@@ -47,6 +47,8 @@ import Shop from './components/Shop';
 import Teams from './components/Teams';
 import Academy from './components/Academy';
 import Profile from './components/Profile';
+import GuestBooking from './components/GuestBooking';
+import UsernameSetupModal from './components/UsernameSetupModal';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import NotFound from './components/NotFound';
@@ -65,21 +67,26 @@ import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 
 const NotificationPanel: React.FC<{
   notifications: Notification[],
-  onClose: () => void
-}> = ({ notifications, onClose }) => {
+  onClose: () => void,
+  onNotificationClick: (notification: Notification) => void
+}> = ({ notifications, onClose, onNotificationClick }) => {
   return (
-    <div className="absolute bottom-full mb-4 right-0 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div className="absolute left-full ml-6 bottom-0 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-left-4 fade-in duration-300 z-[100]">
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-black text-slate-900 tracking-tight uppercase">Activity</h3>
         <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-900"><X size={16} /></button>
       </div>
       <div className="space-y-4 max-h-80 overflow-y-auto scrollbar-hide">
         {notifications.length > 0 ? notifications.map(n => (
-          <div key={n.id} className="flex items-start gap-3">
-            {!n.isRead && <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 shrink-0 animate-pulse"></div>}
-            <img src={n.actor.avatar} className={`w-8 h-8 rounded-full ${n.isRead ? 'ml-4' : ''}`} />
+          <div
+            key={n.id}
+            className="flex items-start gap-3 p-2 rounded-2xl hover:bg-slate-50 cursor-pointer transition-colors group"
+            onClick={() => onNotificationClick(n)}
+          >
+            {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
+            <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
             <div>
-              <p className="text-sm text-slate-700 leading-tight">
+              <p className="text-sm text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">
                 <span className="font-bold">{n.actor.name}</span> {n.message}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -190,6 +197,7 @@ const NavigationHandler: React.FC<{
   followedUsers: string[];
   handleFollow: (userId: string, userName: string) => void;
   notifications: Notification[];
+  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   handleMarkNotificationsRead: () => void;
   posts: SocialPost[];
   setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
@@ -198,19 +206,27 @@ const NavigationHandler: React.FC<{
   onUpdateCartQuantity: (productId: string, newQuantity: number) => void;
   onRemoveFromCart: (productId: string) => void;
   userName: string | null;
+  userAvatar: string | null;
   currentUserId: string | null;
   isSwitchingRole: boolean;
   roleSwitchTarget: UserRole;
   handleRoleSwitch: (newRole: UserRole) => void;
+  showUsernameModal: boolean;
+  setShowUsernameModal: (show: boolean) => void;
+  isUpdatingUsername: boolean;
+  initialNameForModal: string;
+  handleConfirmUsername: (newName: string) => Promise<void>;
 }> = (props) => {
   const {
     role, setRole, isLoginModalOpen, setIsLoginModalOpen, handleLogout,
     applications, onApprove, onReject, onSubmitApplication,
     authorizedProRoles, setAuthorizedProRoles, followedUsers, handleFollow,
-    notifications, handleMarkNotificationsRead, posts, setPosts,
+    notifications, setNotifications, handleMarkNotificationsRead, posts, setPosts,
     cartItems, onAddToCart, onUpdateCartQuantity, onRemoveFromCart,
-    userName, currentUserId,
-    isSwitchingRole, roleSwitchTarget, handleRoleSwitch
+    userName, userAvatar, currentUserId,
+    isSwitchingRole, roleSwitchTarget, handleRoleSwitch,
+    showUsernameModal, setShowUsernameModal, isUpdatingUsername,
+    initialNameForModal, handleConfirmUsername
   } = props;
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -224,7 +240,8 @@ const NavigationHandler: React.FC<{
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
 
   const pendingCount = applications.filter(a => a.status === 'PENDING').length;
-  const hasUnreadNotifications = notifications.some(n => !n.isRead);
+  const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
+  const hasUnreadNotifications = unreadNotificationsCount > 0;
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -244,10 +261,20 @@ const NavigationHandler: React.FC<{
   };
 
   const toggleNotifications = () => {
-    setIsNotificationsOpen(prev => !prev);
-    if (!isNotificationsOpen) {
+    if (isNotificationsOpen) {
+      // Mark as read when closing
       handleMarkNotificationsRead();
     }
+    setIsNotificationsOpen(prev => !prev);
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    if (notification.bookingId) {
+      navigate('/bookings-admin');
+    }
+    // Add more navigation logic for other notification types if needed
+    setIsNotificationsOpen(false); // Close panel after clicking
+    handleMarkNotificationsRead(); // Mark all as read when interacting
   };
 
   const getThemeColor = () => {
@@ -265,7 +292,7 @@ const NavigationHandler: React.FC<{
   return (
     <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#F5F5F0' }}>
       {role !== 'guest' && !isAuthPage && (
-        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-50 rounded-r-3xl overflow-hidden`} style={{ backgroundColor: '#1E40AF' }}>
+        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-50 rounded-r-3xl`} style={{ backgroundColor: '#1E40AF' }}>
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="absolute -right-3 bottom-12 w-6 h-6 border rounded-full flex items-center justify-center shadow-md z-[60] transition-all hover:scale-110 active:scale-95 cursor-pointer bg-white border-slate-200 text-slate-600"
@@ -275,10 +302,13 @@ const NavigationHandler: React.FC<{
 
           <div className={`p-8 flex items-center mb-4 ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
             <Link to="/" className="flex items-center gap-3 font-black text-2xl tracking-tighter shrink-0 transition-all">
-              <div className="bg-white p-2 rounded-xl shadow-lg text-blue-600">
-                <Trophy size={20} />
-              </div>
-              {!isSidebarCollapsed && <span className="animate-in fade-in duration-500 text-white font-black">PICKLEBALL<span className="text-white ml-1">PH</span></span>}
+              <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-16 h-16 object-contain rounded-xl" />
+              {!isSidebarCollapsed && (
+                <div className="animate-in fade-in duration-500 text-white font-black flex flex-col leading-none">
+                  <span className="text-2xl">PICKLEPLAY</span>
+                  <span className="text-xs tracking-wider opacity-80">PHILIPPINES</span>
+                </div>
+              )}
             </Link>
           </div>
 
@@ -353,7 +383,11 @@ const NavigationHandler: React.FC<{
             <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
               <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? 'justify-center' : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
                 <div className={`relative shrink-0 rounded-full p-0.5`}>
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} alt="User" className="w-10 h-10 rounded-full bg-white border-2 border-white" />
+                  <img
+                    src={userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || role}`}
+                    alt="User"
+                    className="w-10 h-10 rounded-full bg-white border-2 border-white"
+                  />
                 </div>
                 {!isSidebarCollapsed && (
                   <div className="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300 flex-1">
@@ -363,13 +397,20 @@ const NavigationHandler: React.FC<{
                 )}
               </Link>
               {!isSidebarCollapsed && (
-                <button onClick={toggleNotifications} className="relative p-3 rounded-full text-white/80 hover:bg-white/10 hover:text-white transition-colors">
+                <button onClick={toggleNotifications} className={`relative p-3 rounded-full transition-all duration-300 ${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl scale-110' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}>
                   <Bell size={20} />
-                  {hasUnreadNotifications && <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-lime-400 rounded-full border-2 border-white animate-pulse"></div>}
+                  {hasUnreadNotifications && (
+                    <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-lg">
+                      {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                    </div>
+                  )}
                 </button>
               )}
             </div>
-            {isNotificationsOpen && <NotificationPanel notifications={notifications} onClose={() => setIsNotificationsOpen(false)} />}
+            {isNotificationsOpen && <NotificationPanel notifications={notifications} onClose={() => {
+              setIsNotificationsOpen(false);
+              handleMarkNotificationsRead();
+            }} onNotificationClick={handleNotificationClick} />}
 
             <button onClick={onLogoutClick} className={`w-full flex items-center gap-3 py-4 rounded-2xl transition-all text-sm font-black uppercase tracking-widest ${isSidebarCollapsed ? 'justify-center' : 'px-6'} text-white/70 hover:text-white hover:bg-white/10`} title={isSidebarCollapsed ? "Logout" : ""}>
               <LogOut size={20} className="shrink-0" />
@@ -383,8 +424,11 @@ const NavigationHandler: React.FC<{
       {!isAuthPage && (
         <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-300 ${headerActive || role !== 'guest' ? 'bg-white/95 backdrop-blur-md border-b border-slate-100' : 'bg-transparent'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
-            <Trophy size={20} className={headerActive || role !== 'guest' ? `text-${themeColor}-600` : 'text-lime-400'} />
-            <span>PICKLEBALL PH</span>
+            <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
+            <div className="flex flex-col leading-none">
+              <span className="text-xl">PICKLEPLAY</span>
+              <span className="text-[10px] tracking-wider opacity-70">PHILIPPINES</span>
+            </div>
           </Link>
           <div className="flex items-center gap-4">
             {role === 'guest' ? (
@@ -458,7 +502,11 @@ const NavigationHandler: React.FC<{
       {role === 'guest' && !isAuthPage && (
         <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-300 rounded-full border items-center px-12 justify-between ${headerActive ? 'bg-white/95 backdrop-blur-md border-slate-200 shadow-xl' : 'bg-transparent border-white/10'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-2xl tracking-tighter transition-colors ${headerActive ? 'text-slate-950' : 'text-white'}`}>
-            <Trophy className={headerActive ? 'text-blue-600' : 'text-lime-400'} size={28} /><span>PICKLEBALL PH</span>
+            <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
+            <div className="flex flex-col leading-none">
+              <span className="text-2xl">PICKLEPLAY</span>
+              <span className="text-xs tracking-wider opacity-70">PHILIPPINES</span>
+            </div>
           </Link>
           <nav className={`hidden md:flex items-center gap-8 font-black text-sm uppercase tracking-[0.2em] transition-colors ${headerActive ? 'text-slate-600' : 'text-white/80'}`}>
             <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PLAY GUIDE</Link>
@@ -471,34 +519,36 @@ const NavigationHandler: React.FC<{
 
       <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: '#F5F5F0' }}>
         <div className={`${role === 'guest' ? '' : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'} transition-colors duration-300`}>
-          <Routes>
-            <Route path="/" element={role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-            <Route path="/news" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><News /></div>} />
-            <Route path="/academy" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
-            <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
-            <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
-            <Route path="/booking" element={role !== 'guest' ? <Booking /> : <Navigate to="/" />} />
-            <Route path="/community" element={role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
-            <Route path="/teams" element={role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-            <Route path="/profile" element={role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
-            <Route path="/profile/:userId" element={role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
+          <div key={location.pathname} className="animate-route-transition">
+            <Routes location={location}>
+              <Route path="/" element={role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
+              <Route path="/news" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><News /></div>} />
+              <Route path="/academy" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
+              <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
+              <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/community" element={role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/teams" element={role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
+              <Route path="/profile" element={role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
+              <Route path="/profile/:userId" element={role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
 
-            {/* Specialized Coach Routes */}
-            <Route path="/students" element={role !== 'guest' ? <Students /> : <Navigate to="/" />} />
-            <Route path="/clinics" element={role !== 'guest' ? <Clinics /> : <Navigate to="/" />} />
-            <Route path="/schedule" element={role !== 'guest' ? <Schedule /> : <Navigate to="/" />} />
+              {/* Specialized Coach Routes */}
+              <Route path="/students" element={role !== 'guest' ? <Students currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/clinics" element={role !== 'guest' ? <Clinics currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/schedule" element={role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/" />} />
 
-            {/* Specialized Court Owner Routes */}
-            <Route path="/courts" element={role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
-            <Route path="/bookings-admin" element={role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
-            <Route path="/revenue" element={role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
+              {/* Specialized Court Owner Routes */}
+              <Route path="/courts" element={role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
+              <Route path="/bookings-admin" element={role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/revenue" element={role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
 
-            <Route path="/admin" element={role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="/admin" element={role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </div>
         </div>
       </main>
 
@@ -522,6 +572,14 @@ const NavigationHandler: React.FC<{
           </div>
         </div>
       )}
+
+      {showUsernameModal && (
+        <UsernameSetupModal
+          initialName={initialNameForModal}
+          onConfirm={handleConfirmUsername}
+          isLoading={isUpdatingUsername}
+        />
+      )}
     </div>
   );
 };
@@ -537,9 +595,13 @@ const App: React.FC = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [roleSwitchTarget, setRoleSwitchTarget] = useState<UserRole>('PLAYER');
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+  const [initialNameForModal, setInitialNameForModal] = useState('');
 
   useEffect(() => {
     // 0. Test Connection
@@ -559,6 +621,7 @@ const App: React.FC = () => {
         setRole('guest');
         setAuthorizedProRoles([]);
         setUserName(null);
+        setUserAvatar(null);
         setCurrentUserId(null);
         return;
       }
@@ -576,7 +639,7 @@ const App: React.FC = () => {
       try {
         // Parallel fetch for profile and professional applications
         const [profileRes, appsRes] = await Promise.all([
-          supabase.from('profiles').select('full_name, active_role, roles').eq('id', session.user.id).single(),
+          supabase.from('profiles').select('full_name, active_role, roles, avatar_url').eq('id', session.user.id).single(),
           supabase.from('professional_applications')
             .select('requested_role')
             .eq('profile_id', session.user.id)
@@ -590,6 +653,19 @@ const App: React.FC = () => {
         // Update profile data if available
         if (profileRes.data) {
           setUserName(profileRes.data.full_name);
+          setUserAvatar(profileRes.data.avatar_url);
+
+          // Trigger onboarding modal if it's a social login and the name hasn't been "confirmed"
+          // We detect this if the user metadata has a provider and we haven't shown it this session
+          const isSocialLogin = session.user.app_metadata?.provider === 'google' || session.user.app_metadata?.provider === 'facebook';
+          const hasShownOnboarding = sessionStorage.getItem(`onboarding_shown_${session.user.id}`);
+
+          if (isSocialLogin && !hasShownOnboarding) {
+            setInitialNameForModal(profileRes.data.full_name || '');
+            setShowUsernameModal(true);
+            sessionStorage.setItem(`onboarding_shown_${session.user.id}`, 'true');
+          }
+
           const activeFromDB = profileRes.data.active_role as UserRole;
           if (activeFromDB) {
             setRole(activeFromDB);
@@ -661,17 +737,80 @@ const App: React.FC = () => {
 
       setPosts(INITIAL_POSTS);
 
-      const mockNotifications: Notification[] = [
-        { id: 'n1', type: 'FOLLOW', message: 'started following you.', actor: { name: 'Elena Rodriguez', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Elena' }, timestamp: new Date(Date.now() - 60000 * 5).toISOString(), isRead: false },
-        { id: 'n2', type: 'MATCH_RESULT', message: 'logged a new match result: 11-7, 11-9.', actor: { name: 'David Smith', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David' }, timestamp: new Date(Date.now() - 60000 * 60).toISOString(), isRead: true }
-      ];
-      setNotifications(mockNotifications);
+      // 3. Fetch initial notifications
+      if (session?.user) {
+        const { data: notifs, error: notifError } = await supabase
+          .from('notifications')
+          .select('*, profiles!notifications_actor_id_fkey(full_name, avatar_url)')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (!notifError && notifs) {
+          const mappedNotifs: Notification[] = notifs.map(n => ({
+            id: n.id,
+            type: n.type as any,
+            message: n.message,
+            actor: {
+              name: n.profiles?.full_name || 'System',
+              avatar: n.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${n.actor_id}`,
+              id: n.actor_id
+            },
+            timestamp: n.created_at,
+            isRead: n.is_read,
+            bookingId: n.booking_id,
+            metadata: n.metadata
+          }));
+          setNotifications(mappedNotifs);
+        }
+      }
     };
 
     fetchInitialData();
+  }, [currentUserId]);
 
-    return () => subscription.unsubscribe();
-  }, []);
+  // Separate Effect for Notifications Subscription
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`user-notifications-${currentUserId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${currentUserId}`
+      }, async (payload) => {
+        const newNotif = payload.new as any;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', newNotif.actor_id)
+          .single();
+
+        const mappedNewNotif: Notification = {
+          id: newNotif.id,
+          type: newNotif.type as any,
+          message: newNotif.message,
+          actor: {
+            name: profile?.full_name || 'System',
+            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id}`,
+            id: newNotif.actor_id
+          },
+          timestamp: newNotif.created_at,
+          isRead: newNotif.is_read,
+          bookingId: newNotif.booking_id
+        };
+
+        setNotifications(prev => [mappedNewNotif, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
 
   const handleRoleSwitch = async (newRole: UserRole) => {
     setIsSwitchingRole(true);
@@ -704,6 +843,26 @@ const App: React.FC = () => {
     }
   };
 
+  const handleConfirmUsername = async (newName: string) => {
+    if (!currentUserId) return;
+    setIsUpdatingUsername(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: newName })
+        .eq('id', currentUserId);
+
+      if (error) throw error;
+      setUserName(newName);
+      setShowUsernameModal(false);
+    } catch (err: any) {
+      console.error('Error updating profile name:', err.message);
+      alert('Failed to update name: ' + err.message);
+    } finally {
+      setIsUpdatingUsername(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setRole('guest');
@@ -728,10 +887,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleMarkNotificationsRead = () => {
-    setTimeout(() => {
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    }, 500);
+  const handleMarkNotificationsRead = async () => {
+    if (!currentUserId) return;
+
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('user_id', currentUserId)
+        .eq('is_read', false);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error marking notifications as read:', err);
+    }
   };
 
   const handleApprove = async (id: string) => {
@@ -871,17 +1043,25 @@ const App: React.FC = () => {
         role={role} setRole={setRole} isLoginModalOpen={isLoginModalOpen} setIsLoginModalOpen={setIsLoginModalOpen}
         handleLogout={handleLogout} applications={applications} onApprove={handleApprove} onReject={handleReject}
         onSubmitApplication={handleSubmitApplication} authorizedProRoles={authorizedProRoles} setAuthorizedProRoles={setAuthorizedProRoles}
-        followedUsers={followedUsers} handleFollow={handleFollow} notifications={notifications} handleMarkNotificationsRead={handleMarkNotificationsRead}
+        followedUsers={followedUsers} handleFollow={handleFollow}
+        notifications={notifications} setNotifications={setNotifications}
+        handleMarkNotificationsRead={handleMarkNotificationsRead}
         posts={posts} setPosts={setPosts}
         cartItems={cartItems}
         onAddToCart={handleAddToCart}
         onUpdateCartQuantity={handleUpdateCartQuantity}
         onRemoveFromCart={handleRemoveFromCart}
         userName={userName}
+        userAvatar={userAvatar}
         currentUserId={currentUserId}
         isSwitchingRole={isSwitchingRole}
         roleSwitchTarget={roleSwitchTarget}
         handleRoleSwitch={handleRoleSwitch}
+        showUsernameModal={showUsernameModal}
+        setShowUsernameModal={setShowUsernameModal}
+        isUpdatingUsername={isUpdatingUsername}
+        initialNameForModal={initialNameForModal}
+        handleConfirmUsername={handleConfirmUsername}
       />
       {isSwitchingRole && <RoleSwitchOverlay targetRole={roleSwitchTarget} />}
     </Router>

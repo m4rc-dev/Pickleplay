@@ -73,6 +73,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [activeSessions, setActiveSessions] = useState<number | null>(null);
   const [playerStats, setPlayerStats] = useState<any>(null); // For PLAYER role
+
+  // Coach specific metrics
+  const [coachStats, setCoachStats] = useState({
+    studentsCount: 0,
+    clinicCompletion: 0,
+    lessonRequests: 0
+  });
+
+  const [courtOwnerStats, setCourtOwnerStats] = useState({
+    bookingRevenue: 0,
+    courtUtilization: 0,
+    playerRetention: 0
+  });
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string>('');
 
@@ -118,10 +132,102 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
             });
         }
       });
+    } else if (userRole === 'COACH' && currentUserId) {
+      // Fetch Coach Metrics
+      const fetchCoachMetrics = async () => {
+        try {
+          // 1. Total Students (Unique student_ids from lessons)
+          const { data: lessonsData } = await supabase
+            .from('lessons')
+            .select('student_id')
+            .eq('coach_id', currentUserId);
+
+          const uniqueStudents = new Set(lessonsData?.map(l => l.student_id).filter(Boolean)).size;
+
+          // 2. Clinic Completion
+          const { data: clinicsData } = await supabase
+            .from('clinics')
+            .select('status')
+            .eq('coach_id', currentUserId);
+
+          const completedClinics = clinicsData?.filter(c => c.status === 'completed').length || 0;
+          const totalClinics = clinicsData?.length || 0;
+          const completionRate = totalClinics > 0 ? Math.round((completedClinics / totalClinics) * 100) : 0;
+
+          // 3. Lesson Requests (Pending status)
+          const { count: pendingLessons } = await supabase
+            .from('lessons')
+            .select('*', { count: 'exact', head: true })
+            .eq('coach_id', currentUserId)
+            .eq('status', 'pending');
+
+          setCoachStats({
+            studentsCount: uniqueStudents,
+            clinicCompletion: completionRate,
+            lessonRequests: pendingLessons || 0
+          });
+        } catch (err) {
+          console.error('Error fetching coach metrics:', err);
+        }
+      };
+
+      fetchCoachMetrics();
+    } else if (userRole === 'COURT_OWNER' && currentUserId) {
+      // Fetch Court Owner Metrics
+      const fetchCourtOwnerMetrics = async () => {
+        try {
+          // 1. Booking Revenue (Sum of total_price for confirmed bookings)
+          const { data: bookingsData } = await supabase
+            .from('bookings')
+            .select('total_price, player_id, court_id')
+            .eq('status', 'confirmed'); // You might want to include 'completed' too
+
+          // Filter bookings for courts owned by this user
+          const { data: myCourts } = await supabase
+            .from('courts')
+            .select('id, num_courts')
+            .eq('owner_id', currentUserId);
+
+          const myCourtIds = myCourts?.map(c => c.id) || [];
+          const myBookings = bookingsData?.filter(b => myCourtIds.includes(b.court_id)) || [];
+
+          const revenue = myBookings.reduce((sum, b) => sum + Number(b.total_price), 0);
+
+          // 2. Court Utilization (Simplified: booked slots / estimated total slots)
+          // Let's assume 10 slots per court per day for simplicity
+          const totalCourts = myCourts?.reduce((sum, c) => sum + (c.num_courts || 1), 0) || 0;
+          const totalAvailableSlots = totalCourts * 10;
+          const utilization = totalAvailableSlots > 0 ? Math.round((myBookings.length / totalAvailableSlots) * 100) : 0;
+
+          // 3. Player Retention (Players with >1 booking)
+          const playerBookingCounts: Record<string, number> = {};
+          myBookings.forEach(b => {
+            if (b.player_id) {
+              playerBookingCounts[b.player_id] = (playerBookingCounts[b.player_id] || 0) + 1;
+            }
+          });
+
+          const uniquePlayers = Object.keys(playerBookingCounts).length;
+          const repeatPlayers = Object.values(playerBookingCounts).filter(count => count > 1).length;
+          const retention = uniquePlayers > 0 ? Math.round((repeatPlayers / uniquePlayers) * 100) : 0;
+
+          setCourtOwnerStats({
+            bookingRevenue: revenue,
+            courtUtilization: utilization,
+            playerRetention: retention
+          });
+        } catch (err) {
+          console.error('Error fetching court owner metrics:', err);
+        }
+      };
+
+      fetchCourtOwnerMetrics();
     }
 
     return () => clearTimeout(timer);
-  }, [userRole]);
+  }, [userRole, currentUserId]);
+
+  console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
   const themeColor = userRole === 'COACH' ? 'rose' : userRole === 'COURT_OWNER' ? 'amber' : userRole === 'ADMIN' ? 'indigo' : 'blue';
   const pendingAppsCount = applications.filter(app => app.status === 'PENDING').length;
@@ -230,17 +336,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'COURT_OWNER':
         return (
           <>
-            <StatCard label="Booking Revenue" value="₱12,450" change="+14%" icon={<DollarSign className="text-amber-600" />} color="amber" />
-            <StatCard label="Court Utilization" value="92%" change="+5%" icon={<Activity className="text-amber-600" />} color="amber" />
-            <StatCard label="Player Retention" value="76%" change="+2%" icon={<UserCheck className="text-amber-600" />} color="amber" />
+            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<DollarSign className="text-amber-600" />} color="amber" />
+            <StatCard label="Court Utilization" value={`${courtOwnerStats.courtUtilization}%`} change="+5%" icon={<Activity className="text-amber-600" />} color="amber" />
+            <StatCard label="Player Retention" value={`${courtOwnerStats.playerRetention}%`} change="+2%" icon={<UserCheck className="text-amber-600" />} color="amber" />
           </>
         );
       case 'COACH':
         return (
           <>
-            <StatCard label="Students" value="48" change="+6" icon={<GraduationCap className="text-rose-600" />} color="rose" />
-            <StatCard label="Clinic Completion" value="88%" change="+10%" icon={<Award className="text-rose-600" />} color="rose" />
-            <StatCard label="Lesson Requests" value="12" change="New" icon={<BookOpen className="text-rose-600" />} color="rose" />
+            <StatCard label="Students" value={coachStats.studentsCount.toString()} change={`+${coachStats.studentsCount}`} icon={<GraduationCap className="text-rose-600" />} color="rose" />
+            <StatCard label="Clinic Completion" value={`${coachStats.clinicCompletion}%`} change="+10%" icon={<Award className="text-rose-600" />} color="rose" />
+            <StatCard label="Lesson Requests" value={coachStats.lessonRequests.toString()} change={coachStats.lessonRequests > 0 ? 'New' : 'Clear'} icon={<BookOpen className="text-rose-600" />} color="rose" />
           </>
         );
       case 'PLAYER':
@@ -291,11 +397,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <History size={16} /> Logs
             </button>
             <button
-              onClick={() => userRole === 'ADMIN' ? setShowBroadcastModal(true) : null}
+              onClick={() => {
+                console.log('Action Button Clicked - Role:', userRole);
+                if (userRole === 'ADMIN') setShowBroadcastModal(true);
+                else if (userRole === 'COACH') navigate('/clinics');
+                else if (userRole === 'COURT_OWNER') navigate('/courts');
+                else if (userRole === 'PLAYER') navigate('/booking');
+              }}
               className={`whitespace-nowrap bg-${themeColor}-600 hover:bg-${themeColor}-700 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl shadow-lg shadow-${themeColor}-100 transition-all flex items-center gap-2 md:gap-3`}
             >
               <PlusCircle size={18} />
-              {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Open Slot' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
+              {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Add Court' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
             </button>
           </div>
         )}
@@ -405,10 +517,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
       </div>
 
-      {/* Submit Docs Application Modal */}
+      {/* Submit Docs Application Modal - Refined Stacking logic */}
       {showSubmitConfirm && ReactDOM.createPortal(
-        <div className={`fixed top-0 ${isSidebarCollapsed ? 'md:left-20' : 'md:left-72'} left-0 right-0 bottom-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-40 p-6 animate-fade-in overflow-y-auto`}>
-          <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-scale-in my-8">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300 overflow-y-auto">
+          <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-300 my-8 z-[100]">
             <div className="space-y-6">
               <div className="text-center">
                 <h3 className="text-2xl font-black text-slate-950 mb-2 uppercase tracking-tighter">Professional Application</h3>
@@ -636,10 +748,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>,
         document.body
       )}
-      {/* Broadcast Modal */}
+      {/* Broadcast Modal - Refined Stacking logic */}
       {showBroadcastModal && ReactDOM.createPortal(
-        <div className={`fixed top-0 ${isSidebarCollapsed ? 'md:left-20' : 'md:left-72'} left-0 right-0 bottom-0 z-[1000] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300`}>
-          <div className="bg-white w-full max-w-lg rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500 overflow-hidden">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-lg rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden z-[100]">
             <button
               onClick={() => setShowBroadcastModal(false)}
               className="absolute top-8 right-8 p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"

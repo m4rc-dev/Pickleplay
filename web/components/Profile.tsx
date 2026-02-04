@@ -1,21 +1,19 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   User,
-  Medal,
-  Activity,
-  Settings,
-  LogOut,
+  MapPin,
+  Save,
   Sparkles,
-  ShieldCheck,
-  Zap,
-  Lock,
-  RefreshCw
+  UserPlus,
+  UserCheck
 } from 'lucide-react';
 import { UserRole, SocialPost } from '../types';
 import { supabase } from '../services/supabase';
 import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
+import { PostCard } from './Community';
 
 interface ProfileProps {
   userRole: UserRole;
@@ -35,6 +33,13 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   const [profileData, setProfileData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+
+  // Editable fields
+  const [editedName, setEditedName] = useState('');
+  const [editedLocation, setEditedLocation] = useState('');
+  const [editedBio, setEditedBio] = useState('');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -59,6 +64,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
           if (!error && data) {
             setProfileData(data);
+            // Initialize editable fields
+            setEditedName(data.full_name || '');
+            setEditedLocation(data.location || '');
+            setEditedBio(data.bio || '');
           }
         }
       } catch (err) {
@@ -71,6 +80,50 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     fetchProfile();
   }, [userId]);
 
+  const handleSave = async () => {
+    if (!currentUserId || !isCurrentUser) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editedName,
+          location: editedLocation,
+          bio: editedBio
+        })
+        .eq('id', currentUserId);
+
+      if (error) throw error;
+
+      // Update local state
+      setProfileData((prev: any) => ({
+        ...prev,
+        full_name: editedName,
+        location: editedLocation,
+        bio: editedBio
+      }));
+
+      alert('Profile updated successfully!');
+    } catch (err: any) {
+      console.error('Error saving profile:', err);
+      alert('Failed to save changes: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLike = (postId: string) => {
+    setPosts(currentPosts => currentPosts.map(p => {
+      if (p.id === postId) {
+        const isLiked = p.likes.includes('player-current');
+        const newLikes = isLiked ? p.likes.filter(id => id !== 'player-current') : [...p.likes, 'player-current'];
+        return { ...p, likes: newLikes };
+      }
+      return p;
+    }));
+  };
+
   if (isLoading) {
     return <div className="max-w-7xl mx-auto"><Skeleton className="w-full h-96" /></div>;
   }
@@ -79,130 +132,142 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     return <NotFound />;
   }
 
-  const isTargetAdmin = profileData.active_role === 'ADMIN';
-
-  const stats = isTargetAdmin ? [
-    { label: "Access Level", value: "Root", icon: ShieldCheck },
-    { label: "Hierarchy", value: "Senior", icon: Zap },
-    { label: "Security", value: "Encrypted", icon: Lock },
-  ] : [
-    { label: "Matches Played", value: profileData.matches_played || "0", icon: Activity },
-    { label: "Win Rate", value: `${profileData.win_rate || 0}%`, icon: Medal },
-    { label: "Skill Level", value: profileData.dupr_rating?.toFixed(1) || "0.0", icon: User },
-  ];
+  const themeColor = profileData.active_role === 'COACH' ? 'rose' : profileData.active_role === 'ADMIN' ? 'indigo' : 'blue';
+  const isFollowing = profileId ? followedUsers.includes(profileId) : false;
+  const userPosts = posts.filter(post => post.authorId === profileId);
+  const displayRole = profileData.active_role || 'PLAYER';
+  const displayName = profileData.full_name || 'Player';
 
   return (
-    <div className="pb-24 pt-2 px-4 md:px-8 max-w-7xl mx-auto animate-fade-in">
-      <div className="relative mb-24">
-        {/* Cover Photo */}
-        <div className="h-48 rounded-3xl bg-gradient-to-r from-slate-700 to-slate-800 overflow-hidden relative">
-          <div className="absolute inset-0 bg-blue-600/10" />
+    <div className="max-w-7xl mx-auto space-y-10 animate-fade-in pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <p className={`text-xs font-black text-${themeColor}-600 uppercase tracking-[0.4em] mb-4`}>User Identity / {displayRole}</p>
+          <h1 className="text-5xl font-black text-slate-950 tracking-tighter uppercase">{displayName}.</h1>
         </div>
 
-        {/* Profile Info Overlay */}
-        <div className="absolute -bottom-16 left-6 md:left-10 flex items-center gap-6">
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white bg-slate-700 overflow-hidden shadow-xl">
-            {profileData.avatar ? (
-              <img src={profileData.avatar} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-slate-600 text-3xl font-black text-slate-400">
-                {(profileData.full_name || 'A')[0]}
-              </div>
-            )}
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">{profileData.full_name || 'Anonymous'}</h1>
-            <p className="text-slate-500 font-black uppercase text-[10px] tracking-[0.2em]">{profileData.active_role || 'PLAYER'}</p>
-
-            {/* Role Switcher - Show if user has professional roles available */}
-            {isCurrentUser && authorizedProRoles.length > 0 && (
-              <div className="mt-3 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg border border-slate-200">
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors text-slate-400`}>
-                  Mode: <span className="text-blue-600 ml-1">{profileData.active_role.replace('_', ' ')}</span>
-                </span>
-                <button
-                  onClick={async () => {
-                    try {
-                      // Define the role sequence for cycling: PLAYER -> pro_roles[0] -> pro_roles[1] -> ... -> PLAYER
-                      let newRole: UserRole = 'PLAYER';
-                      const currentActive = profileData.active_role as UserRole;
-
-                      if (currentActive === 'PLAYER') {
-                        newRole = authorizedProRoles[0];
-                      } else {
-                        const currentIndex = authorizedProRoles.indexOf(currentActive);
-                        if (currentIndex !== -1 && currentIndex < authorizedProRoles.length - 1) {
-                          newRole = authorizedProRoles[currentIndex + 1];
-                        } else {
-                          newRole = 'PLAYER';
-                        }
-                      }
-
-                      if (onRoleSwitch) {
-                        onRoleSwitch(newRole);
-                      } else {
-                        // Fallback for simulation
-                        setProfileData({ ...profileData, active_role: newRole });
-                        window.location.reload();
-                      }
-                    } catch (err) {
-                      console.error('Role switch error:', err);
-                      alert('Failed to switch role');
-                    }
-                  }}
-                  className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                  title="Cycle Mode"
-                >
-                  <RefreshCw size={14} className="hover:rotate-180 transition-transform duration-500" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="absolute top-4 right-4">
-          <button className="p-3 bg-white/90 hover:bg-white rounded-full transition-all shadow-lg text-slate-700">
-            <Settings className="w-5 h-5" />
+        {isCurrentUser ? (
+          <button onClick={handleSave} disabled={isSaving} className={`bg-slate-900 hover:bg-slate-800 text-white h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 disabled:opacity-50`}>
+            {isSaving ? 'SYNCING...' : 'SAVE CHANGES'} <Save size={18} />
           </button>
-        </div>
+        ) : (
+          <button onClick={() => onFollow(profileId!, displayName)} className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 ${isFollowing ? `bg-blue-600 text-white shadow-xl shadow-blue-100` : `bg-slate-900 text-white hover:bg-blue-600 shadow-xl`}`}>
+            {isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}
+            {isFollowing ? 'Following' : 'Follow'}
+          </button>
+        )}
       </div>
 
-      {/* Bio Section */}
-      {profileData.bio && (
-        <div className="mt-16 mb-8">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">About</h3>
-            <p className="text-slate-700 font-medium leading-relaxed">{profileData.bio}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
+        <div className="lg:col-span-1 space-y-8">
+          <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm text-center">
+            <div className="relative inline-block mb-6">
+              <div className={`w-32 h-32 rounded-full p-1 border-4 border-${themeColor}-200 shadow-2xl group relative`}>
+                <img
+                  src={profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                  alt="Profile"
+                  className="w-full h-full rounded-full bg-slate-50"
+                />
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-black text-slate-950 tracking-tight uppercase">{displayName}</h2>
+            <p className={`text-[10px] text-${themeColor}-600 font-black uppercase tracking-widest mt-1 mb-8`}>{displayRole.replace('_', ' ')}</p>
+
+            <div className="space-y-4 pt-8 border-t border-slate-100">
+              <div className="flex items-center justify-between text-left">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DUPR</span>
+                <span className="font-black text-slate-950 text-sm">{profileData.dupr_rating?.toFixed(2) || '0.00'}</span>
+              </div>
+              <div className="flex items-center justify-between text-left">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matches</span>
+                <span className="font-black text-slate-950 text-sm">{profileData.matches_played || 0}</span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
 
-      <div className={profileData.bio ? "" : "mt-16"}>
-        {/* Stats Section */}
-        <div className="space-y-6">
-          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-            {isTargetAdmin ? "System Access Status" : "Player Stats"}
-          </h2>
-          <div className="grid grid-cols-3 gap-4">
-            {stats.map((stat, i) => {
-              const Icon = stat.icon;
-              return (
-                <div key={i} className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-all">
-                  <Icon className={`w-6 h-6 ${isTargetAdmin ? 'text-indigo-600' : 'text-blue-600'} mb-2`} />
-                  <span className="text-3xl font-black text-slate-900 tracking-tight">{stat.value}</span>
-                  <span className="text-xs text-slate-500 uppercase tracking-wide font-bold mt-1">{stat.label}</span>
-                </div>
-              );
-            })}
+        <div className="lg:col-span-2 space-y-10">
+          <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-10">
+            <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
+              <User className={`text-${themeColor}-600`} /> Player Identity
+            </h3>
+
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Display Name</label>
+                {isCurrentUser ? (
+                  <input
+                    type="text"
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 transition-all outline-none"
+                    placeholder="Enter your name"
+                  />
+                ) : (
+                  <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">{displayName}</div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Home Location</label>
+                {isCurrentUser ? (
+                  <div className="relative">
+                    <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={editedLocation}
+                      onChange={(e) => setEditedLocation(e.target.value)}
+                      className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 pl-14 pr-6 font-bold text-slate-700 transition-all outline-none"
+                      placeholder="e.g., Metro Manila, PH"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 flex items-center gap-3">
+                    <MapPin className="text-slate-400" size={16} />
+                    {profileData.location || 'Not specified'}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Short Manifesto (Bio)</label>
+                {isCurrentUser ? (
+                  <textarea
+                    value={editedBio}
+                    onChange={(e) => setEditedBio(e.target.value)}
+                    rows={4}
+                    className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed transition-all outline-none resize-none"
+                    placeholder="Tell us about yourself..."
+                  />
+                ) : (
+                  <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed">{profileData.bio || 'No bio yet.'}</div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <h2 className="text-xl font-black text-slate-900 mt-8 uppercase tracking-tight">
-            {isTargetAdmin ? "Platform Activity" : "Recent Matches"}
-          </h2>
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-500 py-12 shadow-sm">
-            <p className="font-medium">
-              {isTargetAdmin ? "No recent administrative logs." : "No recent match history available."}
-            </p>
+          <div className="space-y-8">
+            <h3 className="text-base font-black text-slate-950 uppercase tracking-tight px-4">
+              Player Feed
+            </h3>
+            {userPosts.length > 0 ? (
+              userPosts.map(post => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onLike={() => handleLike(post.id)}
+                  isExpanded={expandedComments[post.id]}
+                  onToggleComments={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
+                  postsState={posts}
+                  setPostsState={setPosts}
+                />
+              ))
+            ) : (
+              <div className="bg-white text-center p-12 rounded-3xl border-2 border-dashed border-slate-200">
+                <p className="text-slate-400 font-medium">This player hasn't posted anything yet.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

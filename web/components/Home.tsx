@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   MapPin,
   Navigation,
@@ -61,10 +61,18 @@ const LATEST_NEWS: Partial<NewsArticle>[] = [
     image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=600'
   }
 ];
+const POPULAR_PLACES = [
+  "Metro Manila", "Cebu City", "Davao City", "Quezon City",
+  "Makati", "Taguig (BGC)", "Baguio City", "Iloilo City",
+  "Bacolod", "Dumaguete", "Pasig", "Angeles City"
+];
 
 const Home: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredSuggestions, setFilteredSuggestions] = useState(POPULAR_PLACES);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -75,22 +83,50 @@ const Home: React.FC = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/booking?q=${encodeURIComponent(searchQuery.trim())}`);
+      setShowSuggestions(false);
+    } else {
+      navigate('/booking');
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    if (value.trim()) {
+      const filtered = POPULAR_PLACES.filter(place =>
+        place.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredSuggestions(filtered);
+    } else {
+      setFilteredSuggestions(POPULAR_PLACES);
+    }
+  };
+
+  const handleSuggestionClick = (place: string) => {
+    setSearchQuery(place);
+    setShowSuggestions(false);
+    navigate(`/booking?q=${encodeURIComponent(place)}`);
   };
 
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 overflow-hidden bg-slate-950">
-        <div
-          className="absolute inset-0 z-0 flex transition-transform duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
-          style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
-        >
-          {HERO_IMAGES.map((img, idx) => (
-            <div key={idx} className="min-w-full h-full flex-shrink-0 relative">
-              <img src={img} className="w-full h-full object-cover grayscale-[20%] brightness-[0.7] contrast-125" alt={`Slide ${idx}`} />
-            </div>
-          ))}
+      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 bg-slate-950 z-40">
+        <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
+          <div
+            className="absolute inset-0 flex transition-transform duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
+            style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
+          >
+            {HERO_IMAGES.map((img, idx) => (
+              <div key={idx} className="min-w-full h-full flex-shrink-0 relative">
+                <img src={img} className="w-full h-full object-cover grayscale-[20%] brightness-[0.7] contrast-125" alt={`Slide ${idx}`} />
+              </div>
+            ))}
+          </div>
         </div>
+
         <div className="absolute inset-0 z-10 pointer-events-none">
           <div className="absolute inset-0 bg-slate-950/30"></div>
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent"></div>
@@ -101,9 +137,9 @@ const Home: React.FC = () => {
           <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-6 md:mb-8">
             The National Network for Philippines
           </div>
-          <h1 className="text-4xl sm:text-6xl md:text-8xl lg:text-[11rem] font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-6 md:mb-8 uppercase">
-            DINK. DRIVE. <br />
-            <span className="text-lime-400">PILIPINAS.</span>
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-6 md:mb-8 uppercase">
+            <span className="text-4xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
+            <span className="text-lime-400 text-5xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
           </h1>
           <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-10 md:mb-12">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
@@ -116,13 +152,37 @@ const Home: React.FC = () => {
                   type="text"
                   placeholder="Find PH dink spots..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleInputChange}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
                 <button type="submit" className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-12 md:h-16 px-6 md:px-10 rounded-full font-black flex items-center gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg">
                   LOCATE <ArrowRight size={18} />
                 </button>
               </div>
+
+              {/* Suggestions Dropdown */}
+              {showSuggestions && filteredSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-4 bg-slate-900/95 border border-white/10 backdrop-blur-2xl rounded-[32px] py-4 shadow-3xl z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <p className="px-8 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Popular Spots</p>
+                  <div className="max-h-[300px] overflow-y-auto no-scrollbar">
+                    {filteredSuggestions.map((place, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSuggestionClick(place)}
+                        className="w-full text-left px-8 py-4 hover:bg-white/5 flex items-center gap-4 group transition-colors"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-lime-400 group-hover:text-slate-950 transition-all">
+                          <MapPin size={18} />
+                        </div>
+                        <span className="text-white font-bold group-hover:text-lime-400 transition-colors">{place}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </form>
           </div>
         </div>
@@ -328,8 +388,11 @@ const Home: React.FC = () => {
             {/* Brand Section */}
             <div className="space-y-6">
               <div className="flex items-center gap-3 text-slate-950 font-black text-2xl tracking-tighter uppercase">
-                <Trophy className="text-blue-600" size={28} />
-                <span>PICKLEBALL<span className="text-blue-600">PH</span></span>
+                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
+                <div className="flex flex-col leading-none">
+                  <span className="text-2xl">PICKLEPLAY</span>
+                  <span className="text-sm tracking-wider text-blue-600">PHILIPPINES</span>
+                </div>
               </div>
               <p className="text-slate-500 text-sm leading-relaxed max-w-xs font-medium">
                 The premier destination for the Philippine pickleball community. Join the movement, find your squad, and dominate the court.

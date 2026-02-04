@@ -20,6 +20,9 @@ export interface Court {
   availability: string[]; // ISO strings
   latitude?: number;
   longitude?: number;
+  numCourts?: number;
+  amenities?: string[];
+  ownerId?: string;
 }
 
 export interface Match {
@@ -111,12 +114,15 @@ export interface Tournament {
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT';
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING';
   message: string;
   actor: {
     name: string;
     avatar: string;
+    id?: string;
   };
   timestamp: string;
   isRead: boolean;
+  userId?: string;
+  bookingId?: string; // Optional reference to booking for navigation
 }

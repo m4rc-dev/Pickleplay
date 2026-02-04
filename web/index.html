@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pickleball Philippines - The Home of PH Pickleball</title>
+    <title>PicklePlay Philippines - The Home of PH Pickleball</title>
+    <link rel="icon" type="image/jpeg" href="/images/PicklePlayLogo.jpg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
@@ -132,8 +133,24 @@
             }
         }
 
+        @keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         .animate-fade-in {
             animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .animate-route-transition {
+            animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
     </style>
     <script type="importmap">
