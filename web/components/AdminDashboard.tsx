@@ -29,7 +29,10 @@ import {
   Key,
   Globe,
   Clock,
-  History
+  History,
+  Plus,
+  Trash2,
+  Copy
 } from 'lucide-react';
 import {
   BarChart,
@@ -103,6 +106,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [platformSettings, setPlatformSettings] = useState<Record<string, any>>({});
+  const [accessCodes, setAccessCodes] = useState<any[]>([]);
 
   useEffect(() => {
     loadTournaments();
@@ -162,6 +166,61 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
       }), {});
       setPlatformSettings(settingsMap);
     }
+
+    // 5. Fetch Access Codes
+    const { data: codes } = await supabase
+      .from('access_codes')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (codes) setAccessCodes(codes);
+  };
+
+  const handleGenerateCode = async () => {
+    try {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid ambiguous chars
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('access_codes')
+        .insert({
+          code,
+          assigned_role: 'COURT_OWNER',
+          created_by: user?.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setAccessCodes(prev => [data, ...prev]);
+        await logAdminAction('CODE_GENERATE', data.id, code, 'Generated new utility access code', 'AUDIT');
+      }
+    } catch (err: any) {
+      console.error('Code generation failed:', err);
+      alert('Failed: ' + err.message);
+    }
+  };
+
+  const handleDeleteCode = async (id: string, code: string) => {
+    if (!confirm('Revoke this access code?')) return;
+    try {
+      const { error } = await supabase.from('access_codes').delete().eq('id', id);
+      if (error) throw error;
+      setAccessCodes(prev => prev.filter(c => c.id !== id));
+      await logAdminAction('CODE_REVOKE', id, code, 'Revoked unused access code', 'AUDIT');
+    } catch (err: any) {
+      alert('Failed: ' + err.message);
+    }
+  };
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    // You could add a toast here if you have one, but alert for now as a fallback
+    // Or just let the visual feedback be enough
   };
 
   const handleToggleSetting = async (key: string) => {
@@ -444,6 +503,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             <TabButton active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} label="Apps" badge={pendingApps.length} />
             <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Users" />
             <TabButton active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Security" icon={<Lock size={14} />} />
+            <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
             <TabButton active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} label="Audit" icon={<Eye size={14} />} />
           </div>
         </div>
@@ -806,6 +866,98 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 <button className="relative z-10 w-full py-5 bg-white/10 border border-white/20 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-white/20 transition-all">
                   Generate Threat Report
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'codes' && (
+          <div className="space-y-8 animate-slide-up">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
+                  <Key className="text-amber-500" /> Utility Access Codes
+                </h2>
+                <p className="text-slate-500 font-medium text-sm">Generate single-use codes for instant professional onboarding.</p>
+              </div>
+              <button
+                onClick={handleGenerateCode}
+                className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 transition-all"
+              >
+                <Plus size={20} /> GENERATE CODE
+              </button>
+            </div>
+
+            <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                      <th className="px-8 py-6">Code</th>
+                      <th className="px-8 py-6">Role</th>
+                      <th className="px-8 py-6">Status</th>
+                      <th className="px-8 py-6">Created</th>
+                      <th className="px-8 py-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {accessCodes.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No utility codes generated yet.</td>
+                      </tr>
+                    ) : (
+                      accessCodes.map((code) => (
+                        <tr key={code.id} className={code.is_used ? 'opacity-50' : ''}>
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-black text-lg text-indigo-600 tracking-wider bg-indigo-50 px-4 py-2 rounded-xl">
+                                {code.code}
+                              </span>
+                              {!code.is_used && (
+                                <button
+                                  onClick={() => handleCopyCode(code.code)}
+                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                  title="Copy Code"
+                                >
+                                  <Copy size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-slate-100 text-slate-500 rounded-lg">
+                              {code.assigned_role}
+                            </span>
+                          </td>
+                          <td className="px-8 py-6">
+                            {code.is_used ? (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                <Check size={12} /> Used by ID: {code.used_by?.substring(0, 8)}...
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 flex items-center gap-2 animate-pulse">
+                                <Activity size={12} /> Available
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-8 py-6 text-xs font-bold text-slate-500">
+                            {new Date(code.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            {!code.is_used && (
+                              <button
+                                onClick={() => handleDeleteCode(code.id, code.code)}
+                                className="p-3 text-slate-400 hover:text-rose-600 transition-colors"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

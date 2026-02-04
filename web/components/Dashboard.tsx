@@ -34,11 +34,13 @@ import {
   X,
   Megaphone,
   HelpCircle,
-  Building2
+  Building2,
+  Key
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
 import { Skeleton } from './ui/Skeleton';
+import { Radio } from 'lucide-react';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -87,6 +89,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     courtUtilization: 0,
     playerRetention: 0
   });
+
+  const [ratingHistory, setRatingHistory] = useState<any[]>([]);
+  const [showLogDuprModal, setShowLogDuprModal] = useState(false);
+  const [newDuprRating, setNewDuprRating] = useState('');
+  const [isLoggingDupr, setIsLoggingDupr] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string>('');
@@ -146,6 +153,32 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       }
     };
 
+    const fetchRatingHistory = async () => {
+      if (!currentUserId) return;
+      try {
+        const { data } = await supabase
+          .from('dupr_logs')
+          .select('*')
+          .eq('player_id', currentUserId)
+          .order('recorded_at', { ascending: true });
+
+        if (data && data.length > 0) {
+          const mappedHistory = data.map(log => ({
+            name: new Date(log.recorded_at).toLocaleDateString([], { month: 'short' }),
+            rating: Number(log.rating)
+          }));
+          setRatingHistory(mappedHistory);
+        } else {
+          // Default data if no logs
+          setRatingHistory([
+            { name: 'Start', rating: 3.5 },
+          ]);
+        }
+      } catch (err) {
+        console.error('Error fetching rating history:', err);
+      }
+    };
+
     if (userRole === 'ADMIN') {
       // 1. Total Users
       supabase.from('profiles').select('*', { count: 'exact', head: true })
@@ -177,6 +210,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
             });
         }
       });
+
+      fetchRatingHistory();
     } else if (userRole === 'COACH' && currentUserId) {
       // Fetch Coach Metrics
       const fetchCoachMetrics = async () => {
@@ -254,6 +289,69 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       alert('Failed to send broadcast.');
     } finally {
       setIsBroadcasting(false);
+    }
+  };
+
+  const handleLogDupr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDuprRating || !currentUserId) return;
+
+    setIsLoggingDupr(true);
+    try {
+      const rating = parseFloat(newDuprRating);
+      if (isNaN(rating) || rating < 0 || rating > 8.0) {
+        alert('Please enter a valid DUPR rating (0.000 - 8.000)');
+        return;
+      }
+
+      // 1. Insert into logs
+      const { error: logError } = await supabase.from('dupr_logs').insert({
+        player_id: currentUserId,
+        rating: rating,
+        source: 'MANUAL'
+      });
+
+      if (logError) throw logError;
+
+      // 2. Update profile
+      const { error: profileError } = await supabase.from('profiles').update({
+        dupr_rating: rating
+      }).eq('id', currentUserId);
+
+      if (profileError) throw profileError;
+
+      // 3. Refresh data
+      setShowLogDuprModal(false);
+      setNewDuprRating('');
+
+      // Refresh player stats
+      const { data } = await supabase.from('profiles')
+        .select('dupr_rating, win_rate, matches_played')
+        .eq('id', currentUserId)
+        .single();
+      if (data) setPlayerStats(data);
+
+      // Refresh history
+      const { data: logs } = await supabase
+        .from('dupr_logs')
+        .select('*')
+        .eq('player_id', currentUserId)
+        .order('recorded_at', { ascending: true });
+
+      if (logs) {
+        const mappedHistory = logs.map(log => ({
+          name: new Date(log.recorded_at).toLocaleDateString([], { month: 'short' }),
+          rating: Number(log.rating)
+        }));
+        setRatingHistory(mappedHistory);
+      }
+
+      alert('DUPR rating updated successfully!');
+    } catch (err: any) {
+      console.error('Logging DUPR failed:', err);
+      alert('Failed to log DUPR: ' + err.message);
+    } finally {
+      setIsLoggingDupr(false);
     }
   };
 
@@ -400,7 +498,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 if (userRole === 'ADMIN') setShowBroadcastModal(true);
                 else if (userRole === 'COACH') navigate('/clinics');
                 else if (userRole === 'COURT_OWNER') navigate('/courts');
-                else if (userRole === 'PLAYER') navigate('/booking');
+                else if (userRole === 'PLAYER') setShowLogDuprModal(true);
               }}
               className={`whitespace-nowrap bg-${themeColor}-600 hover:bg-${themeColor}-700 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl shadow-lg shadow-${themeColor}-100 transition-all flex items-center gap-2 md:gap-3`}
             >
@@ -433,7 +531,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <Skeleton className="w-full h-full rounded-2xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={PERFORMANCE_DATA} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                <LineChart data={ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
                   <YAxis hide domain={['dataMin - 0.2', 'dataMax + 0.2']} />
@@ -538,9 +636,68 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   return;
                 }
 
+                const accessCode = formData.get('accessCode') as string;
+
                 try {
                   const { data: { user } } = await supabase.auth.getUser();
                   if (!user) throw new Error('Not authenticated');
+
+                  // 1. Check for Access Code
+                  if (accessCode && accessCode.trim()) {
+                    const { data: codeData, error: codeError } = await supabase
+                      .from('access_codes')
+                      .select('*')
+                      .eq('code', accessCode.toUpperCase().trim())
+                      .eq('is_used', false)
+                      .single();
+
+                    if (codeData) {
+                      // Fetch current profile to get existing roles
+                      const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('roles')
+                        .eq('id', user.id)
+                        .single();
+
+                      const currentRoles = profile?.roles || ['PLAYER'];
+                      const requestedRole = applicationType === 'coach' ? 'COACH' : 'COURT_OWNER';
+
+                      if (!currentRoles.includes(requestedRole)) {
+                        currentRoles.push(requestedRole);
+                      }
+
+                      // Update profile directly
+                      const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({
+                          roles: currentRoles,
+                          active_role: requestedRole
+                        })
+                        .eq('id', user.id);
+
+                      if (updateError) throw updateError;
+
+                      // Mark code as used
+                      await supabase
+                        .from('access_codes')
+                        .update({
+                          is_used: true,
+                          used_by: user.id,
+                          used_at: new Date().toISOString()
+                        })
+                        .eq('id', codeData.id);
+
+                      alert(`Promotional access granted! Welcome as a ${requestedRole}.`);
+                      setShowSubmitConfirm(false);
+                      window.location.reload();
+                      return;
+                    } else if (codeError && codeError.code !== 'PGRST116') {
+                      throw codeError;
+                    } else {
+                      alert('Invalid or expired access code. Please check and try again.');
+                      return;
+                    }
+                  }
 
                   // Upload files to Supabase Storage
                   const uploadedFileUrls: string[] = [];
@@ -619,6 +776,23 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       <option disabled>Existing application pending review</option>
                     )}
                   </select>
+                </div>
+
+                {/* Access Code */}
+                <div className="pt-2">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-2 flex items-center justify-between">
+                    Access Code (Promotional)
+                    <span className="text-[9px] font-bold text-slate-400 normal-case italic">Optional</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      name="accessCode"
+                      type="text"
+                      placeholder="e.g. PICKLE-PRO-2024"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono font-bold text-sm text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/30 uppercase"
+                    />
+                    <Key size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                  </div>
                 </div>
 
                 {/* File Upload */}
@@ -746,63 +920,126 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>,
         document.body
       )}
-      {/* Broadcast Modal - Refined Stacking logic */}
-      {showBroadcastModal && ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden z-[100]">
-            <button
-              onClick={() => setShowBroadcastModal(false)}
-              className="absolute top-8 right-8 p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
-            >
-              <X size={20} />
-            </button>
 
-            <div className="mb-10 text-center">
-              <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                <Megaphone size={32} className="text-indigo-600" />
+      {/* Log DUPR Modal */}
+      {
+        showLogDuprModal && ReactDOM.createPortal(
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Target size={32} className="text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Log DUPR Rating</h3>
+                <p className="text-slate-500 font-medium text-sm mt-2">
+                  Update your current performance rating to track your growth.
+                </p>
               </div>
-              <h2 className="text-4xl font-black text-slate-950 tracking-tighter uppercase mb-2">Broadcast Notice.</h2>
-              <p className="text-slate-500 font-medium text-sm">Send a platform-wide announcement to all users.</p>
+
+              <form onSubmit={handleLogDupr} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Current Rating</label>
+                  <div className="relative">
+                    <input
+                      required
+                      type="number"
+                      step="0.001"
+                      min="2.0"
+                      max="8.0"
+                      value={newDuprRating}
+                      onChange={e => setNewDuprRating(e.target.value)}
+                      placeholder="e.g. 3.750"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 pr-14 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-lg"
+                    />
+                    <div className="absolute right-6 top-1/2 -translate-y-1/2">
+                      <TrendingUp size={18} className="text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowLogDuprModal(false)}
+                    className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoggingDupr}
+                    className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoggingDupr ? 'Logging...' : 'Log Rating'}
+                    {!isLoggingDupr && <Radio size={14} className="animate-pulse" />}
+                  </button>
+                </div>
+              </form>
             </div>
+          </div>,
+          document.body
+        )
+      }
 
-            <form onSubmit={handleBroadcastNotice} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Subject / Title</label>
-                <input
-                  required
-                  type="text"
-                  value={broadcastTitle}
-                  onChange={e => setBroadcastTitle(e.target.value)}
-                  placeholder="e.g. Server Maintenance Notice"
-                  className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Announcement Message</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={broadcastContent}
-                  onChange={e => setBroadcastContent(e.target.value)}
-                  placeholder="Type your message here..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold resize-none"
-                />
-              </div>
-
+      {/* Broadcast Modal - Refined Stacking logic */}
+      {
+        showBroadcastModal && ReactDOM.createPortal(
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-lg rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden z-[100]">
               <button
-                type="submit"
-                disabled={isBroadcasting}
-                className={`w-full h-20 ${isBroadcasting ? 'bg-slate-200' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-[32px] font-black text-lg uppercase tracking-widest transition-all shadow-2xl shadow-indigo-500/20 mt-4 flex items-center justify-center gap-3`}
+                onClick={() => setShowBroadcastModal(false)}
+                className="absolute top-8 right-8 p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
               >
-                {isBroadcasting ? 'SENDING...' : 'DISPATCH BROADCAST'}
-                {!isBroadcasting && <Megaphone size={20} />}
+                <X size={20} />
               </button>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+
+              <div className="mb-10 text-center">
+                <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                  <Megaphone size={32} className="text-indigo-600" />
+                </div>
+                <h2 className="text-4xl font-black text-slate-950 tracking-tighter uppercase mb-2">Broadcast Notice.</h2>
+                <p className="text-slate-500 font-medium text-sm">Send a platform-wide announcement to all users.</p>
+              </div>
+
+              <form onSubmit={handleBroadcastNotice} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Subject / Title</label>
+                  <input
+                    required
+                    type="text"
+                    value={broadcastTitle}
+                    onChange={e => setBroadcastTitle(e.target.value)}
+                    placeholder="e.g. Server Maintenance Notice"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Announcement Message</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={broadcastContent}
+                    onChange={e => setBroadcastContent(e.target.value)}
+                    placeholder="Type your message here..."
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isBroadcasting}
+                  className={`w-full h-20 ${isBroadcasting ? 'bg-slate-200' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-[32px] font-black text-lg uppercase tracking-widest transition-all shadow-2xl shadow-indigo-500/20 mt-4 flex items-center justify-center gap-3`}
+                >
+                  {isBroadcasting ? 'SENDING...' : 'DISPATCH BROADCAST'}
+                  {!isBroadcasting && <Megaphone size={20} />}
+                </button>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )
+      }
     </div>
   );
 };
