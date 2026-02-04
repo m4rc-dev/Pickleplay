@@ -54,6 +54,7 @@ const Signup: React.FC = () => {
                 options: {
                     data: {
                         full_name: fullName,
+                        username: fullName.toLowerCase().replace(/\s+/g, '_')
                     }
                 }
             });

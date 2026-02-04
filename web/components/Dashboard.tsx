@@ -33,7 +33,8 @@ import {
   Check,
   X,
   Megaphone,
-  HelpCircle
+  HelpCircle,
+  Building2
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
@@ -103,7 +104,48 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         if (data) setAnnouncements(data);
       });
 
-    // Fetch Metrics based on Role
+    const fetchCourtOwnerMetrics = async () => {
+      if (!currentUserId) return;
+      try {
+        const { data: bookingsData } = await supabase
+          .from('bookings')
+          .select('total_price, player_id, court_id')
+          .eq('status', 'confirmed');
+
+        const { data: myCourts } = await supabase
+          .from('courts')
+          .select('id, num_courts')
+          .eq('owner_id', currentUserId);
+
+        const myCourtIds = myCourts?.map(c => c.id) || [];
+        const myBookings = bookingsData?.filter(b => myCourtIds.includes(b.court_id)) || [];
+
+        const revenue = myBookings.reduce((sum, b) => sum + Number(b.total_price), 0);
+        const totalCourts = myCourts?.reduce((sum, c) => sum + (c.num_courts || 1), 0) || 0;
+        const totalAvailableSlots = totalCourts * 10;
+        const utilization = totalAvailableSlots > 0 ? Math.round((myBookings.length / totalAvailableSlots) * 100) : 0;
+
+        const playerBookingCounts: Record<string, number> = {};
+        myBookings.forEach(b => {
+          if (b.player_id) {
+            playerBookingCounts[b.player_id] = (playerBookingCounts[b.player_id] || 0) + 1;
+          }
+        });
+
+        const uniquePlayers = Object.keys(playerBookingCounts).length;
+        const repeatPlayers = Object.values(playerBookingCounts).filter(count => count > 1).length;
+        const retention = uniquePlayers > 0 ? Math.round((repeatPlayers / uniquePlayers) * 100) : 0;
+
+        setCourtOwnerStats({
+          bookingRevenue: revenue,
+          courtUtilization: utilization,
+          playerRetention: retention
+        });
+      } catch (err) {
+        console.error('Error fetching court owner metrics:', err);
+      }
+    };
+
     if (userRole === 'ADMIN') {
       // 1. Total Users
       supabase.from('profiles').select('*', { count: 'exact', head: true })
@@ -119,6 +161,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         .then(({ count }) => {
           if (count !== null) setActiveSessions(count);
         });
+
+      // 3. Fetch Court Metrics for Admin's own courts
+      fetchCourtOwnerMetrics();
     } else if (userRole === 'PLAYER') {
       // Fetch Player Stats
       supabase.auth.getUser().then(({ data: { user } }) => {
@@ -173,54 +218,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       fetchCoachMetrics();
     } else if (userRole === 'COURT_OWNER' && currentUserId) {
-      // Fetch Court Owner Metrics
-      const fetchCourtOwnerMetrics = async () => {
-        try {
-          // 1. Booking Revenue (Sum of total_price for confirmed bookings)
-          const { data: bookingsData } = await supabase
-            .from('bookings')
-            .select('total_price, player_id, court_id')
-            .eq('status', 'confirmed'); // You might want to include 'completed' too
-
-          // Filter bookings for courts owned by this user
-          const { data: myCourts } = await supabase
-            .from('courts')
-            .select('id, num_courts')
-            .eq('owner_id', currentUserId);
-
-          const myCourtIds = myCourts?.map(c => c.id) || [];
-          const myBookings = bookingsData?.filter(b => myCourtIds.includes(b.court_id)) || [];
-
-          const revenue = myBookings.reduce((sum, b) => sum + Number(b.total_price), 0);
-
-          // 2. Court Utilization (Simplified: booked slots / estimated total slots)
-          // Let's assume 10 slots per court per day for simplicity
-          const totalCourts = myCourts?.reduce((sum, c) => sum + (c.num_courts || 1), 0) || 0;
-          const totalAvailableSlots = totalCourts * 10;
-          const utilization = totalAvailableSlots > 0 ? Math.round((myBookings.length / totalAvailableSlots) * 100) : 0;
-
-          // 3. Player Retention (Players with >1 booking)
-          const playerBookingCounts: Record<string, number> = {};
-          myBookings.forEach(b => {
-            if (b.player_id) {
-              playerBookingCounts[b.player_id] = (playerBookingCounts[b.player_id] || 0) + 1;
-            }
-          });
-
-          const uniquePlayers = Object.keys(playerBookingCounts).length;
-          const repeatPlayers = Object.values(playerBookingCounts).filter(count => count > 1).length;
-          const retention = uniquePlayers > 0 ? Math.round((repeatPlayers / uniquePlayers) * 100) : 0;
-
-          setCourtOwnerStats({
-            bookingRevenue: revenue,
-            courtUtilization: utilization,
-            playerRetention: retention
-          });
-        } catch (err) {
-          console.error('Error fetching court owner metrics:', err);
-        }
-      };
-
+      // fetchCourtOwnerMetrics is now defined above
       fetchCourtOwnerMetrics();
     }
 
@@ -329,7 +327,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         return (
           <>
             <StatCard label="Total Users" value={totalUsers !== null ? totalUsers.toLocaleString() : '...'} change="+12%" icon={<Users className="text-indigo-600" />} color="indigo" />
-            <StatCard label="Active Sessions" value={activeSessions !== null ? activeSessions.toLocaleString() : '...'} change="+3%" icon={<Activity className="text-lime-600" />} color="lime" />
+            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="Platform" icon={<DollarSign className="text-amber-600" />} color="amber" />
             <StatCard label="Pending Apps" value={pendingAppsCount.toString()} change={`${pendingAppsCount > 0 ? 'Action Req.' : 'Clear'}`} icon={<BarChart4 className="text-slate-600" />} color="slate" />
           </>
         );
@@ -409,6 +407,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <PlusCircle size={18} />
               {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Add Court' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
             </button>
+            {userRole === 'ADMIN' && (
+              <button
+                onClick={() => navigate('/courts')}
+                className="whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl shadow-lg shadow-amber-100 transition-all flex items-center gap-2 md:gap-3"
+              >
+                <Building2 size={18} /> Add Court
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -315,10 +315,16 @@ const NavigationHandler: React.FC<{
           <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
             <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
             {role === 'ADMIN' && (
-              <div className="relative">
+              <div className="relative space-y-1.5">
                 <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {pendingCount > 0 && <span className={`absolute ${isSidebarCollapsed ? 'top-1 right-2' : 'top-3 right-4'} w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse`}>{pendingCount}</span>}
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="Manage Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <div className={`pt-2 mt-2 border-t border-white/10 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+                  <p className="text-[10px] font-black uppercase tracking-widest px-4 mb-2 text-white/40">Court Management</p>
+                  <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                  <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                  <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                </div>
               </div>
             )}
             {role === 'PLAYER' && (
@@ -452,7 +458,17 @@ const NavigationHandler: React.FC<{
             </div>
             <nav className="flex-1 space-y-2">
               <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-              {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />}
+              {role === 'ADMIN' && (
+                <>
+                  <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <div className="border-t border-slate-100 my-2 pt-2 px-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Court Management</p>
+                    <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                    <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                    <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  </div>
+                </>
+              )}
               {role === 'PLAYER' && (
                 <>
                   <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
@@ -639,7 +655,7 @@ const App: React.FC = () => {
       try {
         // Parallel fetch for profile and professional applications
         const [profileRes, appsRes] = await Promise.all([
-          supabase.from('profiles').select('full_name, active_role, roles, avatar_url').eq('id', session.user.id).single(),
+          supabase.from('profiles').select('full_name, username, active_role, roles, avatar_url').eq('id', session.user.id).single(),
           supabase.from('professional_applications')
             .select('requested_role')
             .eq('profile_id', session.user.id)
@@ -655,15 +671,12 @@ const App: React.FC = () => {
           setUserName(profileRes.data.full_name);
           setUserAvatar(profileRes.data.avatar_url);
 
-          // Trigger onboarding modal if it's a social login and the name hasn't been "confirmed"
-          // We detect this if the user metadata has a provider and we haven't shown it this session
+          // Trigger onboarding modal if it's a social login and the username hasn't been set
           const isSocialLogin = session.user.app_metadata?.provider === 'google' || session.user.app_metadata?.provider === 'facebook';
-          const hasShownOnboarding = sessionStorage.getItem(`onboarding_shown_${session.user.id}`);
 
-          if (isSocialLogin && !hasShownOnboarding) {
+          if (isSocialLogin && !profileRes.data.username) {
             setInitialNameForModal(profileRes.data.full_name || '');
             setShowUsernameModal(true);
-            sessionStorage.setItem(`onboarding_shown_${session.user.id}`, 'true');
           }
 
           const activeFromDB = profileRes.data.active_role as UserRole;
@@ -849,7 +862,10 @@ const App: React.FC = () => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ full_name: newName })
+        .update({
+          full_name: newName,
+          username: newName.toLowerCase().replace(/\s+/g, '_') // Slugified username
+        })
         .eq('id', currentUserId);
 
       if (error) throw error;

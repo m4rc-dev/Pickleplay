@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function checkTables() {
-    const tables = ['clinics', 'lessons', 'coach_students'];
+    const tables = ['clinics', 'lessons', 'coach_students', 'squads', 'squad_members'];
     for (const table of tables) {
         const { error } = await supabase.from(table).select('*', { count: 'exact', head: true });
         if (error) {

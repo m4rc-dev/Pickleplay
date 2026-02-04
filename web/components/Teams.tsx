@@ -15,10 +15,11 @@ import {
   CheckCircle2,
   Info,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Crown
 } from 'lucide-react';
-// Fix: Import UserRole from the centralized types.ts file.
 import { UserRole } from '../types';
+import Toast, { ToastType } from './ui/Toast';
 
 interface Team {
   id: string;
@@ -28,10 +29,21 @@ interface Team {
   is_private: boolean;
   is_official: boolean;
   tags: string[];
-  members_count?: number;
-  avg_rating?: number; // DB column is avg_rating
-  wins?: number;
-  created_by?: string;
+  members_count: number;
+  avg_rating: number;
+  created_by: string;
+  is_member?: boolean;
+}
+
+interface SquadMember {
+  id: string;
+  squad_id: string;
+  user_id: string;
+  role: string;
+  profiles?: {
+    full_name: string;
+    avatar_url: string;
+  };
 }
 
 interface TeamsProps {
@@ -48,38 +60,76 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
   const [joinedTeamId, setJoinedTeamId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [editingSquadId, setEditingSquadId] = useState<string | null>(null);
+  const [selectedSquadMembers, setSelectedSquadMembers] = useState<SquadMember[]>([]);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [activeSquadName, setActiveSquadName] = useState('');
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type, isVisible: true });
+  };
 
   const themeColor = userRole === 'ADMIN' ? 'indigo' : 'blue';
 
   useEffect(() => {
-    loadSquads();
-    getCurrentUser();
+    getCurrentUser().then(uid => {
+      loadSquads(uid);
+    });
   }, []);
 
   const getCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) setCurrentUserId(user.id);
+    if (user) {
+      setCurrentUserId(user.id);
+      return user.id;
+    }
+    return null;
   };
 
-  const loadSquads = async () => {
-    const { data, error } = await supabase
+  const loadSquads = async (userId: string | null = currentUserId) => {
+    const { data: squads, error: squadsError } = await supabase
       .from('squads')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error loading squads:', error);
+    if (squadsError) {
+      showToast('Error loading squads: ' + squadsError.message, 'error');
       return;
     }
 
-    if (data) {
-      // Add random member counts for demo effect since squad_members is empty initially
-      const mappedTeams: Team[] = data.map(t => ({
-        ...t,
-        members_count: Math.floor(Math.random() * 50) + 1, // Placeholder
-        avg_rating: t.avg_rating || (3.0 + Math.random() * 2.0),
-        wins: t.wins || Math.floor(Math.random() * 20)
-      }));
+    const { data: memberCounts, error: countsError } = await supabase
+      .from('squad_members')
+      .select('squad_id');
+
+    if (countsError) {
+      console.error('Error fetching member counts:', countsError);
+    }
+
+    let userMemberships: string[] = [];
+    if (userId) {
+      const { data: memberships } = await supabase
+        .from('squad_members')
+        .select('squad_id')
+        .eq('user_id', userId);
+      if (memberships) userMemberships = memberships.map(m => m.squad_id);
+    }
+
+    if (squads) {
+      const mappedTeams: Team[] = squads.map(t => {
+        const count = memberCounts ? memberCounts.filter(m => m.squad_id === t.id).length : 0;
+        return {
+          ...t,
+          members_count: count,
+          avg_rating: t.avg_rating || 0,
+          is_member: userMemberships.includes(t.id)
+        };
+      });
       setTeams(mappedTeams);
     }
   };
@@ -98,13 +148,11 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
         tags: userRole === 'ADMIN' && newTeam.isOfficial
           ? ['OFFICIAL', 'MOD-LED']
           : ['New', 'Member-Owned'],
-        // Only update created_by if creating new
-        ...(editingSquadId ? {} : { created_by: user.id, image_url: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=400' })
+        ...(editingSquadId ? {} : { created_by: user.id })
       };
 
       let result;
       if (editingSquadId) {
-        // Update
         result = await supabase
           .from('squads')
           .update(squadData)
@@ -112,7 +160,6 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
           .select()
           .single();
       } else {
-        // Create
         result = await supabase
           .from('squads')
           .insert(squadData)
@@ -123,20 +170,21 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
       if (result.error) throw result.error;
 
       if (result.data) {
-        if (editingSquadId) {
-          setTeams(teams.map(t => t.id === editingSquadId ? { ...t, ...result.data } : t));
-          alert('Squad updated successfully!');
-        } else {
-          setTeams([result.data, ...teams]);
-          alert('Squad deployed successfully!');
+        if (!editingSquadId) {
+          await supabase.from('squad_members').insert({
+            squad_id: result.data.id,
+            user_id: user.id,
+            role: 'OWNER'
+          });
         }
 
+        showToast(editingSquadId ? 'Squad updated successfully!' : 'Squad deployed successfully!', 'success');
+        loadSquads(user.id);
         closeModal();
       }
 
     } catch (err: any) {
-      console.error('Failed to save squad:', err);
-      alert('Error saving squad: ' + err.message);
+      showToast('Error saving squad: ' + err.message, 'error');
     }
   };
 
@@ -157,12 +205,63 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
     setNewTeam({ name: '', description: '', isPrivate: false, isOfficial: false });
   };
 
-  const joinTeam = (id: string) => {
-    setJoinedTeamId(id);
-    setTimeout(() => {
+  const joinTeam = async (teamId: string) => {
+    if (!currentUserId) {
+      showToast('Please login to join a squad.', 'info');
+      return;
+    }
+
+    setJoinedTeamId(teamId);
+    try {
+      const { error } = await supabase.from('squad_members').insert({
+        squad_id: teamId,
+        user_id: currentUserId,
+        role: 'MEMBER'
+      });
+
+      if (error) throw error;
+
+      showToast('Successfully joined the squad!', 'success');
+      loadSquads();
+
+      setTimeout(() => {
+        setJoinedTeamId(null);
+        setActiveTab('my-teams');
+      }, 1500);
+    } catch (err: any) {
+      showToast('Error joining squad: ' + err.message, 'error');
       setJoinedTeamId(null);
-      setActiveTab('my-teams');
-    }, 1500);
+    }
+  };
+
+  const viewMembers = async (team: Team) => {
+    setActiveSquadName(team.name);
+    const { data, error } = await supabase
+      .from('squad_members')
+      .select(`
+        id,
+        role,
+        joined_at,
+        profiles (
+          full_name,
+          avatar_url
+        )
+      `)
+      .eq('squad_id', team.id);
+
+    if (error) {
+      showToast('Error loading members: ' + error.message, 'error');
+      return;
+    }
+
+    const formattedMembers = (data || []).map((m: any) => ({
+      id: m.id,
+      role: m.role,
+      profiles: m.profiles
+    }));
+
+    setSelectedSquadMembers(formattedMembers);
+    setShowMembersModal(true);
   };
 
   const filteredTeams = teams.filter(t =>
@@ -170,17 +269,18 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
     t.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const myTeams = teams.filter(t => {
-    if (userRole === 'ADMIN') {
-      return t.is_official || t.created_by === currentUserId;
-    }
-    return t.created_by === currentUserId; // simplified for now, should also include joined squads
-  });
+  const myTeams = teams.filter(t => t.is_member || t.created_by === currentUserId);
 
   const displayTeams = activeTab === 'discover' ? filteredTeams : myTeams;
 
   return (
     <div className="space-y-8 animate-fade-in pb-20">
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast({ ...toast, isVisible: false })}
+      />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <p className={`text-xs font-black text-${themeColor}-600 uppercase tracking-[0.4em] mb-4`}>
@@ -238,6 +338,7 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
               team={team}
               onJoin={() => joinTeam(team.id)}
               onManage={() => openEditModal(team)}
+              onViewMembers={() => viewMembers(team)}
               isJoining={joinedTeamId === team.id}
               themeColor={themeColor}
               currentUserId={currentUserId}
@@ -367,17 +468,76 @@ const Teams: React.FC<TeamsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed =
         </div>,
         document.body
       )}
+
+      {showMembersModal && ReactDOM.createPortal(
+        <div className={`fixed top-0 left-0 right-0 bottom-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300 ${isSidebarCollapsed ? 'md:pl-20' : 'md:pl-72'}`}>
+          <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl relative overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+            <button
+              onClick={() => setShowMembersModal(false)}
+              className="absolute top-6 right-6 p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full transition-all text-slate-500"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="mb-8 ">
+              <h2 className="text-3xl font-black text-slate-950 tracking-tighter mb-2 uppercase">
+                {activeSquadName} ROSTER.
+              </h2>
+              <p className="text-slate-500 font-medium uppercase tracking-widest text-xs">
+                Current active deployment: {selectedSquadMembers.length} operators
+              </p>
+            </div>
+
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {selectedSquadMembers.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={member.profiles?.avatar_url || `https://ui-avatars.com/api/?name=${member.profiles?.full_name || 'User'}&background=random`}
+                      className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm"
+                    />
+                    <div>
+                      <p className="font-bold text-slate-900">{member.profiles?.full_name || 'Unknown Player'}</p>
+                      <div className="flex items-center gap-2">
+                        {member.role === 'OWNER' ? (
+                          <span className="text-[10px] font-black text-lime-600 uppercase tracking-widest flex items-center gap-1">
+                            <Crown size={10} /> SQUAD LEADER
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">MEMBER</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
 
-const TeamCard: React.FC<{ team: Team, onJoin: () => void, onManage: () => void, isJoining: boolean, themeColor: string, currentUserId: string | null }> = ({ team, onJoin, onManage, isJoining, themeColor, currentUserId }) => {
+interface TeamCardProps {
+  team: Team;
+  onJoin: () => void;
+  onManage: () => void;
+  onViewMembers: () => void;
+  isJoining: boolean;
+  themeColor: string;
+  currentUserId: string | null;
+}
+
+const TeamCard: React.FC<TeamCardProps> = ({ team, onJoin, onManage, onViewMembers, isJoining, themeColor, currentUserId }) => {
   const isCreator = currentUserId === team.created_by;
+  const isMember = team.is_member;
 
   return (
     <div className="group relative bg-white rounded-[48px] border border-slate-200 overflow-hidden shadow-sm hover:shadow-2xl transition-all hover:-translate-y-2 duration-500">
       <div className="aspect-[16/10] relative overflow-hidden">
-        <img src={team.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 opacity-90" />
+        <img src={team.image_url || 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=400'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 opacity-90" />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
 
         <div className="absolute top-6 left-6 flex gap-2">
@@ -394,6 +554,15 @@ const TeamCard: React.FC<{ team: Team, onJoin: () => void, onManage: () => void,
           )}
         </div>
 
+        {isCreator && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onManage(); }}
+            className="absolute top-6 right-6 p-3 bg-white/10 backdrop-blur-md hover:bg-white/20 rounded-2xl text-white transition-all shadow-xl border border-white/10"
+          >
+            <Shield size={18} />
+          </button>
+        )}
+
         <div className="absolute bottom-6 left-6 right-6">
           <h3 className="text-2xl font-black text-white tracking-tighter leading-tight uppercase">{team.name}</h3>
         </div>
@@ -405,18 +574,18 @@ const TeamCard: React.FC<{ team: Team, onJoin: () => void, onManage: () => void,
         </p>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-all" onClick={onViewMembers}>
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Squad Rating</p>
             <div className="flex items-center gap-2">
-              <Zap size={14} className={`text-${themeColor}-600 fill-${themeColor}-600`} />
+              <Zap size={14} className={`text-${themeColor === 'indigo' ? 'indigo-600' : 'lime-400'} fill-${themeColor === 'indigo' ? 'indigo-600' : 'lime-400'}`} />
               <span className="font-black text-slate-950 text-xl tracking-tight">{(team.avg_rating || 0).toFixed(1)}</span>
             </div>
           </div>
-          <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-all" onClick={onViewMembers}>
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Roster</p>
             <div className="flex items-center gap-2">
-              <UsersRound size={14} className={`text-${themeColor}-600`} />
-              <span className="font-black text-slate-950 text-xl tracking-tight">{team.members_count || 0}</span>
+              <UsersRound size={14} className={`text-${themeColor === 'indigo' ? 'indigo-600' : 'lime-400'}`} />
+              <span className="font-black text-slate-950 text-xl tracking-tight">{team.members_count}</span>
             </div>
           </div>
         </div>
@@ -430,19 +599,15 @@ const TeamCard: React.FC<{ team: Team, onJoin: () => void, onManage: () => void,
         </div>
 
         <button
-          onClick={isCreator ? onManage : onJoin}
-          disabled={isJoining}
-          className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 relative overflow-hidden ${isJoining ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-lime-400 text-slate-950 hover:bg-lime-500 shadow-xl shadow-lime-100'
+          onClick={isMember ? onViewMembers : onJoin}
+          disabled={isJoining || (isMember && !isCreator)}
+          className={`w-full h-16 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 relative overflow-hidden ${isJoining ? 'bg-blue-600 text-white shadow-blue-100' : isMember ? 'bg-slate-950 text-white hover:bg-slate-900 shadow-xl shadow-slate-200' : 'bg-lime-400 text-slate-950 hover:bg-lime-500 shadow-xl shadow-lime-100'
             }`}
         >
           {isJoining ? (
-            isCreator ? (
-              <>ACCESSING SQUAD... <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></>
-            ) : (
-              <>DEPLOYMENT REQUEST SENT <CheckCircle2 size={18} /></>
-            )
-          ) : isCreator ? (
-            <>MANAGE SQUAD <ArrowRight size={18} /></>
+            <>JOINING SQUAD... <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></>
+          ) : isMember ? (
+            <>VIEW SQUAD ROSTER <ArrowRight size={18} /></>
           ) : (
             <>ENTER THE SQUAD <ArrowRight size={18} /></>
           )}
