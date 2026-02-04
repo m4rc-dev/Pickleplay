@@ -319,12 +319,6 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {pendingCount > 0 && <span className={`absolute ${isSidebarCollapsed ? 'top-1 right-2' : 'top-3 right-4'} w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse`}>{pendingCount}</span>}
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="Manage Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <div className={`pt-2 mt-2 border-t border-white/10 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-                  <p className="text-[10px] font-black uppercase tracking-widest px-4 mb-2 text-white/40">Court Management</p>
-                  <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                  <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                  <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                </div>
               </div>
             )}
             {role === 'PLAYER' && (
@@ -458,17 +452,7 @@ const NavigationHandler: React.FC<{
             </div>
             <nav className="flex-1 space-y-2">
               <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-              {role === 'ADMIN' && (
-                <>
-                  <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <div className="border-t border-slate-100 my-2 pt-2 px-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Court Management</p>
-                    <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                    <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                    <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  </div>
-                </>
-              )}
+              {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />}
               {role === 'PLAYER' && (
                 <>
                   <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
@@ -691,6 +675,11 @@ const App: React.FC = () => {
         if (appsRes.data && appsRes.data.length > 0) {
           const approvedRoles = appsRes.data.map(app => app.requested_role as UserRole);
           consolidatedRoles = Array.from(new Set([...consolidatedRoles, ...approvedRoles]));
+        }
+
+        // Auto-include COURT_OWNER for ADMINS
+        if (consolidatedRoles.includes('ADMIN') && !consolidatedRoles.includes('COURT_OWNER')) {
+          consolidatedRoles.push('COURT_OWNER');
         }
 
         // Self-Healing Logic:

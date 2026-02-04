@@ -23,7 +23,13 @@ import {
   ChevronRight,
   ArrowUp,
   FileText,
-  ExternalLink
+  ExternalLink,
+  Ban,
+  AlertTriangle,
+  Key,
+  Globe,
+  Clock,
+  History
 } from 'lucide-react';
 import {
   BarChart,
@@ -94,6 +100,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
 
   const [totalUsers, setTotalUsers] = useState<number>(0);
+  const [securityLogs, setSecurityLogs] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<Record<string, any>>({});
 
   useEffect(() => {
     loadTournaments();
@@ -128,6 +137,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
       }));
       setUserList(mappedUsers);
     }
+
+    // 3. Fetch Logs
+    const { data: logs } = await supabase
+      .from('system_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (logs) {
+      setSecurityLogs(logs.filter(l => l.event_type === 'SECURITY'));
+      setAuditLogs(logs.filter(l => l.event_type === 'AUDIT'));
+    }
+
+    // 4. Fetch Platform Settings
+    const { data: settings } = await supabase
+      .from('platform_settings')
+      .select('*');
+
+    if (settings) {
+      const settingsMap = settings.reduce((acc, curr) => ({
+        ...acc,
+        [curr.key]: curr.value
+      }), {});
+      setPlatformSettings(settingsMap);
+    }
+  };
+
+  const handleToggleSetting = async (key: string) => {
+    const newValue = !platformSettings[key];
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('platform_settings')
+        .update({
+          value: newValue,
+          updated_at: new Date().toISOString(),
+          updated_by: user?.id
+        })
+        .eq('key', key);
+
+      if (error) throw error;
+
+      setPlatformSettings(prev => ({ ...prev, [key]: newValue }));
+      await logAdminAction('SECURITY_TOGGLE', key, key.replace('security_', '').replace(/_/g, ' ').toUpperCase(), `Enabled -> ${newValue}`, 'SECURITY');
+    } catch (err: any) {
+      console.error('Failed to toggle setting:', err);
+      alert('Error updating setting: ' + err.message);
+    }
+  };
+
+  const logAdminAction = async (action: string, targetId: string, targetName: string, details: string, eventType: 'AUDIT' | 'SECURITY' = 'AUDIT') => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('system_logs').insert({
+        event_type: eventType,
+        action,
+        agent_id: user?.id,
+        agent_name: 'System Admin', // Fallback
+        target_id: targetId,
+        target_name: targetName,
+        details,
+        ip_address: 'Logged Session'
+      });
+      // Refresh logs
+      fetchAdminData();
+    } catch (err) {
+      console.error('Logging failed:', err);
+    }
   };
 
   const handleUpdateUserRole = async (userId: string, newRole: UserRole) => {
@@ -138,6 +215,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
         .eq('id', userId);
 
       if (error) throw error;
+
+      const targetUser = userList.find(u => u.id === userId);
+      await logAdminAction('ROLE_UPDATE', userId, targetUser?.name || 'Unknown', `${targetUser?.role} -> ${newRole}`);
 
       setUserList(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       alert(`User role updated to ${newRole}`);
@@ -161,6 +241,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
         .eq('id', userId);
 
       if (error) throw error;
+
+      const targetUser = userList.find(u => u.id === userId);
+      await logAdminAction('STATUS_UPDATE', userId, targetUser?.name || 'Unknown', `Status -> ${newStatus}`, 'SECURITY');
 
       setUserList(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus as any } : u));
       alert(`User account is now ${newStatus}`);
@@ -254,6 +337,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
           };
 
           setTournaments(prev => prev.map(t => t.id === editingTournamentId ? updatedTournament : t));
+          await logAdminAction('TOURNAMENT_UPDATE', data.id, data.name, 'Updated event parameters');
           alert('Tournament successfully updated!');
         }
       } else {
@@ -279,6 +363,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
           };
 
           setTournaments(prev => [createdTournament, ...prev]);
+          await logAdminAction('TOURNAMENT_DEPLOY', data.id, data.name, 'New intermediate tournament');
           alert('Tournament successfully deployed!');
         }
       }
@@ -316,6 +401,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
       if (error) throw error;
 
       setTournaments(prev => prev.filter(t => t.id !== editingTournamentId));
+      await logAdminAction('TOURNAMENT_DELETE', editingTournamentId, 'Tournament', 'Event terminated');
       setShowTournamentModal(false);
       setEditingTournamentId(null);
       alert('Tournament deleted successfully.');
@@ -629,6 +715,164 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             </div>
           </div>
         )}
+
+        {activeTab === 'security' && (
+          <div className="space-y-8 animate-slide-up">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Access Control & Authentication */}
+              <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm space-y-8">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
+                    <Lock className="text-indigo-600" /> Security Controls
+                  </h2>
+                  <p className="text-slate-500 font-medium text-sm mt-1">Configure platform-wide authentication and access policies.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <SecurityToggle
+                    icon={<ShieldCheck size={20} className="text-emerald-500" />}
+                    title="Two-Factor Authentication (2FA)"
+                    description="Force 2FA for all administrative accounts."
+                    enabled={platformSettings['security_2fa_enabled'] ?? true}
+                    onToggle={() => handleToggleSetting('security_2fa_enabled')}
+                  />
+                  <SecurityToggle
+                    icon={<Key size={20} className="text-blue-500" />}
+                    title="Session Persistence"
+                    description="Automatically terminate idle administrative sessions after 15 minutes."
+                    enabled={platformSettings['security_session_persistence'] ?? true}
+                    onToggle={() => handleToggleSetting('security_session_persistence')}
+                  />
+                  <SecurityToggle
+                    icon={<Ban size={20} className="text-rose-500" />}
+                    title="IP Brute-Force Protection"
+                    description="Automatically blacklist IPs with more than 5 failed login attempts."
+                    enabled={platformSettings['security_brute_force_protection'] ?? true}
+                    onToggle={() => handleToggleSetting('security_brute_force_protection')}
+                  />
+                </div>
+
+                <div className="pt-8 border-t border-slate-100">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                    <Globe size={14} /> Regional IP Restrictions
+                  </h3>
+                  <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-xs font-bold font-mono">124.106.128.0/24</span>
+                      </div>
+                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Office HQ</span>
+                    </div>
+                    <button className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-black text-[10px] uppercase tracking-widest hover:border-blue-200 hover:text-blue-400 transition-all">
+                      Add Restricted IP
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Event Feed */}
+              <div className="bg-slate-950 p-10 rounded-[48px] text-white shadow-2xl relative overflow-hidden flex flex-col">
+                <div className="relative z-10 flex-1">
+                  <h3 className="text-xl font-black flex items-center gap-2 mb-8 uppercase text-lime-400">
+                    <AlertTriangle size={24} /> Threat Intelligence
+                  </h3>
+
+                  <div className="space-y-4 mb-8">
+                    {securityLogs.length === 0 ? (
+                      <div className="text-center py-10 opacity-30 uppercase font-black text-xs">No active threats detected</div>
+                    ) : (
+                      securityLogs.map((log, i) => (
+                        <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/10 flex flex-col gap-2">
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.action === 'STATUS_UPDATE' ? 'bg-rose-500 text-white' : i === 0 ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
+                              }`}>
+                              {log.action.replace('_', ' ')}
+                            </span>
+                            <span className="text-[10px] font-bold text-white/40 uppercase">
+                              {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-mono text-white/80 font-bold">{log.target_name}</span>
+                            <span className="text-xs text-white/60 font-medium">{log.details}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <button className="relative z-10 w-full py-5 bg-white/10 border border-white/20 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-white/20 transition-all">
+                  Generate Threat Report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'audit' && (
+          <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden animate-slide-up">
+            <div className="p-10 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">System Audit Log</h2>
+                <p className="text-slate-500 font-medium text-sm mt-1">Immutable record of all administrative activities.</p>
+              </div>
+              <button className="flex items-center gap-2 px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-white hover:shadow-md transition-all">
+                <FileText size={16} /> Export JSON
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    <th className="px-8 py-6">Timestamp</th>
+                    <th className="px-8 py-6">Agent</th>
+                    <th className="px-8 py-6">Action</th>
+                    <th className="px-8 py-6">Target</th>
+                    <th className="px-8 py-6 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-8 py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No audit logs found.</td>
+                    </tr>
+                  ) : (
+                    auditLogs.map((log, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-8 py-6">
+                          <span className="text-xs font-mono text-slate-500">
+                            {new Date(log.created_at).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                              <History size={12} />
+                            </div>
+                            <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{log.agent_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <span className="text-sm font-bold text-slate-600">{log.target_name}</span>
+                        </td>
+                        <td className="px-8 py-6 text-right">
+                          <span className="text-xs text-slate-400 italic font-medium">{log.details}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL IS NOW OUTSIDE THE WRAPPER TO PREVENT TRANSFORM TRAPPING */}
@@ -769,6 +1013,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   );
 };
 
+const MetricCard: React.FC<{ label: string, value: string, change: string, up: boolean }> = ({ label, value, change, up }) => (
+  <div className="bg-white p-10 rounded-[40px] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative">
+    <div className="relative z-10">
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">{label}</p>
+      <div className="flex items-end justify-between">
+        <h3 className="text-4xl font-black text-slate-900 group-hover:text-blue-600 transition-colors tracking-tighter">{value}</h3>
+        <div className={`flex items-center gap-1 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${up ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-slate-50 text-slate-500'}`}>
+          {up ? <ArrowUp size={12} /> : ''} {change}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 const TabButton: React.FC<{ active: boolean, onClick: () => void, label: string, badge?: number, icon?: React.ReactNode }> = ({ active, onClick, label, badge, icon }) => (
   <button
     onClick={onClick}
@@ -784,16 +1042,26 @@ const TabButton: React.FC<{ active: boolean, onClick: () => void, label: string,
   </button>
 );
 
-const MetricCard: React.FC<{ label: string, value: string, change: string, up: boolean }> = ({ label, value, change, up }) => (
-  <div className="bg-white p-10 rounded-[40px] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative">
-    <div className="relative z-10">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6">{label}</p>
-      <div className="flex items-end justify-between">
-        <h3 className="text-4xl font-black text-slate-900 group-hover:text-blue-600 transition-colors tracking-tighter">{value}</h3>
-        <div className={`flex items-center gap-1 text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${up ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-slate-50 text-slate-500'}`}>
-          {up ? <ArrowUp size={12} /> : ''} {change}
-        </div>
+const SecurityToggle: React.FC<{
+  icon: React.ReactNode,
+  title: string,
+  description: string,
+  enabled: boolean,
+  onToggle?: () => void
+}> = ({ icon, title, description, enabled, onToggle }) => (
+  <div
+    onClick={onToggle}
+    className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex items-center justify-between group hover:bg-white hover:shadow-xl hover:border-slate-200 transition-all duration-500 cursor-pointer"
+  >
+    <div className="flex items-center gap-5">
+      <div className="p-4 bg-white rounded-2xl shadow-sm group-hover:scale-110 transition-transform">{icon}</div>
+      <div>
+        <h4 className="font-black text-slate-900 uppercase tracking-tight leading-none">{title}</h4>
+        <p className="text-[11px] text-slate-500 font-medium mt-1.5">{description}</p>
       </div>
+    </div>
+    <div className={`w-14 h-8 rounded-full p-1.5 transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+      <div className={`w-5 h-5 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0'}`} />
     </div>
   </div>
 );

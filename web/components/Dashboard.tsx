@@ -327,7 +327,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         return (
           <>
             <StatCard label="Total Users" value={totalUsers !== null ? totalUsers.toLocaleString() : '...'} change="+12%" icon={<Users className="text-indigo-600" />} color="indigo" />
-            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="Platform" icon={<DollarSign className="text-amber-600" />} color="amber" />
+            <StatCard label="Active Sessions" value={activeSessions !== null ? activeSessions.toLocaleString() : '...'} change="+3%" icon={<Activity className="text-lime-600" />} color="lime" />
             <StatCard label="Pending Apps" value={pendingAppsCount.toString()} change={`${pendingAppsCount > 0 ? 'Action Req.' : 'Clear'}`} icon={<BarChart4 className="text-slate-600" />} color="slate" />
           </>
         );
@@ -407,14 +407,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <PlusCircle size={18} />
               {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Add Court' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
             </button>
-            {userRole === 'ADMIN' && (
-              <button
-                onClick={() => navigate('/courts')}
-                className="whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl shadow-lg shadow-amber-100 transition-all flex items-center gap-2 md:gap-3"
-              >
-                <Building2 size={18} /> Add Court
-              </button>
-            )}
           </div>
         )}
       </div>
