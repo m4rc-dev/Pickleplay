@@ -94,74 +94,140 @@ const Booking: React.FC = () => {
     fetchCourts();
   }, []);
 
-  // Check availability when a court is selected
-  useEffect(() => {
-    const checkCourtAvailability = async () => {
-      if (!selectedCourt) {
-        setBlockedSlots(new Set());
-        setBookedSlots(new Set());
-        return;
+  // Function to check court availability - extracted for reuse
+  const checkCourtAvailability = async (court: Court | null) => {
+    if (!court) {
+      setBlockedSlots(new Set());
+      setBookedSlots(new Set());
+      return;
+    }
+
+    setIsCheckingAvailability(true);
+    const newBlockedSlots = new Set<string>();
+    const newBookedSlots = new Set<string>();
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    try {
+      // 1. Fetch court events (blocking events from owner)
+      const { data: events } = await getCourtBlockingEvents(court.id);
+      
+      // 2. Fetch existing bookings for today - use RPC function to bypass RLS
+      // First try direct query, if empty try using a public view approach
+      let bookings: any[] = [];
+      
+      // Try fetching with a more permissive query
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('start_time, end_time, status')
+        .eq('court_id', court.id)
+        .eq('date', todayStr)
+        .not('status', 'eq', 'cancelled');
+
+      if (bookingsError) {
+        console.error('Error fetching bookings:', bookingsError);
       }
+      
+      bookings = bookingsData || [];
+      console.log('Fetched bookings for court:', court.id, 'date:', todayStr, 'bookings:', bookings, 'error:', bookingsError);
 
-      setIsCheckingAvailability(true);
-      const newBlockedSlots = new Set<string>();
-      const newBookedSlots = new Set<string>();
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      // Check each time slot
+      for (const slot of TIME_SLOTS) {
+        const { start, end } = getSlotDateTime(slot, today);
 
-      try {
-        // 1. Fetch court events (blocking events from owner)
-        const { data: events } = await getCourtBlockingEvents(selectedCourt.id);
-        
-        // 2. Fetch existing bookings for today
-        const { data: bookings } = await supabase
-          .from('bookings')
-          .select('start_time, end_time')
-          .eq('court_id', selectedCourt.id)
-          .eq('date', todayStr)
-          .neq('status', 'cancelled');
+        // Check against court events
+        if (events) {
+          for (const event of events) {
+            const eventStart = new Date(event.start_datetime);
+            const eventEnd = new Date(event.end_datetime);
 
-        // Check each time slot
-        for (const slot of TIME_SLOTS) {
-          const { start, end } = getSlotDateTime(slot, today);
-
-          // Check against court events
-          if (events) {
-            for (const event of events) {
-              const eventStart = new Date(event.start_datetime);
-              const eventEnd = new Date(event.end_datetime);
-
-              // Check if slot overlaps with event
-              if (start < eventEnd && end > eventStart) {
-                newBlockedSlots.add(slot);
-                break;
-              }
-            }
-          }
-
-          // Check against existing bookings
-          if (bookings) {
-            const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
-            
-            for (const booking of bookings) {
-              if (booking.start_time === startTimeStr) {
-                newBookedSlots.add(slot);
-                break;
-              }
+            // Check if slot overlaps with event
+            if (start < eventEnd && end > eventStart) {
+              newBlockedSlots.add(slot);
+              break;
             }
           }
         }
 
-        setBlockedSlots(newBlockedSlots);
-        setBookedSlots(newBookedSlots);
-      } catch (err) {
-        console.error('Error checking availability:', err);
-      } finally {
-        setIsCheckingAvailability(false);
+        // Check against existing bookings
+        if (bookings && bookings.length > 0) {
+          const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
+          
+          for (const booking of bookings) {
+            // Compare start times - handle both HH:MM:SS and HH:MM formats
+            const bookingStartTime = booking.start_time?.substring(0, 8); // Get HH:MM:SS
+            console.log('Comparing slot:', slot, 'startTimeStr:', startTimeStr, 'bookingStartTime:', bookingStartTime);
+            
+            if (bookingStartTime === startTimeStr || booking.start_time?.startsWith(startTimeStr.substring(0, 5))) {
+              console.log('MATCH FOUND - marking slot as booked:', slot);
+              newBookedSlots.add(slot);
+              break;
+            }
+          }
+        }
       }
-    };
 
-    checkCourtAvailability();
+      console.log('Final booked slots:', Array.from(newBookedSlots));
+      console.log('Final blocked slots:', Array.from(newBlockedSlots));
+      
+      setBlockedSlots(newBlockedSlots);
+      setBookedSlots(newBookedSlots);
+    } catch (err) {
+      console.error('Error checking availability:', err);
+    } finally {
+      setIsCheckingAvailability(false);
+    }
+  };
+
+  // Check availability when a court is selected
+  useEffect(() => {
+    checkCourtAvailability(selectedCourt);
+  }, [selectedCourt]);
+
+  // Polling: Auto-refresh availability every 5 seconds for real-time updates across all players
+  useEffect(() => {
+    if (!selectedCourt) return;
+
+    // Poll every 5 seconds to check for new bookings
+    const pollInterval = setInterval(() => {
+      checkCourtAvailability(selectedCourt);
+    }, 5000); // 5 seconds
+
+    // Cleanup interval when court changes or component unmounts
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [selectedCourt]);
+
+  // Real-time subscription to bookings - updates for ALL players when anyone books
+  useEffect(() => {
+    if (!selectedCourt) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Subscribe to booking changes for the selected court
+    const subscription = supabase
+      .channel(`bookings-${selectedCourt.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'bookings',
+          filter: `court_id=eq.${selectedCourt.id}`
+        },
+        (payload) => {
+          console.log('Booking change detected:', payload);
+          // Refresh availability for all players viewing this court
+          checkCourtAvailability(selectedCourt);
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription when court changes or component unmounts
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, [selectedCourt]);
 
   useEffect(() => {
@@ -391,7 +457,16 @@ const Booking: React.FC = () => {
         }, 3000);
       } catch (err: any) {
         console.error('Booking error:', err);
-        alert(`Booking failed: ${err.message}`);
+        
+        // Handle duplicate booking constraint violation
+        if (err.message?.includes('unique_court_booking') || err.code === '23505') {
+          alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
+          // Refresh availability to show updated slots
+          setSelectedSlot(null);
+          checkCourtAvailability(selectedCourt);
+        } else {
+          alert(`Booking failed: ${err.message}`);
+        }
       } finally {
         setIsProcessing(false);
       }
