@@ -566,13 +566,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 console.log('Action Button Clicked - Role:', userRole);
                 if (userRole === 'ADMIN') setShowBroadcastModal(true);
                 else if (userRole === 'COACH') navigate('/clinics');
-                else if (userRole === 'COURT_OWNER') navigate('/courts');
+                else if (userRole === 'COURT_OWNER') {
+                  // Show a menu or just navigate to courts? 
+                  // Let's add a condition or a way to choose.
+                  // For now, let's keep it simple and maybe navigate to tournaments if they want.
+                  navigate('/tournaments-admin');
+                }
                 else if (userRole === 'PLAYER') setShowLogDuprModal(true);
               }}
               className={`whitespace-nowrap bg-${themeColor}-600 hover:bg-${themeColor}-700 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl shadow-lg shadow-${themeColor}-100 transition-all flex items-center gap-2 md:gap-3`}
             >
               <PlusCircle size={18} />
-              {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Add Court' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
+              {userRole === 'ADMIN' ? 'Broadcast' : userRole === 'COURT_OWNER' ? 'Add Tournament' : userRole === 'COACH' ? 'New Clinic' : 'Log DUPR'}
             </button>
           </div>
         )}

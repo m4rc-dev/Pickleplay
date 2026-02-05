@@ -42,6 +42,7 @@ import Booking from './components/Booking';
 import Community from './components/Community';
 import Rankings from './components/Rankings';
 import AdminDashboard from './components/AdminDashboard';
+import Tournaments from './components/Tournaments';
 import News from './components/News';
 import Shop from './components/Shop';
 import Teams from './components/Teams';
@@ -60,6 +61,7 @@ import Schedule from './components/coach/Schedule';
 import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
+import TournamentsManager from './components/court-owner/TournamentsManager';
 import Coaches from '@/components/Coaches';
 import { supabase } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
@@ -325,6 +327,7 @@ const NavigationHandler: React.FC<{
             {role === 'PLAYER' && (
               <>
                 <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
@@ -341,6 +344,7 @@ const NavigationHandler: React.FC<{
               <>
                 <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
             )}
@@ -458,6 +462,7 @@ const NavigationHandler: React.FC<{
               {role === 'PLAYER' && (
                 <>
                   <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                 </>
@@ -473,6 +478,7 @@ const NavigationHandler: React.FC<{
                 <>
                   <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                 </>
               )}
@@ -532,6 +538,7 @@ const NavigationHandler: React.FC<{
               <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/tournaments" element={role !== 'guest' ? <Tournaments /> : <Navigate to="/" />} />
               <Route path="/coaches" element={role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
               <Route path="/teams" element={role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
@@ -546,6 +553,7 @@ const NavigationHandler: React.FC<{
               {/* Specialized Court Owner Routes */}
               <Route path="/courts" element={role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
               <Route path="/bookings-admin" element={role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin" element={role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
               <Route path="/revenue" element={role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
