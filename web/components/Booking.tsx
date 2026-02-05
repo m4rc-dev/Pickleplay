@@ -309,14 +309,14 @@ const Booking: React.FC = () => {
     );
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-6">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4">
         <div>
-          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2025</p>
-          <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Book a Court.</h1>
+          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURTS / 2025</p>
+          <h1 className="text-3xl md:text-4xl font-black text-slate-950 tracking-tighter uppercase">Book a Court.</h1>
         </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Filter Chips */}
           <div className="flex gap-2">
             {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
@@ -356,51 +356,51 @@ const Booking: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Map View */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             {isLoading ? (
-              <div className="h-[600px] bg-slate-100 flex items-center justify-center">
-                <Loader2 className="animate-spin text-blue-600" size={48} />
+              <div className="h-[400px] bg-slate-100 flex items-center justify-center">
+                <Loader2 className="animate-spin text-blue-600" size={40} />
               </div>
             ) : (
-              <div ref={mapRef} className="h-[600px] w-full" />
+              <div ref={mapRef} className="h-[400px] w-full" />
             )}
           </div>
         </div>
 
         {/* Court Details Sidebar */}
-        <div className="lg:col-span-1 space-y-6">
+        <div className="lg:col-span-1 space-y-4">
           {selectedCourt ? (
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <div>
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider ${selectedCourt.type === 'Indoor'
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={`text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider ${selectedCourt.type === 'Indoor'
                       ? 'bg-blue-50 text-blue-600'
                       : 'bg-lime-50 text-lime-600'
                       }`}>
                       {selectedCourt.type}
                     </span>
-                    <span className="text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-600">
+                    <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-600">
                       {selectedCourt.numCourts} {selectedCourt.numCourts === 1 ? 'Court' : 'Courts'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-sm text-slate-500 font-medium mb-6">
-                  <MapPin size={14} className="shrink-0" />
+                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mb-4">
+                  <MapPin size={12} className="shrink-0" />
                   <span className="leading-snug">{selectedCourt.location}</span>
                 </div>
 
                 {selectedCourt.amenities && (selectedCourt.amenities as string[]).length > 0 && (
-                  <div className="mb-6">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Amenities</p>
-                    <div className="flex flex-wrap gap-1.5">
+                  <div className="mb-4">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Amenities</p>
+                    <div className="flex flex-wrap gap-1">
                       {(selectedCourt.amenities as string[]).map((amenity, idx) => (
-                        <span key={idx} className="text-[9px] font-bold px-2 py-1 bg-slate-50 text-slate-600 rounded-md border border-slate-100 uppercase tracking-wider italic">
+                        <span key={idx} className="text-[8px] font-bold px-1.5 py-0.5 bg-slate-50 text-slate-600 rounded-sm border border-slate-100 uppercase tracking-wider italic">
                           {amenity}
                         </span>
                       ))}
@@ -408,30 +408,30 @@ const Booking: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-2xl text-white shadow-xl">
+                <div className="flex items-center justify-between p-3 bg-slate-950 rounded-2xl text-white shadow-lg">
                   <div>
-                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1.5">Rate</p>
+                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Rate</p>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-black">₱{selectedCourt.pricePerHour}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">/hr</span>
+                      <span className="text-xl font-black">₱{selectedCourt.pricePerHour}</span>
+                      <span className="text-[8px] font-bold text-slate-400 uppercase">/hr</span>
                     </div>
                   </div>
-                  <Navigation size={20} className="text-lime-400" />
+                  <Navigation size={18} className="text-lime-400" />
                 </div>
               </div>
 
               {/* Time Slots */}
               <div>
-                <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                  <Clock size={16} className="text-blue-600" />
+                <h4 className="text-xs font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <Clock size={14} className="text-blue-600" />
                   Available Times
                 </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {TIME_SLOTS.map(slot => (
                     <button
                       key={slot}
                       onClick={() => setSelectedSlot(slot)}
-                      className={`py-2.5 px-3 rounded-xl font-semibold text-sm transition-all border ${selectedSlot === slot
+                      className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border ${selectedSlot === slot
                         ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
                         }`}
@@ -446,7 +446,7 @@ const Booking: React.FC = () => {
               <button
                 disabled={!selectedSlot || isBooked || isProcessing}
                 onClick={handleBooking}
-                className={`w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isBooked
+                className={`w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isBooked
                   ? 'bg-lime-400 text-slate-900 cursor-default'
                   : 'bg-lime-400 hover:bg-lime-500 text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-lime-100'
                   }`}
@@ -464,17 +464,17 @@ const Booking: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <MapPin size={48} className="mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-bold text-slate-900 mb-2">Select a Court</h3>
-              <p className="text-sm text-slate-500">Click on a marker on the map to view court details and book.</p>
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-center">
+              <MapPin size={40} className="mx-auto text-slate-300 mb-2" />
+              <h3 className="text-sm font-bold text-slate-900 mb-1.5">Select a Court</h3>
+              <p className="text-xs text-slate-500">Click on a marker on the map to view court details and book.</p>
             </div>
           )}
 
           {/* Court List */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h4 className="text-sm font-bold text-slate-900 mb-4">All Courts ({filteredCourts.length})</h4>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-hide">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+            <h4 className="text-xs font-bold text-slate-900 mb-3">All Courts ({filteredCourts.length})</h4>
+            <div className="space-y-1.5 max-h-[250px] overflow-y-auto scrollbar-hide">
               {isLoading ? (
                 Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
               ) : (
