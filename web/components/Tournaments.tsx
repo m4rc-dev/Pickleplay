@@ -1,0 +1,280 @@
+import React, { useState, useEffect } from 'react';
+import { Trophy, Calendar, MapPin, Users, Award, Search, Filter, CheckCircle2 } from 'lucide-react';
+import { supabase } from '../services/supabase';
+import { Tournament } from '../types';
+
+const Tournaments: React.FC = () => {
+    const [tournaments, setTournaments] = useState<(Tournament & { isJoined?: boolean })[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filter, setFilter] = useState('All');
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const init = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                setCurrentUserId(session.user.id);
+            }
+            fetchTournaments(session?.user?.id);
+        };
+        init();
+    }, []);
+
+    const fetchTournaments = async (userId?: string) => {
+        setIsLoading(true);
+        try {
+            // Fetch tournaments
+            const { data: tourneyData, error: tourneyError } = await supabase
+                .from('tournaments')
+                .select('*')
+                .order('date', { ascending: true });
+
+            if (tourneyError) throw tourneyError;
+
+            // If user is logged in, fetch their registrations
+            let registrations: Set<string> = new Set();
+            if (userId) {
+                const { data: regData } = await supabase
+                    .from('tournament_registrations')
+                    .select('tournament_id')
+                    .eq('player_id', userId);
+
+                if (regData) {
+                    registrations = new Set(regData.map(r => r.tournament_id));
+                }
+            }
+
+            const mappedData = (tourneyData || []).map((t: any) => ({
+                id: t.id,
+                name: t.name,
+                date: t.date,
+                location: t.location,
+                prizePool: t.prize_pool,
+                status: t.status,
+                skillLevel: t.skill_level,
+                maxPlayers: t.max_players,
+                registeredCount: t.registered_count,
+                image: t.image_url,
+                isJoined: registrations.has(t.id)
+            }));
+
+            setTournaments(mappedData);
+        } catch (err) {
+            console.error('Error fetching tournaments:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleJoinTournament = async (tournamentId: string) => {
+        if (!currentUserId) {
+            alert('Please login to join tournaments.');
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('tournament_registrations')
+                .insert({
+                    tournament_id: tournamentId,
+                    player_id: currentUserId
+                });
+
+            if (error) throw error;
+
+            // Re-fetch to update counts and state
+            fetchTournaments(currentUserId);
+        } catch (err: any) {
+            console.error('Error joining tournament:', err);
+            alert(err.message || 'Failed to join tournament');
+        }
+    };
+
+    const handleLeaveTournament = async (tournamentId: string) => {
+        if (!currentUserId || !confirm('Are you sure you want to leave this tournament?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('tournament_registrations')
+                .delete()
+                .eq('tournament_id', tournamentId)
+                .eq('player_id', currentUserId);
+
+            if (error) throw error;
+
+            fetchTournaments(currentUserId);
+        } catch (err) {
+            console.error('Error leaving tournament:', err);
+            alert('Failed to leave tournament');
+        }
+    };
+
+    const filteredTournaments = tournaments.filter(t => {
+        const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            t.location.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter = filter === 'All' || t.status === filter.toUpperCase();
+        return matchesSearch && matchesFilter;
+    });
+
+    return (
+        <div className="max-w-[1800px] mx-auto space-y-12 animate-in fade-in duration-700">
+            {/* Typographic Header */}
+            <div className="mb-12">
+                <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">
+                    PICKLEPLAY / TOURNAMENT NETWORK
+                </p>
+                <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter leading-[1] uppercase mb-6">
+                    COMPETE. WIN. <br />
+                    <span className="text-blue-600">DOMINATE.</span>
+                </h1>
+                <p className="text-slate-500 text-base md:text-lg font-small max-w-xl leading-relaxed">
+                    Join the most prestigious pickleball circuit in the Philippines. From local opens to national championships, find your path to the podium.
+                </p>
+            </div>
+
+            {/* Filters Bar updated to match screenshot style */}
+            <div className="flex flex-col md:flex-row gap-6 items-center justify-between z-40">
+                <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                    {['All', 'Upcoming', 'Live', 'Completed'].map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap ${filter === f
+                                ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+                                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+                                }`}
+                        >
+                            {f}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="relative flex-1 w-full max-w-md">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                        type="text"
+                        placeholder="Search tournaments or venues..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-16 pr-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                    />
+                </div>
+            </div>
+
+            {/* Tournaments Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {isLoading ? (
+                    Array(6).fill(0).map((_, i) => (
+                        <div key={i} className="bg-white rounded-[48px] border border-slate-100 h-[500px] animate-pulse"></div>
+                    ))
+                ) : filteredTournaments.length > 0 ? (
+                    filteredTournaments.map((tournament) => (
+                        <TournamentJoinCard
+                            key={tournament.id}
+                            tournament={tournament}
+                            onJoin={() => handleJoinTournament(tournament.id)}
+                            onLeave={() => handleLeaveTournament(tournament.id)}
+                        />
+                    ))
+                ) : (
+                    <div className="col-span-full py-32 text-center">
+                        <Trophy className="w-24 h-24 text-slate-200 mx-auto mb-8" />
+                        <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">No tournaments found</h3>
+                        <p className="text-slate-400 font-medium">Try adjusting your filters or search query.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const TournamentJoinCard: React.FC<{
+    tournament: Tournament & { isJoined?: boolean },
+    onJoin: () => void,
+    onLeave: () => void
+}> = ({ tournament, onJoin, onLeave }) => {
+    const isFull = (tournament.registeredCount || 0) >= (tournament.maxPlayers || 0);
+
+    return (
+        <div className="group bg-white rounded-[48px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-700 overflow-hidden flex flex-col">
+            {/* Image Section */}
+            <div className="h-56 relative overflow-hidden bg-slate-100">
+                <img
+                    src={tournament.image || "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800"}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    alt={tournament.name}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <div className="absolute bottom-6 left-6 flex gap-2">
+                    <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{tournament.status}</span>
+                    <span className="bg-white text-slate-900 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{tournament.skillLevel}</span>
+                </div>
+            </div>
+
+            {/* Content Section */}
+            <div className="p-8 flex-1 flex flex-col">
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4 group-hover:text-indigo-600 transition-colors">{tournament.name}</h3>
+
+                <div className="space-y-4 mb-8">
+                    <div className="flex items-center gap-4 text-slate-500 bg-slate-50 p-3 rounded-2xl">
+                        <Calendar size={18} className="text-indigo-600" />
+                        <span className="text-xs font-bold uppercase">{new Date(tournament.date).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-slate-500 bg-slate-50 p-3 rounded-2xl">
+                        <MapPin size={18} className="text-indigo-600" />
+                        <span className="text-xs font-bold uppercase truncate">{tournament.location}</span>
+                    </div>
+                    {tournament.prizePool && (
+                        <div className="flex items-center gap-4 text-emerald-600 bg-emerald-50 p-3 rounded-2xl border border-emerald-100/50">
+                            <Award size={18} />
+                            <span className="text-xs font-black uppercase tracking-tight">Prize: {tournament.prizePool}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-8">
+                    <div className="flex justify-between items-end mb-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entry Capacity</p>
+                        <p className="text-xs font-black text-slate-900">{tournament.registeredCount} / {tournament.maxPlayers}</p>
+                    </div>
+                    <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden p-0.5">
+                        <div
+                            className={`h-full rounded-full transition-all duration-1000 ${isFull ? 'bg-rose-500' : 'bg-indigo-600'}`}
+                            style={{ width: `${Math.min(100, ((tournament.registeredCount || 0) / (tournament.maxPlayers || 32)) * 100)}%` }}
+                        ></div>
+                    </div>
+                </div>
+
+                {/* Action Button */}
+                {tournament.isJoined ? (
+                    <div className="flex gap-2">
+                        <div className="flex-[3] flex items-center justify-center gap-3 bg-emerald-50 text-emerald-600 h-16 rounded-2xl border border-emerald-100 font-black text-sm uppercase tracking-widest">
+                            <CheckCircle2 size={20} /> Registered
+                        </div>
+                        <button
+                            onClick={onLeave}
+                            className="flex-1 bg-rose-50 text-rose-500 hover:bg-rose-100 h-16 rounded-2xl transition-all flex items-center justify-center font-black text-[10px] uppercase tracking-widest"
+                        >
+                            Leave
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={onJoin}
+                        disabled={isFull || tournament.status !== 'UPCOMING'}
+                        className={`w-full h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${isFull || tournament.status !== 'UPCOMING'
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-xl shadow-slate-200'
+                            }`}
+                    >
+                        {isFull ? 'Sold Out' : tournament.status !== 'UPCOMING' ? 'Closed' : 'Join Tournament'}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default Tournaments;
