@@ -6,6 +6,7 @@ import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
 
+// Always use hourly slots for simplicity
 const TIME_SLOTS = [
   '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
@@ -25,7 +26,7 @@ const getSlotDateTime = (slot: string, baseDate: Date = new Date()): { start: Da
   const startDateTime = new Date(baseDate);
   startDateTime.setHours(hours, minutes, 0, 0);
 
-  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour slot
 
   return { start: startDateTime, end: endDateTime };
 };
@@ -83,7 +84,8 @@ const Booking: React.FC = () => {
           longitude: c.longitude,
           numCourts: c.num_courts || 1,
           amenities: Array.isArray(c.amenities) ? c.amenities : [],
-          ownerId: c.owner_id
+          ownerId: c.owner_id,
+          cleaningTimeMinutes: c.cleaning_time_minutes || 0
         }));
 
         setCourts(mappedCourts);
@@ -127,6 +129,9 @@ const Booking: React.FC = () => {
 
       const bookings = bookingsData || [];
 
+      const cleaningTimeMinutes = court.cleaningTimeMinutes || 0;
+      console.log('Court cleaning time:', cleaningTimeMinutes, 'minutes');
+
       // Check each time slot
       for (const slot of TIME_SLOTS) {
         const { start, end } = getSlotDateTime(slot, date);
@@ -145,13 +150,27 @@ const Booking: React.FC = () => {
           }
         }
 
-        // Check against existing bookings
+        // Check against existing bookings (including cleaning time buffer)
         if (bookings && bookings.length > 0) {
           const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
 
           for (const booking of bookings) {
-            const bookingStartTime = booking.start_time?.substring(0, 8);
-            if (bookingStartTime === startTimeStr || booking.start_time?.startsWith(startTimeStr.substring(0, 5))) {
+            // Parse booking start time
+            const [bHours, bMinutes] = booking.start_time.split(':').map(Number);
+            const bookingStart = new Date(date);
+            bookingStart.setHours(bHours, bMinutes, 0, 0);
+            
+            // Parse booking end time (use actual end_time from booking)
+            const [eHours, eMinutes] = booking.end_time.split(':').map(Number);
+            const bookingEnd = new Date(date);
+            bookingEnd.setHours(eHours, eMinutes, 0, 0);
+            
+            // Add cleaning buffer AFTER the booking ends
+            const bookingEndWithCleaning = new Date(bookingEnd.getTime() + cleaningTimeMinutes * 60 * 1000);
+            
+            // Check if this slot overlaps with the booking OR the cleaning period
+            if (start < bookingEndWithCleaning && end > bookingStart) {
+              console.log('MATCH FOUND - slot overlaps with booking + cleaning:', slot, 'booking:', booking.start_time, '-', booking.end_time, 'cleaning buffer:', cleaningTimeMinutes, 'min');
               newBookedSlots.add(slot);
               break;
             }
@@ -596,6 +615,16 @@ const Booking: React.FC = () => {
                   </div>
                   <Navigation size={18} className="text-lime-400" />
                 </div>
+
+                {/* Cleaning Time Info */}
+                {selectedCourt.cleaningTimeMinutes > 0 && (
+                  <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100">
+                    <Clock size={12} className="text-blue-600 shrink-0" />
+                    <p className="text-[9px] text-blue-700 leading-relaxed">
+                      <span className="font-bold">{selectedCourt.cleaningTimeMinutes >= 60 ? `${Math.floor(selectedCourt.cleaningTimeMinutes / 60)}h ${selectedCourt.cleaningTimeMinutes % 60 > 0 ? `${selectedCourt.cleaningTimeMinutes % 60}m` : ''}` : `${selectedCourt.cleaningTimeMinutes} min`} cleaning buffer</span> after each booking
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Date Selection */}

@@ -23,6 +23,7 @@ export interface Court {
   numCourts?: number;
   amenities?: string[];
   ownerId?: string;
+  cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
 }
 
 export interface Match {
