@@ -27,6 +27,7 @@ import {
   Phone
 } from 'lucide-react';
 import { Product, NewsArticle } from '../types';
+import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
   "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=1920",
@@ -67,12 +68,206 @@ const POPULAR_PLACES = [
   "Bacolod", "Dumaguete", "Pasig", "Angeles City"
 ];
 
+// Helper function to calculate distance between two coordinates (Haversine formula)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 3959; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+interface CourtWithDistance {
+  name: string;
+  location: string;
+  city: string;
+  latitude?: number;
+  longitude?: number;
+  distance?: number;
+  region?: string;
+}
+
+// Philippine regions mapping
+const VISAYAS_CITIES = ['cebu', 'mandaue', 'lapu-lapu', 'talisay', 'danao', 'bogo', 'carcar', 'naga', 'toledo', 'tacloban', 'ormoc', 'bacolod', 'iloilo', 'roxas', 'dumaguete', 'tagbilaran', 'bohol', 'leyte', 'samar', 'negros', 'panay', 'siquijor', 'biliran'];
+const MINDANAO_CITIES = ['davao', 'cagayan de oro', 'zamboanga', 'general santos', 'butuan', 'iligan', 'cotabato', 'koronadal', 'tagum', 'panabo', 'digos', 'mati', 'surigao', 'tandag', 'bislig', 'ozamiz', 'dipolog', 'pagadian', 'marawi', 'kidapawan', 'tacurong', 'malaybalay', 'valencia'];
+
+// Default suggested cities when GPS is not enabled
+const SUGGESTED_CITIES = [
+  { name: 'Manila, Philippines', region: 'Luzon', lat: 14.5995, lng: 120.9842, zoom: 11 },
+  { name: 'Cebu City, Philippines', region: 'Visayas', lat: 10.3157, lng: 123.8854, zoom: 10 },
+  { name: 'Davao City, Philippines', region: 'Mindanao', lat: 7.1907, lng: 125.4553, zoom: 10 }
+];
+
+const getRegion = (city: string): string => {
+  const cityLower = city.toLowerCase();
+  if (VISAYAS_CITIES.some(c => cityLower.includes(c))) return 'Visayas';
+  if (MINDANAO_CITIES.some(c => cityLower.includes(c))) return 'Mindanao';
+  return 'Luzon'; // Default to Luzon
+};
+
 const Home: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [filteredSuggestions, setFilteredSuggestions] = useState(POPULAR_PLACES);
+  const [courts, setCourts] = useState<CourtWithDistance[]>([]);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [userCity, setUserCity] = useState<string | null>(null);
+  const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
   const navigate = useNavigate();
+
+  // Fetch courts from Supabase for search suggestions
+  useEffect(() => {
+    const fetchCourts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('courts')
+          .select('name, address, city, latitude, longitude')
+          .eq('is_active', true);
+
+        if (error) throw error;
+
+        const courtData = (data || []).map(c => ({
+          name: c.name,
+          location: `${c.city || ''}`,
+          city: c.city || '',
+          latitude: c.latitude,
+          longitude: c.longitude,
+          region: getRegion(c.city || '')
+        }));
+        setCourts(courtData);
+      } catch (err) {
+        console.error('Error fetching courts for search:', err);
+      }
+    };
+    fetchCourts();
+  }, []);
+
+  // Get user's GPS location when they focus on search
+  const getUserLocation = () => {
+    if (userLocation) return; // Already have location
+    
+    setIsLoadingLocation(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          
+          // Calculate distances for courts and sort by nearest FIRST
+          const courtsWithDistance = courts.map(court => {
+            if (court.latitude && court.longitude) {
+              const distance = calculateDistance(latitude, longitude, court.latitude, court.longitude);
+              return { ...court, distance };
+            }
+            return court;
+          }).filter(c => c.distance !== undefined)
+            .sort((a, b) => (a.distance || 999) - (b.distance || 999));
+          
+          setNearbyCourts(courtsWithDistance);
+          
+          // Try to get city from nearest court as fallback
+          const nearestCourt = courtsWithDistance[0];
+          let fallbackCity = nearestCourt?.city || '';
+          let fallbackRegion = nearestCourt?.region || 'Luzon';
+          
+          // Reverse geocode to get city name using Google Maps API
+          try {
+            const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+            if (apiKey) {
+              const response = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`
+              );
+              const data = await response.json();
+              if (data.results && data.results.length > 0) {
+                const addressComponents = data.results[0].address_components;
+                let city = '';
+                let country = '';
+                let postalCode = '';
+                let adminArea = '';
+                
+                for (const component of addressComponents) {
+                  if (component.types.includes('locality')) {
+                    city = component.long_name;
+                  }
+                  if (component.types.includes('country')) {
+                    country = component.long_name;
+                  }
+                  if (component.types.includes('postal_code')) {
+                    postalCode = component.long_name;
+                  }
+                  if (component.types.includes('administrative_area_level_1') || component.types.includes('administrative_area_level_2')) {
+                    if (!adminArea) adminArea = component.long_name;
+                  }
+                }
+                
+                // Build display string: "Cebu City, Philippines 6000"
+                let displayCity = city || adminArea || fallbackCity || 'Your Location';
+                if (country) displayCity += `, ${country}`;
+                if (postalCode) displayCity += ` ${postalCode}`;
+                
+                setUserCity(displayCity);
+                setGpsEnabled(true);
+                
+                // Determine region based on city
+                const region = getRegion(city || adminArea || fallbackCity);
+                setUserRegion(region);
+              } else {
+                // No results from geocoding, use fallback
+                setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+                setUserRegion(fallbackRegion);
+                setGpsEnabled(true);
+              }
+            } else {
+              // No API key, use fallback from nearest court
+              setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+              setUserRegion(fallbackRegion);
+              setGpsEnabled(true);
+            }
+          } catch (err) {
+            console.error('Error getting city name:', err);
+            // Use fallback from nearest court
+            setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+            setUserRegion(fallbackRegion);
+            setGpsEnabled(true);
+          }
+          
+          setIsLoadingLocation(false);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setGpsEnabled(false); // GPS denied or failed
+          setIsLoadingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setGpsEnabled(false); // Geolocation not supported
+      setIsLoadingLocation(false);
+    }
+  };
+
+  // Recalculate distances when courts or userLocation changes
+  useEffect(() => {
+    if (userLocation && courts.length > 0) {
+      const courtsWithDistance = courts.map(court => {
+        if (court.latitude && court.longitude) {
+          const distance = calculateDistance(userLocation.lat, userLocation.lng, court.latitude, court.longitude);
+          return { ...court, distance };
+        }
+        return court;
+      }).filter(c => c.distance !== undefined)
+        .sort((a, b) => (a.distance || 999) - (b.distance || 999));
+      
+      setNearbyCourts(courtsWithDistance);
+    }
+  }, [userLocation, courts]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -94,20 +289,62 @@ const Home: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
-    if (value.trim()) {
-      const filtered = POPULAR_PLACES.filter(place =>
-        place.toLowerCase().includes(value.toLowerCase())
+  };
+
+  // Get filtered courts based on search query and user's region
+  const getFilteredCourts = () => {
+    let courtsToFilter = nearbyCourts.length > 0 ? nearbyCourts : courts;
+    
+    // Filter by user's region (Luzon, Visayas, Mindanao)
+    if (userRegion && !searchQuery.trim()) {
+      courtsToFilter = courtsToFilter.filter(court => court.region === userRegion);
+    }
+    
+    // If searching, filter by query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      courtsToFilter = courtsToFilter.filter(court =>
+        court.name.toLowerCase().includes(query) ||
+        court.location.toLowerCase().includes(query) ||
+        court.city.toLowerCase().includes(query)
       );
-      setFilteredSuggestions(filtered);
+    }
+    
+    return courtsToFilter;
+  };
+
+  // Region center coordinates for map zooming
+  const REGION_CENTERS: Record<string, {lat: number, lng: number, zoom: number}> = {
+    'Visayas': { lat: 10.3157, lng: 123.8854, zoom: 10 },  // Cebu center
+    'Luzon': { lat: 14.5995, lng: 120.9842, zoom: 11 },    // Manila center
+    'Mindanao': { lat: 7.1907, lng: 125.4553, zoom: 10 }   // Davao center
+  };
+
+  const handleSuggestionClick = (suggestion: CourtWithDistance) => {
+    setSearchQuery(suggestion.name);
+    setShowSuggestions(false);
+    // Pass court coordinates for direct pin navigation
+    if (suggestion.latitude && suggestion.longitude) {
+      navigate(`/booking?court=${encodeURIComponent(suggestion.name)}&lat=${suggestion.latitude}&lng=${suggestion.longitude}&zoom=16`);
     } else {
-      setFilteredSuggestions(POPULAR_PLACES);
+      navigate(`/booking?q=${encodeURIComponent(suggestion.name)}`);
     }
   };
 
-  const handleSuggestionClick = (place: string) => {
-    setSearchQuery(place);
+  const handlePlaceClick = () => {
+    const cityName = userCity?.split(',')[0] || '';
+    setSearchQuery(cityName);
     setShowSuggestions(false);
-    navigate(`/booking?q=${encodeURIComponent(place)}`);
+    // Navigate with region coordinates for area zoom
+    const regionCenter = REGION_CENTERS[userRegion || 'Luzon'];
+    navigate(`/booking?q=${encodeURIComponent(cityName)}&lat=${regionCenter.lat}&lng=${regionCenter.lng}&zoom=${regionCenter.zoom}`);
+  };
+
+  const handleSuggestedCityClick = (city: typeof SUGGESTED_CITIES[0]) => {
+    setSearchQuery(city.name);
+    setShowSuggestions(false);
+    setUserRegion(city.region); // Set region for court filtering
+    navigate(`/booking?q=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
   };
 
   return (
@@ -153,7 +390,10 @@ const Home: React.FC = () => {
                   placeholder="Find PH dink spots..."
                   value={searchQuery}
                   onChange={handleInputChange}
-                  onFocus={() => setShowSuggestions(true)}
+                  onFocus={() => {
+                    setShowSuggestions(true);
+                    getUserLocation();
+                  }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
@@ -163,24 +403,104 @@ const Home: React.FC = () => {
               </div>
 
               {/* Suggestions Dropdown */}
-              {showSuggestions && filteredSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-4 bg-slate-900/95 border border-white/10 backdrop-blur-2xl rounded-[32px] py-4 shadow-3xl z-50 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <p className="px-8 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Popular Spots</p>
-                  <div className="max-h-[300px] overflow-y-auto no-scrollbar">
-                    {filteredSuggestions.map((place, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSuggestionClick(place)}
-                        className="w-full text-left px-8 py-4 hover:bg-white/5 flex items-center gap-4 group transition-colors"
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-lime-400 group-hover:text-slate-950 transition-all">
-                          <MapPin size={18} />
-                        </div>
-                        <span className="text-white font-bold group-hover:text-lime-400 transition-colors">{place}</span>
-                      </button>
-                    ))}
-                  </div>
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-4 bg-white border border-slate-200 rounded-[16px] py-4 shadow-xl z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {/* Loading State */}
+                  {isLoadingLocation && (
+                    <div className="px-6 py-4 flex items-center gap-3 text-slate-500">
+                      <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm font-medium">Getting your location...</span>
+                    </div>
+                  )}
+
+                  {/* PLACES Section - Show user's city if GPS enabled, or suggested cities if not */}
+                  {(userCity || gpsEnabled === false) && (
+                    <>
+                      <p className="px-6 py-2 text-xs font-bold text-teal-500 uppercase tracking-wider">Places</p>
+                      
+                      {/* User's detected location */}
+                      {userCity && (
+                        <button
+                          type="button"
+                          onClick={handlePlaceClick}
+                          className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
+                            <MapPin size={20} />
+                          </div>
+                          <span className="text-slate-800 font-medium text-[15px]">{userCity}</span>
+                        </button>
+                      )}
+                      
+                      {/* Suggested cities when GPS is denied/not available */}
+                      {gpsEnabled === false && !userCity && SUGGESTED_CITIES.map((city, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSuggestedCityClick(city)}
+                          className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
+                            <MapPin size={20} />
+                          </div>
+                          <span className="text-slate-800 font-medium text-[15px]">{city.name}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* COURTS Section */}
+                  {getFilteredCourts().length > 0 && (
+                    <>
+                      <p className="px-6 py-2 text-xs font-bold text-teal-500 uppercase tracking-wider mt-1">Courts</p>
+                      <div className="max-h-[350px] overflow-y-auto no-scrollbar">
+                        {getFilteredCourts().slice(0, 10).map((court, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSuggestionClick(court)}
+                            className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
+                              {/* Pickleball paddle icon */}
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                                <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                <circle cx="10" cy="8" r="1" fill="currentColor"/>
+                                <circle cx="14" cy="8" r="1" fill="currentColor"/>
+                                <circle cx="12" cy="11" r="1" fill="currentColor"/>
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-slate-800 font-semibold text-[15px]">{court.name}</p>
+                              <p className="text-[13px] text-slate-400">
+                                {court.distance !== undefined && (
+                                  <span>{court.distance.toFixed(1)} miles away</span>
+                                )}
+                                {court.distance !== undefined && court.city && ' · '}
+                                <span>{court.city}{court.region ? `, ${court.region}` : ''}</span>
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* No courts in region message */}
+                  {!isLoadingLocation && userCity && getFilteredCourts().length === 0 && (
+                    <div className="px-6 py-6 text-center">
+                      <p className="text-sm text-slate-500">No courts found in {userRegion || 'your area'}</p>
+                    </div>
+                  )}
+
+                  {/* No location message */}
+                  {!isLoadingLocation && !userCity && getFilteredCourts().length === 0 && (
+                    <div className="px-6 py-8 text-center">
+                      <MapPin size={32} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
+                    </div>
+                  )}
                 </div>
               )}
             </form>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
-import { INITIAL_COURTS } from '../data/mockData';
+import { supabase } from '../services/supabase';
 
 const TIME_SLOTS = [
     '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -26,9 +25,16 @@ const GuestBooking: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
     const [searchParams] = useSearchParams();
-    const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || '');
+    const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
     const [showLoginModal, setShowLoginModal] = useState(false);
     const navigate = useNavigate();
+    
+    // Get map position from URL params
+    const urlLat = searchParams.get('lat');
+    const urlLng = searchParams.get('lng');
+    const urlZoom = searchParams.get('zoom');
+    const urlCourt = searchParams.get('court');
+    
     const mapRef = useRef<HTMLDivElement>(null);
     const googleMapRef = useRef<any>(null);
     const markersRef = useRef<any[]>([]);
@@ -36,11 +42,34 @@ const GuestBooking: React.FC = () => {
     useEffect(() => {
         const fetchCourts = async () => {
             setIsLoading(true);
-            const data = await new Promise<Court[]>(resolve =>
-                setTimeout(() => resolve(INITIAL_COURTS), 800)
-            );
-            setCourts(data);
-            setIsLoading(false);
+            try {
+                const { data, error } = await supabase
+                    .from('courts')
+                    .select('*')
+                    .eq('is_active', true);
+
+                if (error) throw error;
+
+                const mappedCourts: Court[] = (data || []).map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+                    location: `${c.address || ''}, ${c.city || ''}`.replace(/^, |, $/g, ''),
+                    pricePerHour: parseFloat(c.base_price) || 0,
+                    availability: [],
+                    latitude: c.latitude,
+                    longitude: c.longitude,
+                    numCourts: c.num_courts || 1,
+                    amenities: Array.isArray(c.amenities) ? c.amenities : [],
+                    ownerId: c.owner_id
+                }));
+
+                setCourts(mappedCourts);
+            } catch (err) {
+                console.error('Error fetching courts:', err);
+            } finally {
+                setIsLoading(false);
+            }
         };
         fetchCourts();
     }, []);
@@ -54,11 +83,16 @@ const GuestBooking: React.FC = () => {
     const initializeMap = () => {
         if (!mapRef.current || !window.google) return;
 
-        const center = { lat: 14.5995, lng: 121.0437 };
+        // Use URL params for center/zoom, or default to Manila
+        const center = urlLat && urlLng 
+            ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
+            : { lat: 14.5995, lng: 121.0437 };
+        
+        const zoom = urlZoom ? parseInt(urlZoom) : 12;
 
         const map = new window.google.maps.Map(mapRef.current, {
             center,
-            zoom: 12,
+            zoom,
             styles: [
                 {
                     featureType: 'poi',
@@ -96,13 +130,30 @@ const GuestBooking: React.FC = () => {
                     },
                 });
 
+                const infoWindow = new window.google.maps.InfoWindow({
+                    content: `
+                        <div style="padding: 8px; font-family: Inter, sans-serif;">
+                            <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${court.name}</p>
+                            <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">₱${court.pricePerHour}/hour</p>
+                        </div>
+                    `,
+                    disableAutoPan: true
+                });
+
                 marker.addListener('click', () => {
                     setSelectedCourt(court);
                     map.panTo({ lat: court.latitude!, lng: court.longitude! });
-                    map.setZoom(14);
+                    map.setZoom(16);
+                    infoWindow.open(map, marker);
                 });
 
                 markersRef.current.push(marker);
+                
+                // If this court matches the URL court param, select it and open info window
+                if (urlCourt && court.name.toLowerCase() === decodeURIComponent(urlCourt).toLowerCase()) {
+                    setSelectedCourt(court);
+                    infoWindow.open(map, marker);
+                }
             }
         });
     };
@@ -114,6 +165,15 @@ const GuestBooking: React.FC = () => {
     }, [filterType]);
 
     const handleBooking = () => {
+        // Store redirect URL in localStorage for after login
+        let redirectUrl = '/booking';
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('q', searchQuery);
+        if (selectedCourt) params.set('court', selectedCourt.name);
+        if (selectedSlot) params.set('slot', selectedSlot);
+        if (params.toString()) redirectUrl += '?' + params.toString();
+        localStorage.setItem('auth_redirect', redirectUrl);
+        
         setShowLoginModal(true);
     };
 
@@ -326,13 +386,29 @@ const GuestBooking: React.FC = () => {
 
                             <div className="space-y-4">
                                 <button
-                                    onClick={() => navigate('/login')}
+                                    onClick={() => {
+                                        let redirectUrl = '/booking';
+                                        const params = new URLSearchParams();
+                                        if (searchQuery) params.set('q', searchQuery);
+                                        if (selectedCourt) params.set('court', selectedCourt.name);
+                                        if (selectedSlot) params.set('slot', selectedSlot);
+                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+                                    }}
                                     className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-slate-200"
                                 >
                                     <LogIn size={18} /> Sign In
                                 </button>
                                 <button
-                                    onClick={() => navigate('/signup')}
+                                    onClick={() => {
+                                        let redirectUrl = '/booking';
+                                        const params = new URLSearchParams();
+                                        if (searchQuery) params.set('q', searchQuery);
+                                        if (selectedCourt) params.set('court', selectedCourt.name);
+                                        if (selectedSlot) params.set('slot', selectedSlot);
+                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
+                                    }}
                                     className="w-full py-4 bg-lime-400 hover:bg-lime-500 text-slate-950 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-lime-100"
                                 >
                                     <UserPlus size={18} /> Create Account
