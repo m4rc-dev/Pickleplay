@@ -172,7 +172,59 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             </div>
 
             <h2 className="text-2xl font-black text-slate-950 tracking-tight uppercase">{displayName}</h2>
-            <p className={`text-[10px] text-${themeColor}-600 font-black uppercase tracking-widest mt-1 mb-8`}>{displayRole.replace('_', ' ')}</p>
+            <p className={`text-[10px] text-${themeColor}-600 font-black uppercase tracking-widest mt-1 mb-8`}>
+              {displayRole.replace('_', ' ')}
+              {/* Mobile Role Switcher (md:hidden) */}
+              {isCurrentUser && (
+                <div className="md:hidden mt-4">
+                  {authorizedProRoles.length === 1 && (
+                    <button
+                      onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
+                      className="w-full p-3 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800 mt-2"
+                    >
+                      <span className="font-black text-[10px] uppercase tracking-widest">
+                        {displayRole === 'PLAYER' ? 'Pro Mode' : `${displayRole.replace('_', ' ')} Mode`}
+                      </span>
+                      <span className="font-bold text-[9px] uppercase tracking-widest text-slate-400 ml-2">
+                        Switch to {displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
+                      </span>
+                    </button>
+                  )}
+                  {authorizedProRoles.length >= 2 && (
+                    <div className="space-y-2 mt-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Switch Role</span>
+                      <button
+                        onClick={() => onRoleSwitch && onRoleSwitch('PLAYER')}
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
+                          displayRole === 'PLAYER'
+                            ? 'bg-lime-400 text-slate-900'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        <User size={16} />
+                        <span className="font-black text-[11px] uppercase tracking-widest">Player</span>
+                        {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                      </button>
+                      {authorizedProRoles.map((proRole) => (
+                        <button
+                          key={proRole}
+                          onClick={() => onRoleSwitch && onRoleSwitch(proRole)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
+                            displayRole === proRole
+                              ? 'bg-lime-400 text-slate-900'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {proRole === 'COACH' ? <UserCheck size={16} /> : <UserPlus size={16} />}
+                          <span className="font-black text-[11px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                          {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </p>
 
             <div className="space-y-4 pt-8 border-t border-slate-100">
               <div className="flex items-center justify-between text-left">
