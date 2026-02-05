@@ -6,6 +6,7 @@ import { HashRouter as Router, Routes, Route, Link, useLocation, useNavigate, Na
 import {
   Trophy,
   Calendar,
+  Calendar as CalendarIcon,
   LayoutDashboard,
   Menu,
   X,
@@ -63,8 +64,9 @@ import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
 import TournamentsManager from './components/court-owner/TournamentsManager';
+import CourtCalendar from './components/court-owner/CourtCalendar';
 import Coaches from '@/components/Coaches';
-import { supabase } from './services/supabase';
+import { supabase, createSession } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
 import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
 import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
@@ -346,6 +348,7 @@ const NavigationHandler: React.FC<{
               <>
                 <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
@@ -563,6 +566,7 @@ const NavigationHandler: React.FC<{
                 <>
                   <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                 </>
@@ -624,6 +628,7 @@ const NavigationHandler: React.FC<{
               {/* Specialized Court Owner Routes */}
               <Route path="/courts" element={role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
               <Route path="/bookings-admin" element={role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/court-calendar" element={role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
               <Route path="/tournaments-admin" element={role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
               <Route path="/revenue" element={role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { supabase, createSession } from '../services/supabase';
 import {
     Trophy,
     Mail,
@@ -51,6 +51,18 @@ const Login: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
+                // Create session record with IP address
+                const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
+                
+                // Fetch IP address
+                try {
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipResponse.json();
+                    await createSession(data.user.id, deviceName, ipData.ip);
+                } catch {
+                    await createSession(data.user.id, deviceName);
+                }
+                
                 navigate('/dashboard');
             }
         } catch (err: any) {

@@ -653,9 +653,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             <h2 className="text-2xl font-black text-slate-950 tracking-tight uppercase">{displayName}</h2>
             <p className={`text-[10px] text-${themeColor}-600 font-black uppercase tracking-widest mt-1 mb-8`}>
               {displayRole.replace('_', ' ')}
-              {/* Mobile Role Switcher (md:hidden) */}
-              {isCurrentUser && (
-                <div className="md:hidden mt-4">
+            </p>
+            {/* Mobile Role Switcher (md:hidden) */}
+            {isCurrentUser && (
+              <div className="md:hidden mt-4">
                   {authorizedProRoles.length === 1 && (
                     <button
                       onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
@@ -701,9 +702,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-            </p>
+              </div>
+            )}
 
             <div className="space-y-4 pt-8 border-t border-slate-100">
               <div className="flex items-center justify-between text-left">
