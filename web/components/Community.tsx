@@ -1,30 +1,29 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  MapPin, 
-  UserPlus, 
-  Heart, 
-  MessageSquare, 
-  Share2, 
-  Send, 
-  Image as ImageIcon, 
-  Plus, 
+import {
+  MapPin,
+  UserPlus,
+  Heart,
+  MessageSquare,
+  Share2,
+  Send,
+  Image as ImageIcon,
+  Plus,
   MoreHorizontal,
   Clock,
   Sparkles,
   Trophy as TrophyIcon,
-  Reply,
-  UserCheck
+  UserCheck,
+  X,
+  Reply
 } from 'lucide-react';
-import { SocialPost, SocialComment } from '../types';
+import { useRef } from 'react';
+import { SocialPost, SocialComment, UserRole } from '../types';
 import { PostSkeleton } from './ui/Skeleton';
+import { supabase } from '../services/supabase';
 
-const PARTNERS = [
-  { id: 'u2', name: 'Marcus Chen', level: '4.5', location: '1.2 miles away', tags: ['Power', 'Aggressive'], avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus' },
-  { id: 'u3', name: 'Elena Rodriguez', level: '3.8', location: '2.5 miles away', tags: ['Casual', 'Dinking'], avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Elena' },
-  { id: 'u1', name: 'David Smith', level: '5.0', location: '0.8 miles away', tags: ['Tournament Ready'], avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David' },
-];
+// PARTNERS mock data removed in favor of dynamic fetching
 
 interface CommunityProps {
   followedUsers: string[];
@@ -33,56 +32,209 @@ interface CommunityProps {
   setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
 }
 
+const formatContent = (content: string) => {
+  if (!content) return null;
+  return content.split(/(\s+)/).map((part, i) => {
+    if (part.startsWith('#') && part.length > 1) {
+      return (
+        <span key={i} className="text-blue-600 font-bold hover:underline cursor-pointer">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+};
+
 const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, setPosts }) => {
   const [activeTab, setActiveTab] = useState<'feed' | 'partners'>('feed');
   const [newPostContent, setNewPostContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [partners, setPartners] = useState<any[]>([]);
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, avatar: string, role: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const trendingTags = React.useMemo(() => {
+    const tagCounts: Record<string, number> = {};
+    posts.forEach(post => {
+      // Find all hashtags in content
+      const foundTags = post.content.match(/#\w+/g) || [];
+      foundTags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+
+    return Object.entries(tagCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [posts]);
 
   useEffect(() => {
-    // Data is now passed via props, but we can still simulate a loading state
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
+    const fetchUserData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setCurrentUserId(session.user.id);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url, active_role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile) {
+          setCurrentUserProfile({
+            name: profile.full_name,
+            avatar: profile.avatar_url,
+            role: profile.active_role
+          });
+        }
+
+        // Fetch other users for partners tab
+        const { data: otherUsers } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, active_role')
+          .neq('id', session.user.id)
+          .limit(10);
+
+        if (otherUsers) {
+          setPartners(otherUsers.map(u => ({
+            id: u.id,
+            name: u.full_name,
+            level: 'N/A', // Assuming level is not in profile yet or needs calculation
+            location: 'Nearby',
+            tags: [u.active_role || 'PLAYER'],
+            avatar: u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`
+          })));
+        }
+      }
+      setIsLoading(false);
+    };
+    fetchUserData();
   }, []);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPostContent.trim()) return;
+    if ((!newPostContent.trim() && !selectedFile) || !currentUserId || !currentUserProfile) return;
 
     setIsPosting(true);
 
-    const newPost: SocialPost = {
-      id: `p-${Date.now()}`,
-      authorId: 'player-current',
-      authorName: 'John Player',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
-      authorRole: 'PLAYER',
-      content: newPostContent,
-      tags: ['General'],
-      likes: [],
-      comments: [],
-      timestamp: new Date().toISOString()
-    };
-    
-    // Simulate API call and update global state
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPosts(prevPosts => [newPost, ...prevPosts]);
-    setNewPostContent('');
-    setIsPosting(false);
+    try {
+      let imageUrl = null;
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${currentUserId}/${Date.now()}.${fileExt}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('community-posts')
+          .upload(fileName, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('community-posts')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrl;
+      }
+
+      const { data, error } = await supabase
+        .from('community_posts')
+        .insert({
+          profile_id: currentUserId,
+          content: newPostContent,
+          image_url: imageUrl,
+          tags: ['General']
+        })
+        .select(`
+          *,
+          profiles!profile_id (full_name, avatar_url, active_role)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      const newPost: SocialPost = {
+        id: data.id,
+        authorId: data.profile_id,
+        authorName: data.profiles?.full_name || currentUserProfile.name,
+        authorAvatar: data.profiles?.avatar_url || currentUserProfile.avatar,
+        authorRole: (data.profiles?.active_role as UserRole) || (currentUserProfile.role as UserRole),
+        content: data.content,
+        image: data.image_url,
+        tags: data.tags || [],
+        likes: [],
+        comments: [],
+        timestamp: data.created_at
+      };
+
+      setPosts(prevPosts => [newPost, ...prevPosts]);
+      setNewPostContent('');
+      setSelectedFile(null);
+      setImagePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err) {
+      console.error('Error creating post:', err);
+      alert('Failed to publish post');
+    } finally {
+      setIsPosting(false);
+    }
   };
 
-  const handleLike = (postId: string) => {
-    setPosts(posts.map(p => {
-      if (p.id === postId) {
-        const isLiked = p.likes.includes('player-current');
-        const newLikes = isLiked
-          ? p.likes.filter(id => id !== 'player-current')
-          : [...p.likes, 'player-current'];
-        return { ...p, likes: newLikes };
+  const handleLike = async (postId: string) => {
+    if (!currentUserId) return;
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const isLiked = post.likes.includes(currentUserId);
+
+    try {
+      if (isLiked) {
+        await supabase
+          .from('community_post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('profile_id', currentUserId);
+
+        setPosts(posts.map(p => p.id === postId ? { ...p, likes: p.likes.filter(id => id !== currentUserId) } : p));
+      } else {
+        await supabase
+          .from('community_post_likes')
+          .insert({ post_id: postId, profile_id: currentUserId });
+
+        setPosts(posts.map(p => p.id === postId ? { ...p, likes: [...p.likes, currentUserId] } : p));
       }
-      return p;
-    }));
+    } catch (err) {
+      console.error('Error liking post:', err);
+    }
   };
 
   const toggleComments = (postId: string) => {
@@ -96,21 +248,19 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
           <p className="text-xs font-black text-indigo-600 uppercase tracking-[0.4em] mb-4">THE KITCHEN HUB / 2025</p>
           <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Community.</h1>
         </div>
-        
+
         <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm">
-          <button 
+          <button
             onClick={() => setActiveTab('feed')}
-            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              activeTab === 'feed' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
-            }`}
+            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'feed' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
+              }`}
           >
             THE FEED
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('partners')}
-            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              activeTab === 'partners' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
-            }`}
+            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'partners' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
+              }`}
           >
             FIND PARTNERS
           </button>
@@ -124,22 +274,49 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
               <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
                 <form onSubmit={handlePost} className="space-y-4">
                   <div className="flex gap-4">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=John" className="w-12 h-12 rounded-2xl bg-slate-100" />
-                    <textarea 
+                    <img src={currentUserProfile?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=John"} className="w-12 h-12 rounded-2xl bg-slate-100" />
+                    <textarea
                       value={newPostContent}
                       onChange={(e) => setNewPostContent(e.target.value)}
                       placeholder="Share your latest match update or drill tip..."
                       className="flex-1 bg-slate-50 border-none rounded-3xl p-5 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none h-28"
                     />
                   </div>
+
+                  {imagePreview && (
+                    <div className="relative inline-block ml-16">
+                      <img src={imagePreview} className="w-48 rounded-2xl border border-slate-100 shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg hover:bg-rose-600 transition-all"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                     <div className="flex gap-2">
-                       <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><ImageIcon size={20} /></button>
-                       <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><Sparkles size={20} /></button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageSelect}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`p-3 rounded-xl transition-all ${imagePreview ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}`}
+                      >
+                        <ImageIcon size={20} />
+                      </button>
+                      <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><Sparkles size={20} /></button>
                     </div>
-                    <button 
+                    <button
                       type="submit"
-                      disabled={!newPostContent.trim() || isPosting}
+                      disabled={(!newPostContent.trim() && !selectedFile) || isPosting}
                       className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2"
                     >
                       {isPosting ? 'POSTING...' : 'PUBLISH POST'} <Send size={14} />
@@ -153,14 +330,16 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                   Array(3).fill(0).map((_, i) => <PostSkeleton key={i} />)
                 ) : (
                   posts.map(post => (
-                    <PostCard 
-                      key={post.id} 
-                      post={post} 
+                    <PostCard
+                      key={post.id}
+                      post={post}
                       onLike={() => handleLike(post.id)}
                       isExpanded={expandedComments[post.id]}
                       onToggleComments={() => toggleComments(post.id)}
                       postsState={posts}
                       setPostsState={setPosts}
+                      currentUserId={currentUserId}
+                      currentUserProfile={currentUserProfile}
                     />
                   ))
                 )}
@@ -168,7 +347,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
             </>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {PARTNERS.map(partner => {
+              {partners.map(partner => {
                 const isFollowing = followedUsers.includes(partner.id);
                 return (
                   <div key={partner.id} className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group">
@@ -193,11 +372,10 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                         </span>
                       ))}
                     </div>
-                    <button 
+                    <button
                       onClick={() => onFollow(partner.id, partner.name)}
-                      className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl text-xs uppercase tracking-[0.2em] transition-all ${
-                        isFollowing ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-slate-950 text-white hover:bg-indigo-600 shadow-slate-100'
-                      }`}
+                      className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl text-xs uppercase tracking-[0.2em] transition-all ${isFollowing ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-slate-950 text-white hover:bg-indigo-600 shadow-slate-100'
+                        }`}
                     >
                       {isFollowing ? <UserCheck size={16} /> : <UserPlus size={16} />}
                       {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
@@ -222,15 +400,21 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
           </div>
 
           <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
-             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-8">TRENDING TAGS</h3>
-             <div className="space-y-4">
-                {['#DUPR3Sync', '#KitchenMeta', '#MetroManilaOpen', '#ThirdShotDrop'].map(tag => (
-                  <div key={tag} className="flex items-center justify-between group cursor-pointer">
-                    <span className="font-black text-slate-900 text-sm group-hover:text-indigo-600 transition-colors">{tag}</span>
-                    <span className="text-[10px] font-black text-slate-400 group-hover:text-slate-900">1.2k posts</span>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-8">TRENDING TAGS</h3>
+            <div className="space-y-4">
+              {trendingTags.length > 0 ? (
+                trendingTags.map(tag => (
+                  <div key={tag.name} className="flex items-center justify-between group cursor-pointer">
+                    <span className="font-black text-blue-600 text-sm group-hover:text-indigo-600 transition-colors">{tag.name}</span>
+                    <span className="text-[10px] font-black text-slate-400 group-hover:text-slate-950">
+                      {tag.count} {tag.count === 1 ? 'post' : 'posts'}
+                    </span>
                   </div>
-                ))}
-             </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400 font-medium italic">No tags yet...</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -238,37 +422,62 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
   );
 };
 
-export const PostCard: React.FC<{ 
-  post: SocialPost, 
-  onLike: () => void, 
-  isExpanded: boolean, 
+export const PostCard: React.FC<{
+  post: SocialPost,
+  onLike: () => void,
+  isExpanded: boolean,
   onToggleComments: () => void,
   postsState: SocialPost[],
-  setPostsState: React.Dispatch<React.SetStateAction<SocialPost[]>>
-}> = ({ post, onLike, isExpanded, onToggleComments, postsState, setPostsState }) => {
+  setPostsState: React.Dispatch<React.SetStateAction<SocialPost[]>>,
+  currentUserId: string | null,
+  currentUserProfile: { name: string, avatar: string, role: string } | null
+}> = ({ post, onLike, isExpanded, onToggleComments, postsState, setPostsState, currentUserId, currentUserProfile }) => {
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentInput.trim()) return;
+    if (!commentInput.trim() || !currentUserId || !currentUserProfile) return;
+
     setIsSubmitting(true);
-    const newComment: SocialComment = {
-      id: `c-${Date.now()}`,
-      authorName: 'John Player',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
-      content: commentInput,
-      timestamp: new Date().toISOString(),
-      likes: [],
-      replies: []
-    };
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPostsState(currentPosts => currentPosts.map(p => p.id === post.id ? { ...p, comments: [...p.comments, newComment] } : p));
-    setCommentInput('');
-    setIsSubmitting(false);
+
+    try {
+      const { data, error } = await supabase
+        .from('community_post_comments')
+        .insert({
+          post_id: post.id,
+          profile_id: currentUserId,
+          content: commentInput
+        })
+        .select(`
+          *,
+          profiles!profile_id (full_name, avatar_url)
+
+        `)
+        .single();
+
+      if (error) throw error;
+
+      const newComment: SocialComment = {
+        id: data.id,
+        authorName: data.profiles?.full_name || currentUserProfile.name,
+        authorAvatar: data.profiles?.avatar_url || currentUserProfile.avatar,
+        content: data.content,
+        timestamp: data.created_at,
+        likes: [],
+        replies: []
+      };
+
+      setPostsState(currentPosts => currentPosts.map(p => p.id === post.id ? { ...p, comments: [...p.comments, newComment] } : p));
+      setCommentInput('');
+    } catch (err) {
+      console.error('Error adding comment:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const isLiked = post.likes.includes('player-current');
+  const isLiked = currentUserId ? post.likes.includes(currentUserId) : false;
 
   return (
     <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 overflow-hidden">
@@ -290,7 +499,7 @@ export const PostCard: React.FC<{
         </div>
 
         <p className="text-slate-700 text-lg leading-relaxed mb-6 font-medium">
-          {post.content}
+          {formatContent(post.content)}
         </p>
 
         {post.image && (
@@ -301,113 +510,164 @@ export const PostCard: React.FC<{
 
         <div className="flex items-center justify-between py-6 border-t border-slate-50">
           <div className="flex items-center gap-6">
-             <button onClick={onLike} className={`flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all ${isLiked ? 'text-rose-500' : 'text-slate-400 hover:text-rose-500'}`}>
-                <Heart size={20} className={isLiked ? 'fill-rose-500' : ''} /> {post.likes.length}
-             </button>
-             <button onClick={onToggleComments} className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-all">
-                <MessageSquare size={20} /> {post.comments.length}
-             </button>
-             <button className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-all">
-                <Share2 size={20} />
-             </button>
+            <button onClick={onLike} className={`flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all ${isLiked ? 'text-rose-500' : 'text-slate-400 hover:text-rose-500'}`}>
+              <Heart size={20} className={isLiked ? 'fill-rose-500' : ''} /> {post.likes.length}
+            </button>
+            <button onClick={onToggleComments} className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-all">
+              <MessageSquare size={20} /> {post.comments.length}
+            </button>
+            <button className="flex items-center gap-2 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-all">
+              <Share2 size={20} />
+            </button>
           </div>
           <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
-             <Clock size={12} /> {new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <Clock size={12} /> {new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
       </div>
 
       {isExpanded && (
         <div className="bg-slate-50 p-8 border-t border-slate-100 space-y-6 animate-slide-up">
-           <div className="space-y-6">
-              {postsState.find(p => p.id === post.id)?.comments.map(comment => (
-                <CommentItem key={comment.id} postId={post.id} comment={comment} postsState={postsState} setPostsState={setPostsState} />
-              ))}
-           </div>
-           <form onSubmit={handleCommentSubmit} className="flex gap-3 pt-4 border-t border-slate-200">
-              <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder="Write a comment..." className="flex-1 bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20" />
-              <button type="submit" disabled={!commentInput.trim() || isSubmitting} className="bg-indigo-600 text-white w-12 h-12 rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg disabled:opacity-50">
-                <Send size={18} />
-              </button>
-           </form>
+          <div className="space-y-6">
+            {postsState.find(p => p.id === post.id)?.comments.map(comment => (
+              <CommentItem
+                key={comment.id}
+                postId={post.id}
+                comment={comment}
+                postsState={postsState}
+                setPostsState={setPostsState}
+                currentUserId={currentUserId}
+                currentUserProfile={currentUserProfile}
+              />
+            ))}
+          </div>
+          <form onSubmit={handleCommentSubmit} className="flex gap-3 pt-4 border-t border-slate-200">
+            <input type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)} placeholder="Write a comment..." className="flex-1 bg-white border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            <button type="submit" disabled={!commentInput.trim() || isSubmitting} className="bg-indigo-600 text-white w-12 h-12 rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg disabled:opacity-50">
+              <Send size={18} />
+            </button>
+          </form>
         </div>
       )}
     </div>
   );
 };
 
-const CommentItem: React.FC<{ 
-  postId: string, 
-  comment: SocialComment, 
+const CommentItem: React.FC<{
+  postId: string,
+  comment: SocialComment,
   isReply?: boolean,
   postsState: SocialPost[],
-  setPostsState: React.Dispatch<React.SetStateAction<SocialPost[]>>
-}> = ({ postId, comment, isReply = false, postsState, setPostsState }) => {
+  setPostsState: React.Dispatch<React.SetStateAction<SocialPost[]>>,
+  currentUserId: string | null,
+  currentUserProfile: { name: string, avatar: string, role: string } | null
+}> = ({ postId, comment, isReply = false, postsState, setPostsState, currentUserId, currentUserProfile }) => {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLike = () => {
-    setPostsState(currentPosts => 
-      currentPosts.map(p => {
-        if (p.id !== postId) return p;
-        
-        const updateLikes = (comments: SocialComment[]): SocialComment[] => {
-          return comments.map(c => {
-            if (c.id === comment.id) {
-              const isLiked = c.likes.includes('player-current');
-              const newLikes = isLiked ? c.likes.filter(id => id !== 'player-current') : [...c.likes, 'player-current'];
-              return { ...c, likes: newLikes };
-            }
-            if (c.replies) {
-              return { ...c, replies: updateLikes(c.replies) };
-            }
-            return c;
-          });
-        };
-        return { ...p, comments: updateLikes(p.comments) };
-      })
-    );
+  const handleLike = async () => {
+    if (!currentUserId) return;
+    const isCommentLiked = comment.likes?.includes(currentUserId);
+
+    try {
+      if (isCommentLiked) {
+        await supabase
+          .from('community_comment_likes')
+          .delete()
+          .eq('comment_id', comment.id)
+          .eq('profile_id', currentUserId);
+      } else {
+        await supabase
+          .from('community_comment_likes')
+          .insert({ comment_id: comment.id, profile_id: currentUserId });
+      }
+
+      setPostsState(currentPosts =>
+        currentPosts.map(p => {
+          if (p.id !== postId) return p;
+
+          const updateLikes = (comments: SocialComment[]): SocialComment[] => {
+            return comments.map(c => {
+              if (c.id === comment.id) {
+                const newLikes = isCommentLiked ? c.likes.filter(id => id !== currentUserId) : [...c.likes, currentUserId];
+                return { ...c, likes: newLikes };
+              }
+              if (c.replies) {
+                return { ...c, replies: updateLikes(c.replies) };
+              }
+              return c;
+            });
+          };
+          return { ...p, comments: updateLikes(p.comments) };
+        })
+      );
+    } catch (err) {
+      console.error('Error liking comment:', err);
+    }
   };
 
   const handleReplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyContent.trim()) return;
+    if (!replyContent.trim() || !currentUserId || !currentUserProfile) return;
     setIsSubmitting(true);
-    const newReply: SocialComment = {
-        id: `r-${Date.now()}`,
-        authorName: 'John Player',
-        authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
-        content: replyContent,
-        timestamp: new Date().toISOString(),
+
+    try {
+      const { data, error } = await supabase
+        .from('community_post_comments')
+        .insert({
+          post_id: postId,
+          profile_id: currentUserId,
+          parent_id: comment.id,
+          content: replyContent
+        })
+        .select(`
+          *,
+          profiles!profile_id (full_name, avatar_url)
+
+        `)
+        .single();
+
+      if (error) throw error;
+
+      const newReply: SocialComment = {
+        id: data.id,
+        authorName: data.profiles?.full_name || currentUserProfile.name,
+        authorAvatar: data.profiles?.avatar_url || currentUserProfile.avatar,
+        content: data.content,
+        timestamp: data.created_at,
         likes: [],
         replies: []
-    };
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPostsState(currentPosts =>
-      currentPosts.map(p => {
-        if (p.id !== postId) return p;
+      };
 
-        const addReply = (comments: SocialComment[]): SocialComment[] => {
-          return comments.map(c => {
-            if (c.id === comment.id) {
-              return { ...c, replies: [...c.replies, newReply] };
-            }
-            if (c.replies) {
-              return { ...c, replies: addReply(c.replies) };
-            }
-            return c;
-          });
-        };
-        return { ...p, comments: addReply(p.comments) };
-      })
-    );
-    setReplyContent('');
-    setShowReplyInput(false);
-    setIsSubmitting(false);
+      setPostsState(currentPosts =>
+        currentPosts.map(p => {
+          if (p.id !== postId) return p;
+
+          const addReply = (comments: SocialComment[]): SocialComment[] => {
+            return comments.map(c => {
+              if (c.id === comment.id) {
+                return { ...c, replies: [...c.replies, newReply] };
+              }
+              if (c.replies) {
+                return { ...c, replies: addReply(c.replies) };
+              }
+              return c;
+            });
+          };
+          return { ...p, comments: addReply(p.comments) };
+        })
+      );
+      setReplyContent('');
+      setShowReplyInput(false);
+    } catch (err) {
+      console.error('Error adding reply:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const isLiked = comment.likes?.includes('player-current');
+  const isLiked = currentUserId ? comment.likes?.includes(currentUserId) : false;
 
   return (
     <div className={`space-y-4 ${isReply ? 'ml-10' : ''}`}>
@@ -416,7 +676,7 @@ const CommentItem: React.FC<{
         <div className="flex-1 space-y-2">
           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group">
             <p className="text-[10px] font-black text-slate-950 mb-1 uppercase tracking-widest">{comment.authorName}</p>
-            <p className="text-sm text-slate-600 leading-relaxed">{comment.content}</p>
+            <p className="text-sm text-slate-600 leading-relaxed">{formatContent(comment.content)}</p>
             <button onClick={handleLike} className={`absolute top-4 right-4 transition-all ${isLiked ? 'text-rose-500 scale-110' : 'text-slate-300 hover:text-rose-500'}`}>
               <Heart size={16} className={isLiked ? 'fill-rose-500' : ''} />
             </button>
@@ -435,7 +695,16 @@ const CommentItem: React.FC<{
         </form>
       )}
       {comment.replies?.map(reply => (
-        <CommentItem key={reply.id} postId={postId} comment={reply} isReply={true} postsState={postsState} setPostsState={setPostsState} />
+        <CommentItem
+          key={reply.id}
+          postId={postId}
+          comment={reply}
+          isReply={true}
+          postsState={postsState}
+          setPostsState={setPostsState}
+          currentUserId={currentUserId}
+          currentUserProfile={currentUserProfile}
+        />
       ))}
     </div>
   );

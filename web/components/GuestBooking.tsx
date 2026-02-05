@@ -19,6 +19,8 @@ declare global {
 const GuestBooking: React.FC = () => {
     const [courts, setCourts] = useState<Court[]>([]);
     const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [showAdvanceOptions, setShowAdvanceOptions] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
     const [isBooked, setIsBooked] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -236,7 +238,7 @@ const GuestBooking: React.FC = () => {
                                     placeholder="Search courts by name or location..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-2xl py-3 ml-12 pr-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                                 />
                             </div>
                             <button
@@ -286,11 +288,64 @@ const GuestBooking: React.FC = () => {
                                     </div>
                                 </div>
 
+                                {/* Date Selection */}
                                 <div>
-                                    <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                        <Clock size={16} className="text-blue-600" />
-                                        Available Times
-                                    </h4>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                            <CalendarIcon size={16} className="text-blue-600" />
+                                            {showAdvanceOptions ? 'Select Date' : 'Booking for Today'}
+                                        </h4>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md uppercase tracking-tight">
+                                                {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                            <button
+                                                onClick={() => setShowAdvanceOptions(!showAdvanceOptions)}
+                                                className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all ${showAdvanceOptions
+                                                        ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-100'
+                                                    }`}
+                                            >
+                                                {showAdvanceOptions ? 'Hide' : 'Advance Booking'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {showAdvanceOptions && (
+                                        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-1 px-1 animate-in slide-in-from-top-2 duration-300">
+                                            {Array.from({ length: 14 }).map((_, i) => {
+                                                const date = new Date();
+                                                date.setDate(date.getDate() + i);
+                                                const isSelected = selectedDate.toDateString() === date.toDateString();
+                                                const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
+                                                const dayNum = date.getDate();
+
+                                                return (
+                                                    <button
+                                                        key={i}
+                                                        onClick={() => {
+                                                            setSelectedDate(date);
+                                                            setSelectedSlot(null); // Reset slot when date changes
+                                                        }}
+                                                        className={`flex flex-col items-center min-w-[60px] py-3 rounded-2xl border transition-all duration-300 ${isSelected
+                                                            ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-100'
+                                                            : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white hover:shadow-md'
+                                                            }`}
+                                                    >
+                                                        <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                            {dayName}
+                                                        </span>
+                                                        <span className="text-base font-black">
+                                                            {dayNum}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
                                     <div className="grid grid-cols-2 gap-2">
                                         {TIME_SLOTS.map(slot => (
                                             <button

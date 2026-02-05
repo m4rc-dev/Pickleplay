@@ -6,6 +6,7 @@ import { HashRouter as Router, Routes, Route, Link, useLocation, useNavigate, Na
 import {
   Trophy,
   Calendar,
+  Calendar as CalendarIcon,
   LayoutDashboard,
   Menu,
   X,
@@ -64,10 +65,11 @@ import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
 import TournamentsManager from './components/court-owner/TournamentsManager';
+import CourtCalendar from './components/court-owner/CourtCalendar';
 import Coaches from '@/components/Coaches';
-import { supabase } from './services/supabase';
+import { supabase, createSession } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
-import { ProfessionalApplication, UserRole, Notification, SocialPost, Product, CartItem } from './types';
+import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
 import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 
 const NotificationPanel: React.FC<{
@@ -347,6 +349,7 @@ const NavigationHandler: React.FC<{
               <>
                 <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
@@ -564,6 +567,7 @@ const NavigationHandler: React.FC<{
                 <>
                   <NavItem to="/courts" icon={<Building2 size={22} />} label="Manage Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
                 </>
@@ -626,6 +630,7 @@ const NavigationHandler: React.FC<{
               {/* Specialized Court Owner Routes */}
               <Route path="/courts" element={role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
               <Route path="/bookings-admin" element={role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/court-calendar" element={role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
               <Route path="/tournaments-admin" element={role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
               <Route path="/revenue" element={role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
 
@@ -821,7 +826,59 @@ const App: React.FC = () => {
         }
       }
 
-      setPosts(INITIAL_POSTS);
+      // 4. Fetch dynamic social posts
+      const { data: dbPosts, error: postsError } = await supabase
+        .from('community_posts')
+        .select(`
+          *,
+          profiles!profile_id (full_name, avatar_url, active_role),
+          community_post_likes (profile_id),
+          community_post_comments (
+            *,
+            profiles!profile_id (full_name, avatar_url),
+            community_comment_likes (profile_id)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (!postsError && dbPosts) {
+        const mappedPosts: SocialPost[] = dbPosts.map((p: any) => ({
+          id: p.id,
+          authorId: p.profile_id,
+          authorName: p.profiles?.full_name || 'Anonymous',
+          authorAvatar: p.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profile_id}`,
+          authorRole: p.profiles?.active_role as UserRole,
+          content: p.content,
+          image: p.image_url,
+          tags: p.tags || [],
+          likes: p.community_post_likes?.map((l: any) => l.profile_id) || [],
+          timestamp: p.created_at,
+          comments: (p.community_post_comments || [])
+            .filter((c: any) => !c.parent_id) // Get top-level comments
+            .map((c: any) => ({
+              id: c.id,
+              authorName: c.profiles?.full_name || 'Anonymous',
+              authorAvatar: c.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.profile_id}`,
+              content: c.content,
+              timestamp: c.created_at,
+              likes: c.community_comment_likes?.map((l: any) => l.profile_id) || [],
+              replies: (p.community_post_comments || [])
+                .filter((r: any) => r.parent_id === c.id)
+                .map((r: any) => ({
+                  id: r.id,
+                  authorName: r.profiles?.full_name || 'Anonymous',
+                  authorAvatar: r.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.profile_id}`,
+                  content: r.content,
+                  likes: r.community_comment_likes?.map((l: any) => l.profile_id) || [],
+                  timestamp: r.created_at,
+                  replies: []
+                }))
+            }))
+        }));
+        setPosts(mappedPosts);
+      } else if (postsError) {
+        console.error('Error fetching community posts:', postsError);
+      }
 
       // 3. Fetch initial notifications
       if (session?.user) {
@@ -850,10 +907,128 @@ const App: React.FC = () => {
           setNotifications(mappedNotifs);
         }
       }
+      // 5. Fetch initial social posts
+      // ... already fetched above ...
+
+      // 6. Fetch initial follows
+      if (session?.user) {
+        const { data: follows, error: followError } = await supabase
+          .from('user_follows')
+          .select('followed_id')
+          .eq('follower_id', session.user.id);
+
+        if (!followError && follows) {
+          setFollowedUsers(follows.map(f => f.followed_id));
+        }
+      }
     };
 
     fetchInitialData();
   }, [currentUserId]);
+
+  // Separate Effect for Community Feed Realtime
+  useEffect(() => {
+    const channel = supabase
+      .channel('community-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, async (payload) => {
+        const newPostRow = payload.new as any;
+
+        // Fetch author info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url, active_role')
+          .eq('id', newPostRow.profile_id)
+          .single();
+
+        const newPost: SocialPost = {
+          id: newPostRow.id,
+          authorId: newPostRow.profile_id,
+          authorName: profile?.full_name || 'Anonymous',
+          authorAvatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newPostRow.profile_id}`,
+          authorRole: profile?.active_role as UserRole,
+          content: newPostRow.content,
+          image: newPostRow.image_url,
+          tags: newPostRow.tags || [],
+          likes: [],
+          comments: [],
+          timestamp: newPostRow.created_at
+        };
+
+        setPosts(prev => {
+          // Prevent duplicates if the user is the one who posted (already added via handlePost)
+          if (prev.some(p => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_post_comments' }, async (payload) => {
+        const newCommentRow = payload.new as any;
+
+        // Fetch profile info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', newCommentRow.profile_id)
+          .single();
+
+        const newComment: SocialComment = {
+          id: newCommentRow.id,
+          authorName: profile?.full_name || 'Anonymous',
+          authorAvatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newCommentRow.profile_id}`,
+          content: newCommentRow.content,
+          timestamp: newCommentRow.created_at,
+          likes: [],
+          replies: []
+        };
+
+        setPosts(prev => prev.map(p => {
+          if (p.id !== newCommentRow.post_id) return p;
+
+          // Check if already exists (optimistic sync)
+          if (p.comments.some(c => c.id === newComment.id)) return p;
+
+          // Handle nested replies if parent_id exists
+          if (newCommentRow.parent_id) {
+            return {
+              ...p,
+              comments: p.comments.map(c => {
+                if (c.id === newCommentRow.parent_id) {
+                  return { ...c, replies: [...(c.replies || []), newComment] };
+                }
+                return c;
+              })
+            };
+          }
+
+          return { ...p, comments: [...p.comments, newComment] };
+        }));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_post_likes' }, (payload) => {
+        const newLike = payload.new as any;
+        setPosts(prev => prev.map(p => {
+          if (p.id === newLike.post_id) {
+            if (p.likes.includes(newLike.profile_id)) return p;
+            return { ...p, likes: [...p.likes, newLike.profile_id] };
+          }
+          return p;
+        }));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'community_post_likes' }, (payload) => {
+        const oldLike = payload.old as any;
+        // Note: DELETE payload only has 'old' and only if primary key is present
+        // Since post_id, profile_id is PK, it should be there.
+        setPosts(prev => prev.map(p => {
+          if (p.id === oldLike.post_id) {
+            return { ...p, likes: p.likes.filter(id => id !== oldLike.profile_id) };
+          }
+          return p;
+        }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Separate Effect for Notifications Subscription
   useEffect(() => {
@@ -958,21 +1133,34 @@ const App: React.FC = () => {
     setAuthorizedProRoles([]);
   };
 
-  const handleFollow = (userId: string, userName: string) => {
+  const handleFollow = async (userId: string, userName: string) => {
+    if (!currentUserId) return;
     const isCurrentlyFollowing = followedUsers.includes(userId);
-    setFollowedUsers(prev => isCurrentlyFollowing ? prev.filter(id => id !== userId) : [...prev, userId]);
 
-    if (!isCurrentlyFollowing) {
-      const newNotification: Notification = {
-        id: `n-${Date.now()}`,
-        type: 'FOLLOW',
-        message: 'started following you.',
-        actor: { name: userName, avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}` }, // This is a simplification
-        timestamp: new Date().toISOString(),
-        isRead: false
-      };
-      // This is a simulation, you'd get this from the backend
-      // setNotifications(prev => [newNotification, ...prev]);
+    try {
+      if (isCurrentlyFollowing) {
+        await supabase
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', currentUserId)
+          .eq('followed_id', userId);
+        setFollowedUsers(prev => prev.filter(id => id !== userId));
+      } else {
+        await supabase
+          .from('user_follows')
+          .insert({ follower_id: currentUserId, followed_id: userId });
+        setFollowedUsers(prev => [...prev, userId]);
+
+        // Send notification (optional, can be done via DB trigger too)
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          actor_id: currentUserId,
+          type: 'FOLLOW',
+          message: 'started following you.'
+        });
+      }
+    } catch (err) {
+      console.error('Error following user:', err);
     }
   };
 
