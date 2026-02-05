@@ -1,0 +1,7 @@
+{
+  "name": "Pickleball Philippines",
+  "description": "The ultimate platform for pickleball enthusiasts in the Philippines to book courts, find partners, track national stats, and stay updated with the PH community.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
