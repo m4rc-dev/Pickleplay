@@ -97,6 +97,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string>('');
+  const [accessCodeValue, setAccessCodeValue] = useState<string>('');
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
@@ -638,6 +639,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
                 const accessCode = formData.get('accessCode') as string;
 
+                // Validate: require files if no access code is provided
+                if (!accessCode || !accessCode.trim()) {
+                  if (selectedFiles.length === 0) {
+                    setUploadError('Please upload at least one supporting document, or enter a valid access code to skip this requirement.');
+                    return;
+                  }
+                }
+
                 try {
                   const { data: { user } } = await supabase.auth.getUser();
                   if (!user) throw new Error('Not authenticated');
@@ -782,13 +791,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 <div className="pt-2">
                   <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-2 flex items-center justify-between">
                     Access Code (Promotional)
-                    <span className="text-[9px] font-bold text-slate-400 normal-case italic">Optional</span>
+                    <span className="text-[9px] font-bold text-slate-400 normal-case italic">{accessCodeValue.trim() ? 'Code entered - documents optional' : 'Optional'}</span>
                   </label>
                   <div className="relative">
                     <input
                       name="accessCode"
                       type="text"
                       placeholder="e.g. PICKLE-PRO-2024"
+                      value={accessCodeValue}
+                      onChange={(e) => {
+                        setAccessCodeValue(e.target.value);
+                        setUploadError(''); // Clear error when user types access code
+                      }}
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono font-bold text-sm text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/30 uppercase"
                     />
                     <Key size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
@@ -800,6 +814,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <div className="flex items-center gap-2 mb-2">
                     <label className="block text-xs font-black text-slate-700 uppercase tracking-widest">
                       Supporting Documents
+                      {!accessCodeValue.trim() && <span className="text-red-500 ml-1">*</span>}
                     </label>
                     <div className="relative">
                       <button
@@ -892,6 +907,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <p className="text-xs text-slate-400 mt-2 font-medium">
                     Upload certifications, licenses, or facility documents
                   </p>
+                  {!accessCodeValue.trim() && selectedFiles.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1 font-semibold">
+                      ⚠️ At least one document is required unless you have an access code
+                    </p>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
@@ -902,6 +922,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       setShowSubmitConfirm(false);
                       setSelectedFiles([]);
                       setUploadError('');
+                      setAccessCodeValue('');
                     }}
                     className="flex-1 bg-slate-100 text-slate-900 font-black py-4 px-6 rounded-2xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
                   >

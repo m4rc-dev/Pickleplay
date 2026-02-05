@@ -18,6 +18,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   UsersRound,
   RefreshCw,
   ArrowRight,
@@ -233,6 +234,7 @@ const NavigationHandler: React.FC<{
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -351,33 +353,116 @@ const NavigationHandler: React.FC<{
 
           <div className="relative p-4 border-t space-y-3 border-white/20" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
             {canSwitchRole && !isSidebarCollapsed && (
-              <button onClick={async () => {
-                // Determine the next role in the sequence
-                let nextRole: UserRole = 'PLAYER';
-                if (role === 'PLAYER') {
-                  nextRole = authorizedProRoles.length > 0 ? authorizedProRoles[0] : 'COACH';
-                } else {
-                  const currentIndex = authorizedProRoles.indexOf(role);
-                  if (currentIndex !== -1 && currentIndex < authorizedProRoles.length - 1) {
-                    nextRole = authorizedProRoles[currentIndex + 1];
-                  } else {
-                    nextRole = 'PLAYER';
-                  }
-                }
-                handleRoleSwitch(nextRole);
-              }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20"><RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" /></div>
-                  <div className="text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">
-                      {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Pro Mode' : `${role.replace('_', ' ')} Mode`)}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                      Switch Role
-                    </p>
-                  </div>
-                </div>
-              </button>
+              <div className="relative">
+                {/* 2 roles: Simple toggle button */}
+                {authorizedProRoles.length === 1 && (
+                  <button onClick={async () => {
+                    const nextRole: UserRole = role === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER';
+                    handleRoleSwitch(nextRole);
+                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
+                        <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] font-black uppercase tracking-widest leading-none">
+                          {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Pro Mode' : `${role.replace('_', ' ')} Mode`)}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          Switch to {role === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {/* 3+ roles: Dropdown selector */}
+                {authorizedProRoles.length >= 2 && (
+                  <>
+                    <button 
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)} 
+                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
+                          <RefreshCw size={18} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[10px] font-black uppercase tracking-widest leading-none">
+                            {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Player Mode' : `${role.replace('_', ' ')} Mode`)}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                            Switch Role
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isRoleDropdownOpen && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                        <div className="p-2 space-y-1">
+                          {/* Player option */}
+                          <button
+                            onClick={() => {
+                              handleRoleSwitch('PLAYER');
+                              setIsRoleDropdownOpen(false);
+                            }}
+                            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${
+                              role === 'PLAYER' 
+                                ? 'bg-lime-400 text-slate-900' 
+                                : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                            }`}
+                          >
+                            <User size={16} />
+                            <span className="text-[11px] font-black uppercase tracking-widest">Player</span>
+                            {role === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                          </button>
+
+                          {/* Pro role options */}
+                          {authorizedProRoles.map((proRole) => (
+                            <button
+                              key={proRole}
+                              onClick={() => {
+                                handleRoleSwitch(proRole);
+                                setIsRoleDropdownOpen(false);
+                              }}
+                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${
+                                role === proRole 
+                                  ? 'bg-lime-400 text-slate-900' 
+                                  : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                              }`}
+                            >
+                              {proRole === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
+                              <span className="text-[11px] font-black uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                              {role === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Fallback for simulation mode when no authorized roles */}
+                {authorizedProRoles.length === 0 && isSimulating && (
+                  <button onClick={async () => {
+                    const nextRole: UserRole = role === 'PLAYER' ? 'COACH' : 'PLAYER';
+                    handleRoleSwitch(nextRole);
+                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
+                        <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] font-black uppercase tracking-widest leading-none">Simulation Active</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Switch Role</p>
+                      </div>
+                    </div>
+                  </button>
+                )}
+              </div>
             )}
 
             <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
@@ -476,22 +561,8 @@ const NavigationHandler: React.FC<{
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
               <div className="border-t border-slate-100 my-4" />
-              {canSwitchRole && <button onClick={() => {
-                setIsMobileMenuOpen(false);
-                // Cycle role in mobile
-                let nextRole: UserRole = 'PLAYER';
-                if (role === 'PLAYER') {
-                  nextRole = authorizedProRoles.length > 0 ? authorizedProRoles[0] : 'COACH';
-                } else {
-                  const currentIndex = authorizedProRoles.indexOf(role);
-                  if (currentIndex !== -1 && currentIndex < authorizedProRoles.length - 1) {
-                    nextRole = authorizedProRoles[currentIndex + 1];
-                  } else {
-                    nextRole = 'PLAYER';
-                  }
-                }
-                handleRoleSwitch(nextRole);
-              }} className="w-full flex items-center justify-between p-5 bg-slate-900 rounded-2xl text-white group"><span className="font-black text-[10px] uppercase tracking-widest">Switch Role</span><RefreshCw size={16} /></button>}
+              
+              // ...existing code...
             </nav>
             <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-4 text-rose-600 font-black uppercase text-xs tracking-widest"><LogOut size={20} /> Log Out</button>
           </div>
