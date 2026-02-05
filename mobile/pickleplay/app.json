@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "PicklePlay Philippines",
+    "slug": "pickleplay-ph",
+    "version": "1.0.0",
+    "scheme": "pickleplay",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.pickleplay.ph",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A56A7"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.pickleplay.ph",
+      "buildNumber": "1.0.0"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "packagerOpts": {
+      "config": "metro.config.js"
+    }
+  }
+}
