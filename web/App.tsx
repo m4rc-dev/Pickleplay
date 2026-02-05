@@ -748,7 +748,59 @@ const App: React.FC = () => {
         }
       }
 
-      setPosts(INITIAL_POSTS);
+      // 4. Fetch dynamic social posts
+      const { data: dbPosts, error: postsError } = await supabase
+        .from('community_posts')
+        .select(`
+          *,
+          profiles!profile_id (full_name, avatar_url, active_role),
+          community_post_likes (profile_id),
+          community_post_comments (
+            *,
+            profiles!profile_id (full_name, avatar_url),
+            community_comment_likes (profile_id)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (!postsError && dbPosts) {
+        const mappedPosts: SocialPost[] = dbPosts.map((p: any) => ({
+          id: p.id,
+          authorId: p.profile_id,
+          authorName: p.profiles?.full_name || 'Anonymous',
+          authorAvatar: p.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.profile_id}`,
+          authorRole: p.profiles?.active_role as UserRole,
+          content: p.content,
+          image: p.image_url,
+          tags: p.tags || [],
+          likes: p.community_post_likes?.map((l: any) => l.profile_id) || [],
+          timestamp: p.created_at,
+          comments: (p.community_post_comments || [])
+            .filter((c: any) => !c.parent_id) // Get top-level comments
+            .map((c: any) => ({
+              id: c.id,
+              authorName: c.profiles?.full_name || 'Anonymous',
+              authorAvatar: c.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.profile_id}`,
+              content: c.content,
+              timestamp: c.created_at,
+              likes: c.community_comment_likes?.map((l: any) => l.profile_id) || [],
+              replies: (p.community_post_comments || [])
+                .filter((r: any) => r.parent_id === c.id)
+                .map((r: any) => ({
+                  id: r.id,
+                  authorName: r.profiles?.full_name || 'Anonymous',
+                  authorAvatar: r.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.profile_id}`,
+                  content: r.content,
+                  likes: r.community_comment_likes?.map((l: any) => l.profile_id) || [],
+                  timestamp: r.created_at,
+                  replies: []
+                }))
+            }))
+        }));
+        setPosts(mappedPosts);
+      } else if (postsError) {
+        console.error('Error fetching community posts:', postsError);
+      }
 
       // 3. Fetch initial notifications
       if (session?.user) {
@@ -775,6 +827,20 @@ const App: React.FC = () => {
             metadata: n.metadata
           }));
           setNotifications(mappedNotifs);
+        }
+      }
+      // 5. Fetch initial social posts
+      // ... already fetched above ...
+
+      // 6. Fetch initial follows
+      if (session?.user) {
+        const { data: follows, error: followError } = await supabase
+          .from('user_follows')
+          .select('followed_id')
+          .eq('follower_id', session.user.id);
+
+        if (!followError && follows) {
+          setFollowedUsers(follows.map(f => f.followed_id));
         }
       }
     };
@@ -885,21 +951,34 @@ const App: React.FC = () => {
     setAuthorizedProRoles([]);
   };
 
-  const handleFollow = (userId: string, userName: string) => {
+  const handleFollow = async (userId: string, userName: string) => {
+    if (!currentUserId) return;
     const isCurrentlyFollowing = followedUsers.includes(userId);
-    setFollowedUsers(prev => isCurrentlyFollowing ? prev.filter(id => id !== userId) : [...prev, userId]);
 
-    if (!isCurrentlyFollowing) {
-      const newNotification: Notification = {
-        id: `n-${Date.now()}`,
-        type: 'FOLLOW',
-        message: 'started following you.',
-        actor: { name: userName, avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}` }, // This is a simplification
-        timestamp: new Date().toISOString(),
-        isRead: false
-      };
-      // This is a simulation, you'd get this from the backend
-      // setNotifications(prev => [newNotification, ...prev]);
+    try {
+      if (isCurrentlyFollowing) {
+        await supabase
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', currentUserId)
+          .eq('followed_id', userId);
+        setFollowedUsers(prev => prev.filter(id => id !== userId));
+      } else {
+        await supabase
+          .from('user_follows')
+          .insert({ follower_id: currentUserId, followed_id: userId });
+        setFollowedUsers(prev => [...prev, userId]);
+
+        // Send notification (optional, can be done via DB trigger too)
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          actor_id: currentUserId,
+          type: 'FOLLOW',
+          message: 'started following you.'
+        });
+      }
+    } catch (err) {
+      console.error('Error following user:', err);
     }
   };
 
