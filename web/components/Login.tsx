@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { supabase } from '../services/supabase';
-import { useNavigate, Link } from 'react-router-dom';
 import { supabase, createSession } from '../services/supabase';
 import {
     Trophy,
