@@ -51,17 +51,18 @@ const Booking: React.FC = () => {
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
-  
+
   // Get map position from URL params
   const urlLat = searchParams.get('lat');
   const urlLng = searchParams.get('lng');
   const urlZoom = searchParams.get('zoom');
   const urlCourt = searchParams.get('court');
   const urlSlot = searchParams.get('slot');
-  
+
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const userLocationMarkerRef = useRef<any>(null);
 
   // New states for availability checking
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -167,15 +168,15 @@ const Booking: React.FC = () => {
             const [bHours, bMinutes] = booking.start_time.split(':').map(Number);
             const bookingStart = new Date(date);
             bookingStart.setHours(bHours, bMinutes, 0, 0);
-            
+
             // Parse booking end time (use actual end_time from booking)
             const [eHours, eMinutes] = booking.end_time.split(':').map(Number);
             const bookingEnd = new Date(date);
             bookingEnd.setHours(eHours, eMinutes, 0, 0);
-            
+
             // Add cleaning buffer AFTER the booking ends
             const bookingEndWithCleaning = new Date(bookingEnd.getTime() + cleaningTimeMinutes * 60 * 1000);
-            
+
             // Check if this slot overlaps with the booking OR the cleaning period
             if (start < bookingEndWithCleaning && end > bookingStart) {
               console.log('MATCH FOUND - slot overlaps with booking + cleaning:', slot, 'booking:', booking.start_time, '-', booking.end_time, 'cleaning buffer:', cleaningTimeMinutes, 'min');
@@ -254,10 +255,10 @@ const Booking: React.FC = () => {
     if (!mapRef.current || !window.google) return;
 
     // Use URL params for center/zoom, or default to Manila
-    const center = urlLat && urlLng 
+    const center = urlLat && urlLng
       ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
       : { lat: 14.5995, lng: 121.0437 };
-    
+
     const zoom = urlZoom ? parseInt(urlZoom) : 12;
 
     const map = new window.google.maps.Map(mapRef.current, {
@@ -317,11 +318,20 @@ const Booking: React.FC = () => {
           setSelectedSlot(null); // Reset slot when switching courts
           map.panTo({ lat: court.latitude!, lng: court.longitude! });
           map.setZoom(16);
+        });
+
+        // Show info window on hover
+        marker.addListener('mouseover', () => {
           infoWindow.open(map, marker);
         });
 
+        // Hide info window when mouse leaves
+        marker.addListener('mouseout', () => {
+          infoWindow.close();
+        });
+
         markersRef.current.push(marker);
-        
+
         // If this court matches the URL court param, select it and open info window
         if (urlCourt && court.name.toLowerCase() === decodeURIComponent(urlCourt).toLowerCase()) {
           setSelectedCourt(court);
@@ -509,14 +519,79 @@ const Booking: React.FC = () => {
             lat: position.coords.latitude,
             lng: position.coords.longitude
           };
+
+          // Remove existing user location marker if any
+          if (userLocationMarkerRef.current) {
+            userLocationMarkerRef.current.setMap(null);
+          }
+
+          // Create a custom marker for user's location with a distinctive style
+          const userMarker = new window.google.maps.Marker({
+            position: userLocation,
+            map: googleMapRef.current,
+            title: 'Your Location',
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: '#3b82f6', // Blue color
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 4,
+            },
+            animation: window.google.maps.Animation.DROP,
+            zIndex: 999, // Ensure it appears on top
+          });
+
+          // Add a pulsing outer circle effect
+          const pulseCircle = new window.google.maps.Marker({
+            position: userLocation,
+            map: googleMapRef.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 24,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.3,
+              strokeColor: '#3b82f6',
+              strokeWeight: 2,
+              strokeOpacity: 0.5,
+            },
+            zIndex: 998,
+          });
+
+          // Create info window for user location
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
+                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
+                <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
+              </div>
+            `,
+            disableAutoPan: false
+          });
+
+          // Open info window immediately
+          infoWindow.open(googleMapRef.current, userMarker);
+
+          // Store reference to remove later (store both markers)
+          userLocationMarkerRef.current = {
+            setMap: (map: any) => {
+              userMarker.setMap(map);
+              pulseCircle.setMap(map);
+            }
+          };
+
+          // Pan to user location and set appropriate zoom
           googleMapRef.current.panTo(userLocation);
-          googleMapRef.current.setZoom(13);
+          googleMapRef.current.setZoom(15);
         },
         (error) => {
           console.error('Error getting location:', error);
           alert('Unable to get your location. Please enable location services.');
-        }
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
       );
+    } else {
+      alert('Geolocation is not supported by your browser.');
     }
   };
 
@@ -663,8 +738,8 @@ const Booking: React.FC = () => {
                     <button
                       onClick={() => setShowAdvanceOptions(!showAdvanceOptions)}
                       className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg transition-all ${showAdvanceOptions
-                          ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100'
+                        ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100'
                         }`}
                     >
                       {showAdvanceOptions ? 'Hide Calendar' : 'Advance Booking'}

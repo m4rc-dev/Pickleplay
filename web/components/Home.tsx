@@ -12,6 +12,7 @@ import {
   Trophy,
   ArrowUpRight,
   ChevronRight,
+  ChevronLeft,
   ShoppingBag,
   Plus,
   Newspaper,
@@ -73,11 +74,11 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   const R = 3959; // Earth's radius in miles
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
@@ -89,6 +90,7 @@ interface CourtWithDistance {
   longitude?: number;
   distance?: number;
   region?: string;
+  base_price?: number;
 }
 
 // Philippine regions mapping
@@ -111,10 +113,38 @@ const getRegion = (city: string): string => {
 
 const Home: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  // Real player faces and user count from Supabase
+  const [playerFaces, setPlayerFaces] = useState<string[]>([]);
+  const [totalUsers, setTotalUsers] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchPlayerFacesAndCount = async () => {
+      try {
+        // Fetch up to 5 random user avatars and total user count from 'profiles' table
+        const { data: facesData, error: facesError } = await supabase
+          .from('profiles')
+          .select('avatar_url')
+          .not('avatar_url', 'is', null)
+          .limit(5);
+        if (facesError) throw facesError;
+        setPlayerFaces((facesData || []).map((p: any) => p.avatar_url));
+
+        // Fetch total user count
+        const { count, error: countError } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true });
+        if (countError) throw countError;
+        setTotalUsers(count || 0);
+      } catch (err) {
+        console.error('Error fetching player faces or user count:', err);
+      }
+    };
+    fetchPlayerFacesAndCount();
+  }, []);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [courts, setCourts] = useState<CourtWithDistance[]>([]);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [userCity, setUserCity] = useState<string | null>(null);
   const [userRegion, setUserRegion] = useState<string | null>(null);
   const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
@@ -128,7 +158,7 @@ const Home: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('courts')
-          .select('name, address, city, latitude, longitude')
+          .select('name, address, city, latitude, longitude, base_price')
           .eq('is_active', true);
 
         if (error) throw error;
@@ -139,7 +169,8 @@ const Home: React.FC = () => {
           city: c.city || '',
           latitude: c.latitude,
           longitude: c.longitude,
-          region: getRegion(c.city || '')
+          region: getRegion(c.city || ''),
+          base_price: c.base_price ?? 0
         }));
         setCourts(courtData);
       } catch (err) {
@@ -152,14 +183,14 @@ const Home: React.FC = () => {
   // Get user's GPS location when they focus on search
   const getUserLocation = () => {
     if (userLocation) return; // Already have location
-    
+
     setIsLoadingLocation(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
           setUserLocation({ lat: latitude, lng: longitude });
-          
+
           // Calculate distances for courts and sort by nearest FIRST
           const courtsWithDistance = courts.map(court => {
             if (court.latitude && court.longitude) {
@@ -169,14 +200,14 @@ const Home: React.FC = () => {
             return court;
           }).filter(c => c.distance !== undefined)
             .sort((a, b) => (a.distance || 999) - (b.distance || 999));
-          
+
           setNearbyCourts(courtsWithDistance);
-          
+
           // Try to get city from nearest court as fallback
           const nearestCourt = courtsWithDistance[0];
           let fallbackCity = nearestCourt?.city || '';
           let fallbackRegion = nearestCourt?.region || 'Luzon';
-          
+
           // Reverse geocode to get city name using Google Maps API
           try {
             const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -191,7 +222,7 @@ const Home: React.FC = () => {
                 let country = '';
                 let postalCode = '';
                 let adminArea = '';
-                
+
                 for (const component of addressComponents) {
                   if (component.types.includes('locality')) {
                     city = component.long_name;
@@ -206,15 +237,15 @@ const Home: React.FC = () => {
                     if (!adminArea) adminArea = component.long_name;
                   }
                 }
-                
+
                 // Build display string: "Cebu City, Philippines 6000"
                 let displayCity = city || adminArea || fallbackCity || 'Your Location';
                 if (country) displayCity += `, ${country}`;
                 if (postalCode) displayCity += ` ${postalCode}`;
-                
+
                 setUserCity(displayCity);
                 setGpsEnabled(true);
-                
+
                 // Determine region based on city
                 const region = getRegion(city || adminArea || fallbackCity);
                 setUserRegion(region);
@@ -237,7 +268,7 @@ const Home: React.FC = () => {
             setUserRegion(fallbackRegion);
             setGpsEnabled(true);
           }
-          
+
           setIsLoadingLocation(false);
         },
         (error) => {
@@ -264,7 +295,7 @@ const Home: React.FC = () => {
         return court;
       }).filter(c => c.distance !== undefined)
         .sort((a, b) => (a.distance || 999) - (b.distance || 999));
-      
+
       setNearbyCourts(courtsWithDistance);
     }
   }, [userLocation, courts]);
@@ -294,12 +325,12 @@ const Home: React.FC = () => {
   // Get filtered courts based on search query and user's region
   const getFilteredCourts = () => {
     let courtsToFilter = nearbyCourts.length > 0 ? nearbyCourts : courts;
-    
+
     // Filter by user's region (Luzon, Visayas, Mindanao)
     if (userRegion && !searchQuery.trim()) {
       courtsToFilter = courtsToFilter.filter(court => court.region === userRegion);
     }
-    
+
     // If searching, filter by query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -309,12 +340,12 @@ const Home: React.FC = () => {
         court.city.toLowerCase().includes(query)
       );
     }
-    
+
     return courtsToFilter;
   };
 
   // Region center coordinates for map zooming
-  const REGION_CENTERS: Record<string, {lat: number, lng: number, zoom: number}> = {
+  const REGION_CENTERS: Record<string, { lat: number, lng: number, zoom: number }> = {
     'Visayas': { lat: 10.3157, lng: 123.8854, zoom: 10 },  // Cebu center
     'Luzon': { lat: 14.5995, lng: 120.9842, zoom: 11 },    // Manila center
     'Mindanao': { lat: 7.1907, lng: 125.4553, zoom: 10 }   // Davao center
@@ -351,6 +382,23 @@ const Home: React.FC = () => {
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
       <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 bg-slate-950 z-40">
+                {/* Overlapping player faces and user count - bottom left (real data) */}
+                <div className="absolute left-6 bottom-6 md:left-16 md:bottom-16 z-40 flex items-center gap-3 select-none">
+                  <div className="flex -space-x-4">
+                    {playerFaces.map((face, idx) => (
+                      <img
+                        key={idx}
+                        src={face}
+                        alt={`Player ${idx + 1}`}
+                        className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg object-cover ${idx !== 0 ? '-ml-4' : ''}`}
+                        style={{ zIndex: playerFaces.length - idx }}
+                      />
+                    ))}
+                  </div>
+                  <span className="bg-white/80 text-slate-900 font-bold text-xs md:text-base px-4 py-2 rounded-full shadow-md border border-slate-200">
+                    Over {totalUsers.toLocaleString()} Pickleplay players registered
+                  </span>
+                </div>
         <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
           <div
             className="absolute inset-0 flex transition-transform duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
@@ -417,7 +465,7 @@ const Home: React.FC = () => {
                   {(userCity || gpsEnabled === false) && (
                     <>
                       <p className="px-6 py-2 text-xs font-bold text-teal-500 uppercase tracking-wider">Places</p>
-                      
+
                       {/* User's detected location */}
                       {userCity && (
                         <button
@@ -431,7 +479,7 @@ const Home: React.FC = () => {
                           <span className="text-slate-800 font-medium text-[15px]">{userCity}</span>
                         </button>
                       )}
-                      
+
                       {/* Suggested cities when GPS is denied/not available */}
                       {gpsEnabled === false && !userCity && SUGGESTED_CITIES.map((city, idx) => (
                         <button
@@ -464,11 +512,11 @@ const Home: React.FC = () => {
                             <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
                               {/* Pickleball paddle icon */}
                               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                                <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                                <circle cx="10" cy="8" r="1" fill="currentColor"/>
-                                <circle cx="14" cy="8" r="1" fill="currentColor"/>
-                                <circle cx="12" cy="11" r="1" fill="currentColor"/>
+                                <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                                <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                <circle cx="10" cy="8" r="1" fill="currentColor" />
+                                <circle cx="14" cy="8" r="1" fill="currentColor" />
+                                <circle cx="12" cy="11" r="1" fill="currentColor" />
                               </svg>
                             </div>
                             <div className="flex-1">
@@ -505,6 +553,164 @@ const Home: React.FC = () => {
               )}
             </form>
           </div>
+        </div>
+      </section>
+
+      {/* Featured Courts Near You Section */}
+      <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
+        <div className="max-w-[1800px] mx-auto">
+          {/* Section Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
+            <div>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
+                Featured Courts <span className="text-lime-500">Near You.</span>
+              </h2>
+              {userCity && (
+                <p className="text-slate-500 font-medium mt-4 flex items-center gap-2">
+                  <MapPin size={16} className="text-blue-600" />
+                  Showing courts near <span className="font-bold text-slate-700">{userCity}</span>
+                </p>
+              )}
+            </div>
+            <Link
+              to="/booking"
+              className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors"
+            >
+              VIEW ALL COURTS <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+
+          {/* Courts Row - Horizontal Scroll */}
+          {isLoadingLocation ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-lime-400 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-slate-500 font-medium">Finding courts near you...</p>
+              </div>
+            </div>
+          ) : nearbyCourts.length > 0 ? (
+            <div className="relative">
+              {/* Left Scroll Button */}
+              <button
+                onClick={() => {
+                  const container = document.getElementById('courts-carousel');
+                  if (container) container.scrollBy({ left: -320, behavior: 'smooth' });
+                }}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 -ml-6 hidden md:flex"
+              >
+                <ChevronLeft size={24} className="text-slate-700" />
+              </button>
+
+              {/* Right Scroll Button */}
+              <button
+                onClick={() => {
+                  const container = document.getElementById('courts-carousel');
+                  if (container) container.scrollBy({ left: 320, behavior: 'smooth' });
+                }}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 -mr-6 hidden md:flex"
+              >
+                <ChevronRight size={24} className="text-slate-700" />
+              </button>
+
+              {/* Left Fade Gradient */}
+              <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
+
+              {/* Right Fade Gradient */}
+              <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
+
+              {/* Scrollable Container */}
+              <div
+                id="courts-carousel"
+                className="flex gap-6 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
+              >
+                {nearbyCourts.slice(0, 10).map((court, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 snap-start"
+                  >
+                    {/* Court Image */}
+                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
+                      <img
+                        src={`https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=600&h=400`}
+                        alt={court.name}
+                        className="w-full h-64 object-cover rounded-2xl mb-7"
+                      />
+                    </Link>
+
+                    {/* Rating Section */}
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <svg key={star} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                          </svg>
+                        ))}
+                      </div>
+                      <span className="bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded">
+                        4.8 out of 5
+                      </span>
+                    </div>
+
+                    {/* Court Name & Location */}
+                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
+                      <h5 className="text-2xl text-slate-900 font-black tracking-tight leading-snug hover:text-blue-600 transition-colors">
+                        {court.name}
+                      </h5>
+                    </Link>
+                    <p className="text-base text-slate-500 mt-2 flex items-center gap-2">
+                      <MapPin size={18} className="text-slate-400" />
+                      {court.city}, {court.region || 'Philippines'}
+                      {court.distance !== undefined && (
+                        <span className="text-blue-600 font-semibold ml-2">• {court.distance.toFixed(1)} mi</span>
+                      )}
+                    </p>
+
+                    {/* Price & Book Button */}
+                    <div className="flex items-center justify-between mt-8">
+                      <span className="text-3xl font-extrabold text-slate-900">
+                        ₱{court.base_price ?? 0}
+                        <span className="text-lg font-medium text-slate-400">/hr</span>
+                      </span>
+                      <Link
+                        to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}
+                        className="inline-flex items-center text-white bg-blue-600 hover:bg-blue-700 border border-transparent focus:ring-4 focus:ring-blue-200 shadow-md font-black rounded-2xl text-base px-6 py-3 transition-all active:scale-95"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Book Now
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Scroll Indicator Dots */}
+              <div className="flex justify-center gap-2 mt-4 md:hidden">
+                {nearbyCourts.slice(0, Math.min(10, nearbyCourts.length)).map((_, idx) => (
+                  <div key={idx} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <MapPin size={32} className="text-slate-400" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Enable Location to See Nearby Courts</h3>
+              <p className="text-slate-500 font-medium mb-6 max-w-md mx-auto">
+                Allow location access to discover pickleball courts near you and start playing today!
+              </p>
+              <button
+                onClick={getUserLocation}
+                className="px-8 py-4 bg-lime-400 hover:bg-lime-500 text-slate-900 rounded-2xl font-black text-sm uppercase tracking-wider transition-all active:scale-95 shadow-xl shadow-lime-100"
+              >
+                <Navigation size={18} className="inline mr-2" />
+                Find Courts Near Me
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -673,17 +879,44 @@ const Home: React.FC = () => {
       </section>
 
 
-      {/* Feature Section */}
-      <section className="bg-slate-50 py-16 px-6 md:px-24 lg:px-32">
+      {/* Mobile App Download Section */}
+      <section className="bg-lime-400 py-16 px-6 md:px-24 lg:px-32">
         <div className="max-w-[1800px] mx-auto">
           <div className="text-center max-w-4xl mx-auto mb-12 md:mb-16">
-            <h2 className="text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tighter mb-4 md:mb-6 uppercase">THE PH SYSTEM.</h2>
-            <p className="text-slate-500 font-medium text-base md:text-xl">Engineered for Filipino players who treat pickleball as a science.</p>
+            <h2 className="text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tighter mb-4 md:mb-6 uppercase">DOWNLOAD OUR APP</h2>
+            <p className="text-slate-500 font-medium text-base md:text-xl">Please download our upcoming Mobile App. Compatible both in iOS and Android.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
-            <FeatureCard icon={<Shield size={32} className="text-blue-600" />} title="PH DUPR SYNC" description="Official Philippine DUPR API integration. Watch your rating climb against national rivals." tag="PH CERTIFIED" />
-            <FeatureCard icon={<Activity size={32} className="text-lime-500" />} title="OPEN PLAY PH" description="Instant skill-matched court reservations across all major Philippine cities." tag="FAST PH" />
-            <FeatureCard icon={<Trophy size={32} className="text-slate-900" />} title="PH LADDER" description="Automated league management. Regional brackets and city-wide titles." tag="COMPETITIVE" />
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
+            <div className="relative">
+              <img
+                src="/images/mobile-app-preview.png"
+                alt="PicklePlay Mobile App"
+                className="w-[280px] md:w-[320px] h-auto rounded-[32px] shadow-2xl"
+              />
+            </div>
+            <div className="flex flex-col items-center md:items-start gap-6">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <a href="#" className="flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-4 rounded-2xl transition-all shadow-lg">
+                  <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                  </svg>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-medium opacity-80">Download on the</span>
+                    <span className="text-lg font-bold -mt-1">App Store</span>
+                  </div>
+                </a>
+                <a href="#" className="flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-4 rounded-2xl transition-all shadow-lg">
+                  <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198l2.807 1.626a1 1 0 010 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658L16.802 8.99l-2.303 2.303-8.635-8.635z" />
+                  </svg>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-medium opacity-80">GET IT ON</span>
+                    <span className="text-lg font-bold -mt-1">Google Play</span>
+                  </div>
+                </a>
+              </div>
+              <p className="text-slate-400 text-sm font-medium text-center md:text-left">Coming Soon • Be the first to know when we launch!</p>
+            </div>
           </div>
         </div>
       </section>

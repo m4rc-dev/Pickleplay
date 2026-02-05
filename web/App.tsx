@@ -584,7 +584,7 @@ const NavigationHandler: React.FC<{
 
       {/* Guest Desktop Header */}
       {role === 'guest' && !isAuthPage && (
-        <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-300 rounded-full border items-center px-12 justify-between ${headerActive ? 'bg-white/95 backdrop-blur-md border-slate-200 shadow-xl' : 'bg-transparent border-white/10'}`}>
+        <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-300 rounded-full items-center px-12 justify-between ${headerActive ? 'bg-white/95 backdrop-blur-md shadow-xl' : 'bg-transparent'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-2xl tracking-tighter transition-colors ${headerActive ? 'text-slate-950' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
             <div className="flex flex-col leading-none">
