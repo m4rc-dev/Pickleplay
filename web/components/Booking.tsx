@@ -53,8 +53,10 @@ const Booking: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  
+
   // New states for availability checking
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showAdvanceOptions, setShowAdvanceOptions] = useState(false);
   const [blockedSlots, setBlockedSlots] = useState<Set<string>>(new Set());
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
@@ -95,7 +97,7 @@ const Booking: React.FC = () => {
   }, []);
 
   // Function to check court availability - extracted for reuse
-  const checkCourtAvailability = async (court: Court | null) => {
+  const checkCourtAvailability = async (court: Court | null, date: Date) => {
     if (!court) {
       setBlockedSlots(new Set());
       setBookedSlots(new Set());
@@ -105,35 +107,29 @@ const Booking: React.FC = () => {
     setIsCheckingAvailability(true);
     const newBlockedSlots = new Set<string>();
     const newBookedSlots = new Set<string>();
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const targetDateStr = date.toISOString().split('T')[0];
 
     try {
       // 1. Fetch court events (blocking events from owner)
       const { data: events } = await getCourtBlockingEvents(court.id);
-      
-      // 2. Fetch existing bookings for today - use RPC function to bypass RLS
-      // First try direct query, if empty try using a public view approach
-      let bookings: any[] = [];
-      
-      // Try fetching with a more permissive query
+
+      // 2. Fetch existing bookings for selected date
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('start_time, end_time, status')
         .eq('court_id', court.id)
-        .eq('date', todayStr)
+        .eq('date', targetDateStr)
         .not('status', 'eq', 'cancelled');
 
       if (bookingsError) {
         console.error('Error fetching bookings:', bookingsError);
       }
-      
-      bookings = bookingsData || [];
-      console.log('Fetched bookings for court:', court.id, 'date:', todayStr, 'bookings:', bookings, 'error:', bookingsError);
+
+      const bookings = bookingsData || [];
 
       // Check each time slot
       for (const slot of TIME_SLOTS) {
-        const { start, end } = getSlotDateTime(slot, today);
+        const { start, end } = getSlotDateTime(slot, date);
 
         // Check against court events
         if (events) {
@@ -152,14 +148,10 @@ const Booking: React.FC = () => {
         // Check against existing bookings
         if (bookings && bookings.length > 0) {
           const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
-          
+
           for (const booking of bookings) {
-            // Compare start times - handle both HH:MM:SS and HH:MM formats
-            const bookingStartTime = booking.start_time?.substring(0, 8); // Get HH:MM:SS
-            console.log('Comparing slot:', slot, 'startTimeStr:', startTimeStr, 'bookingStartTime:', bookingStartTime);
-            
+            const bookingStartTime = booking.start_time?.substring(0, 8);
             if (bookingStartTime === startTimeStr || booking.start_time?.startsWith(startTimeStr.substring(0, 5))) {
-              console.log('MATCH FOUND - marking slot as booked:', slot);
               newBookedSlots.add(slot);
               break;
             }
@@ -167,9 +159,6 @@ const Booking: React.FC = () => {
         }
       }
 
-      console.log('Final booked slots:', Array.from(newBookedSlots));
-      console.log('Final blocked slots:', Array.from(newBlockedSlots));
-      
       setBlockedSlots(newBlockedSlots);
       setBookedSlots(newBookedSlots);
     } catch (err) {
@@ -179,10 +168,10 @@ const Booking: React.FC = () => {
     }
   };
 
-  // Check availability when a court is selected
+  // Check availability when a court or date is selected
   useEffect(() => {
-    checkCourtAvailability(selectedCourt);
-  }, [selectedCourt]);
+    checkCourtAvailability(selectedCourt, selectedDate);
+  }, [selectedCourt, selectedDate]);
 
   // Polling: Auto-refresh availability every 5 seconds for real-time updates across all players
   useEffect(() => {
@@ -190,7 +179,7 @@ const Booking: React.FC = () => {
 
     // Poll every 5 seconds to check for new bookings
     const pollInterval = setInterval(() => {
-      checkCourtAvailability(selectedCourt);
+      checkCourtAvailability(selectedCourt, selectedDate);
     }, 5000); // 5 seconds
 
     // Cleanup interval when court changes or component unmounts
@@ -202,8 +191,6 @@ const Booking: React.FC = () => {
   // Real-time subscription to bookings - updates for ALL players when anyone books
   useEffect(() => {
     if (!selectedCourt) return;
-
-    const todayStr = new Date().toISOString().split('T')[0];
 
     // Subscribe to booking changes for the selected court
     const subscription = supabase
@@ -219,7 +206,7 @@ const Booking: React.FC = () => {
         (payload) => {
           console.log('Booking change detected:', payload);
           // Refresh availability for all players viewing this court
-          checkCourtAvailability(selectedCourt);
+          checkCourtAvailability(selectedCourt, selectedDate);
         }
       )
       .subscribe();
@@ -355,7 +342,7 @@ const Booking: React.FC = () => {
           hours = 0; // Midnight
         }
 
-        const startDateTime = new Date();
+        const startDateTime = new Date(selectedDate);
         startDateTime.setHours(hours, minutes, 0, 0);
 
         const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Add 1 hour
@@ -369,14 +356,14 @@ const Booking: React.FC = () => {
 
         const startTimeFormatted = formatTime(startDateTime);
         const endTimeFormatted = formatTime(endDateTime);
+        const targetDateStr = selectedDate.toISOString().split('T')[0];
 
         // 3. DUPLICATE SLOT CHECK - Prevent double-booking
         const { data: existingBooking, error: checkError } = await supabase
           .from('bookings')
           .select('id')
           .eq('court_id', selectedCourt.id)
-          .eq('date', new Date().toISOString().split('T')[0])
-          .eq('start_time', startTimeFormatted)
+          .eq('date', targetDateStr)
           .neq('status', 'cancelled')
           .maybeSingle();
 
@@ -407,7 +394,7 @@ const Booking: React.FC = () => {
           .insert({
             court_id: selectedCourt.id,
             player_id: user.id,
-            date: new Date().toISOString().split('T')[0],
+            date: targetDateStr,
             start_time: startTimeFormatted,
             end_time: endTimeFormatted,
             total_price: selectedCourt.pricePerHour,
@@ -457,13 +444,13 @@ const Booking: React.FC = () => {
         }, 3000);
       } catch (err: any) {
         console.error('Booking error:', err);
-        
+
         // Handle duplicate booking constraint violation
         if (err.message?.includes('unique_court_booking') || err.code === '23505') {
           alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
           // Refresh availability to show updated slots
           setSelectedSlot(null);
-          checkCourtAvailability(selectedCourt);
+          checkCourtAvailability(selectedCourt, selectedDate);
         } else {
           alert(`Booking failed: ${err.message}`);
         }
@@ -611,6 +598,63 @@ const Booking: React.FC = () => {
                 </div>
               </div>
 
+              {/* Date Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                    <CalendarIcon size={14} className="text-blue-600" />
+                    {showAdvanceOptions ? 'Select Date' : 'Booking for Today'}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md uppercase tracking-tight">
+                      {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                    <button
+                      onClick={() => setShowAdvanceOptions(!showAdvanceOptions)}
+                      className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg transition-all ${showAdvanceOptions
+                          ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100'
+                        }`}
+                    >
+                      {showAdvanceOptions ? 'Hide Calendar' : 'Advance Booking'}
+                    </button>
+                  </div>
+                </div>
+
+                {showAdvanceOptions && (
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1 animate-in slide-in-from-top-2 duration-300">
+                    {Array.from({ length: 14 }).map((_, i) => {
+                      const date = new Date();
+                      date.setDate(date.getDate() + i);
+                      const isSelected = selectedDate.toDateString() === date.toDateString();
+                      const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
+                      const dayNum = date.getDate();
+
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setSelectedDate(date);
+                            setSelectedSlot(null); // Reset slot when date changes
+                          }}
+                          className={`flex flex-col items-center min-w-[54px] py-2.5 rounded-xl border transition-all ${isSelected
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                            : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-200 hover:bg-white'
+                            }`}
+                        >
+                          <span className={`text-[9px] font-black uppercase tracking-widest mb-1 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                            {dayName}
+                          </span>
+                          <span className="text-sm font-black">
+                            {dayNum}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Time Slots */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -624,7 +668,7 @@ const Booking: React.FC = () => {
                     </span>
                   )}
                 </div>
-                
+
                 {/* Legend */}
                 <div className="flex flex-wrap gap-2 mb-3 text-[9px]">
                   <span className="flex items-center gap-1 text-slate-500">
@@ -643,22 +687,21 @@ const Booking: React.FC = () => {
                     const isBlocked = blockedSlots.has(slot);
                     const isBooked = bookedSlots.has(slot);
                     const isUnavailable = isBlocked || isBooked;
-                    
+
                     return (
                       <button
                         key={slot}
                         onClick={() => !isUnavailable && setSelectedSlot(slot)}
                         disabled={isUnavailable}
                         title={isBlocked ? 'Court event scheduled' : isBooked ? 'Already booked' : 'Available'}
-                        className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${
-                          isBlocked
-                            ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
-                            : isBooked
+                        className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isBlocked
+                          ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                          : isBooked
                             ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
                             : selectedSlot === slot
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                        }`}
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                          }`}
                       >
                         <span className={isUnavailable ? 'line-through' : ''}>{slot}</span>
                         {isBlocked && (
@@ -671,12 +714,12 @@ const Booking: React.FC = () => {
                     );
                   })}
                 </div>
-                
+
                 {/* Availability Summary */}
                 {(blockedSlots.size > 0 || bookedSlots.size > 0) && (
                   <div className="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[10px] text-slate-500">
-                      <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available today
+                      <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available on this date
                       {blockedSlots.size > 0 && (
                         <span className="text-red-500"> • {blockedSlots.size} blocked by owner</span>
                       )}
