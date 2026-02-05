@@ -60,6 +60,7 @@ import Schedule from './components/coach/Schedule';
 import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
+import Coaches from '@/components/Coaches';
 import { supabase } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
 import { ProfessionalApplication, UserRole, Notification, SocialPost, Product, CartItem } from './types';
@@ -324,6 +325,7 @@ const NavigationHandler: React.FC<{
             {role === 'PLAYER' && (
               <>
                 <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
@@ -530,6 +532,7 @@ const NavigationHandler: React.FC<{
               <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/coaches" element={role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
               <Route path="/teams" element={role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
               <Route path="/profile" element={role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />

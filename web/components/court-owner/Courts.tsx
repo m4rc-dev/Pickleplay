@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, LayoutGrid, List, X, Settings2, Trash2 } from 'lucide-react';
+import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, LayoutGrid, List, X, Settings2, Trash2, Navigation, Target } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface Court {
@@ -312,7 +312,7 @@ const Courts: React.FC = () => {
             {/* Add Court Modal - Refined Stacking logic with Portal to escape container constraints */}
             {isAddModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100]">
+                    <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
                             <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
                             <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
@@ -320,101 +320,104 @@ const Courts: React.FC = () => {
                             </button>
                         </div>
 
-                        <form onSubmit={handleAddCourt} className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
-                                <input
-                                    required
-                                    type="text"
-                                    value={newName}
-                                    onChange={e => setNewName(e.target.value)}
-                                    placeholder="e.g. Center Court"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleAddCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            {/* Left Column: Form Fields */}
+                            <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
                                     <input
                                         required
                                         type="text"
-                                        value={newCity}
-                                        onChange={e => setNewCity(e.target.value)}
-                                        placeholder="e.g. Manila"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        value={newName}
+                                        onChange={e => setNewName(e.target.value)}
+                                        placeholder="e.g. Center Court"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Number of Courts</label>
-                                    <input
-                                        required
-                                        type="number"
-                                        min="1"
-                                        value={newNumCourts}
-                                        onChange={e => setNewNumCourts(Number(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newCity}
+                                            onChange={e => setNewCity(e.target.value)}
+                                            placeholder="e.g. Manila"
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="1"
+                                            value={newNumCourts}
+                                            onChange={e => setNewNumCourts(Number(e.target.value))}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newSurface}
+                                            onChange={e => setNewSurface(e.target.value)}
+                                            placeholder="e.g. Pro-Cushion"
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={newPrice}
+                                            onChange={e => setNewPrice(Number(e.target.value))}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
                                     <input
                                         required
                                         type="text"
-                                        value={newSurface}
-                                        onChange={e => setNewSurface(e.target.value)}
-                                        placeholder="e.g. Pro-Cushion"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        value={newAddress}
+                                        onChange={e => setNewAddress(e.target.value)}
+                                        placeholder="Full street address"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
                                     <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={newPrice}
-                                        onChange={e => setNewPrice(Number(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        type="text"
+                                        value={newAmenities}
+                                        onChange={e => setNewAmenities(e.target.value)}
+                                        placeholder="WiFi, Parking, Water Station..."
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
-                                <input
-                                    required
-                                    type="text"
-                                    value={newAddress}
-                                    onChange={e => setNewAddress(e.target.value)}
-                                    placeholder="Full street address"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
-                                <input
-                                    type="text"
-                                    value={newAmenities}
-                                    onChange={e => setNewAmenities(e.target.value)}
-                                    placeholder="e.g. WiFi, Parking, Water Station (Comma separated)"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            {/* Location Verification Map */}
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center ml-4">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
-                                    {isGeocoding && <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>}
-                                </div>
-                                <div className="h-40 bg-slate-50 rounded-3xl border border-slate-100 overflow-hidden relative">
-                                    {previewCoords ? (
+                            {/* Right Column: Map & Submit */}
+                            <div className="flex flex-col h-full">
+                                <div className="flex-1 space-y-4">
+                                    <div className="flex justify-between items-center ml-4">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
+                                        {isGeocoding && <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>}
+                                    </div>
+                                    <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
                                         <MapPreview
                                             coords={previewCoords}
                                             onCoordsChange={setPreviewCoords}
@@ -423,22 +426,26 @@ const Courts: React.FC = () => {
                                                 setNewCity(city);
                                             }}
                                         />
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-2">
-                                            <MapPin size={24} />
-                                            <p className="text-[10px] font-black uppercase tracking-widest">Enter address to preview</p>
-                                        </div>
-                                    )}
+                                        {!previewCoords && (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 backdrop-blur-sm text-slate-300 gap-2">
+                                                <MapPin size={32} />
+                                                <p className="text-[10px] font-black uppercase tracking-widest">Enter address or use GPS</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest">
+                                        TIP: Drag the marker or click map to refine location
+                                    </p>
                                 </div>
-                            </div>
 
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 mt-4 disabled:bg-slate-200"
-                            >
-                                {isSubmitting ? 'Adding...' : 'Confirm Court Registration'}
-                            </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 mt-8 disabled:bg-slate-200 active:scale-95"
+                                >
+                                    {isSubmitting ? 'Adding...' : 'Confirm Registration'}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>,
@@ -448,7 +455,7 @@ const Courts: React.FC = () => {
             {/* Edit Court Modal */}
             {isEditModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100]">
+                    <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
                             <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court Details</h2>
                             <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
@@ -456,97 +463,99 @@ const Courts: React.FC = () => {
                             </button>
                         </div>
 
-                        <form onSubmit={handleUpdateCourt} className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
-                                <input
-                                    required
-                                    type="text"
-                                    value={newName}
-                                    onChange={e => setNewName(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleUpdateCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            {/* Left Column: Form Fields */}
+                            <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
                                     <input
                                         required
                                         type="text"
-                                        value={newCity}
-                                        onChange={e => setNewCity(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        value={newName}
+                                        onChange={e => setNewName(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Number of Courts</label>
-                                    <input
-                                        required
-                                        type="number"
-                                        min="1"
-                                        value={newNumCourts}
-                                        onChange={e => setNewNumCourts(Number(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newCity}
+                                            onChange={e => setNewCity(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="1"
+                                            value={newNumCourts}
+                                            onChange={e => setNewNumCourts(Number(e.target.value))}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newSurface}
+                                            onChange={e => setNewSurface(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={newPrice}
+                                            onChange={e => setNewPrice(Number(e.target.value))}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
                                     <input
                                         required
                                         type="text"
-                                        value={newSurface}
-                                        onChange={e => setNewSurface(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        value={newAddress}
+                                        onChange={e => setNewAddress(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
                                     <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={newPrice}
-                                        onChange={e => setNewPrice(Number(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
+                                        type="text"
+                                        value={newAmenities}
+                                        onChange={e => setNewAmenities(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
-                                <input
-                                    required
-                                    type="text"
-                                    value={newAddress}
-                                    onChange={e => setNewAddress(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
-                                <input
-                                    type="text"
-                                    value={newAmenities}
-                                    onChange={e => setNewAmenities(e.target.value)}
-                                    placeholder="e.g. WiFi, Parking, Water Station (Comma separated)"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold"
-                                />
-                            </div>
-
-                            {/* Location Verification Map */}
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center ml-4">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
-                                    {isGeocoding && <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>}
-                                </div>
-                                <div className="h-40 bg-slate-50 rounded-3xl border border-slate-100 overflow-hidden relative">
-                                    {previewCoords ? (
+                            {/* Right Column: Map & Actions */}
+                            <div className="flex flex-col h-full">
+                                <div className="flex-1 space-y-4">
+                                    <div className="flex justify-between items-center ml-4">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
+                                        {isGeocoding && <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>}
+                                    </div>
+                                    <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
                                         <MapPreview
                                             coords={previewCoords}
                                             onCoordsChange={setPreviewCoords}
@@ -555,30 +564,25 @@ const Courts: React.FC = () => {
                                                 setNewCity(city);
                                             }}
                                         />
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-2">
-                                            <MapPin size={24} />
-                                            <p className="text-[10px] font-black uppercase tracking-widest">Loading location preview...</p>
-                                        </div>
-                                    )}
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex gap-4 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
-                                    className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <Trash2 size={18} /> Remove
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="flex-[2] h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200"
-                                >
-                                    {isSubmitting ? 'Saving...' : 'Save Changes'}
-                                </button>
+                                <div className="flex gap-4 mt-8">
+                                    <button
+                                        type="button"
+                                        onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
+                                        className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Trash2 size={18} /> Remove
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-[2] h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95"
+                                    >
+                                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -638,9 +642,34 @@ const MapPreview: React.FC<{
     onCoordsChange?: (coords: { lat: number, lng: number }) => void,
     onAddressChange?: (address: string, city: string) => void
 }> = ({ coords, onCoordsChange, onAddressChange }) => {
+    const [isLocating, setIsLocating] = React.useState(false);
     const mapRef = React.useRef<HTMLDivElement>(null);
     const googleMapRef = React.useRef<any>(null);
     const markerRef = React.useRef<any>(null);
+
+    const handlePinToGPS = () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setIsLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                const newCoords = { lat: latitude, lng: longitude };
+                if (onCoordsChange) onCoordsChange(newCoords);
+                reverseGeocode(latitude, longitude);
+                setIsLocating(false);
+            },
+            (error) => {
+                console.error('GPS error:', error);
+                alert('Could not get your location. Please ensure GPS is enabled.');
+                setIsLocating(false);
+            },
+            { enableHighAccuracy: true }
+        );
+    };
 
     const reverseGeocode = (lat: number, lng: number) => {
         if (!window.google) return;
@@ -673,9 +702,10 @@ const MapPreview: React.FC<{
         if (mapRef.current && window.google) {
             if (!googleMapRef.current) {
                 googleMapRef.current = new window.google.maps.Map(mapRef.current, {
-                    center: coords,
+                    center: coords || { lat: 14.5995, lng: 120.9842 }, // Default to Manila
                     zoom: 15,
-                    disableDefaultUI: false,
+                    disableDefaultUI: true,
+                    zoomControl: true,
                     mapTypeControl: false,
                     streetViewControl: false,
                     fullscreenControl: false,
@@ -685,8 +715,21 @@ const MapPreview: React.FC<{
                             featureType: 'poi',
                             elementType: 'labels',
                             stylers: [{ visibility: 'off' }]
+                        },
+                        {
+                            "featureType": "water",
+                            "elementType": "geometry",
+                            "stylers": [{ "color": "#e9e9e9" }, { "lightness": 17 }]
                         }
                     ]
+                });
+
+                // Add Click to Pin
+                googleMapRef.current.addListener('click', (e: any) => {
+                    const lat = e.latLng.lat();
+                    const lng = e.latLng.lng();
+                    if (onCoordsChange) onCoordsChange({ lat, lng });
+                    reverseGeocode(lat, lng);
                 });
 
                 markerRef.current = new window.google.maps.Marker({
@@ -695,11 +738,11 @@ const MapPreview: React.FC<{
                     draggable: true,
                     icon: {
                         path: window.google.maps.SymbolPath.CIRCLE,
-                        scale: 12,
+                        scale: 14,
                         fillColor: '#f59e0b',
                         fillOpacity: 1,
                         strokeColor: '#ffffff',
-                        strokeWeight: 2,
+                        strokeWeight: 3,
                     },
                 });
 
@@ -713,21 +756,37 @@ const MapPreview: React.FC<{
                     }
                     reverseGeocode(lat, lng);
                 });
-            } else {
-                // If map already exists, just update position if it's a "fresh" geocode
-                // We check if the distance is significant to avoid resetting on minor drags
+            } else if (coords) {
                 const markerPos = markerRef.current.getPosition();
-                const dist = Math.abs(markerPos.lat() - coords.lat) + Math.abs(markerPos.lng() - coords.lng);
+                const dist = markerPos ? (Math.abs(markerPos.lat() - coords.lat) + Math.abs(markerPos.lng() - coords.lng)) : 1;
 
                 if (dist > 0.0001) {
-                    googleMapRef.current.setCenter(coords);
+                    googleMapRef.current.panTo(coords);
                     markerRef.current.setPosition(coords);
+                    markerRef.current.setVisible(true);
                 }
             }
         }
     }, [coords]);
 
-    return <div ref={mapRef} className="w-full h-full" />;
+    return (
+        <div className="w-full h-full relative">
+            <div ref={mapRef} className="w-full h-full" />
+            <button
+                type="button"
+                onClick={handlePinToGPS}
+                disabled={isLocating}
+                className="absolute right-4 top-4 bg-white p-3 rounded-2xl shadow-xl border border-slate-100 text-slate-900 hover:bg-slate-900 hover:text-white transition-all active:scale-95 group z-10"
+                title="Use current GPS location"
+            >
+                {isLocating ? (
+                    <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                    <Target size={20} className="group-hover:animate-pulse" />
+                )}
+            </button>
+        </div>
+    );
 };
 
 const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => void }> = ({ court, onBook, onSettings }) => (

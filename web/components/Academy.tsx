@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   GraduationCap,
   ChevronRight,
@@ -136,12 +137,12 @@ const Academy: React.FC = () => {
         <h3 className="text-3xl font-black text-slate-950 tracking-tighter uppercase">Ready to put it into practice?</h3>
         <p className="text-slate-500 max-w-2xl mx-auto font-medium">Knowledge is nothing without drills. Find a local court and start dinking today.</p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button className="bg-slate-950 text-white h-20 px-12 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-3 shadow-xl">
+          <Link to="/booking" className="bg-slate-950 text-white h-20 px-12 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-3 shadow-xl">
             BOOK A COURT <Calendar size={18} />
-          </button>
-          <button className="bg-slate-100 text-slate-900 h-20 px-12 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-3">
+          </Link>
+          <Link to="/coaches" className="bg-slate-100 text-slate-900 h-20 px-12 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-3">
             FIND A COACH <GraduationCap size={18} />
-          </button>
+          </Link>
         </div>
       </section>
     </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -35,12 +35,13 @@ import {
   Megaphone,
   HelpCircle,
   Building2,
-  Key
+  Key,
+  Star,
+  Radio
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
 import { Skeleton } from './ui/Skeleton';
-import { Radio } from 'lucide-react';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -81,7 +82,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [coachStats, setCoachStats] = useState({
     studentsCount: 0,
     clinicCompletion: 0,
-    lessonRequests: 0
+    lessonRequests: 0,
+    totalRevenue: 0
   });
 
   const [courtOwnerStats, setCourtOwnerStats] = useState({
@@ -97,6 +99,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string>('');
+  const [recentLessons, setRecentLessons] = useState<any[]>([]);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [selectedLessonForReview, setSelectedLessonForReview] = useState<any>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
@@ -110,6 +118,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       .then(({ data }) => {
         if (data) setAnnouncements(data);
       });
+
+    if (userRole === 'PLAYER' && currentUserId) {
+      fetchPlayerLessons();
+    }
 
     const fetchCourtOwnerMetrics = async () => {
       if (!currentUserId) return;
@@ -219,20 +231,27 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           // 1. Total Students (Unique student_ids from lessons)
           const { data: lessonsData } = await supabase
             .from('lessons')
-            .select('student_id')
+            .select('student_id, price, status')
             .eq('coach_id', currentUserId);
 
           const uniqueStudents = new Set(lessonsData?.map(l => l.student_id).filter(Boolean)).size;
 
-          // 2. Clinic Completion
+          // Calculate Lesson Revenue
+          const completedLessons = lessonsData?.filter(l => l.status === 'completed') || [];
+          const lessonRevenue = completedLessons.reduce((sum, l) => sum + Number(l.price || 0), 0);
+
+          // 2. Clinic Completion & Revenue
           const { data: clinicsData } = await supabase
             .from('clinics')
-            .select('status')
+            .select('id, status, price, participants')
             .eq('coach_id', currentUserId);
 
-          const completedClinics = clinicsData?.filter(c => c.status === 'completed').length || 0;
+          const completedClinics = clinicsData?.filter(c => c.status === 'completed') || [];
           const totalClinics = clinicsData?.length || 0;
-          const completionRate = totalClinics > 0 ? Math.round((completedClinics / totalClinics) * 100) : 0;
+          const completionRate = totalClinics > 0 ? Math.round((completedClinics.length / totalClinics) * 100) : 0;
+
+          // Calculate Clinic Revenue
+          const clinicRevenue = clinicsData?.reduce((sum, c) => sum + (Number(c.price || 0) * (c.participants || 0)), 0) || 0;
 
           // 3. Lesson Requests (Pending status)
           const { count: pendingLessons } = await supabase
@@ -244,7 +263,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           setCoachStats({
             studentsCount: uniqueStudents,
             clinicCompletion: completionRate,
-            lessonRequests: pendingLessons || 0
+            lessonRequests: pendingLessons || 0,
+            totalRevenue: lessonRevenue + clinicRevenue
           });
         } catch (err) {
           console.error('Error fetching coach metrics:', err);
@@ -289,6 +309,55 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       alert('Failed to send broadcast.');
     } finally {
       setIsBroadcasting(false);
+    }
+  };
+
+  const fetchPlayerLessons = async () => {
+    if (!currentUserId) return;
+    try {
+      const { data, error } = await supabase
+        .from('lessons')
+        .select(`
+          *,
+          coach:profiles!lessons_coach_id_fkey(full_name, avatar_url)
+        `)
+        .eq('student_id', currentUserId)
+        .order('date', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setRecentLessons(data || []);
+    } catch (err) {
+      console.error('Error fetching player sessions:', err);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!currentUserId || !selectedLessonForReview) return;
+    setIsSubmittingReview(true);
+    try {
+      const { error: reviewError } = await supabase
+        .from('coach_reviews')
+        .insert({
+          coach_id: selectedLessonForReview.coach_id,
+          student_id: currentUserId,
+          lesson_id: selectedLessonForReview.id,
+          rating: reviewRating,
+          comment: reviewComment
+        });
+
+      if (reviewError) throw reviewError;
+
+      alert('Review submitted! Thank you for your feedback.');
+      setIsReviewModalOpen(false);
+      setReviewComment('');
+      setReviewRating(5);
+      fetchPlayerLessons();
+    } catch (err: any) {
+      console.error('Review submission error:', err);
+      alert('Failed to submit review: ' + err.message);
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -440,9 +509,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'COACH':
         return (
           <>
+            <StatCard label="Session Revenue" value={`₱${coachStats.totalRevenue.toLocaleString()}`} change="+12%" icon={<DollarSign className="text-rose-600" />} color="rose" />
             <StatCard label="Students" value={coachStats.studentsCount.toString()} change={`+${coachStats.studentsCount}`} icon={<GraduationCap className="text-rose-600" />} color="rose" />
             <StatCard label="Clinic Completion" value={`${coachStats.clinicCompletion}%`} change="+10%" icon={<Award className="text-rose-600" />} color="rose" />
-            <StatCard label="Lesson Requests" value={coachStats.lessonRequests.toString()} change={coachStats.lessonRequests > 0 ? 'New' : 'Clear'} icon={<BookOpen className="text-rose-600" />} color="rose" />
           </>
         );
       case 'PLAYER':
@@ -612,6 +681,111 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           </div>
         </div>
       </div>
+
+      {userRole === 'PLAYER' && !isLoading && recentLessons.length > 0 && (
+        <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+              <History className="text-blue-600" /> Recent Sessions
+            </h2>
+            <Link to="/schedule" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
+              View All <ArrowRight size={14} />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recentLessons.map((lesson) => (
+              <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+                <div className="flex items-center gap-4 mb-4">
+                  <img
+                    src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
+                    className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
+                    alt="Coach"
+                  />
+                  <div>
+                    <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
+                    lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                      'bg-slate-200 text-slate-600'
+                    }`}>
+                    {lesson.status}
+                  </span>
+                  {lesson.status === 'completed' && (
+                    <button
+                      onClick={() => {
+                        setSelectedLessonForReview(lesson);
+                        setIsReviewModalOpen(true);
+                      }}
+                      className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                    >
+                      <Star size={12} fill="currentColor" /> Rate Coach
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {isReviewModalOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Star size={32} className="text-blue-600" fill="currentColor" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Rate {selectedLessonForReview?.coach?.full_name}</h3>
+              <p className="text-slate-500 font-medium text-sm mt-2">How was your session on {selectedLessonForReview?.date}?</p>
+            </div>
+
+            <div className="space-y-8">
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setReviewRating(star)}
+                    className={`transition-all ${reviewRating >= star ? 'text-amber-500 scale-110' : 'text-slate-200 hover:text-slate-300'}`}
+                  >
+                    <Star size={36} fill={reviewRating >= star ? "currentColor" : "none"} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Your Comments</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share your feedback to help others..."
+                  className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-medium text-sm min-h-[120px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setIsReviewModalOpen(false)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isSubmittingReview}
+                  onClick={handleSubmitReview}
+                  className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Submit Docs Application Modal - Refined Stacking logic */}
       {showSubmitConfirm && ReactDOM.createPortal(

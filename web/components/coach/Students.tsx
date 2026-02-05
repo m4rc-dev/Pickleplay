@@ -22,32 +22,73 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
     const [students, setStudents] = useState<Student[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
 
     useEffect(() => {
         if (currentUserId) {
             fetchStudents();
+            fetchCoachProfile();
         }
     }, [currentUserId]);
+
+    const fetchCoachProfile = async () => {
+        if (!currentUserId) return;
+        const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUserId)
+            .single();
+        if (data) setCurrentUserProfile(data);
+    };
 
     const fetchStudents = async () => {
         setIsLoading(true);
         try {
-            // 1. Fetch lessons with student profiles
+            // 1. Fetch private lessons with student profiles using explicit relationship name
             const { data: lessonsData, error: lessonsError } = await supabase
                 .from('lessons')
-                .select('student_id, date, student:profiles(*)')
+                .select('student_id, date, type, student:profiles!lessons_student_id_fkey(*)')
                 .eq('coach_id', currentUserId);
 
             if (lessonsError) throw lessonsError;
 
-            // 2. Process unique students
+            // 2. Fetch clinics and their participants
+            const { data: clinicsData, error: clinicsError } = await supabase
+                .from('clinics')
+                .select(`
+                    id,
+                    title,
+                    date,
+                    clinic_participants (
+                        player_id,
+                        enrolled_at,
+                        profiles:profiles!clinic_participants_player_id_fkey (*)
+                    )
+                `)
+                .eq('coach_id', currentUserId);
+
+            if (clinicsError) throw clinicsError;
+
+            // 3. Process unique students
             const studentMap = new Map<string, Student>();
 
+            // Process private lessons
             (lessonsData || []).forEach(lesson => {
                 const profile = lesson.student as any;
                 if (!profile) return;
 
                 const studentId = profile.id;
+
+                // Robust filtering: Check prop ID, profile ID, and name to ensure coach isn't listed as their own student
+                if (
+                    studentId === currentUserId ||
+                    studentId === currentUserProfile?.id ||
+                    profile.full_name === currentUserProfile?.full_name
+                ) {
+                    console.log('Filtering out coach from roster:', profile.full_name);
+                    return;
+                }
+
                 const lessonDate = lesson.date;
 
                 if (!studentMap.has(studentId)) {
@@ -58,7 +99,7 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
                         dupr_rating: profile.dupr_rating || 3.0,
                         lastLessonDate: lessonDate,
                         totalLessons: 1,
-                        level: 'Intermediate', // Fallback or could map from dupr
+                        level: 'Private Student',
                         status: 'Active'
                     });
                 } else {
@@ -68,6 +109,55 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
                         existing.lastLessonDate = lessonDate;
                     }
                 }
+            });
+
+            // Process clinic participants
+            (clinicsData || []).forEach(clinic => {
+                const participants = clinic.clinic_participants as any[];
+                if (!participants) return;
+
+                participants.forEach(p => {
+                    const profile = p.profiles;
+                    if (!profile) return;
+
+                    const studentId = profile.id;
+
+                    // Robust filtering: Check prop ID, profile ID, and name to ensure coach isn't listed as their own student
+                    if (
+                        studentId === currentUserId ||
+                        studentId === currentUserProfile?.id ||
+                        profile.full_name === currentUserProfile?.full_name
+                    ) {
+                        console.log('Filtering out coach from clinic roster:', profile.full_name);
+                        return;
+                    }
+
+                    const enrolledDate = p.enrolled_at;
+
+                    if (!studentMap.has(studentId)) {
+                        studentMap.set(studentId, {
+                            id: studentId,
+                            full_name: profile.full_name || 'Anonymous Player',
+                            avatar_url: profile.avatar_url,
+                            dupr_rating: profile.dupr_rating || 3.0,
+                            lastLessonDate: enrolledDate,
+                            totalLessons: 1,
+                            level: 'Clinic Participant',
+                            status: 'Active'
+                        });
+                    } else {
+                        const existing = studentMap.get(studentId)!;
+                        // If they are already a private student, don't overwrite the level, but update lesson count if unique session?
+                        // Actually, let's just mark them as 'Active Student' if they are in both
+                        if (existing.level === 'Private Student') {
+                            existing.level = 'Active Student';
+                        }
+                        existing.totalLessons += 1;
+                        if (enrolledDate > (existing.lastLessonDate || '')) {
+                            existing.lastLessonDate = enrolledDate;
+                        }
+                    }
+                });
             });
 
             setStudents(Array.from(studentMap.values()));
@@ -122,7 +212,7 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
                 <MetricCard
                     icon={<TrendingUp className="text-rose-600" size={24} />}
                     label="Avg. Rating"
-                    value={isLoading ? '...' : (students.length > 0 ? (students.reduce((acc, s) => acc + s.dupr_rating, 0) / students.length).toFixed(2) : '3.00')}
+                    value={isLoading ? '...' : (currentUserProfile?.rating ? Number(currentUserProfile.rating).toFixed(2) : 'New')}
                     trend="Community Avg"
                 />
             </div>
@@ -216,7 +306,7 @@ const StudentCard: React.FC<{ student: Student }> = ({ student }) => (
 
         <div className="flex items-center gap-3 mt-auto">
             <button className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-colors shadow-lg shadow-rose-200 active:scale-95">
-                Book Session
+                Schedule
             </button>
             <button className="p-3 bg-slate-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all border border-slate-100">
                 <MessageSquare size={18} />

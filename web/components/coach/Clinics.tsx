@@ -26,6 +26,11 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedClinicForRoster, setSelectedClinicForRoster] = useState<Clinic | null>(null);
+    const [rosterParticipants, setRosterParticipants] = useState<any[]>([]);
+    const [isLoadingRoster, setIsLoadingRoster] = useState(false);
+    const [selectedClinicForEdit, setSelectedClinicForEdit] = useState<Clinic | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
     useEffect(() => {
         if (currentUserId) {
@@ -36,14 +41,22 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
     const fetchClinics = async () => {
         setIsLoading(true);
         try {
+            // Fetch clinics with real participant count
             const { data, error } = await supabase
                 .from('clinics')
-                .select('*')
+                .select('*, clinic_participants(count)')
                 .eq('coach_id', currentUserId)
                 .order('date', { ascending: true });
 
             if (error) throw error;
-            setClinics(data || []);
+
+            // Map data to handle the nested count structure from Supabase
+            const flattenedData = (data || []).map((clinic: any) => ({
+                ...clinic,
+                participants: clinic.clinic_participants?.[0]?.count || 0
+            }));
+
+            setClinics(flattenedData);
         } catch (err) {
             console.error('Error fetching clinics:', err);
         } finally {
@@ -77,6 +90,72 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
         } catch (err) {
             console.error('Error creating clinic:', err);
             alert('Failed to create clinic.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const fetchRosterParticipants = async (clinic: Clinic) => {
+        setSelectedClinicForRoster(clinic);
+        setIsLoadingRoster(true);
+        try {
+            const { data, error } = await supabase
+                .from('clinic_participants')
+                .select(`
+                    id,
+                    player_id,
+                    enrolled_at,
+                    profiles:player_id (
+                        id,
+                        full_name,
+                        avatar_url,
+                        email
+                    )
+                `)
+                .eq('clinic_id', clinic.id)
+                .order('enrolled_at', { ascending: true });
+
+            if (error) throw error;
+            setRosterParticipants(data || []);
+        } catch (err) {
+            console.error('Error fetching roster:', err);
+            alert('Failed to load roster.');
+        } finally {
+            setIsLoadingRoster(false);
+        }
+    };
+
+    const handleUpdateClinic = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!selectedClinicForEdit) return;
+
+        setIsSubmitting(true);
+        const formData = new FormData(e.currentTarget);
+
+        const updatedClinic = {
+            title: formData.get('title') as string,
+            level: formData.get('level') as string,
+            capacity: parseInt(formData.get('capacity') as string),
+            date: formData.get('date') as string,
+            time: formData.get('time') as string,
+            location: formData.get('location') as string,
+            price: parseFloat(formData.get('price') as string),
+        };
+
+        try {
+            const { error } = await supabase
+                .from('clinics')
+                .update(updatedClinic)
+                .eq('id', selectedClinicForEdit.id);
+
+            if (error) throw error;
+
+            setIsEditModalOpen(false);
+            setSelectedClinicForEdit(null);
+            fetchClinics();
+        } catch (err) {
+            console.error('Error updating clinic:', err);
+            alert('Failed to update clinic.');
         } finally {
             setIsSubmitting(false);
         }
@@ -120,7 +199,15 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                         ))
                     ) : clinics.length > 0 ? (
                         clinics.map((clinic) => (
-                            <ClinicCard key={clinic.id} clinic={clinic} />
+                            <ClinicCard
+                                key={clinic.id}
+                                clinic={clinic}
+                                onViewRoster={fetchRosterParticipants}
+                                onEdit={(clinic) => {
+                                    setSelectedClinicForEdit(clinic);
+                                    setIsEditModalOpen(true);
+                                }}
+                            />
                         ))
                     ) : (
                         <div className="lg:col-span-2 py-20 bg-white rounded-[40px] border border-dashed border-slate-200 text-center">
@@ -206,11 +293,160 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                 </div>,
                 document.body
             )}
+
+            {/* Edit Modal */}
+            {isEditModalOpen && selectedClinicForEdit && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100]">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Clinic</h2>
+                            <button onClick={() => {
+                                setIsEditModalOpen(false);
+                                setSelectedClinicForEdit(null);
+                            }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateClinic} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Clinic Title</label>
+                                <input required name="title" type="text" defaultValue={selectedClinicForEdit.title} placeholder="e.g. Pickleball Fundamentals" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Level</label>
+                                    <select name="level" defaultValue={selectedClinicForEdit.level} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold">
+                                        <option value="Intro">Intro</option>
+                                        <option value="Intermediate">Intermediate</option>
+                                        <option value="Advanced">Advanced</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capacity</label>
+                                    <input required name="capacity" type="number" defaultValue={selectedClinicForEdit.capacity} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
+                                    <input required name="date" type="date" defaultValue={selectedClinicForEdit.date} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time</label>
+                                    <input required name="time" type="text" defaultValue={selectedClinicForEdit.time} placeholder="10:00 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label>
+                                    <input required name="location" type="text" defaultValue={selectedClinicForEdit.location} placeholder="e.g. Court A1" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Price (₱)</label>
+                                    <input required name="price" type="number" defaultValue={selectedClinicForEdit.price} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className={`w-full py-5 ${isSubmitting ? 'bg-slate-100 text-slate-400' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-xl shadow-rose-100'} rounded-2xl font-black text-xs uppercase tracking-widest transition-all`}
+                            >
+                                {isSubmitting ? 'UPDATING...' : 'UPDATE CLINIC'}
+                            </button>
+                        </form>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Roster Modal */}
+            {selectedClinicForRoster && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-2xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[80vh] overflow-y-auto">
+                        <div className="flex justify-between items-start mb-8">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase mb-1">Clinic Roster</h2>
+                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{selectedClinicForRoster.title}</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {rosterParticipants.length} / {selectedClinicForRoster.capacity} Enrolled
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedClinicForRoster(null);
+                                    setRosterParticipants([]);
+                                }}
+                                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {isLoadingRoster ? (
+                            <div className="space-y-4">
+                                {Array(3).fill(0).map((_, i) => (
+                                    <div key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
+                                        <Skeleton className="w-12 h-12 rounded-full" />
+                                        <div className="flex-1 space-y-2">
+                                            <Skeleton className="w-48 h-4" />
+                                            <Skeleton className="w-32 h-3" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : rosterParticipants.length > 0 ? (
+                            <div className="space-y-3">
+                                {rosterParticipants.map((participant, index) => (
+                                    <div
+                                        key={participant.id}
+                                        className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-black text-slate-600">
+                                            {index + 1}
+                                        </div>
+                                        <img
+                                            src={participant.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${participant.player_id}`}
+                                            alt={participant.profiles?.full_name || 'Player'}
+                                            className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
+                                        />
+                                        <div className="flex-1">
+                                            <p className="font-black text-slate-900 text-sm uppercase tracking-tight">
+                                                {participant.profiles?.full_name || 'Unknown Player'}
+                                            </p>
+                                            <p className="text-xs text-slate-400 font-medium">
+                                                {participant.profiles?.email || 'No email'}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enrolled</p>
+                                            <p className="text-xs text-slate-600 font-bold">
+                                                {new Date(participant.enrolled_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="py-16 text-center">
+                                <Users className="mx-auto text-slate-200 mb-4" size={48} />
+                                <h3 className="text-lg font-black text-slate-400 uppercase tracking-tighter">No participants yet</h3>
+                                <p className="text-slate-400 text-sm font-medium mt-1">Players will appear here once they enroll.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </>
     );
 };
 
-const ClinicCard: React.FC<{ clinic: Clinic }> = ({ clinic }) => {
+const ClinicCard: React.FC<{ clinic: Clinic; onViewRoster: (clinic: Clinic) => void; onEdit: (clinic: Clinic) => void }> = ({ clinic, onViewRoster, onEdit }) => {
     const isFull = clinic.participants >= clinic.capacity;
 
     return (
@@ -249,7 +485,6 @@ const ClinicCard: React.FC<{ clinic: Clinic }> = ({ clinic }) => {
                             <span className="text-[10px] font-black uppercase tracking-widest">Location</span>
                         </div>
                         <p className="text-sm font-bold text-slate-700">{clinic.location}</p>
-                        <p className="text-xs text-slate-400">BGC Sports Center</p>
                     </div>
                 </div>
 
@@ -268,10 +503,16 @@ const ClinicCard: React.FC<{ clinic: Clinic }> = ({ clinic }) => {
             </div>
 
             <div className="flex flex-row md:flex-col gap-3 md:justify-end">
-                <button className="flex-1 md:flex-none p-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center justify-center gap-2 group/btn">
+                <button
+                    onClick={() => onViewRoster(clinic)}
+                    className="flex-1 md:flex-none p-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center justify-center gap-2 group/btn"
+                >
                     Roster <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
                 </button>
-                <button className="p-4 bg-slate-50 text-slate-400 hover:text-rose-600 rounded-2xl border border-slate-100 transition-colors">
+                <button
+                    onClick={() => onEdit(clinic)}
+                    className="p-4 bg-slate-50 text-slate-400 hover:text-rose-600 rounded-2xl border border-slate-100 transition-colors"
+                >
                     Edit
                 </button>
             </div>
