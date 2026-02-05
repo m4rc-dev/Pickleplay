@@ -54,6 +54,7 @@ import GuestBooking from './components/GuestBooking';
 import UsernameSetupModal from './components/UsernameSetupModal';
 import Login from './components/Login';
 import Signup from './components/Signup';
+import AuthCallback from './components/AuthCallback';
 import NotFound from './components/NotFound';
 
 // Professional Components
@@ -607,6 +608,7 @@ const NavigationHandler: React.FC<{
               <Route path="/" element={role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
               <Route path="/news" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><News /></div>} />
               <Route path="/academy" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />

@@ -50,7 +50,15 @@ const Booking: React.FC = () => {
   const [lastBookingTime, setLastBookingTime] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
   const [searchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || '');
+  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
+  
+  // Get map position from URL params
+  const urlLat = searchParams.get('lat');
+  const urlLng = searchParams.get('lng');
+  const urlZoom = searchParams.get('zoom');
+  const urlCourt = searchParams.get('court');
+  const urlSlot = searchParams.get('slot');
+  
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -245,12 +253,16 @@ const Booking: React.FC = () => {
   const initializeMap = () => {
     if (!mapRef.current || !window.google) return;
 
-    // Center on Manila
-    const center = { lat: 14.5995, lng: 121.0437 };
+    // Use URL params for center/zoom, or default to Manila
+    const center = urlLat && urlLng 
+      ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
+      : { lat: 14.5995, lng: 121.0437 };
+    
+    const zoom = urlZoom ? parseInt(urlZoom) : 12;
 
     const map = new window.google.maps.Map(mapRef.current, {
       center,
-      zoom: 12,
+      zoom,
       styles: [
         {
           featureType: 'poi',
@@ -304,11 +316,21 @@ const Booking: React.FC = () => {
           setSelectedCourt(court);
           setSelectedSlot(null); // Reset slot when switching courts
           map.panTo({ lat: court.latitude!, lng: court.longitude! });
-          map.setZoom(14);
+          map.setZoom(16);
           infoWindow.open(map, marker);
         });
 
         markersRef.current.push(marker);
+        
+        // If this court matches the URL court param, select it and open info window
+        if (urlCourt && court.name.toLowerCase() === decodeURIComponent(urlCourt).toLowerCase()) {
+          setSelectedCourt(court);
+          infoWindow.open(map, marker);
+          // Also pre-select the time slot if provided
+          if (urlSlot && TIME_SLOTS.includes(decodeURIComponent(urlSlot))) {
+            setSelectedSlot(decodeURIComponent(urlSlot));
+          }
+        }
       }
     });
   };

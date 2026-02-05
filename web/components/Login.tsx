@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { supabase } from '../services/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase, createSession } from '../services/supabase';
 import {
@@ -19,15 +21,21 @@ const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const redirectUrl = searchParams.get('redirect') || '/dashboard';
 
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         setLoading(true);
         setError(null);
         try {
+            // Store redirect URL in localStorage for after OAuth callback
+            if (redirectUrl && redirectUrl !== '/dashboard') {
+                localStorage.setItem('auth_redirect', redirectUrl);
+            }
             const { error: authError } = await supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: `${window.location.origin}/dashboard`
+                    redirectTo: `${window.location.origin}/auth/callback`
                 }
             });
             if (authError) throw authError;
@@ -51,6 +59,11 @@ const Login: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
+                // Check localStorage first for redirect (from GuestBooking), then URL param
+                const storedRedirect = localStorage.getItem('auth_redirect');
+                localStorage.removeItem('auth_redirect'); // Clean up
+                const finalRedirect = storedRedirect || redirectUrl;
+                navigate(finalRedirect);
                 // Create session record with IP address
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
                 
