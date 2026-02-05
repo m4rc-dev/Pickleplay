@@ -30,6 +30,20 @@ interface CommunityProps {
   setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
 }
 
+const formatContent = (content: string) => {
+  if (!content) return null;
+  return content.split(/(\s+)/).map((part, i) => {
+    if (part.startsWith('#') && part.length > 1) {
+      return (
+        <span key={i} className="text-blue-600 font-bold hover:underline cursor-pointer">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+};
+
 const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, setPosts }) => {
   const [activeTab, setActiveTab] = useState<'feed' | 'partners'>('feed');
   const [newPostContent, setNewPostContent] = useState('');
@@ -40,6 +54,22 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, avatar: string, role: string } | null>(null);
+
+  const trendingTags = React.useMemo(() => {
+    const tagCounts: Record<string, number> = {};
+    posts.forEach(post => {
+      // Find all hashtags in content
+      const foundTags = post.content.match(/#\w+/g) || [];
+      foundTags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+
+    return Object.entries(tagCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [posts]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -295,12 +325,18 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
           <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-8">TRENDING TAGS</h3>
             <div className="space-y-4">
-              {['#DUPR3Sync', '#KitchenMeta', '#MetroManilaOpen', '#ThirdShotDrop'].map(tag => (
-                <div key={tag} className="flex items-center justify-between group cursor-pointer">
-                  <span className="font-black text-slate-900 text-sm group-hover:text-indigo-600 transition-colors">{tag}</span>
-                  <span className="text-[10px] font-black text-slate-400 group-hover:text-slate-900">1.2k posts</span>
-                </div>
-              ))}
+              {trendingTags.length > 0 ? (
+                trendingTags.map(tag => (
+                  <div key={tag.name} className="flex items-center justify-between group cursor-pointer">
+                    <span className="font-black text-blue-600 text-sm group-hover:text-indigo-600 transition-colors">{tag.name}</span>
+                    <span className="text-[10px] font-black text-slate-400 group-hover:text-slate-950">
+                      {tag.count} {tag.count === 1 ? 'post' : 'posts'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400 font-medium italic">No tags yet...</p>
+              )}
             </div>
           </div>
         </div>
@@ -386,7 +422,7 @@ export const PostCard: React.FC<{
         </div>
 
         <p className="text-slate-700 text-lg leading-relaxed mb-6 font-medium">
-          {post.content}
+          {formatContent(post.content)}
         </p>
 
         {post.image && (
@@ -563,7 +599,7 @@ const CommentItem: React.FC<{
         <div className="flex-1 space-y-2">
           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group">
             <p className="text-[10px] font-black text-slate-950 mb-1 uppercase tracking-widest">{comment.authorName}</p>
-            <p className="text-sm text-slate-600 leading-relaxed">{comment.content}</p>
+            <p className="text-sm text-slate-600 leading-relaxed">{formatContent(comment.content)}</p>
             <button onClick={handleLike} className={`absolute top-4 right-4 transition-all ${isLiked ? 'text-rose-500 scale-110' : 'text-slate-300 hover:text-rose-500'}`}>
               <Heart size={16} className={isLiked ? 'fill-rose-500' : ''} />
             </button>

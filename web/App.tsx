@@ -65,7 +65,7 @@ import TournamentsManager from './components/court-owner/TournamentsManager';
 import Coaches from '@/components/Coaches';
 import { supabase } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
-import { ProfessionalApplication, UserRole, Notification, SocialPost, Product, CartItem } from './types';
+import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
 import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 
 const NotificationPanel: React.FC<{
@@ -847,6 +847,110 @@ const App: React.FC = () => {
 
     fetchInitialData();
   }, [currentUserId]);
+
+  // Separate Effect for Community Feed Realtime
+  useEffect(() => {
+    const channel = supabase
+      .channel('community-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_posts' }, async (payload) => {
+        const newPostRow = payload.new as any;
+
+        // Fetch author info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url, active_role')
+          .eq('id', newPostRow.profile_id)
+          .single();
+
+        const newPost: SocialPost = {
+          id: newPostRow.id,
+          authorId: newPostRow.profile_id,
+          authorName: profile?.full_name || 'Anonymous',
+          authorAvatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newPostRow.profile_id}`,
+          authorRole: profile?.active_role as UserRole,
+          content: newPostRow.content,
+          image: newPostRow.image_url,
+          tags: newPostRow.tags || [],
+          likes: [],
+          comments: [],
+          timestamp: newPostRow.created_at
+        };
+
+        setPosts(prev => {
+          // Prevent duplicates if the user is the one who posted (already added via handlePost)
+          if (prev.some(p => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_post_comments' }, async (payload) => {
+        const newCommentRow = payload.new as any;
+
+        // Fetch profile info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', newCommentRow.profile_id)
+          .single();
+
+        const newComment: SocialComment = {
+          id: newCommentRow.id,
+          authorName: profile?.full_name || 'Anonymous',
+          authorAvatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newCommentRow.profile_id}`,
+          content: newCommentRow.content,
+          timestamp: newCommentRow.created_at,
+          likes: [],
+          replies: []
+        };
+
+        setPosts(prev => prev.map(p => {
+          if (p.id !== newCommentRow.post_id) return p;
+
+          // Check if already exists (optimistic sync)
+          if (p.comments.some(c => c.id === newComment.id)) return p;
+
+          // Handle nested replies if parent_id exists
+          if (newCommentRow.parent_id) {
+            return {
+              ...p,
+              comments: p.comments.map(c => {
+                if (c.id === newCommentRow.parent_id) {
+                  return { ...c, replies: [...(c.replies || []), newComment] };
+                }
+                return c;
+              })
+            };
+          }
+
+          return { ...p, comments: [...p.comments, newComment] };
+        }));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_post_likes' }, (payload) => {
+        const newLike = payload.new as any;
+        setPosts(prev => prev.map(p => {
+          if (p.id === newLike.post_id) {
+            if (p.likes.includes(newLike.profile_id)) return p;
+            return { ...p, likes: [...p.likes, newLike.profile_id] };
+          }
+          return p;
+        }));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'community_post_likes' }, (payload) => {
+        const oldLike = payload.old as any;
+        // Note: DELETE payload only has 'old' and only if primary key is present
+        // Since post_id, profile_id is PK, it should be there.
+        setPosts(prev => prev.map(p => {
+          if (p.id === oldLike.post_id) {
+            return { ...p, likes: p.likes.filter(id => id !== oldLike.profile_id) };
+          }
+          return p;
+        }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Separate Effect for Notifications Subscription
   useEffect(() => {
