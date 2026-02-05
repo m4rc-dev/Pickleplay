@@ -14,9 +14,11 @@ import {
   Clock,
   Sparkles,
   Trophy as TrophyIcon,
-  Reply,
-  UserCheck
+  UserCheck,
+  X,
+  Reply
 } from 'lucide-react';
+import { useRef } from 'react';
 import { SocialPost, SocialComment, UserRole } from '../types';
 import { PostSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -54,6 +56,9 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, avatar: string, role: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const trendingTags = React.useMemo(() => {
     const tagCounts: Record<string, number> = {};
@@ -113,18 +118,57 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
     fetchUserData();
   }, []);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPostContent.trim() || !currentUserId || !currentUserProfile) return;
+    if ((!newPostContent.trim() && !selectedFile) || !currentUserId || !currentUserProfile) return;
 
     setIsPosting(true);
 
     try {
+      let imageUrl = null;
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${currentUserId}/${Date.now()}.${fileExt}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('community-posts')
+          .upload(fileName, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('community-posts')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrl;
+      }
+
       const { data, error } = await supabase
         .from('community_posts')
         .insert({
           profile_id: currentUserId,
           content: newPostContent,
+          image_url: imageUrl,
           tags: ['General']
         })
         .select(`
@@ -142,6 +186,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         authorAvatar: data.profiles?.avatar_url || currentUserProfile.avatar,
         authorRole: (data.profiles?.active_role as UserRole) || (currentUserProfile.role as UserRole),
         content: data.content,
+        image: data.image_url,
         tags: data.tags || [],
         likes: [],
         comments: [],
@@ -150,6 +195,11 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
 
       setPosts(prevPosts => [newPost, ...prevPosts]);
       setNewPostContent('');
+      setSelectedFile(null);
+      setImagePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (err) {
       console.error('Error creating post:', err);
       alert('Failed to publish post');
@@ -232,14 +282,41 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                       className="flex-1 bg-slate-50 border-none rounded-3xl p-5 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none h-28"
                     />
                   </div>
+
+                  {imagePreview && (
+                    <div className="relative inline-block ml-16">
+                      <img src={imagePreview} className="w-48 rounded-2xl border border-slate-100 shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg hover:bg-rose-600 transition-all"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                     <div className="flex gap-2">
-                      <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><ImageIcon size={20} /></button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageSelect}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`p-3 rounded-xl transition-all ${imagePreview ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}`}
+                      >
+                        <ImageIcon size={20} />
+                      </button>
                       <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><Sparkles size={20} /></button>
                     </div>
                     <button
                       type="submit"
-                      disabled={!newPostContent.trim() || isPosting}
+                      disabled={(!newPostContent.trim() && !selectedFile) || isPosting}
                       className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2"
                     >
                       {isPosting ? 'POSTING...' : 'PUBLISH POST'} <Send size={14} />
