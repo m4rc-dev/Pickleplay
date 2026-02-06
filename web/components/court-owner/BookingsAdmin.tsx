@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X } from 'lucide-react';
+import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { isTimeSlotBlocked } from '../../services/courtEvents';
+import BookingScanner from './BookingScanner';
 
 interface BookingRecord {
     id: string;
@@ -29,6 +30,7 @@ const BookingsAdmin: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showScanner, setShowScanner] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -203,6 +205,12 @@ const BookingsAdmin: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowScanner(true)}
+                        className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                    >
+                        <QrCode size={18} /> Scan QR Code
+                    </button>
                     <button
                         onClick={handleExportCSV}
                         className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
@@ -423,6 +431,16 @@ const BookingsAdmin: React.FC = () => {
                         </div>
                     </div>,
                     document.body
+                )}
+
+                {/* QR Scanner Modal */}
+                {showScanner && (
+                    <BookingScanner
+                        onClose={() => {
+                            setShowScanner(false);
+                            fetchBookings(); // Refresh bookings after scanning
+                        }}
+                    />
                 )}
             </div>
         </div>

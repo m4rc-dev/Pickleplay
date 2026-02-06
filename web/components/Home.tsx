@@ -31,9 +31,10 @@ import { Product, NewsArticle } from '../types';
 import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=1920",
-  "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1920",
-  "https://images.unsplash.com/photo-1511067007398-7e4b90cfa4bc?auto=format&fit=crop&q=80&w=1920"
+  "/images/home-images/pb1.jpg",
+  "/images/home-images/pb2.jpg",
+  "/images/home-images/pb3.jpg",
+  "/images/home-images/pb4.jpg"
 ];
 
 const PARTNERS = [
@@ -381,24 +382,25 @@ const Home: React.FC = () => {
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 bg-slate-950 z-40">
-                {/* Overlapping player faces and user count - bottom left (real data) */}
-                <div className="absolute left-6 bottom-6 md:left-16 md:bottom-16 z-40 flex items-center gap-3 select-none">
-                  <div className="flex -space-x-4">
-                    {playerFaces.map((face, idx) => (
-                      <img
-                        key={idx}
-                        src={face}
-                        alt={`Player ${idx + 1}`}
-                        className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg object-cover ${idx !== 0 ? '-ml-4' : ''}`}
-                        style={{ zIndex: playerFaces.length - idx }}
-                      />
-                    ))}
-                  </div>
-                  <span className="bg-white/80 text-slate-900 font-bold text-xs md:text-base px-4 py-2 rounded-full shadow-md border border-slate-200">
-                    Over {totalUsers.toLocaleString()} Pickleplay players registered
-                  </span>
-                </div>
+      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 pb-6 bg-slate-950 z-40">
+        {/* Player profiles - shown at bottom left on desktop only */}
+        <div className="hidden md:flex absolute left-4 lg:left-8 bottom-4 lg:bottom-6 z-40 items-center gap-2 select-none">
+          <div className="flex -space-x-2">
+            {playerFaces.map((face, idx) => (
+              <img
+                key={idx}
+                src={face}
+                alt={`Player ${idx + 1}`}
+                className="w-8 h-8 lg:w-10 lg:h-10 rounded-full border-2 border-white shadow-lg object-cover"
+                style={{ zIndex: playerFaces.length - idx }}
+              />
+            ))}
+          </div>
+          <span className="bg-white/90 text-slate-900 font-bold text-[10px] lg:text-xs px-2.5 lg:px-3 py-1.5 rounded-full shadow-md border border-slate-200">
+            {totalUsers.toLocaleString()}+ players
+          </span>
+        </div>
+
         <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
           <div
             className="absolute inset-0 flex transition-transform duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
@@ -418,24 +420,42 @@ const Home: React.FC = () => {
           <div className="absolute inset-0 hero-pattern opacity-10"></div>
         </div>
 
-        <div className="relative z-30 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-6 md:mb-8">
+        <div className="relative z-30 w-full max-w-[1800px] mx-auto px-4 md:px-24 flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
             The National Network for Philippines
           </div>
-          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-6 md:mb-8 uppercase">
-            <span className="text-4xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
-            <span className="text-lime-400 text-5xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
+            <span className="text-5xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
+            <span className="text-lime-400 text-4xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
           </h1>
-          <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-10 md:mb-12">
+          <p className="text-sm md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-6 md:mb-12 px-2">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
-          <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
-            <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2 h-16 md:h-20 shadow-3xl">
-                <Search className="ml-4 md:ml-6 text-slate-500" size={20} />
+          <div className="flex flex-col items-center gap-4 animate-slide-up w-full">
+            {/* Player profiles - shown above search on mobile */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-3 md:hidden">
+              <div className="flex -space-x-3">
+                {playerFaces.map((face, idx) => (
+                  <img
+                    key={idx}
+                    src={face}
+                    alt={`Player ${idx + 1}`}
+                    className="w-8 h-8 rounded-full border-2 border-white shadow-lg object-cover"
+                    style={{ zIndex: playerFaces.length - idx }}
+                  />
+                ))}
+              </div>
+              <span className="bg-white/80 text-slate-900 font-bold text-[10px] px-3 py-1.5 rounded-full shadow-md border border-slate-200">
+                Over {totalUsers.toLocaleString()} players
+              </span>
+            </div>
+
+            <form onSubmit={handleSearch} className="relative group w-full max-w-2xl px-2">
+              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-1.5 md:p-2 h-14 md:h-20 shadow-3xl">
+                <Search className="ml-3 md:ml-6 text-slate-500 flex-shrink-0" size={18} />
                 <input
                   type="text"
-                  placeholder="Find PH dink spots..."
+                  placeholder="Find courts..."
                   value={searchQuery}
                   onChange={handleInputChange}
                   onFocus={() => {
@@ -443,10 +463,10 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
+                  className="flex-1 bg-transparent border-none text-white px-2 md:px-6 text-sm md:text-xl font-medium outline-none placeholder:text-slate-600 min-w-0"
                 />
-                <button type="submit" className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-12 md:h-16 px-6 md:px-10 rounded-full font-black flex items-center gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg">
-                  LOCATE <ArrowRight size={18} />
+                <button type="submit" className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-11 md:h-16 px-3 sm:px-5 md:px-10 rounded-full font-black flex items-center gap-1 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] sm:text-xs md:text-lg flex-shrink-0">
+                  LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
                 </button>
               </div>
 

@@ -9,7 +9,8 @@ import {
     EyeOff,
     ArrowRight,
     AlertCircle,
-    Loader2
+    Loader2,
+    ArrowLeft
 } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -64,7 +65,7 @@ const Login: React.FC = () => {
                 navigate(finalRedirect);
                 // Create session record with IP address
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
-                
+
                 // Fetch IP address
                 try {
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
@@ -73,7 +74,7 @@ const Login: React.FC = () => {
                 } catch {
                     await createSession(data.user.id, deviceName);
                 }
-                
+
                 navigate('/dashboard');
             }
         } catch (err: any) {
@@ -98,14 +99,20 @@ const Login: React.FC = () => {
 
             {/* Login Card */}
             <div className="relative z-20 w-full max-w-md px-6">
+                {/* Back to Home Button */}
+                <Link
+                    to="/"
+                    className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-4 text-sm font-bold uppercase tracking-widest"
+                >
+                    <ArrowLeft size={16} />
+                    Back to Home
+                </Link>
+
                 <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[48px] p-8 md:p-12 shadow-2xl overflow-hidden relative group">
                     {/* Animated border effect */}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
                     <div className="text-center mb-10">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-lime-400 rounded-3xl mb-6 shadow-2xl shadow-lime-400/20 transform hover:rotate-12 transition-transform duration-300">
-                            <Trophy size={32} className="text-slate-950" />
-                        </div>
                         <h1 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase mb-2">Welcome Back.</h1>
                         <p className="text-slate-400 font-medium tracking-tight">Access the Pickleball PH network.</p>
                     </div>
@@ -186,7 +193,7 @@ const Login: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <button
                             type="button"
                             onClick={() => handleSocialLogin('google')}
@@ -199,16 +206,6 @@ const Login: React.FC = () => {
                                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                             </svg>
                             <span className="text-white text-xs font-black uppercase tracking-widest">Google</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleSocialLogin('facebook')}
-                            className="flex items-center justify-center gap-3 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl py-4 transition-all active:scale-[0.95] group"
-                        >
-                            <svg className="w-5 h-5 text-[#1877F2] transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                            </svg>
-                            <span className="text-white text-xs font-black uppercase tracking-widest">Facebook</span>
                         </button>
                     </div>
 

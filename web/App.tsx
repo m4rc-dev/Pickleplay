@@ -110,7 +110,7 @@ const NotificationPanel: React.FC<{
 };
 
 
-const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void }> = ({ to, icon, label, isCollapsed, themeColor, onClick }) => {
+const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
 
@@ -119,8 +119,8 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
       to={to}
       onClick={onClick}
       className={`flex items-center gap-3 p-3.5 rounded-2xl transition-all duration-300 group ${isActive
-        ? 'bg-white/95 text-blue-600 shadow-lg'
-        : 'text-white/80 hover:bg-white/10 hover:text-white'
+        ? isMobile ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/95 text-blue-600 shadow-lg'
+        : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : 'text-white/80 hover:bg-white/10 hover:text-white'
         } ${isCollapsed ? 'justify-center' : ''}`}
     >
       <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
@@ -132,7 +132,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
         </span>
       )}
       {!isCollapsed && isActive && (
-        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />
+        <div className={`ml-auto w-1.5 h-1.5 rounded-full ${isMobile ? 'bg-white' : 'bg-blue-600'}`} />
       )}
     </Link>
   );
@@ -391,8 +391,8 @@ const NavigationHandler: React.FC<{
                 {/* 3+ roles: Dropdown selector */}
                 {authorizedProRoles.length >= 2 && (
                   <>
-                    <button 
-                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)} 
+                    <button
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
                       className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800"
                     >
                       <div className="flex items-center gap-3">
@@ -421,11 +421,10 @@ const NavigationHandler: React.FC<{
                               handleRoleSwitch('PLAYER');
                               setIsRoleDropdownOpen(false);
                             }}
-                            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${
-                              role === 'PLAYER' 
-                                ? 'bg-lime-400 text-slate-900' 
-                                : 'text-white/80 hover:bg-slate-700 hover:text-white'
-                            }`}
+                            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === 'PLAYER'
+                              ? 'bg-lime-400 text-slate-900'
+                              : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                              }`}
                           >
                             <User size={16} />
                             <span className="text-[11px] font-black uppercase tracking-widest">Player</span>
@@ -440,11 +439,10 @@ const NavigationHandler: React.FC<{
                                 handleRoleSwitch(proRole);
                                 setIsRoleDropdownOpen(false);
                               }}
-                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${
-                                role === proRole 
-                                  ? 'bg-lime-400 text-slate-900' 
-                                  : 'text-white/80 hover:bg-slate-700 hover:text-white'
-                              }`}
+                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === proRole
+                                ? 'bg-lime-400 text-slate-900'
+                                : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                                }`}
                             >
                               {proRole === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
                               <span className="text-[11px] font-black uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
@@ -529,7 +527,7 @@ const NavigationHandler: React.FC<{
           </Link>
           <div className="flex items-center gap-4">
             {role === 'guest' ? (
-              <Link to="/login" className={`p-2 rounded-xl border ${headerActive ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/10 text-white border-white/20'}`}><LogIn size={20} /></Link>
+              <Link to="/login" className={`px-4 py-2 rounded-xl border font-black text-xs tracking-wider ${headerActive ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/10 text-white border-white/20'}`}>LOGIN</Link>
             ) : (
               <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -548,36 +546,36 @@ const NavigationHandler: React.FC<{
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X size={24} /></button>
             </div>
             <nav className="flex-1 space-y-2">
-              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-              {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />}
+              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+              {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
                 <>
-                  <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               {role === 'COACH' && (
                 <>
-                  <NavItem to="/students" icon={<GraduationCap size={22} />} label="My Students" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/clinics" icon={<Trophy size={22} />} label="Manage Clinics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/schedule" icon={<Calendar size={22} />} label="Lesson Schedule" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/students" icon={<GraduationCap size={22} />} label="My Students" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/clinics" icon={<Trophy size={22} />} label="Manage Clinics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/schedule" icon={<Calendar size={22} />} label="Lesson Schedule" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               {role === 'COURT_OWNER' && (
                 <>
-                  <NavItem to="/locations" icon={<MapPin size={22} />} label="My Locations" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
-                  <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+                  <NavItem to="/locations" icon={<MapPin size={22} />} label="My Locations" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
-              <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} />
+              <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               <div className="border-t border-slate-100 my-4" />
-              
-              // ...existing code...
+              <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+              <NavItem to="/profile" icon={<User size={22} />} label="Profile" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
             </nav>
             <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-4 text-rose-600 font-black uppercase text-xs tracking-widest"><LogOut size={20} /> Log Out</button>
           </div>
@@ -598,7 +596,7 @@ const NavigationHandler: React.FC<{
             <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PLAY GUIDE</Link>
             <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PRO SHOP</Link>
             <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>NEWS</Link>
-            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black ${headerActive ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700' : 'bg-white text-slate-950 hover:bg-lime-400 shadow-black/20'}`}><LogIn size={18} /> CLIENT ACCESS</Link>
+            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black ${headerActive ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700' : 'bg-white text-slate-950 hover:bg-lime-400 shadow-black/20'}`}><LogIn size={18} /> GET STARTED</Link>
           </nav>
         </header>
       )}

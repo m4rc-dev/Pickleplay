@@ -5,6 +5,7 @@ import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
+import Receipt from './Receipt';
 
 // Always use hourly slots for simplicity
 const TIME_SLOTS = [
@@ -63,6 +64,10 @@ const Booking: React.FC = () => {
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
+
+  // Receipt state
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
 
   // Get map position from URL params
   const urlLat = searchParams.get('lat');
@@ -144,7 +149,7 @@ const Booking: React.FC = () => {
         const groupedByLocation = new Map<string, LocationGroup>();
         mappedCourts.forEach(court => {
           if (!court.locationId) return;
-          
+
           if (!groupedByLocation.has(court.locationId)) {
             const loc = (data || []).find((c: any) => c.id === court.id)?.locations;
             groupedByLocation.set(court.locationId, {
@@ -542,11 +547,34 @@ const Booking: React.FC = () => {
           setBookedSlots(prev => new Set([...prev, selectedSlot]));
         }
 
+        // Fetch player name for receipt
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('username, full_name')
+          .eq('id', user.id)
+          .single();
+
+        // Prepare receipt data
+        setReceiptData({
+          id: bookingData.id,
+          courtName: selectedCourt.name,
+          courtLocation: selectedCourt.location,
+          date: targetDateStr,
+          startTime: startTimeFormatted,
+          endTime: endTimeFormatted,
+          pricePerHour: selectedCourt.pricePerHour,
+          totalPrice: selectedCourt.pricePerHour,
+          playerName: profileData?.full_name || profileData?.username || 'Guest'
+        });
+
+        // Show receipt instead of just success message
+        setShowReceipt(true);
         setIsBooked(true);
+
+        // Clear selection after a delay
         setTimeout(() => {
-          setIsBooked(false);
-          setSelectedSlot(null); // Clear selection after confirmed
-        }, 3000);
+          setSelectedSlot(null);
+        }, 1000);
       } catch (err: any) {
         console.error('Booking error:', err);
 
@@ -578,7 +606,7 @@ const Booking: React.FC = () => {
           if (userMarkerRef.current) {
             userMarkerRef.current.setMap(null);
           }
-          
+
           // Add user location marker with custom icon
           const userMarker = new window.google.maps.Marker({
             position: userLocation,
@@ -594,7 +622,7 @@ const Booking: React.FC = () => {
             },
             zIndex: 1000 // Show on top of other markers
           });
-          
+
           // Add pulsing animation info window
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
@@ -603,12 +631,12 @@ const Booking: React.FC = () => {
               </div>
             `,
           });
-          
+
           infoWindow.open(googleMapRef.current, userMarker);
-          
+
           // Store reference to user marker
           userMarkerRef.current = userMarker;
-          
+
           googleMapRef.current.panTo(userLocation);
           googleMapRef.current.setZoom(14);
         },
@@ -1033,6 +1061,17 @@ const Booking: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Receipt Modal */}
+      {showReceipt && receiptData && (
+        <Receipt
+          bookingData={receiptData}
+          onClose={() => {
+            setShowReceipt(false);
+            setIsBooked(false);
+          }}
+        />
+      )}
     </div >
   );
 };
