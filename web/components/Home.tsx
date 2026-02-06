@@ -159,20 +159,31 @@ const Home: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('courts')
-          .select('name, address, city, latitude, longitude, base_price')
-          .eq('is_active', true);
+          .select(`
+            name, base_price, latitude, longitude, location_id,
+            locations (
+              address,
+              city,
+              latitude,
+              longitude
+            )
+          `);
 
         if (error) throw error;
 
-        const courtData = (data || []).map(c => ({
-          name: c.name,
-          location: `${c.city || ''}`,
-          city: c.city || '',
-          latitude: c.latitude,
-          longitude: c.longitude,
-          region: getRegion(c.city || ''),
-          base_price: c.base_price ?? 0
-        }));
+        const courtData = (data || []).map(c => {
+          const loc = (c as any).locations;
+          const city = loc?.city || '';
+          return {
+            name: c.name,
+            location: city,
+            city: city,
+            latitude: loc?.latitude || c.latitude,
+            longitude: loc?.longitude || c.longitude,
+            region: getRegion(city),
+            base_price: c.base_price ?? 0
+          };
+        });
         setCourts(courtData);
       } catch (err) {
         console.error('Error fetching courts for search:', err);

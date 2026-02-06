@@ -48,8 +48,7 @@ const GuestBooking: React.FC = () => {
             try {
                 const { data, error } = await supabase
                     .from('courts')
-                    .select('*')
-                    .eq('is_active', true);
+                    .select('*');
 
                 if (error) throw error;
 
