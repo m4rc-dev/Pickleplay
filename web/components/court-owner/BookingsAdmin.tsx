@@ -103,7 +103,7 @@ const BookingsAdmin: React.FC = () => {
             // 0. Check for blocking court events
             const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`);
             const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`);
-            
+
             const isBlocked = await isTimeSlotBlocked(
                 formData.court_id,
                 startDateTime.toISOString(),

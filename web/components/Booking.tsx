@@ -37,13 +37,25 @@ declare global {
   }
 }
 
+interface LocationGroup {
+  locationId: string;
+  locationName: string;
+  address: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  courts: Court[];
+}
+
 const Booking: React.FC = () => {
+  const [selectedLocation, setSelectedLocation] = useState<LocationGroup | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isBooked, setIsBooked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [courts, setCourts] = useState<Court[]>([]);
+  const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
   const [mapCenter, setMapCenter] = useState({ lat: 14.5995, lng: 120.9842 });
   const [mapZoom, setMapZoom] = useState(11);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -62,7 +74,7 @@ const Booking: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const userLocationMarkerRef = useRef<any>(null);
+  const userMarkerRef = useRef<any>(null);
 
   // New states for availability checking
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -75,10 +87,19 @@ const Booking: React.FC = () => {
     const fetchCourts = async () => {
       setIsLoading(true);
       try {
+        // Join with locations and get court count per location
         const { data, error } = await supabase
           .from('courts')
-<<<<<<< Updated upstream
-          .select('*')
+          .select(`
+            *,
+            locations!inner (
+              id,
+              address,
+              city,
+              latitude,
+              longitude
+            )
+          `)
           .eq('is_active', true);
 
         if (error) throw error;
@@ -97,7 +118,6 @@ const Booking: React.FC = () => {
           ownerId: c.owner_id,
           cleaningTimeMinutes: c.cleaning_time_minutes || 0
         }));
-=======
           .select(`
             *,
             locations!inner (
@@ -119,7 +139,8 @@ const Booking: React.FC = () => {
             const { count } = await supabase
               .from('courts')
               .select('*', { count: 'exact', head: true })
-              .eq('location_id', locationId);
+              .eq('location_id', locationId)
+              .eq('is_active', true);
             if (count !== null) locationCourtCounts.set(locationId, count);
           }
         }
@@ -143,9 +164,31 @@ const Booking: React.FC = () => {
             locationCourtCount: c.location_id ? locationCourtCounts.get(c.location_id) : undefined
           };
         });
->>>>>>> Stashed changes
+
 
         setCourts(mappedCourts);
+
+        // Group courts by location
+        const groupedByLocation = new Map<string, LocationGroup>();
+        mappedCourts.forEach(court => {
+          if (!court.locationId) return;
+          
+          if (!groupedByLocation.has(court.locationId)) {
+            const loc = (data || []).find((c: any) => c.id === court.id)?.locations;
+            groupedByLocation.set(court.locationId, {
+              locationId: court.locationId,
+              locationName: loc ? loc.address.split(',')[0] : 'Court Location',
+              address: court.location,
+              city: loc?.city || '',
+              latitude: court.latitude || 14.5995,
+              longitude: court.longitude || 120.9842,
+              courts: []
+            });
+          }
+          groupedByLocation.get(court.locationId)!.courts.push(court);
+        });
+
+        setLocationGroups(Array.from(groupedByLocation.values()));
       } catch (err) {
         console.error('Error fetching courts:', err);
       } finally {
@@ -330,66 +373,57 @@ const Booking: React.FC = () => {
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
-    // Add markers for each court
-    const filteredCourts = filterType === 'All'
-      ? courts
-      : courts.filter(c => c.type === filterType);
-
-    filteredCourts.forEach(court => {
-      if (court.latitude && court.longitude) {
-        const marker = new window.google.maps.Marker({
-          position: { lat: court.latitude, lng: court.longitude },
-          map,
-          title: court.name,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: court.type === 'Indoor' ? '#2563eb' : '#a3e635',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 3,
-          },
-        });
-
-        const infoWindow = new window.google.maps.InfoWindow({
-          content: `
-            <div style="padding: 8px; font-family: Inter, sans-serif;">
-              <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${court.name}</p>
-              <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">₱${court.pricePerHour}/hour</p>
-            </div>
-          `,
-          disableAutoPan: true
-        });
-
-        marker.addListener('click', () => {
-          setSelectedCourt(court);
-          setSelectedSlot(null); // Reset slot when switching courts
-          map.panTo({ lat: court.latitude!, lng: court.longitude! });
-          map.setZoom(16);
-        });
-
-        // Show info window on hover
-        marker.addListener('mouseover', () => {
-          infoWindow.open(map, marker);
-        });
-
-        // Hide info window when mouse leaves
-        marker.addListener('mouseout', () => {
-          infoWindow.close();
-        });
-
-        markersRef.current.push(marker);
-
-        // If this court matches the URL court param, select it and open info window
-        if (urlCourt && court.name.toLowerCase() === decodeURIComponent(urlCourt).toLowerCase()) {
-          setSelectedCourt(court);
-          infoWindow.open(map, marker);
-          // Also pre-select the time slot if provided
-          if (urlSlot && TIME_SLOTS.includes(decodeURIComponent(urlSlot))) {
-            setSelectedSlot(decodeURIComponent(urlSlot));
-          }
+    // Add markers for each location (not individual courts)
+    locationGroups.forEach(location => {
+      const marker = new window.google.maps.Marker({
+        position: { lat: location.latitude, lng: location.longitude },
+        map,
+        title: location.locationName,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 14,
+          fillColor: '#f59e0b',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 3,
+        },
+        label: {
+          text: location.courts.length.toString(),
+          color: '#ffffff',
+          fontSize: '12px',
+          fontWeight: 'bold'
         }
-      }
+      });
+
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px; font-family: Inter, sans-serif;">
+            <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${location.locationName}</p>
+            <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">${location.courts.length} ${location.courts.length === 1 ? 'Court' : 'Courts'} Available</p>
+          </div>
+        `,
+        disableAutoPan: true
+      });
+
+      marker.addListener('click', () => {
+        setSelectedLocation(location);
+        setSelectedCourt(null); // Reset court selection
+        setSelectedSlot(null); // Reset slot
+        map.panTo({ lat: location.latitude, lng: location.longitude });
+        map.setZoom(16);
+      });
+
+      // Show info window on hover
+      marker.addListener('mouseover', () => {
+        infoWindow.open(map, marker);
+      });
+
+      // Hide info window when mouse leaves
+      marker.addListener('mouseout', () => {
+        infoWindow.close();
+      });
+
+      markersRef.current.push(marker);
     });
   };
 
@@ -397,7 +431,7 @@ const Booking: React.FC = () => {
     if (googleMapRef.current) {
       initializeMap();
     }
-  }, [filterType]);
+  }, [locationGroups]);
 
   const handleBooking = async () => {
     if (selectedCourt && selectedSlot) {
@@ -568,69 +602,43 @@ const Booking: React.FC = () => {
             lng: position.coords.longitude
           };
 
-          // Remove existing user location marker if any
-          if (userLocationMarkerRef.current) {
-            userLocationMarkerRef.current.setMap(null);
+          // Remove existing user marker if it exists
+          if (userMarkerRef.current) {
+            userMarkerRef.current.setMap(null);
           }
-
-          // Create a custom marker for user's location with a distinctive style
+          
+          // Add user location marker with custom icon
           const userMarker = new window.google.maps.Marker({
             position: userLocation,
             map: googleMapRef.current,
             title: 'Your Location',
             icon: {
               path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 14,
-              fillColor: '#3b82f6', // Blue color
+              scale: 10,
+              fillColor: '#3b82f6',
               fillOpacity: 1,
               strokeColor: '#ffffff',
-              strokeWeight: 4,
+              strokeWeight: 3,
             },
-            animation: window.google.maps.Animation.DROP,
-            zIndex: 999, // Ensure it appears on top
+            zIndex: 1000 // Show on top of other markers
           });
-
-          // Add a pulsing outer circle effect
-          const pulseCircle = new window.google.maps.Marker({
-            position: userLocation,
-            map: googleMapRef.current,
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 24,
-              fillColor: '#3b82f6',
-              fillOpacity: 0.3,
-              strokeColor: '#3b82f6',
-              strokeWeight: 2,
-              strokeOpacity: 0.5,
-            },
-            zIndex: 998,
-          });
-
-          // Create info window for user location
+          
+          // Add pulsing animation info window
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
               <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
-                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
-                <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
+                <p style="margin: 0; font-weight: 800; font-size: 12px; color: #3b82f6;">📍 You are here</p>
               </div>
             `,
-            disableAutoPan: false
           });
-
-          // Open info window immediately
+          
           infoWindow.open(googleMapRef.current, userMarker);
-
-          // Store reference to remove later (store both markers)
-          userLocationMarkerRef.current = {
-            setMap: (map: any) => {
-              userMarker.setMap(map);
-              pulseCircle.setMap(map);
-            }
-          };
-
-          // Pan to user location and set appropriate zoom
+          
+          // Store reference to user marker
+          userMarkerRef.current = userMarker;
+          
           googleMapRef.current.panTo(userLocation);
-          googleMapRef.current.setZoom(15);
+          googleMapRef.current.setZoom(14);
         },
         (error) => {
           console.error('Error getting location:', error);
@@ -642,13 +650,6 @@ const Booking: React.FC = () => {
       alert('Geolocation is not supported by your browser.');
     }
   };
-
-  const filteredCourts = courts
-    .filter(c => filterType === 'All' || c.type === filterType)
-    .filter(c =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.location.toLowerCase().includes(searchQuery.toLowerCase())
-    );
 
   return (
     <div className="space-y-6">
@@ -712,11 +713,20 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        {/* Court Details Sidebar */}
+        {/* Location & Court Selection Sidebar */}
         <div className="lg:col-span-1 space-y-4">
           {selectedCourt ? (
+            /* Court Selected - Show availability and booking interface */
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <div>
+                {/* Back to location button */}
+                <button
+                  onClick={() => setSelectedCourt(null)}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest mb-3 flex items-center gap-1"
+                >
+                  ← Back to Courts
+                </button>
+
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
                   <div className="flex flex-wrap gap-1.5">
@@ -726,8 +736,8 @@ const Booking: React.FC = () => {
                       }`}>
                       {selectedCourt.type}
                     </span>
-                    <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-600">
-                      {selectedCourt.numCourts} {selectedCourt.numCourts === 1 ? 'Court' : 'Courts'}
+                    <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-amber-50 text-amber-700">
+                      {selectedCourt.numCourts} {selectedCourt.numCourts === 1 ? 'Unit' : 'Units'}
                     </span>
                   </div>
                 </div>
@@ -936,43 +946,113 @@ const Booking: React.FC = () => {
                 )}
               </button>
             </div>
+          ) : selectedLocation ? (
+            /* Location Selected - Show courts at this location */
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedLocation.locationName}</h3>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
+                      <MapPin size={12} className="shrink-0" />
+                      <span className="leading-snug">{selectedLocation.address}</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-amber-50 text-amber-700">
+                    {selectedLocation.courts.length} {selectedLocation.courts.length === 1 ? 'Court' : 'Courts'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 mb-3">Select a Court</h4>
+                <div className="space-y-2 max-h-[450px] overflow-y-auto">
+                  {selectedLocation.courts.map(court => (
+                    <button
+                      key={court.id}
+                      onClick={() => setSelectedCourt(court)}
+                      className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <p className="font-bold text-sm text-slate-900">{court.name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${court.type === 'Indoor'
+                              ? 'bg-blue-50 text-blue-600'
+                              : 'bg-lime-50 text-lime-600'
+                              }`}>
+                              {court.type}
+                            </span>
+                            <span className="text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-600">
+                              {court.numCourts} {court.numCourts === 1 ? 'Unit' : 'Units'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-slate-900">₱{court.pricePerHour}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase">/hour</p>
+                        </div>
+                      </div>
+                      {court.amenities && (court.amenities as string[]).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {(court.amenities as string[]).slice(0, 3).map((amenity, idx) => (
+                            <span key={idx} className="text-[7px] font-bold px-1.5 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-100 uppercase italic">
+                              {amenity}
+                            </span>
+                          ))}
+                          {(court.amenities as string[]).length > 3 && (
+                            <span className="text-[7px] font-bold px-1.5 py-0.5 text-slate-400">
+                              +{(court.amenities as string[]).length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
+            /* No Selection - Show prompt to select location */
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-center">
               <MapPin size={40} className="mx-auto text-slate-300 mb-2" />
-              <h3 className="text-sm font-bold text-slate-900 mb-1.5">Select a Court</h3>
-              <p className="text-xs text-slate-500">Click on a marker on the map to view court details and book.</p>
+              <h3 className="text-sm font-bold text-slate-900 mb-1.5">Select a Location</h3>
+              <p className="text-xs text-slate-500">Click on a location marker on the map to view available courts.</p>
             </div>
           )}
 
-          {/* Court List */}
+          {/* All Locations List */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-            <h4 className="text-xs font-bold text-slate-900 mb-3">All Courts ({filteredCourts.length})</h4>
+            <h4 className="text-xs font-bold text-slate-900 mb-3">All Locations ({locationGroups.length})</h4>
             <div className="space-y-1.5 max-h-[250px] overflow-y-auto scrollbar-hide">
               {isLoading ? (
                 Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
               ) : (
-                filteredCourts.map(court => (
+                locationGroups.map(location => (
                   <button
-                    key={court.id}
+                    key={location.locationId}
                     onClick={() => {
-                      setSelectedCourt(court);
-                      setSelectedSlot(null); // Reset slot when switching courts
-                      if (court.latitude && court.longitude && googleMapRef.current) {
-                        googleMapRef.current.panTo({ lat: court.latitude, lng: court.longitude });
-                        googleMapRef.current.setZoom(14);
+                      setSelectedLocation(location);
+                      setSelectedCourt(null);
+                      setSelectedSlot(null);
+                      if (googleMapRef.current) {
+                        googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                        googleMapRef.current.setZoom(16);
                       }
                     }}
-                    className={`w-full text-left p-3 rounded-xl transition-all border ${selectedCourt?.id === court.id
-                      ? 'bg-blue-50 border-blue-200'
+                    className={`w-full text-left p-3 rounded-xl transition-all border ${selectedLocation?.locationId === location.locationId
+                      ? 'bg-amber-50 border-amber-200'
                       : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
                       }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <p className="font-bold text-sm text-slate-900">{court.name}</p>
-                        <p className="text-xs text-slate-500">{court.location}</p>
+                        <p className="font-bold text-sm text-slate-900">{location.locationName}</p>
+                        <p className="text-xs text-slate-500">{location.city}</p>
                       </div>
-                      <span className="text-sm font-bold text-slate-900">₱{court.pricePerHour}/hr</span>
+                      <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-md">
+                        {location.courts.length} {location.courts.length === 1 ? 'Court' : 'Courts'}
+                      </span>
                     </div>
                   </button>
                 ))

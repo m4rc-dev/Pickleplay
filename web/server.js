@@ -11,6 +11,10 @@ const PORT = 5001; // Changed from 5000
 // Initialize Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// News API config
+const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
+const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -18,6 +22,73 @@ app.use(express.json());
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ─── News API Proxy ─────────────────────────────────────────────
+// Proxies requests to HomesPh News API, injecting the secure API key
+app.get('/api/v1/news/articles', async (req, res) => {
+  try {
+    if (!NEWS_API_URL || !NEWS_API_KEY) {
+      return res.status(500).json({ error: 'News API not configured. Set HOMESPH_NEWS_API_URL and HOMESPH_NEWS_API_KEY in .env.local' });
+    }
+
+    const page = req.query.page || 1;
+    const category = req.query.category || ''; // Optional category filter
+    
+    // Build URL with optional category filter
+    let url = `${NEWS_API_URL}/api/external/articles?page=${page}`;
+    if (category) {
+      url += `&category=${category}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        'X-Site-Api-Key': NEWS_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ News API error:', response.status, errorText);
+      return res.status(response.status).json({ error: `News API returned ${response.status}` });
+    }
+
+    const data = await response.json();
+    console.log(`📰 News API: fetched page ${page}${category ? ` (category: ${category})` : ' (all categories)'} - ${data?.data?.total || 0} total articles`);
+    res.json(data);
+  } catch (error) {
+    console.error('❌ News proxy error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch news articles' });
+  }
+});
+
+// Proxy for single article detail
+app.get('/api/v1/news/articles/:id', async (req, res) => {
+  try {
+    if (!NEWS_API_URL || !NEWS_API_KEY) {
+      return res.status(500).json({ error: 'News API not configured.' });
+    }
+
+    const url = `${NEWS_API_URL}/api/external/articles/${req.params.id}`;
+
+    const response = await fetch(url, {
+      headers: {
+        'X-Site-Api-Key': NEWS_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `News API returned ${response.status}` });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('❌ News article detail error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch article' });
+  }
 });
 
 // Send email endpoint
