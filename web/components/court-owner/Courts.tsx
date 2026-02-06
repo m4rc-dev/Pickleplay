@@ -407,11 +407,10 @@ const Courts: React.FC = () => {
                                                 key={option.value}
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
-                                                    newCleaningTime === option.value
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
                                                         ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
                                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                }`}
+                                                    }`}
                                             >
                                                 {option.label}
                                             </button>
@@ -427,11 +426,10 @@ const Courts: React.FC = () => {
                                                 key={option.value}
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
-                                                    newCleaningTime === option.value
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
                                                         ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
                                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                }`}
+                                                    }`}
                                             >
                                                 {option.label}
                                             </button>
@@ -613,11 +611,10 @@ const Courts: React.FC = () => {
                                                 key={option.value}
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
-                                                    newCleaningTime === option.value
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
                                                         ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
                                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                }`}
+                                                    }`}
                                             >
                                                 {option.label}
                                             </button>
@@ -633,11 +630,10 @@ const Courts: React.FC = () => {
                                                 key={option.value}
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
-                                                    newCleaningTime === option.value
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
                                                         ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
                                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                }`}
+                                                    }`}
                                             >
                                                 {option.label}
                                             </button>
