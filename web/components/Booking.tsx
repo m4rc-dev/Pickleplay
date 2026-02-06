@@ -109,32 +109,6 @@ const Booking: React.FC = () => {
 
         if (error) throw error;
 
-        const mappedCourts: Court[] = (data || []).map(c => ({
-          id: c.id,
-          name: c.name,
-          type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
-          location: `${c.address}, ${c.city}`,
-          pricePerHour: parseFloat(c.base_price) || 0,
-          availability: [],
-          latitude: c.latitude,
-          longitude: c.longitude,
-          numCourts: c.num_courts || 1,
-          amenities: Array.isArray(c.amenities) ? c.amenities : [],
-          ownerId: c.owner_id,
-          cleaningTimeMinutes: c.cleaning_time_minutes || 0
-        }));
-          .select(`
-            *,
-            locations!inner (
-              id,
-              address,
-              city,
-              latitude,
-              longitude
-            )
-          `);
-
-        if (error) throw error;
 
         // Get court counts per location
         const locationCourtCounts = new Map<string, number>();
