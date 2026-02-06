@@ -24,6 +24,28 @@ export interface Court {
   amenities?: string[];
   ownerId?: string;
   cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
+  locationId?: string; // References parent location venue
+}
+
+export interface Location {
+  id: string;
+  owner_id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  address: string;
+  city: string;
+  state?: string;
+  postal_code?: string;
+  latitude: number;
+  longitude: number;
+  amenities: string[];
+  phone?: string;
+  base_cleaning_time: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  court_count?: number; // Virtual field for UI
 }
 
 export interface Match {

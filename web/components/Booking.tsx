@@ -62,7 +62,7 @@ const Booking: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const userLocationMarkerRef = useRef<any>(null);
+  const userMarkerRef = useRef<any>(null);
 
   // New states for availability checking
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -520,69 +520,43 @@ const Booking: React.FC = () => {
             lng: position.coords.longitude
           };
 
-          // Remove existing user location marker if any
-          if (userLocationMarkerRef.current) {
-            userLocationMarkerRef.current.setMap(null);
+          // Remove existing user marker if it exists
+          if (userMarkerRef.current) {
+            userMarkerRef.current.setMap(null);
           }
-
-          // Create a custom marker for user's location with a distinctive style
+          
+          // Add user location marker with custom icon
           const userMarker = new window.google.maps.Marker({
             position: userLocation,
             map: googleMapRef.current,
             title: 'Your Location',
             icon: {
               path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 14,
-              fillColor: '#3b82f6', // Blue color
+              scale: 10,
+              fillColor: '#3b82f6',
               fillOpacity: 1,
               strokeColor: '#ffffff',
-              strokeWeight: 4,
+              strokeWeight: 3,
             },
-            animation: window.google.maps.Animation.DROP,
-            zIndex: 999, // Ensure it appears on top
+            zIndex: 1000 // Show on top of other markers
           });
-
-          // Add a pulsing outer circle effect
-          const pulseCircle = new window.google.maps.Marker({
-            position: userLocation,
-            map: googleMapRef.current,
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 24,
-              fillColor: '#3b82f6',
-              fillOpacity: 0.3,
-              strokeColor: '#3b82f6',
-              strokeWeight: 2,
-              strokeOpacity: 0.5,
-            },
-            zIndex: 998,
-          });
-
-          // Create info window for user location
+          
+          // Add pulsing animation info window
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
               <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
-                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
-                <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
+                <p style="margin: 0; font-weight: 800; font-size: 12px; color: #3b82f6;">📍 You are here</p>
               </div>
             `,
-            disableAutoPan: false
           });
-
-          // Open info window immediately
+          
           infoWindow.open(googleMapRef.current, userMarker);
-
-          // Store reference to remove later (store both markers)
-          userLocationMarkerRef.current = {
-            setMap: (map: any) => {
-              userMarker.setMap(map);
-              pulseCircle.setMap(map);
-            }
-          };
-
-          // Pan to user location and set appropriate zoom
+          
+          // Store reference to user marker
+          userMarkerRef.current = userMarker;
+          
           googleMapRef.current.panTo(userLocation);
-          googleMapRef.current.setZoom(15);
+          googleMapRef.current.setZoom(14);
         },
         (error) => {
           console.error('Error getting location:', error);
