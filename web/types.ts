@@ -25,6 +25,7 @@ export interface Court {
   ownerId?: string;
   cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
   locationId?: string; // References parent location venue
+  locationCourtCount?: number; // Total number of courts at this location
 }
 
 export interface Location {
