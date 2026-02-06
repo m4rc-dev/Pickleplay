@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import {
     Trophy,
@@ -23,16 +23,22 @@ const Signup: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const redirectUrl = searchParams.get('redirect') || '/dashboard';
     const [showSocialButtons, setShowSocialButtons] = useState(true);
 
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         setLoading(true);
         setError(null);
         try {
+            // Store redirect URL in localStorage for after OAuth callback
+            if (redirectUrl && redirectUrl !== '/dashboard') {
+                localStorage.setItem('auth_redirect', redirectUrl);
+            }
             const { error: authError } = await supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: `${window.location.origin}/dashboard`
+                    redirectTo: `${window.location.origin}/auth/callback`
                 }
             });
             if (authError) throw authError;
@@ -63,7 +69,11 @@ const Signup: React.FC = () => {
 
             if (data.user) {
                 setSuccess(true);
-                setTimeout(() => navigate('/login'), 3000);
+                // Pass redirect URL to login page so user is redirected after logging in
+                const loginUrl = redirectUrl !== '/dashboard' 
+                    ? `/login?redirect=${encodeURIComponent(redirectUrl)}`
+                    : '/login';
+                setTimeout(() => navigate(loginUrl), 3000);
             }
         } catch (err: any) {
             setError(err.message || 'Failed to create account. Please try again.');

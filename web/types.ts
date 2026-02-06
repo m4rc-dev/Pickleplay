@@ -23,6 +23,7 @@ export interface Court {
   numCourts?: number;
   amenities?: string[];
   ownerId?: string;
+  cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
 }
 
 export interface Match {
@@ -125,4 +126,21 @@ export interface Notification {
   isRead: boolean;
   userId?: string;
   bookingId?: string; // Optional reference to booking for navigation
+}
+
+export type CourtEventType = 'maintenance' | 'private_event' | 'cleaning' | 'closure' | 'other';
+
+export interface CourtEvent {
+  id: string;
+  court_id: string;
+  owner_id: string;
+  title: string;
+  description?: string;
+  start_datetime: string; // ISO 8601 timestamp
+  end_datetime: string; // ISO 8601 timestamp
+  event_type: CourtEventType;
+  blocks_bookings: boolean; // If true, prevents player bookings during this time
+  color?: string; // Hex color for calendar display
+  created_at?: string;
+  updated_at?: string;
 }

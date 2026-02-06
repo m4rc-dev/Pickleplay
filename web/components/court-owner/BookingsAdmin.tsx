@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { isTimeSlotBlocked } from '../../services/courtEvents';
 
 interface BookingRecord {
     id: string;
@@ -99,6 +100,22 @@ const BookingsAdmin: React.FC = () => {
         setIsSubmitting(true);
 
         try {
+            // 0. Check for blocking court events
+            const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`);
+            const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`);
+            
+            const isBlocked = await isTimeSlotBlocked(
+                formData.court_id,
+                startDateTime.toISOString(),
+                endDateTime.toISOString()
+            );
+
+            if (isBlocked) {
+                alert('🚫 Cannot create booking. You have a court event scheduled during this time. Please modify or remove the event first.');
+                setIsSubmitting(false);
+                return;
+            }
+
             // 1. Find player profile by email (if provided)
             let player_id = null;
             if (formData.player_email) {

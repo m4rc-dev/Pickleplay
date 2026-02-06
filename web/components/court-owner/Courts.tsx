@@ -37,6 +37,7 @@ const Courts: React.FC = () => {
     const [newSurface, setNewSurface] = useState('Pro-Cushion');
     const [newAmenities, setNewAmenities] = useState(''); // Comma separated for input
     const [newPrice, setNewPrice] = useState(0);
+    const [newCleaningTime, setNewCleaningTime] = useState(0); // Cleaning buffer in minutes
     const [previewCoords, setPreviewCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isGeocoding, setIsGeocoding] = useState(false);
 
@@ -129,6 +130,7 @@ const Courts: React.FC = () => {
                     num_courts: newNumCourts,
                     surface_type: newSurface,
                     base_price: newPrice,
+                    cleaning_time_minutes: newCleaningTime,
                     amenities: newAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     latitude: previewCoords?.lat,
                     longitude: previewCoords?.lng
@@ -164,6 +166,7 @@ const Courts: React.FC = () => {
                     num_courts: newNumCourts,
                     surface_type: newSurface,
                     base_price: newPrice,
+                    cleaning_time_minutes: newCleaningTime,
                     amenities: newAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     latitude: previewCoords?.lat,
                     longitude: previewCoords?.lng
@@ -210,6 +213,7 @@ const Courts: React.FC = () => {
         setNewNumCourts(court.num_courts);
         setNewSurface(court.surface_type);
         setNewPrice((court as any).base_price || 0);
+        setNewCleaningTime((court as any).cleaning_time_minutes || 0);
         setNewAmenities(Array.isArray(court.amenities) ? court.amenities.join(', ') : '');
         if (court.latitude && court.longitude) {
             setPreviewCoords({ lat: court.latitude, lng: court.longitude });
@@ -386,6 +390,72 @@ const Courts: React.FC = () => {
                                     </div>
                                 </div>
 
+                                {/* Cleaning Time Section */}
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
+                                        Cleaning Time Buffer
+                                    </label>
+                                    <div className="grid grid-cols-5 gap-2">
+                                        {[
+                                            { label: 'None', value: 0 },
+                                            { label: '15m', value: 15 },
+                                            { label: '30m', value: 30 },
+                                            { label: '1hr', value: 60 },
+                                            { label: '2hr', value: 120 },
+                                        ].map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setNewCleaningTime(option.value)}
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
+                                                    newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                        {[
+                                            { label: '3hr', value: 180 },
+                                            { label: '4hr', value: 240 },
+                                            { label: '6hr', value: 360 },
+                                            { label: '8hr', value: 480 },
+                                            { label: '12hr', value: 720 },
+                                        ].map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setNewCleaningTime(option.value)}
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
+                                                    newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="720"
+                                            step="5"
+                                            value={newCleaningTime}
+                                            onChange={e => setNewCleaningTime(Number(e.target.value))}
+                                            placeholder="Custom minutes"
+                                            className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
+                                        />
+                                        <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
+                                        Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
+                                        {newCleaningTime > 0 && ' - Time blocked after each booking'}
+                                    </p>
+                                </div>
+
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
                                     <input
@@ -524,6 +594,72 @@ const Courts: React.FC = () => {
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
                                         />
                                     </div>
+                                </div>
+
+                                {/* Cleaning Time Section */}
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
+                                        Cleaning Time Buffer
+                                    </label>
+                                    <div className="grid grid-cols-5 gap-2">
+                                        {[
+                                            { label: 'None', value: 0 },
+                                            { label: '15m', value: 15 },
+                                            { label: '30m', value: 30 },
+                                            { label: '1hr', value: 60 },
+                                            { label: '2hr', value: 120 },
+                                        ].map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setNewCleaningTime(option.value)}
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
+                                                    newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                        {[
+                                            { label: '3hr', value: 180 },
+                                            { label: '4hr', value: 240 },
+                                            { label: '6hr', value: 360 },
+                                            { label: '8hr', value: 480 },
+                                            { label: '12hr', value: 720 },
+                                        ].map(option => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setNewCleaningTime(option.value)}
+                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${
+                                                    newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="720"
+                                            step="5"
+                                            value={newCleaningTime}
+                                            onChange={e => setNewCleaningTime(Number(e.target.value))}
+                                            placeholder="Custom minutes"
+                                            className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
+                                        />
+                                        <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
+                                        Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
+                                        {newCleaningTime > 0 && ' - Time blocked after each booking'}
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
