@@ -77,6 +77,7 @@ const Booking: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('courts')
+<<<<<<< Updated upstream
           .select('*')
           .eq('is_active', true);
 
@@ -96,6 +97,53 @@ const Booking: React.FC = () => {
           ownerId: c.owner_id,
           cleaningTimeMinutes: c.cleaning_time_minutes || 0
         }));
+=======
+          .select(`
+            *,
+            locations!inner (
+              id,
+              address,
+              city,
+              latitude,
+              longitude
+            )
+          `);
+
+        if (error) throw error;
+
+        // Get court counts per location
+        const locationCourtCounts = new Map<string, number>();
+        if (data) {
+          const locationIds = [...new Set(data.map(c => c.location_id).filter(Boolean))];
+          for (const locationId of locationIds) {
+            const { count } = await supabase
+              .from('courts')
+              .select('*', { count: 'exact', head: true })
+              .eq('location_id', locationId);
+            if (count !== null) locationCourtCounts.set(locationId, count);
+          }
+        }
+
+        const mappedCourts: Court[] = (data || []).map(c => {
+          const loc = c.locations;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+            location: loc ? `${loc.address}, ${loc.city}` : 'Location not available',
+            pricePerHour: parseFloat(c.base_price) || 0,
+            availability: [],
+            latitude: loc?.latitude || c.latitude,
+            longitude: loc?.longitude || c.longitude,
+            numCourts: c.num_courts || 1,
+            amenities: Array.isArray(c.amenities) ? c.amenities : [],
+            ownerId: c.owner_id,
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0,
+            locationId: c.location_id,
+            locationCourtCount: c.location_id ? locationCourtCounts.get(c.location_id) : undefined
+          };
+        });
+>>>>>>> Stashed changes
 
         setCourts(mappedCourts);
       } catch (err) {
