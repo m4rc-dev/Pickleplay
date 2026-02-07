@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { supabase } from '../services/supabase';
+import { submitCourtReview } from '../services/reviews';
 import {
   TrendingUp,
   Target,
@@ -37,7 +38,8 @@ import {
   Building2,
   Key,
   Star,
-  Radio
+  Radio,
+  MapPin
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
@@ -101,8 +103,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [uploadError, setUploadError] = useState<string>('');
   const [accessCodeValue, setAccessCodeValue] = useState<string>('');
   const [recentLessons, setRecentLessons] = useState<any[]>([]);
+  const [recentCourts, setRecentCourts] = useState<any[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isCourtReviewModalOpen, setIsCourtReviewModalOpen] = useState(false);
   const [selectedLessonForReview, setSelectedLessonForReview] = useState<any>(null);
+  const [selectedCourtForReview, setSelectedCourtForReview] = useState<any>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
@@ -122,6 +127,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
     if (userRole === 'PLAYER' && currentUserId) {
       fetchPlayerLessons();
+      fetchPlayerCourts();
     }
 
     const fetchCourtOwnerMetrics = async () => {
@@ -330,6 +336,75 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       setRecentLessons(data || []);
     } catch (err) {
       console.error('Error fetching player sessions:', err);
+    }
+  };
+
+  const fetchPlayerCourts = async () => {
+    if (!currentUserId) return;
+    try {
+      // Find completed court bookings that haven't been reviewed
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          court:courts(name, image_url, location)
+        `)
+        .eq('player_id', currentUserId)
+        .eq('status', 'confirmed')
+        .order('booking_date', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      // Filter by time locally and check for reviews
+      const now = new Date();
+      const completedBookings = (bookings || []).filter(b => {
+        const bookingEnd = new Date(`${b.booking_date}T${b.end_time}`);
+        return bookingEnd < now;
+      });
+
+      // For each completed booking, check if a review exists in court_reviews
+      const bookingsWithReviewStatus = await Promise.all(
+        completedBookings.map(async (b) => {
+          const { data: review } = await supabase
+            .from('court_reviews')
+            .select('id')
+            .eq('booking_id', b.id)
+            .maybeSingle();
+          return { ...b, has_review: !!review };
+        })
+      );
+
+      setRecentCourts(bookingsWithReviewStatus);
+    } catch (err) {
+      console.error('Error fetching player court sessions:', err);
+    }
+  };
+
+  const handleSubmitCourtReview = async () => {
+    if (!currentUserId || !selectedCourtForReview) return;
+    setIsSubmittingReview(true);
+    try {
+      const result = await submitCourtReview({
+        court_id: selectedCourtForReview.court_id,
+        user_id: currentUserId,
+        booking_id: selectedCourtForReview.id,
+        rating: reviewRating,
+        comment: reviewComment
+      });
+
+      if (!result.success) throw new Error(result.message);
+
+      alert('Court review submitted! Thank you!');
+      setIsCourtReviewModalOpen(false);
+      setReviewComment('');
+      setReviewRating(5);
+      fetchPlayerCourts();
+    } catch (err: any) {
+      console.error('Court review error:', err);
+      alert('Failed: ' + err.message);
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -688,52 +763,112 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
       </div>
 
-      {userRole === 'PLAYER' && !isLoading && recentLessons.length > 0 && (
-        <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-              <History className="text-blue-600" /> Recent Sessions
-            </h2>
-            <Link to="/schedule" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
-              View All <ArrowRight size={14} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recentLessons.map((lesson) => (
-              <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center gap-4 mb-4">
-                  <img
-                    src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
-                    className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
-                    alt="Coach"
-                  />
-                  <div>
-                    <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
-                    lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                      'bg-slate-200 text-slate-600'
-                    }`}>
-                    {lesson.status}
-                  </span>
-                  {lesson.status === 'completed' && (
-                    <button
-                      onClick={() => {
-                        setSelectedLessonForReview(lesson);
-                        setIsReviewModalOpen(true);
-                      }}
-                      className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
-                    >
-                      <Star size={12} fill="currentColor" /> Rate Coach
-                    </button>
-                  )}
-                </div>
+      {userRole === 'PLAYER' && !isLoading && (recentLessons.length > 0 || recentCourts.length > 0) && (
+        <div className="space-y-8">
+          {recentLessons.length > 0 && (
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                  <History className="text-rose-600" /> Recent Coaching
+                </h2>
+                <Link to="/schedule" className="text-xs font-bold text-rose-600 hover:gap-3 transition-all flex items-center gap-2">
+                  View All <ArrowRight size={14} />
+                </Link>
               </div>
-            ))}
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recentLessons.map((lesson) => (
+                  <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+                    <div className="flex items-center gap-4 mb-4">
+                      <img
+                        src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
+                        className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
+                        alt="Coach"
+                      />
+                      <div>
+                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
+                        lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-200 text-slate-600'
+                        }`}>
+                        {lesson.status}
+                      </span>
+                      {lesson.status === 'completed' && (
+                        <button
+                          onClick={() => {
+                            setSelectedLessonForReview(lesson);
+                            setIsReviewModalOpen(true);
+                          }}
+                          className="text-[10px] font-black text-white bg-rose-600 px-4 py-2 rounded-xl hover:bg-rose-700 transition-all flex items-center gap-2"
+                        >
+                          <Star size={12} fill="currentColor" /> Rate Coach
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentCourts.length > 0 && (
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                  <Building2 className="text-blue-600" /> Recent Court Sessions
+                </h2>
+                <Link to="/bookings" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
+                  All Bookings <ArrowRight size={14} />
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recentCourts.map((booking) => (
+                  <div key={booking.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+                    <div className="flex items-center gap-4 mb-4">
+                      {booking.court?.image_url ? (
+                        <img
+                          src={booking.court.image_url}
+                          className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
+                          alt="Court"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shadow-sm">
+                          <MapPin size={24} className="text-blue-600" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{booking.court?.name || 'Pickleball Court'}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{booking.booking_date} • {booking.start_time}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-[9px] font-black uppercase tracking-widest">
+                        Finished
+                      </span>
+                      {!booking.has_review ? (
+                        <button
+                          onClick={() => {
+                            setSelectedCourtForReview(booking);
+                            setIsCourtReviewModalOpen(true);
+                          }}
+                          className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                        >
+                          <Star size={12} fill="currentColor" /> Rate Court
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
+                          <Check size={12} /> Reviewed
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -785,6 +920,66 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Court Review Modal */}
+      {isCourtReviewModalOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Building2 size={32} className="text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Rate {selectedCourtForReview?.court?.name}</h3>
+              <p className="text-slate-500 font-medium text-sm mt-2">How was your game on {selectedCourtForReview?.booking_date}?</p>
+            </div>
+
+            <div className="space-y-8">
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setReviewRating(star)}
+                    className={`transition-all ${reviewRating >= star ? 'text-blue-500 scale-110' : 'text-slate-200 hover:text-slate-300'}`}
+                  >
+                    <Star size={36} fill={reviewRating >= star ? "currentColor" : "none"} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Feedback</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Tell us about the court surface, lighting, and overall experience..."
+                  className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-medium text-sm min-h-[120px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setIsCourtReviewModalOpen(false);
+                    setReviewComment('');
+                    setReviewRating(5);
+                  }}
+                  className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isSubmittingReview}
+                  onClick={handleSubmitCourtReview}
+                  className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingReview ? 'Submitting...' : 'Submit Feedback'}
                 </button>
               </div>
             </div>

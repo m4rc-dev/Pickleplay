@@ -5,6 +5,7 @@ import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
+import { autoCancelLateBookings } from '../services/bookings';
 import Receipt from './Receipt';
 
 // Always use hourly slots for simplicity
@@ -102,6 +103,8 @@ const Booking: React.FC = () => {
               address,
               city,
               latitude,
+              longitude,
+              latitude,
               longitude
             )
           `)
@@ -140,7 +143,9 @@ const Booking: React.FC = () => {
             ownerId: c.owner_id,
             cleaningTimeMinutes: c.cleaning_time_minutes || 0,
             locationId: c.location_id,
-            locationCourtCount: c.location_id ? locationCourtCounts.get(c.location_id) : undefined
+            locationCourtCount: c.location_id ? locationCourtCounts.get(c.location_id) : undefined,
+            imageUrl: c.image_url,
+            courtType: c.court_type || 'Outdoor'
           };
         });
 
@@ -191,6 +196,9 @@ const Booking: React.FC = () => {
     const targetDateStr = date.toISOString().split('T')[0];
 
     try {
+      // 0. Auto-cancel late bookings first to free up slots immediately
+      await autoCancelLateBookings();
+
       // 1. Fetch court events (blocking events from owner)
       const { data: events } = await getCourtBlockingEvents(court.id);
 
@@ -376,9 +384,32 @@ const Booking: React.FC = () => {
 
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
-          <div style="padding: 8px; font-family: Inter, sans-serif;">
-            <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${location.locationName}</p>
-            <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">${location.courts.length} ${location.courts.length === 1 ? 'Court' : 'Courts'} Available</p>
+          <div style="width: 240px; font-family: 'Inter', sans-serif; overflow: hidden; border-radius: 16px;">
+            ${location.courts[0]?.imageUrl ? `
+              <div style="height: 120px; width: 100%; border-radius: 12px 12px 0 0; overflow: hidden;">
+                <img src="${location.courts[0].imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${location.locationName}" />
+              </div>
+            ` : `
+              <div style="height: 120px; width: 100%; background: #f1f5f9; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: center; color: #94a3b8;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+            `}
+            <div style="padding: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+                <h3 style="margin: 0; font-weight: 800; font-size: 15px; color: #0f172a; line-height: 1.2;">${location.locationName}</h3>
+                ${location.courts[0]?.courtType ? `
+                  <span style="background: ${location.courts[0].courtType === 'Indoor' ? '#eff6ff' : '#f7fee7'}; color: ${location.courts[0].courtType === 'Indoor' ? '#2563eb' : '#4d7c0f'}; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${location.courts[0].courtType.toUpperCase()}</span>
+                ` : ''}
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span style="font-size: 11px; color: #64748b; font-weight: 500;">${location.city || location.address.split(',')[1] || ''}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 800; font-size: 14px; color: #3b82f6;">${location.courts.length} ${location.courts.length === 1 ? 'Court' : 'Courts'}</span>
+                <span style="font-size: 10px; font-weight: 700; color: #2563eb; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">AVAILABLE</span>
+              </div>
+            </div>
           </div>
         `,
         disableAutoPan: true
@@ -915,6 +946,14 @@ const Booking: React.FC = () => {
                     </p>
                   </div>
                 )}
+              </div>
+
+              {/* Policy Reminder */}
+              <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-blue-700 leading-relaxed font-medium italic">
+                  Please arrive on time. Your booking is subject to cancellation if you are more than <span className="font-bold underline">10 minutes late</span>.
+                </p>
               </div>
 
               {/* Booking Button */}

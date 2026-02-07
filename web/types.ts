@@ -26,6 +26,8 @@ export interface Court {
   cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
   locationId?: string; // References parent location venue
   locationCourtCount?: number; // Total number of courts at this location
+  imageUrl?: string;
+  courtType?: 'Indoor' | 'Outdoor' | 'Both';
 }
 
 export interface Location {
@@ -33,7 +35,6 @@ export interface Location {
   owner_id: string;
   name: string;
   description?: string;
-  image_url?: string;
   address: string;
   city: string;
   state?: string;

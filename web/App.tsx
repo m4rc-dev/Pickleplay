@@ -300,7 +300,7 @@ const NavigationHandler: React.FC<{
 
 
   return (
-    <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#F5F5F0' }}>
+    <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#EBEBE6' }}>
       {role !== 'guest' && !isAuthPage && (
         <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-50 rounded-r-3xl`} style={{ backgroundColor: '#1E40AF' }}>
           <button
@@ -596,12 +596,12 @@ const NavigationHandler: React.FC<{
             <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PLAY GUIDE</Link>
             <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PRO SHOP</Link>
             <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>NEWS</Link>
-            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black ${headerActive ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700' : 'bg-white text-slate-950 hover:bg-lime-400 shadow-black/20'}`}><LogIn size={18} /> GET STARTED</Link>
+            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black ${headerActive ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700' : 'bg-white text-slate-950 hover:bg-lime-400 shadow-black/20'}`}><LogIn size={18} /> LET'S PICKLE</Link>
           </nav>
         </header>
       )}
 
-      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: '#F5F5F0' }}>
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: '#EBEBE6' }}>
         <div className={`${role === 'guest' ? '' : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'} transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>

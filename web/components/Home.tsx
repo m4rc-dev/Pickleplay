@@ -54,14 +54,14 @@ const LATEST_NEWS: Partial<NewsArticle>[] = [
     title: 'THE 2025 PHILIPPINE NATIONALS: DATES CONFIRMED',
     category: 'Tournament',
     date: 'Oct 15',
-    image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=600'
+    image: '/images/home-images/pb1.jpg'
   },
   {
     id: '2',
     title: 'WHY PH PLAYERS ARE REDEFINING THE META',
     category: 'Gear',
     date: 'Oct 12',
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=600'
+    image: '/images/home-images/pb2.jpg'
   }
 ];
 const POPULAR_PLACES = [
@@ -746,12 +746,15 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-16 md:py-24 bg-white px-6 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-16 md:py-24 bg-slate-950 px-6 md:px-24 lg:px-32 relative overflow-hidden border-y border-white/5">
+        {/* Subtle Background Glow */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[120px] pointer-events-none"></div>
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
           <div className="mb-12 md:mb-16">
-            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight">
-              Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-4 underline-offset-8">how to play guides  →</span>
+            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+              Learn to play pickleball with our <span className="text-lime-400 underline decoration-lime-400/30 decoration-4 underline-offset-8">how to play guides  →</span>
             </h2>
           </div>
 
@@ -760,57 +763,57 @@ const Home: React.FC = () => {
             {/* Left Column - Guide Cards */}
             <div className="space-y-6">
               {/* Guide Card 1 */}
-              <Link to="/guides/rules" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/rules" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
                   <img
-                    src="https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb5.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Players on court"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     How to play pickleball - 9 simple rules for beginners
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 2 */}
-              <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
                   <img
-                    src="https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb6.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Player serving"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     What is my pickleball skill rating? Take this quiz to get rated
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 3 */}
-              <Link to="/guides/equipment" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/equipment" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
                   <img
-                    src="https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb7.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Pickleball equipment"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     Essential gear guide - What you need to start playing
                   </h3>
                 </div>
@@ -821,7 +824,7 @@ const Home: React.FC = () => {
             <div className="relative">
               <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
-                  src="https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?auto=format&fit=crop&q=80&w=1200"
+                  src="/images/home-images/pb8.jpg"
                   className="w-full h-full object-cover"
                   alt="Players on court"
                 />
@@ -830,8 +833,8 @@ const Home: React.FC = () => {
 
                 {/* Play Button */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 md:w-28 md:h-28 bg-lime-500 rounded-full flex items-center justify-center shadow-2xl shadow-lime-500/30 group-hover:scale-110 group-hover:bg-lime-400 transition-all duration-300">
-                    <Play className="text-white fill-white" size={40} />
+                  <div className="w-20 h-20 md:w-28 md:h-28 bg-lime-400 rounded-full flex items-center justify-center shadow-2xl shadow-lime-400/40 group-hover:scale-110 group-hover:bg-lime-300 transition-all duration-300">
+                    <Play className="text-slate-950 fill-slate-950" size={40} />
                   </div>
                 </div>
               </div>
@@ -840,25 +843,25 @@ const Home: React.FC = () => {
               <div className="mt-8 space-y-6">
                 {/* Tags */}
                 <div className="flex gap-3">
-                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                  <span className="bg-lime-400/10 text-lime-400 border border-lime-400/20 px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
                     Guides
                   </span>
-                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                  <span className="bg-white/5 text-slate-400 border border-white/10 px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
                     Learn
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-slate-950 leading-tight">
+                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
                   How To Play Pickleball: Free Virtual Clinic for Beginners
                 </h3>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-wrap items-center gap-4">
-                  <button className="bg-lime-500 hover:bg-lime-600 text-white px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
+                  <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-400/20 hover:shadow-xl hover:shadow-lime-400/30 active:scale-95">
                     Watch Now
                   </button>
-                  <Link to="/guides" className="flex items-center gap-2 text-slate-950 font-black text-base hover:text-lime-600 transition-colors group">
+                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-base hover:text-lime-400 transition-colors group">
                     Or read our guides
                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
@@ -910,57 +913,46 @@ const Home: React.FC = () => {
       </section>
 
 
-      {/* Mobile App Download Section */}
-      <section className="bg-lime-400 py-16 px-6 md:px-24 lg:px-32">
-        <div className="max-w-[1800px] mx-auto">
-          <div className="text-center max-w-4xl mx-auto mb-12 md:mb-16">
-            <h2 className="text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tighter mb-4 md:mb-6 uppercase">DOWNLOAD OUR APP</h2>
-            <p className="text-slate-500 font-medium text-base md:text-xl">Please download our upcoming Mobile App. Compatible both in iOS and Android.</p>
-          </div>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
-            <div className="relative">
-              <img
-                src="/images/mobile-app-preview.png"
-                alt="PicklePlay Mobile App"
-                className="w-[280px] md:w-[320px] h-auto rounded-[32px] shadow-2xl"
-              />
-            </div>
-            <div className="flex flex-col items-center md:items-start gap-6">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <a href="#" className="flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-4 rounded-2xl transition-all shadow-lg">
-                  <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-                  </svg>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-medium opacity-80">Download on the</span>
-                    <span className="text-lg font-bold -mt-1">App Store</span>
-                  </div>
-                </a>
-                <a href="#" className="flex items-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-6 py-4 rounded-2xl transition-all shadow-lg">
-                  <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198l2.807 1.626a1 1 0 010 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658L16.802 8.99l-2.303 2.303-8.635-8.635z" />
-                  </svg>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-medium opacity-80">GET IT ON</span>
-                    <span className="text-lg font-bold -mt-1">Google Play</span>
-                  </div>
-                </a>
-              </div>
-              <p className="text-slate-400 text-sm font-medium text-center md:text-left">Coming Soon • Be the first to know when we launch!</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Final CTA */}
       <section className="py-12 px-6 md:px-24 lg:px-32">
-        <div className="max-w-[1800px] mx-auto bg-slate-950 rounded-[40px] md:rounded-[80px] p-12 md:p-32 text-center relative overflow-hidden shadow-3xl">
+        <div className="max-w-[1800px] mx-auto bg-slate-950 rounded-[40px] md:rounded-[60px] p-10 md:p-20 text-center relative overflow-hidden shadow-3xl">
           <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-blue-600/20 blur-[120px]"></div>
           <div className="absolute bottom-0 left-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-lime-400/10 blur-[120px]"></div>
-          <div className="relative z-10 space-y-8 md:space-y-12">
-            <h2 className="text-4xl md:text-9xl font-black text-white tracking-tighter leading-none uppercase">READY TO <br /><span className="text-lime-400 italic">DOMINATE PH?</span></h2>
-            <div className="flex flex-col sm:flex-row gap-4 md:gap-6 justify-center">
-              <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-16 md:h-24 px-8 md:px-16 rounded-2xl md:rounded-[32px] font-black text-base md:text-xl uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-lime-400/20">JOIN PH NETWORK</button>
+          <div className="relative z-10 space-y-8 md:space-y-10">
+            <h2 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">READY TO <br /><span className="text-lime-400 italic">DOMINATE PH?</span></h2>
+            <div className="flex flex-col items-center gap-8 md:gap-12">
+              <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-14 md:h-20 px-8 md:px-14 rounded-2xl md:rounded-[28px] font-black text-base md:text-lg uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-lime-400/20 group flex items-center gap-4">
+                JOIN PH NETWORK
+                <ArrowRight className="group-hover:translate-x-2 transition-transform" />
+              </button>
+
+              <div className="space-y-8">
+                <div className="flex flex-wrap gap-4 justify-center">
+                  <a href="#" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 text-white px-8 py-5 rounded-[24px] transition-all hover:-translate-y-1 active:scale-95 group text-left">
+                    <svg className="w-8 h-8 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                    </svg>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Available on</span>
+                      <span className="text-lg font-black tracking-tight -mt-0.5">App Store</span>
+                    </div>
+                  </a>
+                  <a href="#" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 text-white px-8 py-5 rounded-[24px] transition-all hover:-translate-y-1 active:scale-95 group text-left">
+                    <svg className="w-8 h-8 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198l2.807 1.626a1 1 0 010 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658L16.802 8.99l-2.303 2.303-8.635-8.635z" />
+                    </svg>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Get it on</span>
+                      <span className="text-lg font-black tracking-tight -mt-0.5">Google Play</span>
+                    </div>
+                  </a>
+                </div>
+                <div className="pt-8 border-t border-white/5">
+                  <p className="text-white text-sm font-black uppercase tracking-[0.2em]">Join 2,500+ PH Players</p>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Early access registration open</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1022,11 +1014,11 @@ const Home: React.FC = () => {
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <MapPin size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                  <span className="text-sm font-bold text-slate-500">Metro Manila, Philippines</span>
+                  <span className="text-sm font-bold text-slate-500">Cebu City, Philippines</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Mail size={18} className="text-blue-600 shrink-0" />
-                  <span className="text-sm font-bold text-slate-500">hello@pickleballph.com</span>
+                  <span className="text-sm font-bold text-slate-500">hello@pickleplayph.com</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Phone size={18} className="text-blue-600 shrink-0" />
@@ -1043,7 +1035,7 @@ const Home: React.FC = () => {
           </div>
         </div>
       </footer>
-    </div>
+    </div >
   );
 };
 

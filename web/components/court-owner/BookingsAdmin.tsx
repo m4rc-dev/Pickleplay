@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { isTimeSlotBlocked } from '../../services/courtEvents';
+import { autoCancelLateBookings } from '../../services/bookings';
 import BookingScanner from './BookingScanner';
 
 interface BookingRecord {
@@ -52,6 +53,9 @@ const BookingsAdmin: React.FC = () => {
             const { data: { session } } = await supabase.auth.getSession();
             const user = session?.user;
             if (!user) return;
+
+            // 1.5 Auto-cancel late bookings to keep owner dashboard updated
+            await autoCancelLateBookings();
 
             // 2. Parallelize fetching courts (for dropdown) and bookings (for list)
             const [courtsResponse, bookingsResponse] = await Promise.all([

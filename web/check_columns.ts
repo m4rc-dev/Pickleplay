@@ -20,8 +20,22 @@ async function checkSchema() {
         }
     }
 
-    // Try to insert a dummy row to a non-existent column to see error (diagnostic)
-    // This is a bit hacky but if we don't have results, it's a way.
+    // Check locations table
+    const { data: locData, error: locError } = await supabase
+        .from('locations')
+        .select('*')
+        .limit(1);
+
+    if (locError) {
+        console.error('Error fetching locations:', locError);
+    } else {
+        console.log('Locations record:', locData);
+        if (locData && locData.length > 0) {
+            console.log('Available locations columns:', Object.keys(locData[0]));
+        } else {
+            console.log('Locations table is empty, cannot determine columns via SELECT *');
+        }
+    }
 }
 
 checkSchema();

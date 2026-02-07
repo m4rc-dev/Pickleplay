@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText } from 'lucide-react';
+import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
+import { uploadCourtImage } from '../../../services/locations';
 import { Location } from '../../../types';
 
 declare global {
@@ -216,8 +217,9 @@ const LocationsList: React.FC = () => {
     // Shared form JSX
     const renderForm = (onSubmit: (e: React.FormEvent) => void, isEdit: boolean) => (
         <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            {/* Left Column: Form Fields */}
-            <div className="space-y-5">
+            {/* Left Column: Image & Form Fields */}
+            <div className="space-y-6">
+
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Venue Name</label>
                     <input required type="text" value={formName} onChange={e => setFormName(e.target.value)}
@@ -254,6 +256,7 @@ const LocationsList: React.FC = () => {
                         rows={3}
                         className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm resize-none" />
                 </div>
+
 
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
@@ -501,10 +504,9 @@ const LocationCard: React.FC<{
     return (
         <div onClick={onView}
             className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden cursor-pointer">
-            {/* Map Preview Header */}
-            <div className="h-36 bg-slate-100 relative overflow-hidden">
-                <MiniMapPreview lat={location.latitude} lng={location.longitude} />
-                <div className="absolute top-4 right-4">
+            {/* Image/Map Preview Header */}
+            <div className="h-44 bg-slate-100 relative overflow-hidden">
+                <div className="absolute top-4 right-4 flex gap-2">
                     <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-sm ${location.is_active
                         ? 'bg-emerald-50/90 border-emerald-100 text-emerald-600'
                         : 'bg-slate-50/90 border-slate-200 text-slate-400'
@@ -512,9 +514,11 @@ const LocationCard: React.FC<{
                         {location.is_active ? 'Active' : 'Inactive'}
                     </span>
                 </div>
-                <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-xl shadow-lg border border-white/50">
-                    <p className="text-lg font-black text-slate-900 tracking-tighter">{courtCount}</p>
-                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{courtCount === 1 ? 'Court' : 'Courts'}</p>
+                <div className="absolute bottom-4 left-4 flex items-end gap-3">
+                    <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-xl shadow-lg border border-white/50">
+                        <p className="text-lg font-black text-slate-900 tracking-tighter">{courtCount}</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{courtCount === 1 ? 'Court' : 'Courts'}</p>
+                    </div>
                 </div>
             </div>
 

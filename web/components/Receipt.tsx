@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Printer, Download, CheckCircle2, QrCode } from 'lucide-react';
+import { X, Printer, Download, CheckCircle2, QrCode, AlertCircle } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 
 interface ReceiptProps {
@@ -222,6 +222,17 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    {/* Cancellation Policy */}
+                    <div className="mb-8 p-5 bg-amber-50 rounded-2xl border border-amber-100/50">
+                        <div className="flex items-center gap-2 mb-2 text-amber-700">
+                            <AlertCircle size={16} />
+                            <h3 className="text-xs font-black uppercase tracking-widest">Late Cancellation Policy</h3>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                            To ensure fair access for all players, please be advised that bookings are subject to <span className="font-bold underline">automatic cancellation</span> if you are more than <span className="font-bold">10 minutes late</span> for your scheduled time.
+                        </p>
                     </div>
 
                     {/* Footer */}

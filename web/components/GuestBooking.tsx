@@ -15,7 +15,6 @@ declare global {
         google: any;
     }
 }
-
 const GuestBooking: React.FC = () => {
     const [courts, setCourts] = useState<Court[]>([]);
     const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
@@ -48,24 +47,37 @@ const GuestBooking: React.FC = () => {
             try {
                 const { data, error } = await supabase
                     .from('courts')
-                    .select('*');
+                    .select(`
+                        *,
+                        locations (
+                            id,
+                            address,
+                            city,
+                            latitude,
+                            longitude
+                        )
+                    `);
 
                 if (error) throw error;
 
-                const mappedCourts: Court[] = (data || []).map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
-                    location: `${c.address || ''}, ${c.city || ''}`.replace(/^, |, $/g, ''),
-                    pricePerHour: parseFloat(c.base_price) || 0,
-                    availability: [],
-                    latitude: c.latitude,
-                    longitude: c.longitude,
-                    numCourts: c.num_courts || 1,
-                    amenities: Array.isArray(c.amenities) ? c.amenities : [],
-                    ownerId: c.owner_id
-                }));
-
+                const mappedCourts: Court[] = (data || []).map(c => {
+                    const loc = (c as any).locations;
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+                        location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+                        pricePerHour: c.base_price,
+                        availability: [],
+                        latitude: loc?.latitude,
+                        longitude: loc?.longitude,
+                        numCourts: c.num_courts,
+                        amenities: Array.isArray(c.amenities) ? c.amenities : [],
+                        imageUrl: c.image_url,
+                        courtType: c.court_type || 'Outdoor',
+                        ownerId: c.owner_id
+                    };
+                });
                 setCourts(mappedCourts);
             } catch (err) {
                 console.error('Error fetching courts:', err);
@@ -134,9 +146,32 @@ const GuestBooking: React.FC = () => {
 
                 const infoWindow = new window.google.maps.InfoWindow({
                     content: `
-                        <div style="padding: 8px; font-family: Inter, sans-serif;">
-                            <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${court.name}</p>
-                            <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">₱${court.pricePerHour}/hour</p>
+                        <div style="width: 240px; font-family: 'Inter', sans-serif; overflow: hidden; border-radius: 16px;">
+                            ${court.imageUrl ? `
+                                <div style="height: 120px; width: 100%; border-radius: 12px 12px 0 0; overflow: hidden;">
+                                    <img src="${court.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${court.name}" />
+                                </div>
+                            ` : `
+                                <div style="height: 120px; width: 100%; background: #f1f5f9; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: center; color: #94a3b8;">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                </div>
+                            `}
+                            <div style="padding: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+                                    <h3 style="margin: 0; font-weight: 800; font-size: 15px; color: #0f172a; line-height: 1.2;">${court.name}</h3>
+                                    ${court.courtType ? `
+                                        <span style="background: ${court.courtType === 'Indoor' ? '#eff6ff' : '#f7fee7'}; color: ${court.courtType === 'Indoor' ? '#2563eb' : '#4d7c0f'}; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${court.courtType.toUpperCase()}</span>
+                                    ` : ''}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span style="font-size: 11px; color: #64748b; font-weight: 500;">${court.location.split(',')[0]}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 800; font-size: 14px; color: #0f172a;">₱${court.pricePerHour}<span style="font-size: 10px; color: #64748b; font-weight: 500;"> /hr</span></span>
+                                    <span style="font-size: 10px; font-weight: 700; color: #2563eb; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">${court.numCourts} ${court.numCourts === 1 ? 'COURT' : 'COURTS'}</span>
+                                </div>
+                            </div>
                         </div>
                     `,
                     disableAutoPan: true
