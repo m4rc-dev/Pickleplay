@@ -32,13 +32,27 @@ import { Product, NewsArticle } from '../types';
 import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=1920",
-  "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1920",
-  "https://images.unsplash.com/photo-1511067007398-7e4b90cfa4bc?auto=format&fit=crop&q=80&w=1920"
+  "/images/home-images/pb1.jpg",
+  "/images/home-images/pb2.jpg",
+  "/images/home-images/pb3.jpg",
+  "/images/home-images/pb4.jpg"
 ];
 
 const PARTNERS = [
   "FILIPINO HOMES", "FILIPINO HOMES", "FILIPINO HOMES", "FILIPINO HOMES", "FILIPINO HOMES", "FILIPINO HOMES"
+];
+
+const COURT_IMAGES = [
+  "/images/home-images/pb1.jpg",
+  "/images/home-images/pb2.jpg",
+  "/images/home-images/pb3.jpg",
+  "/images/home-images/pb4.jpg",
+  "/images/home-images/pb5.jpg",
+  "/images/home-images/pb6.jpg",
+  "/images/home-images/pb7.jpg",
+  "/images/home-images/pb8.jpg",
+  "/images/home-images/pb9.jpg",
+  "/images/home-images/pb10.jpg"
 ];
 
 const MOCK_COURTS = [
@@ -54,14 +68,14 @@ const LATEST_NEWS: Partial<NewsArticle>[] = [
     title: 'THE 2025 PHILIPPINE NATIONALS: DATES CONFIRMED',
     category: 'Tournament',
     date: 'Oct 15',
-    image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=600'
+    image: '/images/home-images/pb11.jpg'
   },
   {
     id: '2',
     title: 'WHY PH PLAYERS ARE REDEFINING THE META',
     category: 'Gear',
     date: 'Oct 12',
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=600'
+    image: '/images/home-images/pb12.jpg'
   }
 ];
 const POPULAR_PLACES = [
@@ -69,6 +83,21 @@ const POPULAR_PLACES = [
   "Makati", "Taguig (BGC)", "Baguio City", "Iloilo City",
   "Bacolod", "Dumaguete", "Pasig", "Angeles City"
 ];
+
+// Helper to normalize news articles from the API
+const normalizeHomeArticle = (raw: any, index: number) => {
+  const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || `/images/home-images/pb${11 + (index % 2)}.jpg`;
+  const dateStr = raw.published_at || raw.created_at || raw.date || '';
+  const date = dateStr ? new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recently';
+
+  return {
+    id: String(raw.id),
+    title: raw.title || 'Pickleball Update',
+    category: raw.category || raw.category_name || 'Community',
+    date: date,
+    image
+  };
+};
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -119,6 +148,8 @@ const Home: React.FC = () => {
   // Real player faces and user count from Supabase
   const [playerFaces, setPlayerFaces] = useState<string[]>([]);
   const [totalUsers, setTotalUsers] = useState<number>(0);
+  const [latestNews, setLatestNews] = useState<any[]>([]);
+  const [isNewsLoading, setIsNewsLoading] = useState(false);
 
   useEffect(() => {
     const fetchPlayerFacesAndCount = async () => {
@@ -142,7 +173,62 @@ const Home: React.FC = () => {
         console.error('Error fetching player faces or user count:', err);
       }
     };
+
+    const fetchTournaments = async () => {
+      setIsTournamentsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('tournaments')
+          .select('*')
+          .order('date', { ascending: true })
+          .limit(3);
+
+        if (error) throw error;
+
+        // Map Supabase snake_case to camelCase for the component
+        const mappedTournaments = (data || []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          date: t.date,
+          location: t.location,
+          prizePool: t.prize_pool,
+          status: t.status,
+          skillLevel: t.skill_level,
+          maxPlayers: t.max_players,
+          registeredCount: t.registered_count,
+          image: t.image_url
+        }));
+
+        setTournaments(mappedTournaments);
+      } catch (err) {
+        console.error('Error fetching tournaments:', err);
+      } finally {
+        setIsTournamentsLoading(false);
+      }
+    };
+
+    const fetchLatestNews = async () => {
+      setIsNewsLoading(true);
+      try {
+        const response = await fetch('/api/v1/news/articles?page=1');
+        if (response.ok) {
+          const result = await response.json();
+          const rawArticles = result?.data?.data || result?.data || [];
+          const normalized = rawArticles.slice(0, 2).map((a: any, i: number) => normalizeHomeArticle(a, i));
+          if (normalized.length > 0) {
+            setLatestNews(normalized);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching latest news:', err);
+      } finally {
+        setIsNewsLoading(false);
+      }
+    };
+
     fetchPlayerFacesAndCount();
+    fetchTournaments();
+    fetchLatestNews();
   }, []);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -340,7 +426,9 @@ const Home: React.FC = () => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/booking?q=${encodeURIComponent(searchQuery.trim())}`);
-      setShowSuggestions(false);
+    } else {
+      // If empty search, go to booking page (map view)
+      navigate('/booking');
     }
     setShowSuggestions(false);
   };
@@ -475,7 +563,6 @@ const Home: React.FC = () => {
                 />
                 <button
                   type="submit"
-                  disabled={!searchQuery.trim()}
                   className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-11 md:h-16 px-3 sm:px-5 md:px-10 rounded-full font-black flex items-center gap-1 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] sm:text-xs md:text-lg flex-shrink-0"
                 >
                   LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
@@ -664,7 +751,7 @@ const Home: React.FC = () => {
                     {/* Court Image */}
                     <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
                       <img
-                        src={`https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=600&h=400`}
+                        src={COURT_IMAGES[idx % COURT_IMAGES.length]}
                         alt={court.name}
                         className="w-full h-64 object-cover rounded-2xl mb-7"
                       />
@@ -770,7 +857,7 @@ const Home: React.FC = () => {
               <Link to="/guides/rules" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
                 <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb13.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Players on court"
                   />
@@ -789,7 +876,7 @@ const Home: React.FC = () => {
               <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
                 <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb14.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Player serving"
                   />
@@ -808,7 +895,7 @@ const Home: React.FC = () => {
               <Link to="/guides/equipment" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
                 <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=400"
+                    src="/images/home-images/pb16.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Pickleball equipment"
                   />
@@ -828,7 +915,7 @@ const Home: React.FC = () => {
             <div className="relative">
               <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
-                  src="https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?auto=format&fit=crop&q=80&w=1200"
+                  src="/images/home-images/pb18.jpg"
                   className="w-full h-full object-cover"
                   alt="Players on court"
                 />
@@ -915,7 +1002,7 @@ const Home: React.FC = () => {
                   className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-white/10 bg-slate-900 transition-all hover:scale-[1.02] shadow-2xl"
                 >
                   <img
-                    src={tournament.image || "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800"}
+                    src={tournament.image || "/images/home-images/pb20.jpg"}
                     className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-1000"
                     alt={tournament.name}
                   />
@@ -985,19 +1072,45 @@ const Home: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-10">
-            {LATEST_NEWS.map((article) => (
-              <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                  <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
-                  <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">{article.title}</h3>
-                </div>
-                <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                  {article.date}
-                </div>
-              </Link>
-            ))}
+            {isNewsLoading ? (
+              Array(2).fill(0).map((_, i) => (
+                <div key={i} className="aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] bg-slate-100 animate-pulse" />
+              ))
+            ) : latestNews.length > 0 ? (
+              latestNews.map((article) => (
+                <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
+                  <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt={article.title} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
+                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
+                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase line-clamp-2">{article.title}</h3>
+                  </div>
+                  <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
+                    {article.date}
+                  </div>
+                </Link>
+              ))
+            ) : (
+              // Fallback to static if none fetched or error
+              <>
+                <Link to="/news" className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
+                  <img src="/images/home-images/pb11.jpg" className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt="News 1" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
+                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">Announcement</span>
+                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">Stay tuned for more updates</h3>
+                  </div>
+                </Link>
+                <Link to="/news" className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
+                  <img src="/images/home-images/pb12.jpg" className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt="News 2" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
+                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">Events</span>
+                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">Connecting the PH community</h3>
+                  </div>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
