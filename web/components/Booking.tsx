@@ -763,7 +763,7 @@ const Booking: React.FC = () => {
           </h1>
           <button
             onClick={handleViewBookings}
-            className="px-10 py-5 bg-white border-2 border-slate-950 text-slate-950 font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
+            className="px-6 md:px-10 py-3 md:py-5 bg-white border-2 border-slate-950 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
           >
             View Booked Courts
           </button>
