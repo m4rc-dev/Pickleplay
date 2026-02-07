@@ -1,54 +1,61 @@
 import { supabase } from './supabase';
 
 /**
- * Automatically cancels late bookings (confirmed but not checked in within 10 minutes of start time)
- * This is a "Lazy Update" pattern called when viewing bookings or checking availability.
+ * Automatically cancel bookings that are past their check-in time and haven't been checked in
+ * This helps free up slots for other players
  */
-export const autoCancelLateBookings = async () => {
+export const autoCancelLateBookings = async (): Promise<{ cancelled: number; error?: string }> => {
     try {
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
+        const todayStr = now.toISOString().split('T')[0];
+        const currentTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
 
-        // Calculate 10 minutes ago to find bookings whose start time was >10 mins ago
-        const tenMinsAgo = new Date(now.getTime() - 10 * 60 * 1000);
-        const hours = tenMinsAgo.getHours().toString().padStart(2, '0');
-        const minutes = tenMinsAgo.getMinutes().toString().padStart(2, '0');
-        const timeLimitStr = `${hours}:${minutes}:00`;
-
-        console.log(`Checking for late bookings before ${timeLimitStr} on ${dateStr}`);
-
-        // 1. Find confirmend bookings that are late and not checked in
-        const { data: lateBookings, error: findError } = await supabase
+        // Find all pending bookings for today that have passed their start time by 15+ minutes
+        const { data: lateBookings, error: fetchError } = await supabase
             .from('bookings')
-            .select('id')
-            .eq('date', dateStr)
-            .eq('status', 'confirmed')
-            .is('checked_in_at', null)
-            .lt('start_time', timeLimitStr);
+            .select('id, start_time, court_id, player_id')
+            .eq('date', todayStr)
+            .eq('status', 'pending')
+            .eq('is_checked_in', false)
+            .lt('start_time', currentTimeStr);
 
-        if (findError) throw findError;
-
-        if (!lateBookings || lateBookings.length === 0) {
-            return { success: true, count: 0 };
+        if (fetchError) {
+            console.error('Error fetching late bookings:', fetchError);
+            return { cancelled: 0, error: fetchError.message };
         }
 
-        const idsToCancel = lateBookings.map(b => b.id);
-        console.log(`Auto-cancelling ${idsToCancel.length} late bookings:`, idsToCancel);
+        if (!lateBookings || lateBookings.length === 0) {
+            return { cancelled: 0 };
+        }
 
-        // 2. Perform the update
-        const { error: updateError } = await supabase
+        // Filter to only include bookings that are 15+ minutes late
+        const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+        const lateBookingsToCancel = lateBookings.filter(booking => {
+            const [hours, minutes] = booking.start_time.split(':').map(Number);
+            const bookingTime = new Date(now);
+            bookingTime.setHours(hours, minutes, 0, 0);
+            return bookingTime <= fifteenMinutesAgo;
+        });
+
+        if (lateBookingsToCancel.length === 0) {
+            return { cancelled: 0 };
+        }
+
+        // Cancel these bookings
+        const { error: cancelError } = await supabase
             .from('bookings')
-            .update({
-                status: 'cancelled',
-                // Optional: add a note or cancellation reason if the schema allows
-            })
-            .in('id', idsToCancel);
+            .update({ status: 'cancelled', cancelled_reason: 'auto_cancelled_no_show' })
+            .in('id', lateBookingsToCancel.map(b => b.id));
 
-        if (updateError) throw updateError;
+        if (cancelError) {
+            console.error('Error cancelling late bookings:', cancelError);
+            return { cancelled: 0, error: cancelError.message };
+        }
 
-        return { success: true, count: idsToCancel.length };
-    } catch (err) {
+        console.log(`Auto-cancelled ${lateBookingsToCancel.length} late bookings`);
+        return { cancelled: lateBookingsToCancel.length };
+    } catch (err: any) {
         console.error('Error in autoCancelLateBookings:', err);
-        return { success: false, error: err };
+        return { cancelled: 0, error: err.message };
     }
 };

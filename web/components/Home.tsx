@@ -28,14 +28,13 @@ import {
   Phone,
   Calendar
 } from 'lucide-react';
-import { Product, NewsArticle, Tournament } from '../types';
+import { Product, NewsArticle } from '../types';
 import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
-  "/images/home-images/pb1.jpg",
-  "/images/home-images/pb2.jpg",
-  "/images/home-images/pb3.jpg",
-  "/images/home-images/pb4.jpg"
+  "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=1920",
+  "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1920",
+  "https://images.unsplash.com/photo-1511067007398-7e4b90cfa4bc?auto=format&fit=crop&q=80&w=1920"
 ];
 
 const PARTNERS = [
@@ -55,14 +54,14 @@ const LATEST_NEWS: Partial<NewsArticle>[] = [
     title: 'THE 2025 PHILIPPINE NATIONALS: DATES CONFIRMED',
     category: 'Tournament',
     date: 'Oct 15',
-    image: '/images/home-images/pb1.jpg'
+    image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=600'
   },
   {
     id: '2',
     title: 'WHY PH PLAYERS ARE REDEFINING THE META',
     category: 'Gear',
     date: 'Oct 12',
-    image: '/images/home-images/pb2.jpg'
+    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=600'
   }
 ];
 const POPULAR_PLACES = [
@@ -85,7 +84,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 interface CourtWithDistance {
-  id: string;
   name: string;
   location: string;
   city: string;
@@ -94,6 +92,8 @@ interface CourtWithDistance {
   distance?: number;
   region?: string;
   base_price?: number;
+  rating?: number;
+  reviewCount?: number;
 }
 
 // Philippine regions mapping
@@ -153,73 +153,9 @@ const Home: React.FC = () => {
   const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [isTournamentsLoading, setIsTournamentsLoading] = useState(true);
-  const [latestNews, setLatestNews] = useState<any[]>([]);
-  const [isNewsLoading, setIsNewsLoading] = useState(true);
+  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [isTournamentsLoading, setIsTournamentsLoading] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchTournaments();
-    fetchLatestNews();
-  }, []);
-
-  const fetchLatestNews = async () => {
-    try {
-      const response = await fetch('/api/v1/news/articles?page=1');
-      if (!response.ok) throw new Error('Failed to fetch news');
-      const result = await response.json();
-
-      // Extract articles from nested structure
-      const rawArticles = result?.data?.data || result?.data || [];
-
-      // Map to compatible format and limit to 2
-      const normalized = rawArticles.slice(0, 2).map((a: any) => ({
-        id: String(a.id),
-        title: a.title,
-        category: a.category || a.category_name || 'Pickleball',
-        date: new Date(a.published_at || a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        image: a.image || a.image_url || a.featured_image || 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800'
-      }));
-
-      setLatestNews(normalized);
-    } catch (err) {
-      console.error('Error fetching dynamic news:', err);
-    } finally {
-      setIsNewsLoading(false);
-    }
-  };
-
-  const fetchTournaments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tournaments')
-        .select('*')
-        .order('date', { ascending: true })
-        .limit(3);
-
-      if (error) throw error;
-
-      const mappedData = (data || []).map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        date: t.date,
-        location: t.location,
-        prizePool: t.prize_pool,
-        status: t.status,
-        skillLevel: t.skill_level,
-        maxPlayers: t.max_players,
-        registeredCount: t.registered_count,
-        image: t.image_url
-      }));
-
-      setTournaments(mappedData);
-    } catch (err) {
-      console.error('Error fetching tournaments:', err);
-    } finally {
-      setIsTournamentsLoading(false);
-    }
-  };
 
   // Fetch courts from Supabase for search suggestions
   useEffect(() => {
@@ -228,12 +164,15 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('courts')
           .select(`
-            id, name, base_price, latitude, longitude, location_id,
+            name, base_price, latitude, longitude, location_id,
             locations (
               address,
               city,
               latitude,
               longitude
+            ),
+            court_reviews (
+              rating
             )
           `);
 
@@ -241,16 +180,25 @@ const Home: React.FC = () => {
 
         const courtData = (data || []).map(c => {
           const loc = (c as any).locations;
+          const reviews = (c as any).court_reviews || [];
           const city = loc?.city || '';
+
+          let avgRating = 0;
+          if (reviews.length > 0) {
+            const sum = reviews.reduce((acc: number, rev: any) => acc + rev.rating, 0);
+            avgRating = Math.round((sum / reviews.length) * 10) / 10;
+          }
+
           return {
-            id: c.id,
             name: c.name,
             location: city,
             city: city,
             latitude: loc?.latitude || c.latitude,
             longitude: loc?.longitude || c.longitude,
             region: getRegion(city),
-            base_price: c.base_price ?? 0
+            base_price: c.base_price ?? 0,
+            rating: avgRating,
+            reviewCount: reviews.length
           };
         });
         setCourts(courtData);
@@ -394,6 +342,7 @@ const Home: React.FC = () => {
       navigate(`/booking?q=${encodeURIComponent(searchQuery.trim())}`);
       setShowSuggestions(false);
     }
+    setShowSuggestions(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -443,40 +392,41 @@ const Home: React.FC = () => {
 
   const handlePlaceClick = () => {
     const cityName = userCity?.split(',')[0] || '';
+    setSearchQuery(cityName);
     setShowSuggestions(false);
     // Navigate with region coordinates for area zoom
     const regionCenter = REGION_CENTERS[userRegion || 'Luzon'];
-    navigate(`/booking?loc=${encodeURIComponent(cityName)}&lat=${regionCenter.lat}&lng=${regionCenter.lng}&zoom=${regionCenter.zoom}`);
+    navigate(`/booking?q=${encodeURIComponent(cityName)}&lat=${regionCenter.lat}&lng=${regionCenter.lng}&zoom=${regionCenter.zoom}`);
   };
 
   const handleSuggestedCityClick = (city: typeof SUGGESTED_CITIES[0]) => {
+    setSearchQuery(city.name);
     setShowSuggestions(false);
     setUserRegion(city.region); // Set region for court filtering
-    navigate(`/booking?loc=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
+    navigate(`/booking?q=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
   };
 
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 pb-6 bg-slate-950 z-40">
-        {/* Player profiles - shown at bottom left on desktop only */}
-        <div className="hidden md:flex absolute left-4 lg:left-8 bottom-4 lg:bottom-6 z-40 items-center gap-2 select-none">
-          <div className="flex -space-x-2">
+      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 bg-slate-950 z-40">
+        {/* Overlapping player faces and user count - bottom left (real data) */}
+        <div className="absolute left-6 bottom-6 md:left-16 md:bottom-16 z-40 flex items-center gap-3 select-none">
+          <div className="flex -space-x-4">
             {playerFaces.map((face, idx) => (
               <img
                 key={idx}
                 src={face}
                 alt={`Player ${idx + 1}`}
-                className="w-8 h-8 lg:w-10 lg:h-10 rounded-full border-2 border-white shadow-lg object-cover"
+                className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg object-cover ${idx !== 0 ? '-ml-4' : ''}`}
                 style={{ zIndex: playerFaces.length - idx }}
               />
             ))}
           </div>
-          <span className="bg-white/90 text-slate-900 font-bold text-[10px] lg:text-xs px-2.5 lg:px-3 py-1.5 rounded-full shadow-md border border-slate-200">
-            {totalUsers.toLocaleString()}+ players
+          <span className="bg-white/80 text-slate-900 font-bold text-xs md:text-base px-4 py-2 rounded-full shadow-md border border-slate-200">
+            Over {totalUsers.toLocaleString()} Pickleplay players registered
           </span>
         </div>
-
         <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
           <div
             className="absolute inset-0 flex transition-transform duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
@@ -496,42 +446,24 @@ const Home: React.FC = () => {
           <div className="absolute inset-0 hero-pattern opacity-10"></div>
         </div>
 
-        <div className="relative z-30 w-full max-w-[1800px] mx-auto px-4 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
+        <div className="relative z-30 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-6 md:mb-8">
             The National Network for Philippines
           </div>
-          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
-            <span className="text-5xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
-            <span className="text-lime-400 text-4xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-6 md:mb-8 uppercase">
+            <span className="text-4xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
+            <span className="text-lime-400 text-5xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
           </h1>
-          <p className="text-sm md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-6 md:mb-12 px-2">
+          <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-10 md:mb-12">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
-          <div className="flex flex-col items-center gap-4 animate-slide-up w-full">
-            {/* Player profiles - shown above search on mobile */}
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-3 md:hidden">
-              <div className="flex -space-x-3">
-                {playerFaces.map((face, idx) => (
-                  <img
-                    key={idx}
-                    src={face}
-                    alt={`Player ${idx + 1}`}
-                    className="w-8 h-8 rounded-full border-2 border-white shadow-lg object-cover"
-                    style={{ zIndex: playerFaces.length - idx }}
-                  />
-                ))}
-              </div>
-              <span className="bg-white/80 text-slate-900 font-bold text-[10px] px-3 py-1.5 rounded-full shadow-md border border-slate-200">
-                Over {totalUsers.toLocaleString()} players
-              </span>
-            </div>
-
-            <form onSubmit={handleSearch} className="relative group w-full max-w-2xl px-2">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-1.5 md:p-2 h-14 md:h-20 shadow-3xl">
-                <Search className="ml-3 md:ml-6 text-slate-500 flex-shrink-0" size={18} />
+          <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
+            <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
+              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2 h-16 md:h-20 shadow-3xl">
+                <Search className="ml-4 md:ml-6 text-slate-500" size={20} />
                 <input
                   type="text"
-                  placeholder="Find courts..."
+                  placeholder="Find PH dink spots..."
                   value={searchQuery}
                   onChange={handleInputChange}
                   onFocus={() => {
@@ -539,7 +471,7 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 bg-transparent border-none text-white px-2 md:px-6 text-sm md:text-xl font-medium outline-none placeholder:text-slate-600 min-w-0"
+                  className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
                 <button
                   type="submit"
@@ -656,7 +588,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Featured Courts Section */}
+      {/* Featured Courts Near You Section */}
       <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
@@ -664,7 +596,7 @@ const Home: React.FC = () => {
             <div>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
-                Featured Courts <span className="text-lime-500">{userCity ? `In ${userCity.split(',')[0]}.` : "In The Philippines."}</span>
+                Featured Courts <span className="text-lime-500">Near You.</span>
               </h2>
               {userCity && (
                 <p className="text-slate-500 font-medium mt-4 flex items-center gap-2">
@@ -681,6 +613,7 @@ const Home: React.FC = () => {
             </Link>
           </div>
 
+          {/* Courts Row - Horizontal Scroll */}
           {isLoadingLocation ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-4">
@@ -688,7 +621,7 @@ const Home: React.FC = () => {
                 <p className="text-slate-500 font-medium">Finding courts near you...</p>
               </div>
             </div>
-          ) : (nearbyCourts.length > 0 || courts.length > 0) ? (
+          ) : nearbyCourts.length > 0 ? (
             <div className="relative">
               {/* Left Scroll Button */}
               <button
@@ -712,12 +645,18 @@ const Home: React.FC = () => {
                 <ChevronRight size={24} className="text-slate-700" />
               </button>
 
+              {/* Left Fade Gradient */}
+              <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
+
+              {/* Right Fade Gradient */}
+              <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
+
               {/* Scrollable Container */}
               <div
                 id="courts-carousel"
                 className="flex gap-6 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
               >
-                {(nearbyCourts.length > 0 ? nearbyCourts : courts).slice(0, 10).map((court, idx) => (
+                {nearbyCourts.slice(0, 10).map((court, idx) => (
                   <div
                     key={idx}
                     className="flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 snap-start"
@@ -735,13 +674,19 @@ const Home: React.FC = () => {
                     <div className="flex items-center gap-3 mb-6">
                       <div className="flex items-center gap-0.5">
                         {[1, 2, 3, 4, 5].map((star) => (
-                          <svg key={star} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                          <svg
+                            key={star}
+                            className={`w-5 h-5 ${star <= Math.round(court.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
                             <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
                           </svg>
                         ))}
                       </div>
                       <span className="bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded">
-                        4.8 out of 5
+                        {court.rating && court.rating > 0 ? `${court.rating} out of 5` : 'New Venue'}
+                        {court.reviewCount && court.reviewCount > 0 ? ` (${court.reviewCount})` : ''}
                       </span>
                     </div>
 
@@ -766,7 +711,7 @@ const Home: React.FC = () => {
                         <span className="text-lg font-medium text-slate-400">/hr</span>
                       </span>
                       <Link
-                        to={`/court/${court.id}`}
+                        to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}
                         className="inline-flex items-center text-white bg-blue-600 hover:bg-blue-700 border border-transparent focus:ring-4 focus:ring-blue-200 shadow-md font-black rounded-2xl text-base px-6 py-3 transition-all active:scale-95"
                       >
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -779,30 +724,21 @@ const Home: React.FC = () => {
                 ))}
               </div>
 
-              {/* Find Near Me button if GPS not enabled */}
-              {!gpsEnabled && (
-                <div className="mt-12 flex justify-center">
-                  <button
-                    onClick={getUserLocation}
-                    className="group relative px-10 py-5 bg-white border-2 border-slate-900 overflow-hidden rounded-2xl font-black text-sm uppercase tracking-widest transition-all hover:text-white"
-                  >
-                    <div className="absolute inset-0 bg-slate-900 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                    <span className="relative z-10 flex items-center gap-3">
-                      <Navigation size={18} className="animate-pulse" />
-                      Find Courts Near Me
-                    </span>
-                  </button>
-                </div>
-              )}
+              {/* Scroll Indicator Dots */}
+              <div className="flex justify-center gap-2 mt-4 md:hidden">
+                {nearbyCourts.slice(0, Math.min(10, nearbyCourts.length)).map((_, idx) => (
+                  <div key={idx} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
+                ))}
+              </div>
             </div>
           ) : (
-            <div className="text-center py-20 bg-white/50 backdrop-blur-sm rounded-[40px] border border-dashed border-slate-200">
+            <div className="text-center py-16">
               <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <MapPin size={32} className="text-slate-400" />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">Finding Courts for You</h3>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Enable Location to See Nearby Courts</h3>
               <p className="text-slate-500 font-medium mb-6 max-w-md mx-auto">
-                We're searching for the best pickleball spots in your area.
+                Allow location access to discover pickleball courts near you and start playing today!
               </p>
               <button
                 onClick={getUserLocation}
@@ -817,15 +753,12 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-16 md:py-24 bg-slate-950 px-6 md:px-24 lg:px-32 relative overflow-hidden border-y border-white/5">
-        {/* Subtle Background Glow */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[120px] pointer-events-none"></div>
+      <section className="py-16 md:py-24 bg-white px-6 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
           <div className="mb-12 md:mb-16">
-            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
-              Learn to play pickleball with our <span className="text-lime-400 underline decoration-lime-400/30 decoration-4 underline-offset-8">how to play guides  →</span>
+            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight">
+              Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-4 underline-offset-8">how to play guides  →</span>
             </h2>
           </div>
 
@@ -834,57 +767,57 @@ const Home: React.FC = () => {
             {/* Left Column - Guide Cards */}
             <div className="space-y-6">
               {/* Guide Card 1 */}
-              <Link to="/guides/rules" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
-                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
+              <Link to="/guides/rules" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
+                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="/images/home-images/pb5.jpg"
+                    src="https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Players on court"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
                     How to play pickleball - 9 simple rules for beginners
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 2 */}
-              <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
-                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
+              <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
+                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="/images/home-images/pb6.jpg"
+                    src="https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Player serving"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
                     What is my pickleball skill rating? Take this quiz to get rated
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 3 */}
-              <Link to="/guides/equipment" className="group flex gap-4 md:gap-8 items-start hover:bg-white/5 p-4 rounded-3xl transition-all border border-transparent hover:border-white/10">
-                <div className="w-40 h-28 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-2xl">
+              <Link to="/guides/equipment" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
+                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
-                    src="/images/home-images/pb7.jpg"
+                    src="https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=400"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Pickleball equipment"
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-lime-400/10 text-lime-400 border border-lime-400/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
                     Essential gear guide - What you need to start playing
                   </h3>
                 </div>
@@ -895,7 +828,7 @@ const Home: React.FC = () => {
             <div className="relative">
               <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
-                  src="/images/home-images/pb8.jpg"
+                  src="https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?auto=format&fit=crop&q=80&w=1200"
                   className="w-full h-full object-cover"
                   alt="Players on court"
                 />
@@ -904,8 +837,8 @@ const Home: React.FC = () => {
 
                 {/* Play Button */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 md:w-28 md:h-28 bg-lime-400 rounded-full flex items-center justify-center shadow-2xl shadow-lime-400/40 group-hover:scale-110 group-hover:bg-lime-300 transition-all duration-300">
-                    <Play className="text-slate-950 fill-slate-950" size={40} />
+                  <div className="w-20 h-20 md:w-28 md:h-28 bg-lime-500 rounded-full flex items-center justify-center shadow-2xl shadow-lime-500/30 group-hover:scale-110 group-hover:bg-lime-400 transition-all duration-300">
+                    <Play className="text-white fill-white" size={40} />
                   </div>
                 </div>
               </div>
@@ -914,25 +847,25 @@ const Home: React.FC = () => {
               <div className="mt-8 space-y-6">
                 {/* Tags */}
                 <div className="flex gap-3">
-                  <span className="bg-lime-400/10 text-lime-400 border border-lime-400/20 px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
                     Guides
                   </span>
-                  <span className="bg-white/5 text-slate-400 border border-white/10 px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
                     Learn
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
+                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-slate-950 leading-tight">
                   How To Play Pickleball: Free Virtual Clinic for Beginners
                 </h3>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-wrap items-center gap-4">
-                  <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-400/20 hover:shadow-xl hover:shadow-lime-400/30 active:scale-95">
+                  <button className="bg-lime-500 hover:bg-lime-600 text-white px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
                     Watch Now
                   </button>
-                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-base hover:text-lime-400 transition-colors group">
+                  <Link to="/guides" className="flex items-center gap-2 text-slate-950 font-black text-base hover:text-lime-600 transition-colors group">
                     Or read our guides
                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
@@ -1038,8 +971,8 @@ const Home: React.FC = () => {
         </div>
       </div >
 
-      {/* News Highlight Section - Real data from HomesPh API */}
-      < section className="py-16 md:py-24 bg-white" >
+      {/* News Highlight Section */}
+      <section className="py-16 md:py-24 bg-white">
         <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 md:mb-12 gap-6">
             <div>
@@ -1052,32 +985,22 @@ const Home: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-10">
-            {isNewsLoading ? (
-              Array(2).fill(0).map((_, i) => (
-                <div key={i} className="aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] bg-slate-100 animate-pulse border border-slate-200"></div>
-              ))
-            ) : latestNews.length > 0 ? (
-              latestNews.map((article) => (
-                <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                  <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt={article.title} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
-                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">{article.title}</h3>
-                  </div>
-                  <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                    {article.date}
-                  </div>
-                </Link>
-              ))
-            ) : (
-              <div className="col-span-full py-12 text-center bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">No recent news found</p>
-              </div>
-            )}
+            {LATEST_NEWS.map((article) => (
+              <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
+                <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+                <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
+                  <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
+                  <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">{article.title}</h3>
+                </div>
+                <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
+                  {article.date}
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
-      </section >
+      </section>
 
 
 
@@ -1181,11 +1104,11 @@ const Home: React.FC = () => {
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <MapPin size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                  <span className="text-sm font-bold text-slate-500">Cebu City, Philippines</span>
+                  <span className="text-sm font-bold text-slate-500">Metro Manila, Philippines</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Mail size={18} className="text-blue-600 shrink-0" />
-                  <span className="text-sm font-bold text-slate-500">hello@pickleplayph.com</span>
+                  <span className="text-sm font-bold text-slate-500">hello@pickleballph.com</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Phone size={18} className="text-blue-600 shrink-0" />
@@ -1202,7 +1125,7 @@ const Home: React.FC = () => {
           </div>
         </div>
       </footer>
-    </div >
+    </div>
   );
 };
 

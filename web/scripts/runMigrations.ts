@@ -53,10 +53,12 @@ async function runMigrations() {
           .filter(s => s.length > 0);
 
         for (const statement of statements) {
-          await supabase.rpc('exec', { sql: statement }).catch(err => {
+          try {
+            await supabase.rpc('exec', { sql: statement });
+          } catch (err) {
             // If exec RPC doesn't exist, try raw query
-            return supabase.from('court_events').select('1').limit(1);
-          });
+            await supabase.from('court_events').select('1').limit(1);
+          }
         }
 
         console.log(`✅ Migration completed: ${file}\n`);

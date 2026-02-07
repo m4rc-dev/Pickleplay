@@ -3,13 +3,25 @@ import cors from 'cors';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
-dotenv.config(); // Loads from .env by default
+dotenv.config();
+dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '../.env.local' }); // Try root as well
 
 const app = express();
-const PORT = 5001; // Changed from 5000
+const PORT = 5001;
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend - only if API key is present
+let resend = null;
+if (process.env.RESEND_API_KEY) {
+  try {
+    resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('✅ Resend initialized');
+  } catch (err) {
+    console.error('❌ Failed to initialize Resend:', err.message);
+  }
+} else {
+  console.warn('⚠️ RESEND_API_KEY is missing. Email features will be disabled.');
+}
 
 // News API config
 const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
@@ -101,6 +113,11 @@ app.post('/api/send-email', async (req, res) => {
     // Validate inputs
     if (!email || !code) {
       return res.status(400).json({ error: 'Email and code are required' });
+    }
+
+    if (!resend) {
+      console.error('❌ Email attempt failed: Resend not initialized (missing API key)');
+      return res.status(503).json({ error: 'Email service is currently unavailable' });
     }
 
     // Send email via Resend

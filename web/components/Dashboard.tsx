@@ -385,15 +385,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     if (!currentUserId || !selectedCourtForReview) return;
     setIsSubmittingReview(true);
     try {
-      const result = await submitCourtReview({
-        court_id: selectedCourtForReview.court_id,
-        user_id: currentUserId,
-        booking_id: selectedCourtForReview.id,
-        rating: reviewRating,
-        comment: reviewComment
-      });
+      const result = await submitCourtReview(
+        selectedCourtForReview.court_id,
+        currentUserId,
+        reviewRating,
+        reviewComment,
+        undefined, // title
+        selectedCourtForReview.id
+      );
 
-      if (!result.success) throw new Error(result.message);
+      if (!result.success) throw new Error(result.error);
 
       alert('Court review submitted! Thank you!');
       setIsCourtReviewModalOpen(false);
