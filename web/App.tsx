@@ -242,6 +242,8 @@ const NavigationHandler: React.FC<{
   } = props;
 
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
+  const lastScrollY = useRef(0);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -259,7 +261,27 @@ const NavigationHandler: React.FC<{
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
-    const handleScroll = () => setIsScrolled(scrollContainer.scrollTop > 50);
+
+    const handleScroll = () => {
+      const currentScrollY = scrollContainer.scrollTop;
+
+      // Update isScrolled
+      setIsScrolled(currentScrollY > 50);
+
+      // Smart Header: Hide on scroll down, show on scroll up
+      if (currentScrollY > 200) { // Don't hide immediately at the top
+        if (currentScrollY > lastScrollY.current + 10) { // Use a threshold of 10px to avoid micro-jitters
+          setIsVisible(false);
+        } else if (currentScrollY < lastScrollY.current - 10) {
+          setIsVisible(true);
+        }
+      } else {
+        setIsVisible(true);
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
     scrollContainer.addEventListener('scroll', handleScroll);
     handleScroll();
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
@@ -520,7 +542,7 @@ const NavigationHandler: React.FC<{
 
       {/* Mobile Top Header */}
       {!isAuthPage && (
-        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-300 ${headerActive || role !== 'guest' ? 'bg-white/95 backdrop-blur-md border-b border-slate-100' : 'bg-transparent'}`}>
+        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white border-b border-slate-100' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
             <div className="flex flex-col leading-none">
@@ -587,7 +609,7 @@ const NavigationHandler: React.FC<{
 
       {/* Guest Desktop Header */}
       {role === 'guest' && !isAuthPage && (
-        <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-300 rounded-full items-center px-12 justify-between ${headerActive ? 'bg-white/95 backdrop-blur-md shadow-xl' : 'bg-transparent'}`}>
+        <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-500 ease-in-out rounded-full items-center px-12 justify-between ${headerActive ? 'bg-white shadow-xl' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-[150%]'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-2xl tracking-tighter transition-colors ${headerActive ? 'text-slate-950' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
             <div className="flex flex-col leading-none">
