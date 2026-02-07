@@ -614,9 +614,9 @@ const NavigationHandler: React.FC<{
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={<div className="p-4 md:p-8 max-w-[1800px] mx-auto w-full"><News /></div>} />
-              <Route path="/academy" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
-              <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
+              <Route path="/news" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><News /></div>} />
+              <Route path="/academy" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
+              <Route path="/rankings" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
