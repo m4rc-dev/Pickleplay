@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -28,6 +28,13 @@ const GuestBooking: React.FC = () => {
     const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
     const [searchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
+    const [user, setUser] = useState<any>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            setUser(user);
+        });
+    }, []);
     const [showLoginModal, setShowLoginModal] = useState(false);
     const navigate = useNavigate();
 
@@ -41,6 +48,56 @@ const GuestBooking: React.FC = () => {
     const googleMapRef = useRef<any>(null);
     const markersRef = useRef<any[]>([]);
     const userLocationMarkerRef = useRef<any>(null);
+    const pulseCirclesRef = useRef<any[]>([]);
+
+    const triggerPulse = (lat: number, lng: number) => {
+        if (!googleMapRef.current || !window.google) return;
+
+        // Clear existing pulse circles if any
+        pulseCirclesRef.current.forEach(c => c.setMap(null));
+        pulseCirclesRef.current = [];
+
+        const pulseCircle = new window.google.maps.Circle({
+            strokeColor: '#a3e635', // lime-400
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: '#a3e635',
+            fillOpacity: 0.35,
+            map: googleMapRef.current,
+            center: { lat, lng },
+            radius: 10,
+            zIndex: 1000,
+        });
+
+        pulseCirclesRef.current.push(pulseCircle);
+
+        let radius = 10;
+        const maxRadius = 300;
+        const step = 20;
+
+        const interval = setInterval(() => {
+            radius += step;
+            if (pulseCircle.getMap()) {
+                pulseCircle.setRadius(radius);
+                pulseCircle.setOptions({
+                    fillOpacity: 0.35 * (1 - radius / maxRadius),
+                    strokeOpacity: 0.8 * (1 - radius / maxRadius)
+                });
+            }
+
+            if (radius >= maxRadius) {
+                clearInterval(interval);
+                pulseCircle.setMap(null);
+                pulseCirclesRef.current = pulseCirclesRef.current.filter(c => c !== pulseCircle);
+            }
+        }, 25);
+    };
+
+    // Sync search query state with URL search params
+    useEffect(() => {
+        const q = searchParams.get('q') || searchParams.get('court') || '';
+        setSearchQuery(q); // Sync ONLY q, loc stays out of search bar
+    }, [searchParams]);
 
     useEffect(() => {
         const fetchCourts = async () => {
@@ -143,9 +200,7 @@ const GuestBooking: React.FC = () => {
                 });
 
                 marker.addListener('click', () => {
-                    setSelectedCourt(court);
-                    map.panTo({ lat: court.latitude!, lng: court.longitude! });
-                    map.setZoom(16);
+                    navigate(`/court/${court.id}`);
                 });
 
                 // Show info window on hover
@@ -272,6 +327,14 @@ const GuestBooking: React.FC = () => {
         }
     };
 
+    const handleViewBookings = () => {
+        if (!user) {
+            setShowLoginModal(true);
+            return;
+        }
+        navigate('/my-bookings');
+    };
+
     const filteredCourts = courts
         .filter(c => filterType === 'All' || c.type === filterType)
         .filter(c =>
@@ -281,203 +344,87 @@ const GuestBooking: React.FC = () => {
 
     return (
         <div className="pt-24 md:pt-32 pb-12 px-6 md:px-24 lg:px-32 max-w-[1800px] mx-auto min-h-screen">
-            <div className="space-y-8">
-                <div className="flex flex-col gap-6">
-                    <div>
-                        <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2026</p>
-                        <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Book a Court.</h1>
+            <div className="space-y-12">
+                {/* Header Section */}
+                <div className="space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                        <div>
+                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2026</p>
+                            <h1 className="text-5xl md:text-8xl font-black text-slate-950 tracking-tighter uppercase leading-[0.8]">
+                                Book a Court <span className="text-blue-600">in {(searchParams.get('loc') || searchQuery || 'Cebu City').split(',')[0]}.</span>
+                            </h1>
+                        </div>
                     </div>
 
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex gap-2">
-                            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
-                                <button
-                                    key={type}
-                                    onClick={() => setFilterType(type)}
-                                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 ${filterType === type
-                                        ? 'bg-blue-600 text-white shadow-xl shadow-blue-200 ring-4 ring-blue-600/10'
-                                        : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-400 hover:text-blue-600'
-                                        }`}
-                                >
-                                    {type}
-                                </button>
-                            ))}
-                        </div>
+                    {/* Filter Pills */}
+                    <div className="flex gap-2">
+                        {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className={`px-10 py-3.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 active:scale-95 ${filterType === type
+                                    ? 'bg-blue-600 text-white shadow-2xl shadow-blue-400/40 ring-4 ring-blue-600/10'
+                                    : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-400 hover:text-blue-600 shadow-sm'
+                                    }`}
+                            >
+                                {type}
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+                    {/* Discovery Sidebar */}
+                    <div className="lg:col-span-4 space-y-6">
+                        {/* Search & Tools Row */}
                         <div className="flex gap-3">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <div className="relative flex-1 group">
+                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
                                 <input
                                     type="text"
                                     placeholder="Search courts by name or location..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-[24px] py-4 pl-14 pr-4 text-sm font-semibold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm"
                                 />
                             </div>
                             <button
                                 onClick={handleNearMe}
-                                className="flex items-center gap-2 px-6 py-3 bg-lime-400 text-slate-900 rounded-2xl font-bold text-sm hover:bg-lime-500 transition-all shadow-lg shadow-lime-100"
+                                className="flex items-center gap-3 px-8 py-4 bg-[#a3e635] text-slate-900 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-[#bef264] transition-all shadow-xl shadow-lime-200/50 shrink-0"
                             >
-                                <Navigation size={18} />
-                                Near Me
+                                <Navigation size={18} fill="currentColor" />
+                                <span>Near Me</span>
                             </button>
                         </div>
-                    </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-2">
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                            {isLoading ? (
-                                <div className="h-[600px] bg-slate-100 flex items-center justify-center">
-                                    <Loader2 className="animate-spin text-blue-600" size={48} />
-                                </div>
-                            ) : (
-                                <div ref={mapRef} className="h-[600px] w-full" />
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="lg:col-span-1 space-y-6">
-                        {selectedCourt ? (
-                            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                                <div>
-                                    <div className="flex items-start justify-between mb-3">
-                                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
-                                        <span className={`text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider ${selectedCourt.type === 'Indoor'
-                                            ? 'bg-blue-50 text-blue-600'
-                                            : 'bg-lime-50 text-lime-600'
-                                            }`}>
-                                            {selectedCourt.type}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-slate-500 font-medium mb-4">
-                                        <MapPin size={14} />
-                                        <span>{selectedCourt.location}</span>
-                                    </div>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="text-3xl font-black text-slate-900">₱{selectedCourt.pricePerHour}</span>
-                                        <span className="text-sm text-slate-500 font-medium">/hour</span>
-                                    </div>
-                                </div>
-
-                                {/* Date Selection */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                                            <CalendarIcon size={16} className="text-blue-600" />
-                                            {showAdvanceOptions ? 'Select Date' : 'Booking for Today'}
-                                        </h4>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md uppercase tracking-tight">
-                                                {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                            </span>
-                                            <button
-                                                onClick={() => setShowAdvanceOptions(!showAdvanceOptions)}
-                                                className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all ${showAdvanceOptions
-                                                    ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-100'
-                                                    }`}
-                                            >
-                                                {showAdvanceOptions ? 'Hide' : 'Advance Booking'}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {showAdvanceOptions && (
-                                        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-1 px-1 animate-in slide-in-from-top-2 duration-300">
-                                            {Array.from({ length: 14 }).map((_, i) => {
-                                                const date = new Date();
-                                                date.setDate(date.getDate() + i);
-                                                const isSelected = selectedDate.toDateString() === date.toDateString();
-                                                const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
-                                                const dayNum = date.getDate();
-
-                                                return (
-                                                    <button
-                                                        key={i}
-                                                        onClick={() => {
-                                                            setSelectedDate(date);
-                                                            setSelectedSlot(null); // Reset slot when date changes
-                                                        }}
-                                                        className={`flex flex-col items-center min-w-[60px] py-3 rounded-2xl border transition-all duration-300 ${isSelected
-                                                            ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-100'
-                                                            : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white hover:shadow-md'
-                                                            }`}
-                                                    >
-                                                        <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                                                            {dayName}
-                                                        </span>
-                                                        <span className="text-base font-black">
-                                                            {dayNum}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {TIME_SLOTS.map(slot => (
-                                            <button
-                                                key={slot}
-                                                onClick={() => setSelectedSlot(slot)}
-                                                className={`py-2.5 px-3 rounded-xl font-semibold text-sm transition-all border ${selectedSlot === slot
-                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                                                    }`}
-                                            >
-                                                {slot}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={handleBooking}
-                                    className="w-full py-4 rounded-2xl font-bold bg-lime-400 hover:bg-lime-500 text-slate-900 shadow-xl shadow-lime-100 transition-all flex items-center justify-center gap-2"
-                                >
-                                    Confirm Booking
-                                </button>
+                        {/* Courts List Container */}
+                        <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden flex flex-col min-h-[500px]">
+                            <div className="p-8 border-b border-slate-50">
+                                <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
+                                    Courts in {(searchParams.get('loc') || searchQuery || 'Cebu City').split(',')[0]} ({filteredCourts.length})
+                                </h2>
                             </div>
-                        ) : (
-                            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center">
-                                <MapPin size={48} className="mx-auto text-slate-300 mb-4" />
-                                <h3 className="text-lg font-bold text-slate-900 mb-2">Select a Court</h3>
-                                <p className="text-sm text-slate-500">Click on a marker on the map to view court details and book.</p>
-                            </div>
-                        )}
 
-                        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                            <h4 className="text-sm font-bold text-slate-900 mb-4">All Courts ({filteredCourts.length})</h4>
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-hide">
+                            <div className="p-4 space-y-2 max-h-[650px] overflow-y-auto custom-scrollbar flex-1">
                                 {isLoading ? (
-                                    Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
+                                    Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
                                 ) : (
                                     filteredCourts.map(court => (
                                         <button
                                             key={court.id}
-                                            onClick={() => {
-                                                setSelectedCourt(court);
-                                                if (court.latitude && court.longitude && googleMapRef.current) {
-                                                    googleMapRef.current.panTo({ lat: court.latitude, lng: court.longitude });
-                                                    googleMapRef.current.setZoom(14);
-                                                }
-                                            }}
-                                            className={`w-full text-left p-4 rounded-2xl transition-all duration-300 border group ${selectedCourt?.id === court.id
-                                                ? 'bg-blue-50 border-blue-200 shadow-sm scale-[1.02]'
-                                                : 'bg-slate-50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-md hover:scale-[1.02]'
-                                                }`}
+                                            onClick={() => navigate(`/court/${court.id}`)}
+                                            className="w-full group flex items-center justify-between p-5 rounded-[28px] hover:bg-slate-50 transition-all duration-300"
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <p className="font-bold text-sm text-slate-900">{court.name}</p>
-                                                    <p className="text-xs text-slate-500">{court.location}</p>
-                                                </div>
-                                                <span className="text-sm font-bold text-slate-900">₱{court.pricePerHour}/hr</span>
+                                            <div className="flex-1 text-left">
+                                                <p className="font-black text-slate-900 text-base tracking-tight mb-1 group-hover:text-blue-600 transition-colors uppercase italic">{court.name}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{court.location.split(',')[0]}</p>
+                                            </div>
+                                            <div className="bg-blue-50 px-4 py-2 rounded-xl group-hover:bg-blue-600 transition-all">
+                                                <p className="text-[11px] font-black text-blue-600 group-hover:text-white">
+                                                    ₱{court.pricePerHour}
+                                                </p>
                                             </div>
                                         </button>
                                     ))
@@ -485,79 +432,102 @@ const GuestBooking: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Interactive Map */}
+                    <div className="lg:col-span-8 sticky top-32">
+                        <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden h-[750px] relative">
+                            {isLoading ? (
+                                <div className="h-full bg-slate-100 flex items-center justify-center">
+                                    <Loader2 className="animate-spin text-blue-600" size={48} />
+                                </div>
+                            ) : (
+                                <div ref={mapRef} className="h-full w-full" />
+                            )}
+
+                            {/* Map Floating Actions */}
+                            <div className="absolute top-6 right-6 flex flex-col gap-3">
+                                <button className="w-12 h-12 bg-white rounded-2xl shadow-xl flex items-center justify-center text-slate-600 hover:text-blue-600 transition-all border border-slate-100">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* Login Prompt Modal */}
-            {showLoginModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
-                    <div
-                        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300"
-                        onClick={() => setShowLoginModal(false)}
-                    />
-                    <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300">
-                        <button
+            {
+                showLoginModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
+                        <div
+                            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300"
                             onClick={() => setShowLoginModal(false)}
-                            className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 transition-colors"
-                        >
-                            <X size={24} />
-                        </button>
+                        />
+                        <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300">
+                            <button
+                                onClick={() => setShowLoginModal(false)}
+                                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
 
-                        <div className="p-8 md:p-12 text-center">
-                            <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
-                                <Lock className="text-blue-600" size={32} />
+                            <div className="p-8 md:p-12 text-center">
+                                <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                                    <Lock className="text-blue-600" size={32} />
+                                </div>
+
+                                <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase mb-4">Hold On!</h2>
+                                <p className="text-slate-500 font-medium mb-10 leading-relaxed">
+                                    You need to have an account to secure this spot. Join the community to start booking courts.
+                                </p>
+
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={() => {
+                                            let redirectUrl = '/booking';
+                                            const params = new URLSearchParams();
+                                            if (searchQuery) params.set('q', searchQuery);
+                                            if (selectedCourt) params.set('court', selectedCourt.name);
+                                            if (selectedSlot) params.set('slot', selectedSlot);
+                                            if (params.toString()) redirectUrl += '?' + params.toString();
+                                            navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+                                        }}
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-slate-200"
+                                    >
+                                        <LogIn size={18} /> Sign In
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            let redirectUrl = '/booking';
+                                            const params = new URLSearchParams();
+                                            if (searchQuery) params.set('q', searchQuery);
+                                            if (selectedCourt) params.set('court', selectedCourt.name);
+                                            if (selectedSlot) params.set('slot', selectedSlot);
+                                            if (params.toString()) redirectUrl += '?' + params.toString();
+                                            navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
+                                        }}
+                                        className="w-full py-4 bg-lime-400 hover:bg-lime-500 text-slate-950 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-lime-100"
+                                    >
+                                        <UserPlus size={18} /> Create Account
+                                    </button>
+                                    <button
+                                        onClick={() => setShowLoginModal(false)}
+                                        className="w-full py-4 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors"
+                                    >
+                                        Maybe Later
+                                    </button>
+                                </div>
                             </div>
 
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase mb-4">Hold On!</h2>
-                            <p className="text-slate-500 font-medium mb-10 leading-relaxed">
-                                You need to have an account to secure this spot. Join the community to start booking courts.
-                            </p>
-
-                            <div className="space-y-4">
-                                <button
-                                    onClick={() => {
-                                        let redirectUrl = '/booking';
-                                        const params = new URLSearchParams();
-                                        if (searchQuery) params.set('q', searchQuery);
-                                        if (selectedCourt) params.set('court', selectedCourt.name);
-                                        if (selectedSlot) params.set('slot', selectedSlot);
-                                        if (params.toString()) redirectUrl += '?' + params.toString();
-                                        navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
-                                    }}
-                                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-slate-200"
-                                >
-                                    <LogIn size={18} /> Sign In
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        let redirectUrl = '/booking';
-                                        const params = new URLSearchParams();
-                                        if (searchQuery) params.set('q', searchQuery);
-                                        if (selectedCourt) params.set('court', selectedCourt.name);
-                                        if (selectedSlot) params.set('slot', selectedSlot);
-                                        if (params.toString()) redirectUrl += '?' + params.toString();
-                                        navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
-                                    }}
-                                    className="w-full py-4 bg-lime-400 hover:bg-lime-500 text-slate-950 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-lime-100"
-                                >
-                                    <UserPlus size={18} /> Create Account
-                                </button>
-                                <button
-                                    onClick={() => setShowLoginModal(false)}
-                                    className="w-full py-4 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors"
-                                >
-                                    Maybe Later
-                                </button>
+                            <div className="bg-slate-50 p-6 text-center border-t border-slate-100">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PicklePlay 2026</p>
                             </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-6 text-center border-t border-slate-100">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PicklePlay 2026</p>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+        </div >
     );
 };
 

@@ -49,6 +49,7 @@ import News from './components/News';
 import Shop from './components/Shop';
 import Teams from './components/Teams';
 import Academy from './components/Academy';
+import MyBookings from './components/MyBookings';
 import Profile from './components/Profile';
 import GuestBooking from './components/GuestBooking';
 import UsernameSetupModal from './components/UsernameSetupModal';
@@ -56,6 +57,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import AuthCallback from './components/AuthCallback';
 import NotFound from './components/NotFound';
+import CourtDetail from './components/CourtDetail';
 
 // Professional Components
 import Students from './components/coach/Students';
@@ -615,6 +617,8 @@ const NavigationHandler: React.FC<{
               <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/my-bookings" element={role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
+              <Route path="/court/:courtId" element={<CourtDetail />} />
               <Route path="/tournaments" element={role !== 'guest' ? <Tournaments /> : <Navigate to="/" />} />
               <Route path="/coaches" element={role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />

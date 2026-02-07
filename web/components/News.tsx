@@ -65,7 +65,7 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
   const date = raw.published_at || raw.created_at || raw.date || '';
   const readTime = raw.read_time || raw.reading_time || `${Math.max(2, Math.ceil((raw.body || raw.content || '').length / 1000))} min read`;
-  
+
   return {
     id: String(raw.id),
     title: raw.title || 'Untitled Article',
@@ -499,11 +499,10 @@ const News: React.FC = () => {
                     <button
                       key={pageNum}
                       onClick={() => setPage(pageNum)}
-                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${
-                        pageNum === page
+                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pageNum === page
                           ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
+                        }`}
                     >
                       {pageNum}
                     </button>
@@ -514,11 +513,10 @@ const News: React.FC = () => {
                     <span className="text-slate-400 px-1">...</span>
                     <button
                       onClick={() => setPage(pagination.last_page)}
-                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${
-                        pagination.last_page === page
+                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pagination.last_page === page
                           ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
+                        }`}
                     >
                       {pagination.last_page}
                     </button>
