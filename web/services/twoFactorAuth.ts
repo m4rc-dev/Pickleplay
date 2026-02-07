@@ -1,11 +1,17 @@
 import { supabase } from './supabase';
+import emailjs from '@emailjs/browser';
+
+// EmailJS Configuration
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || '';
+const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '';
+const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || '';
 
 // Generate a random 6-digit code
 export const generateVerificationCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Send Email verification code via API route
+// Send Email verification code via EmailJS (no backend needed)
 export const sendEmailCode = async (email: string, userId: string) => {
   try {
     const code = generateVerificationCode();
@@ -23,20 +29,20 @@ export const sendEmailCode = async (email: string, userId: string) => {
 
     if (updateError) throw updateError;
 
-    // Send email via Express server (proxied through Vite)
-    const response = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        subject: 'Your PicklePlay 2FA Code',
-        code,
-      }),
-    });
+    // Send email via EmailJS
+    const result = await emailjs.send(
+      EMAILJS_SERVICE_ID,
+      EMAILJS_TEMPLATE_ID,
+      {
+        to_email: email,
+        verification_code: code,
+        app_name: 'PicklePlay',
+      },
+      EMAILJS_PUBLIC_KEY
+    );
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to send email');
+    if (result.status !== 200) {
+      throw new Error('Failed to send email');
     }
 
     return { success: true, message: 'Code sent to your email' };
@@ -46,7 +52,8 @@ export const sendEmailCode = async (email: string, userId: string) => {
 };
 
 // Verify the code entered by user
-export const verifyCode = async (userId: string, code: string) => {
+// enableAfterVerify: true when setting up 2FA for first time, false when verifying during login
+export const verifyCode = async (userId: string, code: string, enableAfterVerify: boolean = true) => {
   try {
     const { data: settings, error: fetchError } = await supabase
       .from('security_settings')
@@ -81,15 +88,21 @@ export const verifyCode = async (userId: string, code: string) => {
     }
 
     // Code is valid - clear the verification fields
+    const updateData: any = {
+      verification_code: null,
+      verification_code_expires_at: null,
+      verification_attempts: 0,
+    };
+
+    // Only enable 2FA if this is the initial setup (not login verification)
+    if (enableAfterVerify) {
+      updateData.two_factor_enabled = true;
+      updateData.two_factor_method = 'email';
+    }
+
     const { error: clearError } = await supabase
       .from('security_settings')
-      .update({
-        verification_code: null,
-        verification_code_expires_at: null,
-        verification_attempts: 0,
-        two_factor_enabled: true,
-        two_factor_method: 'email',
-      })
+      .update(updateData)
       .eq('user_id', userId);
 
     if (clearError) throw clearError;
