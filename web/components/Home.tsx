@@ -28,7 +28,7 @@ import {
   Phone,
   Calendar
 } from 'lucide-react';
-import { Product, NewsArticle } from '../types';
+import { Product } from '../types';
 import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
@@ -62,42 +62,35 @@ const MOCK_COURTS = [
   { name: "Metro Baguio Dinking Spot", location: "Baguio City", rating: 4.6 }
 ];
 
-const LATEST_NEWS: Partial<NewsArticle>[] = [
-  {
-    id: '1',
-    title: 'THE 2025 PHILIPPINE NATIONALS: DATES CONFIRMED',
-    category: 'Tournament',
-    date: 'Oct 15',
-    image: '/images/home-images/pb11.jpg'
-  },
-  {
-    id: '2',
-    title: 'WHY PH PLAYERS ARE REDEFINING THE META',
-    category: 'Gear',
-    date: 'Oct 12',
-    image: '/images/home-images/pb12.jpg'
-  }
-];
 const POPULAR_PLACES = [
   "Metro Manila", "Cebu City", "Davao City", "Quezon City",
   "Makati", "Taguig (BGC)", "Baguio City", "Iloilo City",
   "Bacolod", "Dumaguete", "Pasig", "Angeles City"
 ];
 
-// Helper to normalize news articles from the API
-const normalizeHomeArticle = (raw: any, index: number) => {
-  const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || `/images/home-images/pb${11 + (index % 2)}.jpg`;
-  const dateStr = raw.published_at || raw.created_at || raw.date || '';
-  const date = dateStr ? new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Recently';
+const FAQ_ITEMS = [
+  {
+    question: "What is Pickleplay?",
+    answer: "Pickleplay is the premier digital platform for the Philippine pickleball community, connecting players, coaches, and court owners. We provide a seamless ecosystem for booking courts, finding coaches, joining tournaments, and staying updated with the latest news."
+  },
+  {
+    question: "I'm a new pickleball player. How do I get started?",
+    answer: "Getting started is easy! We recommend checking out our 'How to Play' guides in the Academy section and finding a local coach or clinic through our platform. You can also use our court locator to find 'dink spots' near you where beginners are always welcome."
+  },
+  {
+    question: "How do I book a court?",
+    answer: "Simply use our 'Locate' search on the homepage or head to the 'Booking' page. You can filter by region (Luzon, Visayas, Mindanao) or city, view available time slots, and book your court in just a few clicks."
+  },
+  {
+    question: "Can I host my own tournaments?",
+    answer: "Yes! If you are a Court Owner or an Event Organizer, you can apply for a professional account. Once approved, you'll have access to our Tournament Manager where you can create events, manage registrations, and track prize pools."
+  },
+  {
+    question: "What equipment do I need?",
+    answer: "To start playing, you'll need a pickleball paddle, some pickleballs (indoor or outdoor depending on the court), and standard court shoes. Many venues also offer equipment rentals. Check out our 'Pro Shop' for high-quality gear curated for PH players."
+  }
+];
 
-  return {
-    id: String(raw.id),
-    title: raw.title || 'Pickleball Update',
-    category: raw.category || raw.category_name || 'Community',
-    date: date,
-    image
-  };
-};
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -148,17 +141,16 @@ const Home: React.FC = () => {
   // Real player faces and user count from Supabase
   const [playerFaces, setPlayerFaces] = useState<string[]>([]);
   const [totalUsers, setTotalUsers] = useState<number>(0);
-  const [latestNews, setLatestNews] = useState<any[]>([]);
-  const [isNewsLoading, setIsNewsLoading] = useState(false);
 
   useEffect(() => {
     const fetchPlayerFacesAndCount = async () => {
       try {
-        // Fetch up to 5 random user avatars and total user count from 'profiles' table
+        // Fetch up to 5 most recently registered user avatars from 'profiles' table
         const { data: facesData, error: facesError } = await supabase
           .from('profiles')
           .select('avatar_url')
           .not('avatar_url', 'is', null)
+          .order('created_at', { ascending: false })
           .limit(5);
         if (facesError) throw facesError;
         setPlayerFaces((facesData || []).map((p: any) => p.avatar_url));
@@ -207,28 +199,8 @@ const Home: React.FC = () => {
       }
     };
 
-    const fetchLatestNews = async () => {
-      setIsNewsLoading(true);
-      try {
-        const response = await fetch('/api/v1/news/articles?page=1');
-        if (response.ok) {
-          const result = await response.json();
-          const rawArticles = result?.data?.data || result?.data || [];
-          const normalized = rawArticles.slice(0, 2).map((a: any, i: number) => normalizeHomeArticle(a, i));
-          if (normalized.length > 0) {
-            setLatestNews(normalized);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching latest news:', err);
-      } finally {
-        setIsNewsLoading(false);
-      }
-    };
-
     fetchPlayerFacesAndCount();
     fetchTournaments();
-    fetchLatestNews();
   }, []);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -239,6 +211,7 @@ const Home: React.FC = () => {
   const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
+  const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [isTournamentsLoading, setIsTournamentsLoading] = useState(false);
   const navigate = useNavigate();
@@ -497,9 +470,9 @@ const Home: React.FC = () => {
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[80vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-20 bg-slate-950 z-40">
-        {/* Overlapping player faces and user count - bottom left (real data) */}
-        <div className="absolute left-6 bottom-6 md:left-16 md:bottom-16 z-40 flex items-center gap-3 select-none">
+      <section className="relative min-h-[90vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-12 pb-4 md:pb-0 bg-slate-950 z-40">
+        {/* Overlapping player faces and user count - responsive positioning */}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-2 md:left-16 md:bottom-16 md:translate-x-0 z-40 flex flex-col md:flex-row items-center gap-2 md:gap-3 select-none w-full px-6 md:px-0">
           <div className="flex -space-x-4">
             {playerFaces.map((face, idx) => (
               <img
@@ -512,7 +485,7 @@ const Home: React.FC = () => {
             ))}
           </div>
           <span className="bg-white/80 text-slate-900 font-bold text-xs md:text-base px-4 py-2 rounded-full shadow-md border border-slate-200">
-            Over {totalUsers.toLocaleString()} Pickleplay players registered
+            Over {totalUsers.toLocaleString()}+ Pickleplay players registered
           </span>
         </div>
         <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
@@ -535,23 +508,23 @@ const Home: React.FC = () => {
         </div>
 
         <div className="relative z-30 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-6 md:mb-8">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
             The National Network for Philippines
           </div>
-          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-6 md:mb-8 uppercase">
-            <span className="text-4xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
-            <span className="text-lime-400 text-5xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
+            <span className="text-5xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
+            <span className="text-lime-400 text-4xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
           </h1>
-          <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-10 md:mb-12">
+          <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-4 md:mb-12">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
           <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2 h-16 md:h-20 shadow-3xl">
-                <Search className="ml-4 md:ml-6 text-slate-500" size={20} />
+              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2.5 h-16 md:h-20 shadow-3xl">
+                <Search className="ml-2 md:ml-6 text-slate-500" size={20} />
                 <input
                   type="text"
-                  placeholder="Find PH dink spots..."
+                  placeholder="Find courts..."
                   value={searchQuery}
                   onChange={handleInputChange}
                   onFocus={() => {
@@ -559,11 +532,11 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
+                  className="flex-1 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
                 <button
                   type="submit"
-                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-11 md:h-16 px-3 sm:px-5 md:px-10 rounded-full font-black flex items-center gap-1 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] sm:text-xs md:text-lg flex-shrink-0"
+                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-10 md:h-16 px-2 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] md:text-lg flex-shrink-0 mr-1"
                 >
                   LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
                 </button>
@@ -732,11 +705,6 @@ const Home: React.FC = () => {
                 <ChevronRight size={24} className="text-slate-700" />
               </button>
 
-              {/* Left Fade Gradient */}
-              <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
-
-              {/* Right Fade Gradient */}
-              <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
 
               {/* Scrollable Container */}
               <div
@@ -840,11 +808,11 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-16 md:py-24 bg-white px-6 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-16 md:py-24 bg-slate-950 px-6 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
           <div className="mb-12 md:mb-16">
-            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight">
+            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
               Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-4 underline-offset-8">how to play guides  →</span>
             </h2>
           </div>
@@ -852,10 +820,10 @@ const Home: React.FC = () => {
           {/* Two Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
             {/* Left Column - Guide Cards */}
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Guide Card 1 */}
-              <Link to="/guides/rules" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/rules" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
+                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb13.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -863,18 +831,18 @@ const Home: React.FC = () => {
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     How to play pickleball - 9 simple rules for beginners
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 2 */}
-              <Link to="/guides/skill-rating" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/skill-rating" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
+                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb14.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -882,18 +850,18 @@ const Home: React.FC = () => {
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     What is my pickleball skill rating? Take this quiz to get rated
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 3 */}
-              <Link to="/guides/equipment" className="group flex gap-4 md:gap-6 items-start hover:bg-slate-50 p-4 rounded-3xl transition-all">
-                <div className="w-32 h-24 md:w-48 md:h-32 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/equipment" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
+                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb16.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -901,10 +869,10 @@ const Home: React.FC = () => {
                   />
                 </div>
                 <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-3">
+                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
                     Guides
                   </span>
-                  <h3 className="text-lg md:text-xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     Essential gear guide - What you need to start playing
                   </h3>
                 </div>
@@ -943,7 +911,7 @@ const Home: React.FC = () => {
                 </div>
 
                 {/* Title */}
-                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-slate-950 leading-tight">
+                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
                   How To Play Pickleball: Free Virtual Clinic for Beginners
                 </h3>
 
@@ -952,7 +920,7 @@ const Home: React.FC = () => {
                   <button className="bg-lime-500 hover:bg-lime-600 text-white px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
                     Watch Now
                   </button>
-                  <Link to="/guides" className="flex items-center gap-2 text-slate-950 font-black text-base hover:text-lime-600 transition-colors group">
+                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-base hover:text-lime-400 transition-colors group">
                     Or read our guides
                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
@@ -964,26 +932,26 @@ const Home: React.FC = () => {
       </section >
 
       {/* Tournaments Section - Real data from Supabase */}
-      < section className="py-20 md:py-32 bg-slate-950 relative overflow-hidden" >
+      <section className="py-20 md:py-32 bg-slate-50 relative overflow-hidden">
         {/* Abstract Background Accents */}
-        < div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[150px] -z-10" ></div >
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[150px] -z-10"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
 
         <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
             <div className="max-w-2xl">
-              <p className="text-[10px] font-black text-lime-400 uppercase tracking-[0.4em] mb-4">COMPETITIVE CIRCUIT / 2026</p>
-              <h2 className="text-4xl md:text-6xl lg:text-7xl font-black text-white tracking-tighter leading-[0.9] uppercase">
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COMPETITIVE CIRCUIT / 2026</p>
+              <h2 className="text-4xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
                 Elite PH <br />
-                <span className="text-lime-400 italic">Tournaments.</span>
+                <span className="text-lime-500 italic">Tournaments.</span>
               </h2>
             </div>
             <Link
               to="/tournaments"
-              className="group flex items-center gap-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white px-8 py-4 rounded-2xl transition-all"
+              className="group flex items-center gap-4 bg-white border border-slate-200 hover:border-blue-400 text-slate-900 px-8 py-4 rounded-2xl transition-all shadow-sm"
             >
               <span className="text-xs font-black uppercase tracking-widest">View All Events</span>
-              <div className="w-8 h-8 rounded-full bg-lime-400 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                 <ArrowRight size={16} />
               </div>
             </Link>
@@ -999,18 +967,18 @@ const Home: React.FC = () => {
                 <Link
                   to="/tournaments"
                   key={tournament.id}
-                  className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-white/10 bg-slate-900 transition-all hover:scale-[1.02] shadow-2xl"
+                  className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl"
                 >
                   <img
                     src={tournament.image || "/images/home-images/pb20.jpg"}
-                    className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-1000"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
                     alt={tournament.name}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
 
                   {/* Status Badge */}
                   <div className="absolute top-8 left-8">
-                    <span className="bg-lime-400 text-slate-950 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
+                    <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
                       {tournament.status}
                     </span>
                   </div>
@@ -1025,13 +993,13 @@ const Home: React.FC = () => {
                     </h3>
 
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 text-slate-400">
+                      <div className="flex items-center gap-3 text-slate-200">
                         <Calendar size={16} className="text-white" />
                         <span className="text-[10px] font-bold uppercase tracking-widest">
                           {new Date(tournament.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-slate-400">
+                      <div className="flex items-center gap-3 text-slate-200">
                         <MapPin size={16} className="text-white" />
                         <span className="text-[10px] font-bold uppercase tracking-widest truncate">{tournament.location}</span>
                       </div>
@@ -1050,76 +1018,64 @@ const Home: React.FC = () => {
       </section >
 
       {/* Marquee */}
-      < div className="bg-slate-50 py-3 md:py-4 border-y border-slate-100 overflow-hidden relative" >
+      <div className="bg-slate-950 py-3 md:py-4 border-y border-white/10 overflow-hidden relative">
         <div className="animate-marquee whitespace-nowrap flex items-center gap-12 md:gap-24">
           {[...PARTNERS, ...PARTNERS].map((partner, i) => (
-            <span key={i} className="text-slate-900/5 font-black text-4xl md:text-6xl tracking-tighter italic select-none uppercase">{partner}</span>
+            <span key={i} className="text-white/5 font-black text-4xl md:text-6xl tracking-tighter italic select-none uppercase">{partner}</span>
           ))}
         </div>
-      </div >
+      </div>
 
-      {/* News Highlight Section */}
-      <section className="py-16 md:py-24 bg-white">
-        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 md:mb-12 gap-6">
-            <div>
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">NATIONAL NEWS / INTEL</p>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">WHAT'S NEW IN PH.</h2>
-            </div>
-            <Link to="/news" className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors">
-              VIEW FULL PH FEED <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </Link>
+      {/* FAQ Section */}
+      <section className="py-20 md:py-32 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
+        <div className="max-w-4xl mx-auto">
+          {/* Section Header */}
+          <div className="text-center mb-16 md:mb-24">
+            <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase mb-6">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-slate-600 text-lg md:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+              Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-10">
-            {isNewsLoading ? (
-              Array(2).fill(0).map((_, i) => (
-                <div key={i} className="aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] bg-slate-100 animate-pulse" />
-              ))
-            ) : latestNews.length > 0 ? (
-              latestNews.map((article) => (
-                <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                  <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt={article.title} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
-                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase line-clamp-2">{article.title}</h3>
+          {/* Accordion List */}
+          <div className="space-y-4">
+            {FAQ_ITEMS.map((item, idx) => (
+              <div
+                key={idx}
+                className="bg-white border-2 border-slate-100 rounded-3xl overflow-hidden shadow-sm transition-all duration-300"
+              >
+                <button
+                  onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
+                  className="w-full text-left px-8 py-6 md:py-8 flex items-center justify-between group"
+                >
+                  <span className="text-lg md:text-2xl font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
+                    {item.question}
+                  </span>
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
+                    <Plus size={activeFaqIndex === idx ? 24 : 20} className="transition-transform" />
                   </div>
-                  <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                    {article.date}
+                </button>
+                <div
+                  className={`transition-all duration-500 ease-in-out border-t border-slate-50 ${activeFaqIndex === idx ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
+                >
+                  <div className="px-8 py-8 md:px-12 md:py-10 text-slate-500 text-base md:text-lg font-medium leading-relaxed bg-slate-50/50">
+                    {item.answer}
                   </div>
-                </Link>
-              ))
-            ) : (
-              // Fallback to static if none fetched or error
-              <>
-                <Link to="/news" className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                  <img src="/images/home-images/pb11.jpg" className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt="News 1" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">Announcement</span>
-                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">Stay tuned for more updates</h3>
-                  </div>
-                </Link>
-                <Link to="/news" className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                  <img src="/images/home-images/pb12.jpg" className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt="News 2" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">Events</span>
-                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">Connecting the PH community</h3>
-                  </div>
-                </Link>
-              </>
-            )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
 
 
+
       {/* Final CTA */}
-      <section className="bg-lime-400 py-16 px-6 md:px-24 lg:px-32">
-        <div className="max-w-[1800px] mx-auto bg-slate-950 rounded-[40px] md:rounded-[60px] p-10 md:p-20 text-center relative overflow-hidden shadow-3xl">
+      <section className="bg-slate-900 py-20 md:py-32 relative overflow-hidden">
+        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32 text-center relative z-10">
           <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-blue-600/20 blur-[120px]"></div>
           <div className="absolute bottom-0 left-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-lime-400/10 blur-[120px]"></div>
           <div className="relative z-10 space-y-8 md:space-y-10">
@@ -1217,7 +1173,7 @@ const Home: React.FC = () => {
               <ul className="space-y-4">
                 <li className="flex items-start gap-3">
                   <MapPin size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                  <span className="text-sm font-bold text-slate-500">Metro Manila, Philippines</span>
+                  <span className="text-sm font-bold text-slate-500">Cebu City, Philippines</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Mail size={18} className="text-blue-600 shrink-0" />
