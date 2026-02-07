@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { supabase, createSession } from '../services/supabase';
+import { supabase, createSession, getSecuritySettings } from '../services/supabase';
 import {
     Trophy,
     Mail,
@@ -58,15 +58,8 @@ const Login: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
-                // Check localStorage first for redirect (from GuestBooking), then URL param
-                const storedRedirect = localStorage.getItem('auth_redirect');
-                localStorage.removeItem('auth_redirect'); // Clean up
-                const finalRedirect = storedRedirect || redirectUrl;
-                navigate(finalRedirect);
                 // Create session record with IP address
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
-
-                // Fetch IP address
                 try {
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
                     const ipData = await ipResponse.json();
@@ -75,7 +68,23 @@ const Login: React.FC = () => {
                     await createSession(data.user.id, deviceName);
                 }
 
-                navigate('/dashboard');
+                // Check if user has 2FA enabled
+                const settings = await getSecuritySettings(data.user.id);
+                if (settings.data?.two_factor_enabled) {
+                    // Store redirect for after 2FA verification
+                    const storedRedirect = localStorage.getItem('auth_redirect');
+                    const finalRedirect = storedRedirect || redirectUrl;
+                    if (finalRedirect && finalRedirect !== '/dashboard') {
+                        localStorage.setItem('auth_redirect', finalRedirect);
+                    }
+                    navigate('/verify-2fa');
+                } else {
+                    // No 2FA, go directly to dashboard
+                    const storedRedirect = localStorage.getItem('auth_redirect');
+                    localStorage.removeItem('auth_redirect');
+                    const finalRedirect = storedRedirect || redirectUrl;
+                    navigate(finalRedirect);
+                }
             }
         } catch (err: any) {
             setError(err.message || 'Failed to sign in. Please check your credentials.');

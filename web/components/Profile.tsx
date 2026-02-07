@@ -95,6 +95,9 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   // Privacy message state
   const [privacyMessage, setPrivacyMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // Auth provider detection (Google-only users can't use 2FA)
+  const [hasPasswordAuth, setHasPasswordAuth] = useState(true);
+
   // Activity stats state
   const [activityStats, setActivityStats] = useState({
     totalBookings: 0,
@@ -139,12 +142,26 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     try {
       const result = await updatePassword(newPassword);
       if (result.success) {
-        setSecurityMessage({ type: 'success', text: 'Password updated successfully!' });
+        const isSettingNew = !hasPasswordAuth;
+        // Mark password as set in database for Google users
+        if (isSettingNew && currentUserId) {
+          await supabase
+            .from('security_settings')
+            .upsert({ 
+              user_id: currentUserId, 
+              password_set_at: new Date().toISOString() 
+            }, { onConflict: 'user_id' });
+        }
+        setSecurityMessage({ type: 'success', text: isSettingNew ? 'Password set! You can now enable 2FA.' : 'Password updated successfully!' });
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setShowPasswordModal(false);
-        setTimeout(() => setSecurityMessage(null), 3000);
+        // Refresh auth provider status after setting password
+        if (isSettingNew) {
+          setHasPasswordAuth(true);
+        }
+        setTimeout(() => setSecurityMessage(null), 4000);
       } else {
         setSecurityMessage({ type: 'error', text: result.message });
       }
@@ -267,6 +284,18 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   useEffect(() => {
     if (isCurrentUser && activeTab === 'security') {
       loadActiveSessions();
+      // Check if user has password-based authentication
+      const checkAuthProvider = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.identities) {
+          const hasPassword = user.identities.some((id: any) => id.provider === 'email');
+          // Also check if user previously set password (stored in security_settings)
+          const { data: settings } = await getSecuritySettings(user.id);
+          const hasSetPassword = settings?.password_set_at != null;
+          setHasPasswordAuth(hasPassword || hasSetPassword);
+        }
+      };
+      checkAuthProvider();
     }
   }, [activeTab]);
 
@@ -974,17 +1003,29 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
               </h3>
 
               <div className="space-y-6 border-t border-slate-100 pt-8">
-                {/* Change Password Section */}
+                {/* Password Management Section */}
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                   <div>
-                    <p className="font-bold text-slate-900">Change Password</p>
-                    <p className="text-xs text-slate-500">Update your account password</p>
+                    <p className="font-bold text-slate-900">{hasPasswordAuth ? 'Change Password' : 'Set Password'}</p>
+                    <p className="text-xs text-slate-500">
+                      {hasPasswordAuth 
+                        ? 'Update your account password' 
+                        : 'Add a password to your Google account for email login & 2FA'
+                      }
+                    </p>
+                    {!hasPasswordAuth && (
+                      <p className="text-xs text-indigo-500 mt-1 font-bold">Google account detected</p>
+                    )}
                   </div>
                   <button 
                     onClick={() => setShowPasswordModal(true)}
-                    className="px-6 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-all"
+                    className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${
+                      hasPasswordAuth 
+                        ? 'bg-slate-900 text-white hover:bg-slate-800' 
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    }`}
                   >
-                    Update
+                    {hasPasswordAuth ? 'Update' : 'Set Password'}
                   </button>
                 </div>
 
@@ -992,27 +1033,47 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                   <div>
                     <p className="font-bold text-slate-900">Two-Factor Authentication</p>
-                    <p className="text-xs text-slate-500">Add an extra layer of security with SMS or Email</p>
-                    <p className="text-xs text-slate-400 mt-2">Status: {twoFactorEnabled ? '✅ Enabled' : '❌ Disabled'}</p>
+                    {hasPasswordAuth ? (
+                      <>
+                        <p className="text-xs text-slate-500">Add an extra layer of security with Email verification</p>
+                        <p className="text-xs text-slate-400 mt-2">Status: {twoFactorEnabled ? '✅ Enabled' : '❌ Disabled'}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-500">Requires a password to enable 2FA verification</p>
+                        <p className="text-xs text-amber-500 mt-2">Google-only account — set a password first</p>
+                      </>
+                    )}
                   </div>
-                  <button
-                    onClick={() => {
-                      if (!twoFactorEnabled) {
-                        setShow2FASetup(true);
-                      } else {
-                        setTwoFactorEnabled(false);
-                        disableTwoFactorAuth(currentUserId!);
-                        setSecurityMessage({ type: 'success', text: '2FA disabled' });
-                      }
-                    }}
-                    className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${
-                      twoFactorEnabled
-                        ? 'bg-red-600 text-white hover:bg-red-700'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    }`}
-                  >
-                    {twoFactorEnabled ? 'Disable' : 'Enable'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {hasPasswordAuth ? (
+                      <button
+                        onClick={() => {
+                          if (!twoFactorEnabled) {
+                            setShow2FASetup(true);
+                          } else {
+                            setTwoFactorEnabled(false);
+                            disableTwoFactorAuth(currentUserId!);
+                            setSecurityMessage({ type: 'success', text: '2FA disabled' });
+                          }
+                        }}
+                        className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${
+                          twoFactorEnabled
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        }`}
+                      >
+                        {twoFactorEnabled ? 'Disable' : 'Enable'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowPasswordModal(true)}
+                        className="px-5 py-2 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        Set Password
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Active Sessions Section */}
@@ -1200,25 +1261,30 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             document.body
           )}
 
-          {/* Password Change Modal */}
+          {/* Password Change/Set Modal */}
           {showPasswordModal && ReactDOM.createPortal(
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
               <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-                <h4 className="text-xl font-black text-slate-950 mb-6 flex items-center gap-2">
-                  <Lock size={20} className="text-indigo-600" /> Change Password
+                <h4 className="text-xl font-black text-slate-950 mb-2 flex items-center gap-2">
+                  <Lock size={20} className="text-indigo-600" /> {hasPasswordAuth ? 'Change Password' : 'Set Password'}
                 </h4>
+                {!hasPasswordAuth && (
+                  <p className="text-xs text-slate-500 mb-6">Create a password so you can log in with email and enable 2FA</p>
+                )}
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Password</label>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
-                      placeholder="Enter current password"
-                    />
-                  </div>
+                  {hasPasswordAuth && (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Password</label>
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                        placeholder="Enter current password"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">New Password</label>
@@ -1283,7 +1349,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     onClick={handleUpdatePassword}
                     className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
                   >
-                    Update Password
+                    {hasPasswordAuth ? 'Update Password' : 'Set Password'}
                   </button>
                 </div>
               </div>
