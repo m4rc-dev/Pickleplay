@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
@@ -63,7 +63,15 @@ const Booking: React.FC = () => {
   const [lastBookingTime, setLastBookingTime] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+  }, []);
 
   // Receipt state
   const [showReceipt, setShowReceipt] = useState(false);
@@ -80,6 +88,56 @@ const Booking: React.FC = () => {
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
+  const pulseCirclesRef = useRef<any[]>([]);
+
+  const triggerPulse = (lat: number, lng: number) => {
+    if (!googleMapRef.current || !window.google) return;
+
+    // Clear existing pulse circles if any
+    pulseCirclesRef.current.forEach(c => c.setMap(null));
+    pulseCirclesRef.current = [];
+
+    const pulseCircle = new window.google.maps.Circle({
+      strokeColor: '#a3e635', // lime-400
+      strokeOpacity: 0.8,
+      strokeWeight: 2,
+      fillColor: '#a3e635',
+      fillOpacity: 0.35,
+      map: googleMapRef.current,
+      center: { lat, lng },
+      radius: 10,
+      zIndex: 1000,
+    });
+
+    pulseCirclesRef.current.push(pulseCircle);
+
+    let radius = 10;
+    const maxRadius = 300;
+    const step = 20;
+
+    const interval = setInterval(() => {
+      radius += step;
+      if (pulseCircle.getMap()) {
+        pulseCircle.setRadius(radius);
+        pulseCircle.setOptions({
+          fillOpacity: 0.35 * (1 - radius / maxRadius),
+          strokeOpacity: 0.8 * (1 - radius / maxRadius)
+        });
+      }
+
+      if (radius >= maxRadius) {
+        clearInterval(interval);
+        pulseCircle.setMap(null);
+        pulseCirclesRef.current = pulseCirclesRef.current.filter(c => c !== pulseCircle);
+      }
+    }, 25);
+  };
+
+  // Sync search query state with URL search params
+  useEffect(() => {
+    const q = searchParams.get('q') || searchParams.get('court') || '';
+    setSearchQuery(q); // Sync ONLY q, loc stays out of search bar
+  }, [searchParams]);
 
   // New states for availability checking
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -390,6 +448,7 @@ const Booking: React.FC = () => {
         setSelectedSlot(null); // Reset slot
         map.panTo({ lat: location.latitude, lng: location.longitude });
         map.setZoom(16);
+        triggerPulse(location.latitude, location.longitude);
       });
 
       // Show info window on hover
@@ -653,12 +712,27 @@ const Booking: React.FC = () => {
     }
   };
 
+  const handleViewBookings = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    navigate('/my-bookings');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURTS / 2025</p>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-950 tracking-tighter uppercase">Book a Court.</h1>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <h1 className="text-5xl md:text-7xl font-black text-slate-950 tracking-tighter uppercase leading-[0.9]">
+            Book a Court{(searchParams.get('loc') || searchQuery) ? <span className="text-blue-600"> in {(searchParams.get('loc') || searchQuery).split(',')[0]}.</span> : '.'}
+          </h1>
+          <button
+            onClick={handleViewBookings}
+            className="px-10 py-5 bg-white border-2 border-slate-950 text-slate-950 font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
+          >
+            View Booked Courts
+          </button>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -678,7 +752,13 @@ const Booking: React.FC = () => {
             ))}
           </div>
 
-          {/* Search Bar and Near Me Button */}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Location & Court Selection Sidebar - Moved to Left */}
+        <div className="lg:col-span-1 space-y-6 order-2 lg:order-1">
+          {/* Search Bar and Near Me Button - Relocated to top of sidebar */}
           <div className="flex gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -692,41 +772,23 @@ const Booking: React.FC = () => {
             </div>
             <button
               onClick={handleNearMe}
-              className="flex items-center gap-2 px-6 py-3 bg-lime-400 text-slate-900 rounded-2xl font-bold text-sm hover:bg-lime-500 transition-all shadow-lg shadow-lime-100"
+              className="flex items-center gap-2 px-6 py-3 bg-lime-400 text-slate-900 rounded-2xl font-bold text-sm hover:bg-lime-500 transition-all shadow-lg shadow-lime-100 shrink-0"
             >
               <Navigation size={18} />
-              Near Me
+              <span className="hidden xl:inline">Near Me</span>
             </button>
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Map View */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="h-[400px] bg-slate-100 flex items-center justify-center">
-                <Loader2 className="animate-spin text-blue-600" size={40} />
-              </div>
-            ) : (
-              <div ref={mapRef} className="h-[400px] w-full" />
-            )}
-          </div>
-        </div>
-
-        {/* Location & Court Selection Sidebar */}
-        <div className="lg:col-span-1 space-y-4">
           {selectedCourt ? (
             /* Court Selected - Show availability and booking interface */
-            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
               <div>
                 {/* Back to location button */}
                 <button
                   onClick={() => setSelectedCourt(null)}
-                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest mb-3 flex items-center gap-1"
+                  className="group inline-flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest mb-6 px-4 py-2 bg-blue-50 rounded-full hover:bg-blue-100 transition-all"
                 >
-                  ← Back to Courts
+                  <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Courts
                 </button>
 
                 <div className="flex items-start justify-between mb-2">
@@ -972,7 +1034,7 @@ const Booking: React.FC = () => {
                   {selectedLocation.courts.map(court => (
                     <button
                       key={court.id}
-                      onClick={() => setSelectedCourt(court)}
+                      onClick={() => navigate(`/court/${court.id}`)}
                       className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                     >
                       <div className="flex items-start justify-between mb-2">
@@ -1014,52 +1076,63 @@ const Booking: React.FC = () => {
                 </div>
               </div>
             </div>
-          ) : (
-            /* No Selection - Show prompt to select location */
-            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <MapPin size={40} className="mx-auto text-slate-300 mb-2" />
-              <h3 className="text-sm font-bold text-slate-900 mb-1.5">Select a Location</h3>
-              <p className="text-xs text-slate-500">Click on a location marker on the map to view available courts.</p>
-            </div>
-          )}
+          ) : null}
 
           {/* All Locations List */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-            <h4 className="text-xs font-bold text-slate-900 mb-3">All Locations ({locationGroups.length})</h4>
-            <div className="space-y-1.5 max-h-[250px] overflow-y-auto scrollbar-hide">
+          <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+            <h4 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-4">
+              {(searchParams.get('loc') || searchQuery) ? `Places in ${(searchParams.get('loc') || searchQuery).split(',')[0]}` : 'All Locations'} ({locationGroups.filter(l => !searchQuery || l.city.toLowerCase().includes(searchQuery.toLowerCase()) || l.locationName.toLowerCase().includes(searchQuery.toLowerCase())).length})
+            </h4>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {isLoading ? (
                 Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
               ) : (
-                locationGroups.map(location => (
-                  <button
-                    key={location.locationId}
-                    onClick={() => {
-                      setSelectedLocation(location);
-                      setSelectedCourt(null);
-                      setSelectedSlot(null);
-                      if (googleMapRef.current) {
-                        googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                        googleMapRef.current.setZoom(16);
-                      }
-                    }}
-                    className={`w-full text-left p-3 rounded-xl transition-all border ${selectedLocation?.locationId === location.locationId
-                      ? 'bg-amber-50 border-amber-200'
-                      : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="font-bold text-sm text-slate-900">{location.locationName}</p>
-                        <p className="text-xs text-slate-500">{location.city}</p>
+                locationGroups
+                  .filter(l => !searchQuery || l.city.toLowerCase().includes(searchQuery.toLowerCase()) || l.locationName.toLowerCase().includes(searchQuery.toLowerCase()) || l.address.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map(location => (
+                    <button
+                      key={location.locationId}
+                      onClick={() => {
+                        setSelectedLocation(location);
+                        setSelectedCourt(null);
+                        setSelectedSlot(null);
+                        if (googleMapRef.current) {
+                          googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                          googleMapRef.current.setZoom(16);
+                          triggerPulse(location.latitude, location.longitude);
+                        }
+                      }}
+                      className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedLocation?.locationId === location.locationId
+                        ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-50'
+                        : 'bg-slate-50 border-slate-100 hover:bg-white hover:border-blue-200 hover:shadow-md'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="font-black text-slate-900 text-sm">{location.locationName}</p>
+                          <p className="text-xs font-bold text-slate-400 mt-0.5 uppercase tracking-wide">{location.city}</p>
+                        </div>
+                        <span className="text-[10px] font-black text-blue-600 bg-white border border-blue-100 px-3 py-1.5 rounded-xl shadow-sm">
+                          {location.courts.length} {location.courts.length === 1 ? 'COURT' : 'COURTS'}
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-md">
-                        {location.courts.length} {location.courts.length === 1 ? 'Court' : 'Courts'}
-                      </span>
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  ))
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Map View - Moved to Right */}
+        <div className="lg:col-span-2 order-1 lg:order-2">
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden h-[600px]">
+            {isLoading ? (
+              <div className="h-full bg-slate-100 flex items-center justify-center">
+                <Loader2 className="animate-spin text-blue-600" size={40} />
+              </div>
+            ) : (
+              <div ref={mapRef} className="h-full w-full" />
+            )}
           </div>
         </div>
       </div>
@@ -1074,7 +1147,8 @@ const Booking: React.FC = () => {
           }}
         />
       )}
-    </div >
+
+    </div>
   );
 };
 

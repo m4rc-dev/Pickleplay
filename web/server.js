@@ -3,7 +3,7 @@ import cors from 'cors';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: '.env.local' });
+dotenv.config(); // Loads from .env by default
 
 const app = express();
 const PORT = 5001; // Changed from 5000
@@ -34,7 +34,7 @@ app.get('/api/v1/news/articles', async (req, res) => {
 
     const page = req.query.page || 1;
     const category = req.query.category || ''; // Optional category filter
-    
+
     // Build URL with optional category filter
     let url = `${NEWS_API_URL}/api/external/articles?page=${page}`;
     if (category) {

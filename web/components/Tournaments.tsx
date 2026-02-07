@@ -201,7 +201,7 @@ const TournamentJoinCard: React.FC<{
             {/* Image Section */}
             <div className="h-56 relative overflow-hidden bg-slate-100">
                 <img
-                    src={tournament.image || "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800"}
+                    src={tournament.image || "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800"}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                     alt={tournament.name}
                 />
