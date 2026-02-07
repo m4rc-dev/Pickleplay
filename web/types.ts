@@ -122,6 +122,7 @@ export interface SocialPost {
   comments: SocialComment[];
   timestamp: string;
   tags?: string[];
+  isEdited?: boolean;
 }
 
 export interface Tournament {
@@ -167,4 +168,19 @@ export interface CourtEvent {
   color?: string; // Hex color for calendar display
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CourtReview {
+  id: string;
+  court_id: string;
+  user_id: string;
+  booking_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    full_name: string;
+    avatar_url: string;
+  };
 }

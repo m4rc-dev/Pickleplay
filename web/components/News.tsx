@@ -94,7 +94,7 @@ function formatDateLong(dateStr: string) {
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
   return (
-    <div className="animate-fade-in pb-20 pt-32 max-w-4xl mx-auto">
+    <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
       {/* Back Button */}
       <button
         onClick={onBack}
@@ -290,7 +290,7 @@ const News: React.FC = () => {
   // ── Error State ──
   if (error) {
     return (
-      <div className="space-y-12 animate-fade-in pb-20 pt-32">
+      <div className="space-y-12 animate-fade-in pb-20">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
@@ -318,7 +318,7 @@ const News: React.FC = () => {
   // ── Empty State (no articles yet) ──
   if (!loading && articles.length === 0) {
     return (
-      <div className="space-y-12 animate-fade-in pb-20 pt-32">
+      <div className="space-y-12 animate-fade-in pb-20">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
@@ -368,7 +368,7 @@ const News: React.FC = () => {
   const gridArticles = articles.slice(1);
 
   return (
-    <div className="space-y-12 animate-fade-in pb-20 pt-32">
+    <div className="space-y-12 animate-fade-in pb-20">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -500,8 +500,8 @@ const News: React.FC = () => {
                       key={pageNum}
                       onClick={() => setPage(pageNum)}
                       className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pageNum === page
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                         }`}
                     >
                       {pageNum}
@@ -514,8 +514,8 @@ const News: React.FC = () => {
                     <button
                       onClick={() => setPage(pagination.last_page)}
                       className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pagination.last_page === page
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                         }`}
                     >
                       {pagination.last_page}

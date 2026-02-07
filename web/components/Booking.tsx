@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -76,6 +76,7 @@ const Booking: React.FC = () => {
 
   // Receipt state
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
 
   // Get map position from URL params
@@ -601,7 +602,8 @@ const Booking: React.FC = () => {
             end_time: endTimeFormatted,
             total_price: selectedCourt.pricePerHour,
             status: 'pending',
-            payment_status: 'unpaid'
+            payment_status: 'unpaid',
+            is_checked_in: false
           })
           .select()
           .single();
@@ -656,11 +658,12 @@ const Booking: React.FC = () => {
           endTime: endTimeFormatted,
           pricePerHour: selectedCourt.pricePerHour,
           totalPrice: selectedCourt.pricePerHour,
-          playerName: profileData?.full_name || profileData?.username || 'Guest'
+          playerName: profileData?.full_name || profileData?.username || 'Guest',
+          status: 'pending'
         });
 
-        // Show receipt instead of just success message
-        setShowReceipt(true);
+        // Show success modal first
+        setShowSuccessModal(true);
         setIsBooked(true);
 
         // Clear selection after a delay
@@ -1175,6 +1178,49 @@ const Booking: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl p-12 text-center space-y-8 animate-in zoom-in-95 duration-300">
+            <div className="w-24 h-24 bg-lime-50 rounded-[32px] flex items-center justify-center mx-auto">
+              <CircleCheck size={48} className="text-lime-500" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Successfully Booked!</h2>
+              <p className="text-slate-500 font-medium">Your court time has been reserved. You can find your booking details in "My Bookings".</p>
+            </div>
+            <div className="space-y-4">
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setShowReceipt(true);
+                }}
+                className="w-full py-5 bg-blue-600 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+              >
+                View My Receipt
+              </button>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setIsBooked(false);
+                  setSelectedSlot(null);
+                }}
+                className="w-full py-5 bg-slate-900 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+              >
+                Book Another Slot
+              </button>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full py-5 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Receipt Modal */}
       {showReceipt && receiptData && (

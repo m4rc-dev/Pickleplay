@@ -1,60 +1,90 @@
 import { supabase } from './supabase';
 
-/**
- * Court Reviews Service
- */
-
-/**
- * Submit a review for a court
- */
-export const submitCourtReview = async (reviewData: {
+export interface CourtReview {
+    id: string;
     court_id: string;
     user_id: string;
-    booking_id: string;
+    booking_id?: string;
     rating: number;
-    comment: string;
-}) => {
-    try {
-        const { data, error } = await supabase
-            .from('court_reviews')
-            .insert([reviewData])
-            .select()
-            .single();
-
-        if (error) throw error;
-        return { success: true, data };
-    } catch (err: any) {
-        console.error('Error submitting court review:', err);
-        return { success: false, message: err.message };
-    }
-};
+    title?: string;
+    comment?: string;
+    created_at: string;
+    user?: {
+        username?: string;
+        full_name?: string;
+        avatar_url?: string;
+    };
+}
 
 /**
- * Get reviews for a specific court
+ * Get all reviews for a specific court
  */
-export const getCourtReviews = async (courtId: string) => {
+export const getCourtReviews = async (courtId: string): Promise<{ data: CourtReview[] | null; error: any }> => {
     try {
         const { data, error } = await supabase
             .from('court_reviews')
             .select(`
-                *,
-                user:profiles(full_name, avatar_url)
-            `)
+        *,
+        profiles:user_id (
+          username,
+          full_name,
+          avatar_url
+        )
+      `)
             .eq('court_id', courtId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        return { success: true, data };
-    } catch (err: any) {
+
+        // Transform the data to flatten the user profile
+        const reviews = (data || []).map((review: any) => ({
+            ...review,
+            user: review.profiles
+        }));
+
+        return { data: reviews, error: null };
+    } catch (err) {
         console.error('Error fetching court reviews:', err);
-        return { success: false, message: err.message };
+        return { data: null, error: err };
     }
 };
 
 /**
- * Check if a booking has already been reviewed
+ * Submit a new court review
  */
-export const hasUserReviewedBooking = async (bookingId: string, userId: string) => {
+export const submitCourtReview = async (
+    courtId: string,
+    userId: string,
+    rating: number,
+    comment?: string,
+    title?: string,
+    bookingId?: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase
+            .from('court_reviews')
+            .insert({
+                court_id: courtId,
+                user_id: userId,
+                booking_id: bookingId,
+                rating,
+                title,
+                comment
+            });
+
+        if (error) throw error;
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('Error submitting review:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+/**
+ * Check if user has already reviewed a specific booking
+ */
+export const hasUserReviewedBooking = async (bookingId: string, userId: string): Promise<boolean> => {
     try {
         const { data, error } = await supabase
             .from('court_reviews')
@@ -64,9 +94,34 @@ export const hasUserReviewedBooking = async (bookingId: string, userId: string) 
             .maybeSingle();
 
         if (error) throw error;
-        return { success: true, reviewed: !!data };
-    } catch (err: any) {
+
+        return !!data;
+    } catch (err) {
         console.error('Error checking review status:', err);
-        return { success: false, message: err.message };
+        return false;
+    }
+};
+
+/**
+ * Get average rating for a court
+ */
+export const getCourtAverageRating = async (courtId: string): Promise<{ average: number; count: number }> => {
+    try {
+        const { data, error } = await supabase
+            .from('court_reviews')
+            .select('rating')
+            .eq('court_id', courtId);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            return { average: 0, count: 0 };
+        }
+
+        const sum = data.reduce((acc, review) => acc + review.rating, 0);
+        return { average: Math.round((sum / data.length) * 10) / 10, count: data.length };
+    } catch (err) {
+        console.error('Error getting average rating:', err);
+        return { average: 0, count: 0 };
     }
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { X, QrCode, CheckCircle2, AlertCircle, Camera } from 'lucide-react';
+import { X, QrCode, CheckCircle2, AlertCircle, Camera, Banknote, DollarSign } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface BookingScannerProps {
@@ -25,7 +25,8 @@ interface BookingDetails {
     total_price: number;
     status: string;
     payment_status: string;
-    checked_in_at?: string;
+    payment_method: string;
+    is_checked_in: boolean;
     courts: {
         name: string;
         owner_id: string;
@@ -45,6 +46,9 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
     const [isVerifying, setIsVerifying] = useState(false);
     const [error, setError] = useState<string>('');
     const [success, setSuccess] = useState(false);
+    const [showCashFlow, setShowCashFlow] = useState(false);
+    const [cashReceived, setCashReceived] = useState<string>('');
+    const [change, setChange] = useState<number>(0);
 
     const onScanSuccess = async (decodedText: string) => {
         try {
@@ -183,7 +187,7 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
             }
 
             // Check if already checked in
-            if (booking.checked_in_at) {
+            if (booking.is_checked_in) {
                 throw new Error('This booking has already been checked in');
             }
 
@@ -196,36 +200,43 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
         }
     };
 
-    const handleCheckIn = async () => {
+    const handleCheckIn = async (isPaidViaCash = false) => {
         if (!bookingDetails) return;
-
         setIsVerifying(true);
         setError('');
 
         try {
-            // Update booking with check-in timestamp
+            const updates: any = {
+                is_checked_in: true,
+                status: 'confirmed'
+            };
+
+            if (isPaidViaCash) {
+                updates.payment_status = 'paid';
+                updates.amount_tendered = parseFloat(cashReceived);
+                updates.change_amount = change;
+            }
+
             const { error: updateError } = await supabase
                 .from('bookings')
-                .update({
-                    checked_in_at: new Date().toISOString(),
-                    status: 'confirmed'
-                })
+                .update(updates)
                 .eq('id', bookingDetails.id);
 
             if (updateError) throw updateError;
-
             setSuccess(true);
-
-            // Auto-close after 2 seconds
-            setTimeout(() => {
-                onClose();
-            }, 2000);
+            setTimeout(() => onClose(), 2000);
         } catch (err: any) {
             setError(err.message || 'Failed to check in');
-            console.error('Check-in error:', err);
         } finally {
             setIsVerifying(false);
         }
+    };
+
+    const calculateChange = (value: string) => {
+        const received = parseFloat(value) || 0;
+        const total = bookingDetails?.total_price || 0;
+        setCashReceived(value);
+        setChange(Math.max(0, received - total));
     };
 
     const handleReset = () => {
@@ -295,68 +306,119 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
 
                     {bookingDetails && !success && (
                         <div className="space-y-4">
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
-                                <CheckCircle2 className="mx-auto text-emerald-600 mb-3" size={48} />
-                                <h3 className="text-lg font-black text-emerald-900 mb-1">Valid Booking</h3>
-                                <p className="text-sm text-emerald-700">Ready to check in</p>
-                            </div>
+                            {!showCashFlow ? (
+                                <>
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+                                        <CheckCircle2 className="mx-auto text-emerald-600 mb-3" size={48} />
+                                        <h3 className="text-lg font-black text-emerald-900 mb-1">Valid Booking</h3>
+                                        <p className="text-sm text-emerald-700">Ready to check in</p>
+                                    </div>
 
-                            <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
-                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Booking Details</h4>
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
+                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Booking Details</h4>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-slate-600">Player</span>
+                                            <span className="text-sm font-bold text-slate-900">{bookingDetails.profiles.full_name || bookingDetails.profiles.username}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-slate-600">Court</span>
+                                            <span className="text-sm font-bold text-slate-900">{bookingDetails.courts.name}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-slate-600 text-right">Payment Status</span>
+                                            <div className="flex flex-col items-end">
+                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${bookingDetails.payment_status === 'paid' ? 'bg-lime-100 text-lime-700' : 'bg-red-100 text-red-600'}`}>
+                                                    {bookingDetails.payment_status}
+                                                </span>
+                                                {bookingDetails.payment_status === 'unpaid' && (
+                                                    <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase italic">Method: {bookingDetails.payment_method}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                                            <span className="text-sm font-black text-blue-600 uppercase">Total Amount</span>
+                                            <span className="text-lg font-black text-slate-950">₱{bookingDetails.total_price.toFixed(2)}</span>
+                                        </div>
+                                    </div>
 
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-600">Player</span>
-                                    <span className="text-sm font-bold text-slate-900">
-                                        {bookingDetails.profiles.full_name || bookingDetails.profiles.username}
-                                    </span>
-                                </div>
+                                    <div className="flex gap-3">
+                                        <button onClick={handleReset} className="flex-1 px-6 py-4 bg-slate-100 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Cancel</button>
 
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-600">Court</span>
-                                    <span className="text-sm font-bold text-slate-900">{bookingDetails.courts.name}</span>
-                                </div>
+                                        {bookingDetails.payment_status === 'unpaid' && bookingDetails.payment_method === 'cash' ? (
+                                            <button
+                                                onClick={() => setShowCashFlow(true)}
+                                                className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                                            >
+                                                <Banknote size={18} />
+                                                Receive Cash
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleCheckIn()}
+                                                disabled={isVerifying}
+                                                className="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+                                            >
+                                                {isVerifying ? 'Processing...' : 'Confirm Check-In'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="space-y-6 animate-in slide-in-from-right-8 duration-300">
+                                    <div className="bg-blue-50 border border-blue-100 rounded-3xl p-8 text-center space-y-4">
+                                        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-blue-200">
+                                            <Banknote size={32} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-blue-400 uppercase tracking-widest mb-1">Total Bill</p>
+                                            <h3 className="text-4xl font-black text-blue-900 tracking-tighter">₱{bookingDetails.total_price.toFixed(2)}</h3>
+                                        </div>
+                                    </div>
 
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-600">Date</span>
-                                    <span className="text-sm font-bold text-slate-900">
-                                        {new Date(bookingDetails.date).toLocaleDateString()}
-                                    </span>
-                                </div>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cash Received</label>
+                                            <div className="relative">
+                                                <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-400">₱</span>
+                                                <input
+                                                    type="number"
+                                                    value={cashReceived}
+                                                    onChange={(e) => calculateChange(e.target.value)}
+                                                    placeholder="0.00"
+                                                    autoFocus
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-[24px] py-6 pl-12 pr-6 text-2xl font-black text-slate-950 focus:border-blue-500 transition-all outline-none"
+                                                />
+                                            </div>
+                                        </div>
 
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-600">Time</span>
-                                    <span className="text-sm font-bold text-slate-900">
-                                        {bookingDetails.start_time} - {bookingDetails.end_time}
-                                    </span>
-                                </div>
+                                        <div className="p-6 bg-slate-900 rounded-[32px] flex justify-between items-center text-white">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
+                                                    <DollarSign className="text-lime-400" size={20} />
+                                                </div>
+                                                <span className="text-xs font-black uppercase tracking-widest">Change</span>
+                                            </div>
+                                            <span className="text-2xl font-black text-lime-400">₱{change.toFixed(2)}</span>
+                                        </div>
+                                    </div>
 
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-600">Amount</span>
-                                    <span className="text-sm font-bold text-slate-900">₱{bookingDetails.total_price.toFixed(2)}</span>
-                                </div>
-                            </div>
-
-                            {error && (
-                                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                                    <p className="text-sm font-bold text-red-900">{error}</p>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setShowCashFlow(false)}
+                                            className="px-6 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            onClick={() => handleCheckIn(true)}
+                                            disabled={parseFloat(cashReceived) < bookingDetails.total_price || isVerifying}
+                                            className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50"
+                                        >
+                                            Complete Payment & Check-In
+                                        </button>
+                                    </div>
                                 </div>
                             )}
-
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={handleReset}
-                                    className="flex-1 px-6 py-3 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleCheckIn}
-                                    disabled={isVerifying}
-                                    className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold text-sm hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isVerifying ? 'Processing...' : 'Confirm Check-In'}
-                                </button>
-                            </div>
                         </div>
                     )}
 

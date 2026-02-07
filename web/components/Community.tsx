@@ -16,10 +16,18 @@ import {
   Trophy as TrophyIcon,
   UserCheck,
   X,
-  Reply
+  Reply,
+  Newspaper,
+  Calendar,
+  ArrowRight,
+  ChevronRight,
+  Trash2,
+  Edit2,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { useRef } from 'react';
-import { SocialPost, SocialComment, UserRole } from '../types';
+import { SocialPost, SocialComment, UserRole, NewsArticle } from '../types';
 import { PostSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 
@@ -58,6 +66,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
   const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, avatar: string, role: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const trendingTags = React.useMemo(() => {
@@ -115,7 +124,31 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
       }
       setIsLoading(false);
     };
+    const fetchNews = async () => {
+      try {
+        const response = await fetch('/api/v1/news/articles');
+        if (response.ok) {
+          const result = await response.json();
+          const rawArticles = result?.data?.data || result?.data || result?.articles || [];
+          const normalized: NewsArticle[] = rawArticles.slice(0, 5).map((raw: any) => ({
+            id: String(raw.id),
+            title: raw.title || 'Untitled',
+            excerpt: raw.excerpt || (raw.body || raw.content || '').substring(0, 150) + '...',
+            category: (raw.category || raw.category_name || 'Community') as any,
+            date: new Date(raw.published_at || raw.created_at || new Date()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            image: raw.image || raw.image_url || raw.featured_image || 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800',
+            readTime: raw.read_time || raw.reading_time || '3 min read',
+            author: raw.author || raw.author_name || 'Staff'
+          }));
+          setNewsArticles(normalized);
+        }
+      } catch (err) {
+        console.error('Error fetching news:', err);
+      }
+    };
+
     fetchUserData();
+    fetchNews();
   }, []);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +223,8 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         tags: data.tags || [],
         likes: [],
         comments: [],
-        timestamp: data.created_at
+        timestamp: data.created_at,
+        isEdited: false
       };
 
       setPosts(prevPosts => [newPost, ...prevPosts]);
@@ -325,6 +359,41 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                 </form>
               </div>
 
+              {/* Featured News in Feed */}
+              {newsArticles.length > 0 && (
+                <Link to="/news" className="block bg-slate-900 rounded-[48px] overflow-hidden shadow-2xl relative group border border-slate-800 transition-all hover:shadow-indigo-500/10">
+                  <div className="aspect-[21/9] w-full relative">
+                    <img src={newsArticles[0].image} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+                  </div>
+                  <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">FEATURED NEWS</span>
+                      <span className="text-white/60 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                        <Calendar size={12} className="text-lime-400" /> {newsArticles[0].date}
+                      </span>
+                    </div>
+                    <h3 className="text-2xl md:text-3xl font-black text-white tracking-tighter leading-tight mb-4 group-hover:text-lime-400 transition-colors">
+                      {newsArticles[0].title}
+                    </h3>
+                    <p className="text-slate-300 text-sm font-medium leading-relaxed line-clamp-2 mb-6 opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0">
+                      {newsArticles[0].excerpt}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white font-black text-[10px]">
+                          {newsArticles[0].author.charAt(0)}
+                        </div>
+                        <span className="text-[10px] text-white/80 font-black uppercase tracking-widest">{newsArticles[0].author}</span>
+                      </div>
+                      <span className="text-[10px] font-black text-lime-400 uppercase tracking-widest flex items-center gap-2">
+                        READ STORY <ArrowRight size={14} />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+
               <div className="space-y-8">
                 {isLoading ? (
                   Array(3).fill(0).map((_, i) => <PostSkeleton key={i} />)
@@ -399,6 +468,51 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
             <TrophyIcon className="absolute -bottom-10 -right-10 w-48 h-48 text-white/10 rotate-12" />
           </div>
 
+          {/* News Sidebar Summary */}
+          <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-8 relative z-10">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">LATEST NEWS</h3>
+              <Link to="/news" className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors flex items-center gap-1">
+                ALL <ChevronRight size={12} />
+              </Link>
+            </div>
+
+            <div className="space-y-8 relative z-10">
+              {newsArticles.slice(0, 3).map((article, idx) => (
+                <Link key={article.id} to="/news" className="block group/item">
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
+                      <img src={article.image} className="w-full h-full object-cover group-hover/item:scale-110 transition-transform duration-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[8px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1 block">{article.category}</span>
+                      <h4 className="font-black text-slate-950 text-xs leading-tight group-hover/item:text-indigo-600 transition-colors line-clamp-2">
+                        {article.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-2 text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span>{article.date}</span>
+                        <span>•</span>
+                        <span>{article.readTime}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+
+              {newsArticles.length === 0 && !isLoading && (
+                <div className="text-center py-6">
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <Newspaper size={20} className="text-slate-300" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">No updates today</p>
+                </div>
+              )}
+            </div>
+
+            {/* Decorative background element */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-50/50 rounded-full blur-3xl -z-0" />
+          </div>
+
           <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] mb-8">TRENDING TAGS</h3>
             <div className="space-y-4">
@@ -434,6 +548,75 @@ export const PostCard: React.FC<{
 }> = ({ post, onLike, isExpanded, onToggleComments, postsState, setPostsState, currentUserId, currentUserProfile }) => {
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleUpdatePost = async () => {
+    if (!editContent.trim() || editContent === post.content) {
+      setIsEditing(false);
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('community_posts')
+        .update({
+          content: editContent,
+          is_edited: true // Flag as edited
+        })
+        .eq('id', post.id);
+
+      if (error) {
+        console.warn('is_edited column might be missing, falling back to simple update:', error.message);
+        const { error: fallbackError } = await supabase
+          .from('community_posts')
+          .update({ content: editContent })
+          .eq('id', post.id);
+
+        if (fallbackError) throw fallbackError;
+      }
+
+      setPostsState(current => current.map(p => p.id === post.id ? { ...p, content: editContent, isEdited: true } : p));
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Error updating post:', err);
+      alert('Failed to update post');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('community_posts')
+        .delete()
+        .eq('id', post.id);
+
+      if (error) throw error;
+
+      setPostsState(current => current.filter(p => p.id !== post.id));
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      alert('Failed to delete post');
+    }
+  };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -493,14 +676,71 @@ export const PostCard: React.FC<{
               <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest">{post.authorRole}</p>
             </div>
           </Link>
-          <button className="p-2 text-slate-300 hover:text-slate-950 transition-colors">
-            <MoreHorizontal size={24} />
-          </button>
+
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-2 text-slate-300 hover:text-slate-950 transition-colors"
+            >
+              <MoreHorizontal size={24} />
+            </button>
+
+            {showMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                {post.authorId === currentUserId ? (
+                  <>
+                    <button
+                      onClick={() => { setIsEditing(true); setShowMenu(false); }}
+                      className="w-full px-6 py-2.5 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+                    >
+                      <Edit2 size={16} /> Edit Post
+                    </button>
+                    <button
+                      onClick={() => { handleDeletePost(); setShowMenu(false); }}
+                      className="w-full px-6 py-2.5 text-left text-[11px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 flex items-center gap-3 transition-colors"
+                    >
+                      <Trash2 size={16} /> Delete Post
+                    </button>
+                  </>
+                ) : (
+                  <button className="w-full px-6 py-2.5 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 flex items-center gap-3 transition-colors">
+                    Report Post
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <p className="text-slate-700 text-lg leading-relaxed mb-6 font-medium">
-          {formatContent(post.content)}
-        </p>
+        {isEditing ? (
+          <div className="space-y-4 mb-6">
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none h-32"
+              placeholder="Edit your thoughts..."
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setIsEditing(false); setEditContent(post.content); }}
+                className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all flex items-center gap-2"
+              >
+                <RotateCcw size={14} /> Cancel
+              </button>
+              <button
+                onClick={handleUpdatePost}
+                disabled={isUpdating || !editContent.trim()}
+                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isUpdating ? 'SAVING...' : <><Check size={14} /> SAVE CHANGES</>}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-700 text-lg leading-relaxed mb-6 font-medium">
+            {formatContent(post.content)}
+          </p>
+        )}
 
         {post.image && (
           <div className="rounded-3xl overflow-hidden mb-6 border border-slate-100">
@@ -521,6 +761,7 @@ export const PostCard: React.FC<{
             </button>
           </div>
           <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-2">
+            {post.isEdited && <span className="text-indigo-400 italic lowercase tracking-normal">Edited •</span>}
             <Clock size={12} /> {new Date(post.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>

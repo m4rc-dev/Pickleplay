@@ -614,7 +614,7 @@ const NavigationHandler: React.FC<{
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><News /></div>} />
+              <Route path="/news" element={<div className="p-4 md:p-8 max-w-[1800px] mx-auto w-full"><News /></div>} />
               <Route path="/academy" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/rankings" element={<div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
@@ -881,7 +881,8 @@ const App: React.FC = () => {
                   timestamp: r.created_at,
                   replies: []
                 }))
-            }))
+            })),
+          isEdited: p.is_edited || false
         }));
         setPosts(mappedPosts);
       } else if (postsError) {
@@ -1022,14 +1023,29 @@ const App: React.FC = () => {
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'community_post_likes' }, (payload) => {
         const oldLike = payload.old as any;
-        // Note: DELETE payload only has 'old' and only if primary key is present
-        // Since post_id, profile_id is PK, it should be there.
         setPosts(prev => prev.map(p => {
           if (p.id === oldLike.post_id) {
             return { ...p, likes: p.likes.filter(id => id !== oldLike.profile_id) };
           }
           return p;
         }));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'community_posts' }, (payload) => {
+        const updatedPost = payload.new as any;
+        setPosts(prev => prev.map(p => {
+          if (p.id === updatedPost.id) {
+            return {
+              ...p,
+              content: updatedPost.content,
+              isEdited: updatedPost.is_edited || true
+            };
+          }
+          return p;
+        }));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'community_posts' }, (payload) => {
+        const deletedId = payload.old.id;
+        setPosts(prev => prev.filter(p => p.id !== deletedId));
       })
       .subscribe();
 
