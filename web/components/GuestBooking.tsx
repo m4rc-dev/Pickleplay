@@ -389,6 +389,12 @@ const GuestBooking: React.FC = () => {
                                 Book a Court <span className="text-blue-600">in {(searchParams.get('loc') || searchQuery || 'Cebu City').split(',')[0]}.</span>
                             </h1>
                         </div>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="px-6 md:px-10 py-3 md:py-5 bg-lime-400 border-2 border-lime-400 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-2xl shadow-lime-200/50 shrink-0"
+                        >
+                            Back to Home
+                        </button>
                     </div>
 
                     {/* Filter Pills */}
