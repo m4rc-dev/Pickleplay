@@ -25,9 +25,10 @@ import {
   Instagram,
   Twitter,
   Mail,
-  Phone
+  Phone,
+  Calendar
 } from 'lucide-react';
-import { Product, NewsArticle } from '../types';
+import { Product, NewsArticle, Tournament } from '../types';
 import { supabase } from '../services/supabase';
 
 const HERO_IMAGES = [
@@ -84,6 +85,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 interface CourtWithDistance {
+  id: string;
   name: string;
   location: string;
   city: string;
@@ -151,7 +153,73 @@ const Home: React.FC = () => {
   const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [isTournamentsLoading, setIsTournamentsLoading] = useState(true);
+  const [latestNews, setLatestNews] = useState<any[]>([]);
+  const [isNewsLoading, setIsNewsLoading] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchTournaments();
+    fetchLatestNews();
+  }, []);
+
+  const fetchLatestNews = async () => {
+    try {
+      const response = await fetch('/api/v1/news/articles?page=1');
+      if (!response.ok) throw new Error('Failed to fetch news');
+      const result = await response.json();
+
+      // Extract articles from nested structure
+      const rawArticles = result?.data?.data || result?.data || [];
+
+      // Map to compatible format and limit to 2
+      const normalized = rawArticles.slice(0, 2).map((a: any) => ({
+        id: String(a.id),
+        title: a.title,
+        category: a.category || a.category_name || 'Pickleball',
+        date: new Date(a.published_at || a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        image: a.image || a.image_url || a.featured_image || 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800'
+      }));
+
+      setLatestNews(normalized);
+    } catch (err) {
+      console.error('Error fetching dynamic news:', err);
+    } finally {
+      setIsNewsLoading(false);
+    }
+  };
+
+  const fetchTournaments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .order('date', { ascending: true })
+        .limit(3);
+
+      if (error) throw error;
+
+      const mappedData = (data || []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        date: t.date,
+        location: t.location,
+        prizePool: t.prize_pool,
+        status: t.status,
+        skillLevel: t.skill_level,
+        maxPlayers: t.max_players,
+        registeredCount: t.registered_count,
+        image: t.image_url
+      }));
+
+      setTournaments(mappedData);
+    } catch (err) {
+      console.error('Error fetching tournaments:', err);
+    } finally {
+      setIsTournamentsLoading(false);
+    }
+  };
 
   // Fetch courts from Supabase for search suggestions
   useEffect(() => {
@@ -160,7 +228,7 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('courts')
           .select(`
-            name, base_price, latitude, longitude, location_id,
+            id, name, base_price, latitude, longitude, location_id,
             locations (
               address,
               city,
@@ -175,6 +243,7 @@ const Home: React.FC = () => {
           const loc = (c as any).locations;
           const city = loc?.city || '';
           return {
+            id: c.id,
             name: c.name,
             location: city,
             city: city,
@@ -324,8 +393,6 @@ const Home: React.FC = () => {
     if (searchQuery.trim()) {
       navigate(`/booking?q=${encodeURIComponent(searchQuery.trim())}`);
       setShowSuggestions(false);
-    } else {
-      navigate('/booking');
     }
   };
 
@@ -376,18 +443,16 @@ const Home: React.FC = () => {
 
   const handlePlaceClick = () => {
     const cityName = userCity?.split(',')[0] || '';
-    setSearchQuery(cityName);
     setShowSuggestions(false);
     // Navigate with region coordinates for area zoom
     const regionCenter = REGION_CENTERS[userRegion || 'Luzon'];
-    navigate(`/booking?q=${encodeURIComponent(cityName)}&lat=${regionCenter.lat}&lng=${regionCenter.lng}&zoom=${regionCenter.zoom}`);
+    navigate(`/booking?loc=${encodeURIComponent(cityName)}&lat=${regionCenter.lat}&lng=${regionCenter.lng}&zoom=${regionCenter.zoom}`);
   };
 
   const handleSuggestedCityClick = (city: typeof SUGGESTED_CITIES[0]) => {
-    setSearchQuery(city.name);
     setShowSuggestions(false);
     setUserRegion(city.region); // Set region for court filtering
-    navigate(`/booking?q=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
+    navigate(`/booking?loc=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
   };
 
   return (
@@ -476,7 +541,11 @@ const Home: React.FC = () => {
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                   className="flex-1 bg-transparent border-none text-white px-2 md:px-6 text-sm md:text-xl font-medium outline-none placeholder:text-slate-600 min-w-0"
                 />
-                <button type="submit" className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-11 md:h-16 px-3 sm:px-5 md:px-10 rounded-full font-black flex items-center gap-1 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] sm:text-xs md:text-lg flex-shrink-0">
+                <button
+                  type="submit"
+                  disabled={!searchQuery.trim()}
+                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-11 md:h-16 px-3 sm:px-5 md:px-10 rounded-full font-black flex items-center gap-1 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] sm:text-xs md:text-lg flex-shrink-0"
+                >
                   LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
                 </button>
               </div>
@@ -587,7 +656,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Featured Courts Near You Section */}
+      {/* Featured Courts Section */}
       <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
@@ -595,7 +664,7 @@ const Home: React.FC = () => {
             <div>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
-                Featured Courts <span className="text-lime-500">Near You.</span>
+                Featured Courts <span className="text-lime-500">{userCity ? `In ${userCity.split(',')[0]}.` : "In The Philippines."}</span>
               </h2>
               {userCity && (
                 <p className="text-slate-500 font-medium mt-4 flex items-center gap-2">
@@ -612,7 +681,6 @@ const Home: React.FC = () => {
             </Link>
           </div>
 
-          {/* Courts Row - Horizontal Scroll */}
           {isLoadingLocation ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-4">
@@ -620,7 +688,7 @@ const Home: React.FC = () => {
                 <p className="text-slate-500 font-medium">Finding courts near you...</p>
               </div>
             </div>
-          ) : nearbyCourts.length > 0 ? (
+          ) : (nearbyCourts.length > 0 || courts.length > 0) ? (
             <div className="relative">
               {/* Left Scroll Button */}
               <button
@@ -644,18 +712,12 @@ const Home: React.FC = () => {
                 <ChevronRight size={24} className="text-slate-700" />
               </button>
 
-              {/* Left Fade Gradient */}
-              <div className="absolute left-0 top-0 bottom-4 w-16 bg-gradient-to-r from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
-
-              {/* Right Fade Gradient */}
-              <div className="absolute right-0 top-0 bottom-4 w-16 bg-gradient-to-l from-slate-50 to-transparent z-[5] pointer-events-none hidden md:block"></div>
-
               {/* Scrollable Container */}
               <div
                 id="courts-carousel"
                 className="flex gap-6 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
               >
-                {nearbyCourts.slice(0, 10).map((court, idx) => (
+                {(nearbyCourts.length > 0 ? nearbyCourts : courts).slice(0, 10).map((court, idx) => (
                   <div
                     key={idx}
                     className="flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 snap-start"
@@ -704,7 +766,7 @@ const Home: React.FC = () => {
                         <span className="text-lg font-medium text-slate-400">/hr</span>
                       </span>
                       <Link
-                        to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}
+                        to={`/court/${court.id}`}
                         className="inline-flex items-center text-white bg-blue-600 hover:bg-blue-700 border border-transparent focus:ring-4 focus:ring-blue-200 shadow-md font-black rounded-2xl text-base px-6 py-3 transition-all active:scale-95"
                       >
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -717,21 +779,30 @@ const Home: React.FC = () => {
                 ))}
               </div>
 
-              {/* Scroll Indicator Dots */}
-              <div className="flex justify-center gap-2 mt-4 md:hidden">
-                {nearbyCourts.slice(0, Math.min(10, nearbyCourts.length)).map((_, idx) => (
-                  <div key={idx} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
-                ))}
-              </div>
+              {/* Find Near Me button if GPS not enabled */}
+              {!gpsEnabled && (
+                <div className="mt-12 flex justify-center">
+                  <button
+                    onClick={getUserLocation}
+                    className="group relative px-10 py-5 bg-white border-2 border-slate-900 overflow-hidden rounded-2xl font-black text-sm uppercase tracking-widest transition-all hover:text-white"
+                  >
+                    <div className="absolute inset-0 bg-slate-900 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    <span className="relative z-10 flex items-center gap-3">
+                      <Navigation size={18} className="animate-pulse" />
+                      Find Courts Near Me
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="text-center py-16">
+            <div className="text-center py-20 bg-white/50 backdrop-blur-sm rounded-[40px] border border-dashed border-slate-200">
               <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <MapPin size={32} className="text-slate-400" />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">Enable Location to See Nearby Courts</h3>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Finding Courts for You</h3>
               <p className="text-slate-500 font-medium mb-6 max-w-md mx-auto">
-                Allow location access to discover pickleball courts near you and start playing today!
+                We're searching for the best pickleball spots in your area.
               </p>
               <button
                 onClick={getUserLocation}
@@ -870,19 +941,105 @@ const Home: React.FC = () => {
             </div>
           </div>
         </div>
-      </section>
+      </section >
+
+      {/* Tournaments Section - Real data from Supabase */}
+      < section className="py-20 md:py-32 bg-slate-950 relative overflow-hidden" >
+        {/* Abstract Background Accents */}
+        < div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[150px] -z-10" ></div >
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
+
+        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
+            <div className="max-w-2xl">
+              <p className="text-[10px] font-black text-lime-400 uppercase tracking-[0.4em] mb-4">COMPETITIVE CIRCUIT / 2026</p>
+              <h2 className="text-4xl md:text-6xl lg:text-7xl font-black text-white tracking-tighter leading-[0.9] uppercase">
+                Elite PH <br />
+                <span className="text-lime-400 italic">Tournaments.</span>
+              </h2>
+            </div>
+            <Link
+              to="/tournaments"
+              className="group flex items-center gap-4 bg-white/5 border border-white/10 hover:bg-white/10 text-white px-8 py-4 rounded-2xl transition-all"
+            >
+              <span className="text-xs font-black uppercase tracking-widest">View All Events</span>
+              <div className="w-8 h-8 rounded-full bg-lime-400 flex items-center justify-center text-slate-950 group-hover:scale-110 transition-transform">
+                <ArrowRight size={16} />
+              </div>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {isTournamentsLoading ? (
+              Array(3).fill(0).map((_, i) => (
+                <div key={i} className="aspect-[4/5] rounded-[40px] bg-white/5 animate-pulse border border-white/10"></div>
+              ))
+            ) : tournaments.length > 0 ? (
+              tournaments.map((tournament) => (
+                <Link
+                  to="/tournaments"
+                  key={tournament.id}
+                  className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-white/10 bg-slate-900 transition-all hover:scale-[1.02] shadow-2xl"
+                >
+                  <img
+                    src={tournament.image || "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800"}
+                    className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-1000"
+                    alt={tournament.name}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+
+                  {/* Status Badge */}
+                  <div className="absolute top-8 left-8">
+                    <span className="bg-lime-400 text-slate-950 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
+                      {tournament.status}
+                    </span>
+                  </div>
+
+                  <div className="absolute bottom-10 left-10 right-10">
+                    <div className="flex items-center gap-2 text-lime-400 text-[10px] font-black uppercase tracking-widest mb-4">
+                      <Trophy size={14} />
+                      {tournament.prizePool || "Ranked Event"}
+                    </div>
+                    <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight leading-tight uppercase mb-6 group-hover:text-lime-400 transition-colors">
+                      {tournament.name}
+                    </h3>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 text-slate-400">
+                        <Calendar size={16} className="text-white" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">
+                          {new Date(tournament.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-slate-400">
+                        <MapPin size={16} className="text-white" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest truncate">{tournament.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="col-span-full py-20 text-center bg-white/5 rounded-[40px] border border-dashed border-white/10">
+                <Trophy className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">No live tournaments found</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section >
 
       {/* Marquee */}
-      <div className="bg-slate-50 py-3 md:py-4 border-y border-slate-100 overflow-hidden relative">
+      < div className="bg-slate-50 py-3 md:py-4 border-y border-slate-100 overflow-hidden relative" >
         <div className="animate-marquee whitespace-nowrap flex items-center gap-12 md:gap-24">
           {[...PARTNERS, ...PARTNERS].map((partner, i) => (
             <span key={i} className="text-slate-900/5 font-black text-4xl md:text-6xl tracking-tighter italic select-none uppercase">{partner}</span>
           ))}
         </div>
-      </div>
+      </div >
 
-      {/* News Highlight Section */}
-      <section className="py-16 md:py-24 bg-white">
+      {/* News Highlight Section - Real data from HomesPh API */}
+      < section className="py-16 md:py-24 bg-white" >
         <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 md:mb-12 gap-6">
             <div>
@@ -895,27 +1052,37 @@ const Home: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-10">
-            {LATEST_NEWS.map((article) => (
-              <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
-                <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-                <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
-                  <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
-                  <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">{article.title}</h3>
-                </div>
-                <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                  {article.date}
-                </div>
-              </Link>
-            ))}
+            {isNewsLoading ? (
+              Array(2).fill(0).map((_, i) => (
+                <div key={i} className="aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] bg-slate-100 animate-pulse border border-slate-200"></div>
+              ))
+            ) : latestNews.length > 0 ? (
+              latestNews.map((article) => (
+                <Link to="/news" key={article.id} className="group relative aspect-video md:aspect-[21/9] rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-200 shadow-sm bg-slate-900">
+                  <img src={article.image} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700" alt={article.title} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+                  <div className="absolute bottom-6 left-6 right-6 md:bottom-10 md:left-10 md:right-10">
+                    <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest mb-3 md:mb-4 inline-block">{article.category}</span>
+                    <h3 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight group-hover:text-lime-400 transition-colors uppercase">{article.title}</h3>
+                  </div>
+                  <div className="absolute top-6 right-6 md:top-10 md:right-10 bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-2xl text-[8px] md:text-[10px] font-black uppercase tracking-widest">
+                    {article.date}
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="col-span-full py-12 text-center bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">No recent news found</p>
+              </div>
+            )}
           </div>
         </div>
-      </section>
+      </section >
 
 
 
       {/* Final CTA */}
-      <section className="py-12 px-6 md:px-24 lg:px-32">
+      <section className="bg-lime-400 py-16 px-6 md:px-24 lg:px-32">
         <div className="max-w-[1800px] mx-auto bg-slate-950 rounded-[40px] md:rounded-[60px] p-10 md:p-20 text-center relative overflow-hidden shadow-3xl">
           <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-blue-600/20 blur-[120px]"></div>
           <div className="absolute bottom-0 left-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-lime-400/10 blur-[120px]"></div>
@@ -956,7 +1123,7 @@ const Home: React.FC = () => {
             </div>
           </div>
         </div>
-      </section>
+      </section >
 
       <footer className="py-20 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white">
         <div className="max-w-[1800px] mx-auto">

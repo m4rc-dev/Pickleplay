@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode, Play } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { isTimeSlotBlocked } from '../../services/courtEvents';
 import { autoCancelLateBookings } from '../../services/bookings';
@@ -26,6 +27,7 @@ interface BookingRecord {
 
 const BookingsAdmin: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
+    const navigate = useNavigate();
     const [bookings, setBookings] = useState<BookingRecord[]>([]);
     const [myCourts, setMyCourts] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -209,6 +211,12 @@ const BookingsAdmin: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/booking')}
+                        className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                    >
+                        <Play size={18} fill="currentColor" /> Book A Court
+                    </button>
                     <button
                         onClick={() => setShowScanner(true)}
                         className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
