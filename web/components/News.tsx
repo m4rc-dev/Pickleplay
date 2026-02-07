@@ -94,7 +94,7 @@ function formatDateLong(dateStr: string) {
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
   return (
-    <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
+    <div className="animate-fade-in pt-8 pb-20 max-w-4xl mx-auto">
       {/* Back Button */}
       <button
         onClick={onBack}
