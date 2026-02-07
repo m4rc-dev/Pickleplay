@@ -16,11 +16,16 @@ import {
     Search,
     Info,
     AlertCircle,
-    Ban
+    Ban,
+    CreditCard,
+    Banknote
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { Court } from '../types';
+import { Court, CourtReview } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
+import { getCourtReviews } from '../services/reviews';
+import { MessageSquare, X, CircleCheck } from 'lucide-react';
+import Receipt from './Receipt';
 
 const TIME_SLOTS = [
     '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
@@ -81,6 +86,17 @@ const CourtDetail: React.FC = () => {
     const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
     const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
     const [user, setUser] = useState<any>(null);
+    const [reviews, setReviews] = useState<CourtReview[]>([]);
+    const [averageRating, setAverageRating] = useState<number>(0);
+    const [totalReviews, setTotalReviews] = useState<number>(0);
+    const [showReviewsModal, setShowReviewsModal] = useState(false);
+    const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+    // Payment and Receipt State
+    const [selectedBookingForReceipt, setSelectedBookingForReceipt] = useState<any | null>(null);
+    const [showReceiptModal, setShowReceiptModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online' | null>(null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -141,7 +157,26 @@ const CourtDetail: React.FC = () => {
         };
 
         fetchCourtDetails();
+        fetchReviews();
     }, [courtId, navigate]);
+
+    const fetchReviews = async () => {
+        if (!courtId) return;
+        setIsLoadingReviews(true);
+        const result = await getCourtReviews(courtId);
+        if (!result.error && result.data) {
+            setReviews(result.data as CourtReview[]);
+            if (result.data.length > 0) {
+                const sum = result.data.reduce((acc: number, rev: any) => acc + rev.rating, 0);
+                setAverageRating(Math.round((sum / result.data.length) * 10) / 10);
+                setTotalReviews(result.data.length);
+            } else {
+                setAverageRating(0);
+                setTotalReviews(0);
+            }
+        }
+        setIsLoadingReviews(false);
+    };
 
     useEffect(() => {
         if (court) {
@@ -216,8 +251,13 @@ const CourtDetail: React.FC = () => {
         }
     };
 
+    const handleConfirmDetails = () => {
+        setShowConfirmModal(false);
+        setShowPaymentModal(true);
+    };
+
     const confirmBooking = async () => {
-        if (court && selectedSlot && user) {
+        if (court && selectedSlot && user && paymentMethod === 'cash') {
             setIsProcessing(true);
             try {
                 const [time, period] = selectedSlot.split(' ');
@@ -240,15 +280,40 @@ const CourtDetail: React.FC = () => {
                         end_time: endDateTime.toTimeString().split(' ')[0],
                         total_price: court.pricePerHour,
                         status: 'pending',
-                        payment_status: 'unpaid'
+                        payment_status: 'unpaid',
+                        payment_method: 'cash',
+                        is_checked_in: false
                     })
                     .select()
                     .single();
 
                 if (bookingError) throw bookingError;
 
+                // Fetch player name for receipt
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('full_name, username')
+                    .eq('id', user.id)
+                    .maybeSingle();
+
+                setSelectedBookingForReceipt({
+                    id: bookingData.id,
+                    courtName: court.name,
+                    courtLocation: court.location,
+                    date: targetDateStr,
+                    startTime: startDateTime.toTimeString().split(' ')[0],
+                    endTime: endDateTime.toTimeString().split(' ')[0],
+                    pricePerHour: court.pricePerHour,
+                    totalPrice: court.pricePerHour,
+                    playerName: profile?.full_name || profile?.username || 'Guest',
+                    status: 'pending',
+                    confirmedAt: null,
+                    paymentMethod: 'Cash',
+                    paymentStatus: 'unpaid'
+                });
+
                 setIsBooked(true);
-                setShowConfirmModal(false);
+                setShowPaymentModal(false);
                 setShowSuccessModal(true);
                 checkAvailability(); // Refresh the dots
             } catch (err: any) {
@@ -367,13 +432,17 @@ const CourtDetail: React.FC = () => {
                                     <span className="text-[10px] font-bold text-slate-400 lowercase">units</span>
                                 </div>
                             </div>
-                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Rating</p>
+                            <button
+                                onClick={() => setShowReviewsModal(true)}
+                                className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
+                            >
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600">Rating</p>
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-2xl font-black text-slate-950">4.9</span>
-                                    <Star size={16} className="text-amber-400 fill-amber-400" />
+                                    <span className="text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
+                                    <Star size={16} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
+                                    {totalReviews > 0 && <span className="text-[10px] font-bold text-slate-400">({totalReviews})</span>}
                                 </div>
-                            </div>
+                            </button>
                             <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Category</p>
                                 <span className="text-sm font-black text-slate-950 uppercase">{court.type}</span>
@@ -566,9 +635,75 @@ const CourtDetail: React.FC = () => {
                                 Cancel
                             </button>
                             <button
+                                onClick={handleConfirmDetails}
+                                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all"
+                            >
+                                Confirm Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Payment Modal */}
+            {showPaymentModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
+                    <div className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl p-10 space-y-8 animate-in zoom-in-95 duration-300">
+                        <div className="text-center space-y-2">
+                            <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Mode of Payment</h2>
+                            <p className="text-slate-500 font-medium">Select how you want to pay for your booking.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            {/* Online Payment (Disabled) */}
+                            <div className="relative opacity-50 cursor-not-allowed group">
+                                <div className="p-6 bg-slate-50 rounded-[32px] border-2 border-transparent flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center text-slate-400">
+                                        <CreditCard size={24} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-black text-slate-950 uppercase tracking-widest text-[10px]">Online Payment</p>
+                                        <p className="text-[10px] font-bold text-red-500 uppercase mt-0.5">This Feature is not yet available</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Cash Payment */}
+                            <button
+                                onClick={() => setPaymentMethod('cash')}
+                                className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center gap-4 text-left ${paymentMethod === 'cash'
+                                    ? 'bg-blue-50 border-blue-600'
+                                    : 'bg-white border-slate-100 hover:border-blue-200'
+                                    }`}
+                            >
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
+                                    }`}>
+                                    <Banknote size={24} />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="font-black text-slate-950 uppercase tracking-widest text-[10px]">Cash Payment</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">Walk In Payment</p>
+                                </div>
+                                {paymentMethod === 'cash' && (
+                                    <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                                        <CheckCircle2 size={14} />
+                                    </div>
+                                )}
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => setShowPaymentModal(false)}
+                                className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                            >
+                                Back
+                            </button>
+                            <button
                                 onClick={confirmBooking}
-                                disabled={isProcessing}
-                                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                disabled={!paymentMethod || isProcessing}
+                                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Confirm Booking'}
                             </button>
@@ -583,13 +718,22 @@ const CourtDetail: React.FC = () => {
                     <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" />
                     <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl p-12 text-center space-y-8 animate-in zoom-in-95 duration-300">
                         <div className="w-24 h-24 bg-lime-50 rounded-[32px] flex items-center justify-center mx-auto">
-                            <CheckCircle2 size={48} className="text-lime-500" />
+                            <CircleCheck size={48} className="text-lime-500" />
                         </div>
                         <div className="space-y-2">
                             <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Successfully Booked!</h2>
                             <p className="text-slate-500 font-medium">Your court time has been reserved. You can find your booking details in "My Bookings".</p>
                         </div>
                         <div className="space-y-4">
+                            <button
+                                onClick={() => {
+                                    setShowSuccessModal(false);
+                                    setShowReceiptModal(true);
+                                }}
+                                className="w-full py-5 bg-blue-600 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                            >
+                                View My Receipt
+                            </button>
                             <button
                                 onClick={bookAnother}
                                 className="w-full py-5 bg-slate-900 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
@@ -605,6 +749,13 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showReceiptModal && selectedBookingForReceipt && (
+                <Receipt
+                    bookingData={selectedBookingForReceipt}
+                    onClose={() => setShowReceiptModal(false)}
+                />
             )}
 
             {/* My Bookings Modal */}
@@ -665,6 +816,87 @@ const CourtDetail: React.FC = () => {
                         </div>
                         <div className="p-8 bg-slate-50 border-t border-slate-100 text-center">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">PicklePlay 2026 • Premium Network</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Reviews Modal */}
+            {showReviewsModal && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowReviewsModal(false)} />
+                    <div className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Court Reviews</h2>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="flex items-center">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <Star
+                                                key={star}
+                                                size={14}
+                                                className={star <= Math.round(averageRating) ? "text-amber-400 fill-amber-400" : "text-slate-200"}
+                                            />
+                                        ))}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-500">{averageRating} out of 5 ({totalReviews} reviews)</span>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowReviewsModal(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-slate-950 hover:border-slate-400 transition-all shadow-sm">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            {isLoadingReviews ? (
+                                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                                    <Loader2 className="animate-spin text-amber-500" size={32} />
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading feedback...</p>
+                                </div>
+                            ) : reviews.length > 0 ? (
+                                <div className="space-y-6">
+                                    {reviews.map((review) => (
+                                        <div key={review.id} className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                                                        <img
+                                                            src={review.user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(review.user?.full_name || 'User')}`}
+                                                            alt={review.user?.full_name}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-slate-900">{review.user?.full_name || 'Anonymous Player'}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            {new Date(review.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center px-3 py-1 bg-white rounded-full border border-slate-100 shadow-sm">
+                                                    <span className="text-xs font-black text-slate-900 mr-1">{review.rating}</span>
+                                                    <Star size={12} className="text-amber-400 fill-amber-400" />
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-slate-600 font-medium leading-relaxed italic">
+                                                "{review.comment}"
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-16 space-y-4">
+                                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto border-2 border-dashed border-slate-200">
+                                        <MessageSquare size={32} className="text-slate-300" />
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">No Reviews Yet</h3>
+                                    <p className="text-slate-500 font-medium max-w-xs mx-auto text-sm">Be the first to share your experience after playing at this venue!</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Verified Player Feedback • PicklePlay</p>
                         </div>
                     </div>
                 </div>

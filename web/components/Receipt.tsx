@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Printer, Download, CheckCircle2, QrCode, AlertCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Printer, Download, CheckCircle2, QrCode, AlertCircle, Clock, Banknote } from 'lucide-react';
 import QRCodeLib from 'qrcode';
+import { toPng } from 'html-to-image';
 
 interface ReceiptProps {
     bookingData: {
@@ -14,6 +16,12 @@ interface ReceiptProps {
         totalPrice: number;
         playerName?: string;
         ownerName?: string;
+        status?: string;
+        confirmedAt?: string;
+        paymentMethod?: string;
+        paymentStatus?: string;
+        amountTendered?: number;
+        changeAmount?: number;
     };
     onClose: () => void;
 }
@@ -21,10 +29,19 @@ interface ReceiptProps {
 const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
     const receiptRef = useRef<HTMLDivElement>(null);
     const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
 
     // Generate QR code on mount
     useEffect(() => {
         const generateQRCode = async () => {
+            if (bookingData.status !== 'confirmed') return;
+
             try {
                 // Create verification data
                 const qrData = JSON.stringify({
@@ -37,7 +54,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                 // Generate QR code as data URL
                 const dataUrl = await QRCodeLib.toDataURL(qrData, {
-                    width: 200,
+                    width: 300,
                     margin: 2,
                     color: {
                         dark: '#0f172a',
@@ -58,30 +75,33 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
         window.print();
     };
 
-    const handleDownload = () => {
-        // Simple download as HTML - for PDF we'd need a library like jsPDF
-        const receiptContent = receiptRef.current?.innerHTML || '';
-        const blob = new Blob([`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Receipt - ${bookingData.id}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            .receipt { max-width: 600px; margin: 0 auto; }
-          </style>
-        </head>
-        <body>
-          ${receiptContent}
-        </body>
-      </html>
-    `], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `receipt-${bookingData.id}.html`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const handleDownload = async () => {
+        if (!receiptRef.current) return;
+
+        setIsDownloading(true);
+        try {
+            // Wait a small bit for any images to load
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const dataUrl = await toPng(receiptRef.current, {
+                quality: 1,
+                backgroundColor: '#ffffff',
+                cacheBust: true,
+                style: {
+                    borderRadius: '0'
+                }
+            });
+
+            const link = document.createElement('a');
+            link.download = `pickleplay-receipt-${bookingData.id.slice(0, 8)}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (err) {
+            console.error('Error saving image:', err);
+            alert('Failed to save receipt as image. Please try printing or taking a screenshot.');
+        } finally {
+            setIsDownloading(false);
+        }
     };
 
     const formatDate = (dateStr: string) => {
@@ -95,6 +115,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
     };
 
     const formatTime = (timeStr: string) => {
+        if (!timeStr) return '';
         const [hours, minutes] = timeStr.split(':');
         const hour = parseInt(hours);
         const period = hour >= 12 ? 'PM' : 'AM';
@@ -102,192 +123,284 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
         return `${displayHour}:${minutes} ${period}`;
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    const isConfirmed = bookingData.status === 'confirmed';
+
+    const modalContent = (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[9999] p-4 overflow-y-auto">
+            <div className="bg-white rounded-[40px] shadow-2xl max-w-5xl w-full my-8 relative animate-in zoom-in-95 duration-300">
                 {/* Header - Hidden when printing */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-200 print:hidden">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                            <CheckCircle2 className="text-emerald-600" size={24} />
+                <div className="flex items-center justify-between p-8 border-b border-slate-100 print:hidden">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                            {isConfirmed ? (
+                                <CheckCircle2 className="text-emerald-600" size={28} />
+                            ) : (
+                                <Clock className="text-amber-600 animate-pulse" size={28} />
+                            )}
                         </div>
                         <div>
-                            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Booking Confirmed</h2>
-                            <p className="text-xs text-slate-500 font-medium">Your receipt is ready</p>
+                            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                                {isConfirmed ? 'Booking Confirmed' : 'Booking Pending'}
+                            </h2>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                                {isConfirmed ? 'Your digital pass is ready' : 'Waiting for owner confirmation'}
+                            </p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
+                        className="w-12 h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center transition-all group"
                     >
-                        <X size={20} className="text-slate-600" />
+                        <X size={24} className="text-slate-400 group-hover:text-slate-900 transition-colors" />
                     </button>
                 </div>
 
-                {/* Receipt Content */}
-                <div ref={receiptRef} className="p-8">
-                    {/* Receipt Header */}
-                    <div className="text-center mb-8 pb-6 border-b-2 border-dashed border-slate-200">
-                        <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter mb-2">PicklePlay</h1>
-                        <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Court Booking Receipt</p>
-                    </div>
-
-                    {/* Receipt Number & Date */}
-                    <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-slate-200">
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Receipt No.</p>
-                            <p className="text-sm font-bold text-slate-900 font-mono">#{bookingData.id.slice(0, 8).toUpperCase()}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Issue Date</p>
-                            <p className="text-sm font-bold text-slate-900">{new Date().toLocaleDateString()}</p>
-                        </div>
-                    </div>
-
-                    {/* Booking Details */}
-                    <div className="mb-6 pb-6 border-b border-slate-200">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Booking Details</h3>
-
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-start">
-                                <span className="text-sm font-medium text-slate-600">Court</span>
-                                <span className="text-sm font-bold text-slate-900 text-right">{bookingData.courtName}</span>
-                            </div>
-
-                            <div className="flex justify-between items-start">
-                                <span className="text-sm font-medium text-slate-600">Location</span>
-                                <span className="text-sm font-bold text-slate-900 text-right max-w-xs">{bookingData.courtLocation}</span>
-                            </div>
-
-                            <div className="flex justify-between items-start">
-                                <span className="text-sm font-medium text-slate-600">Date</span>
-                                <span className="text-sm font-bold text-slate-900">{formatDate(bookingData.date)}</span>
-                            </div>
-
-                            <div className="flex justify-between items-start">
-                                <span className="text-sm font-medium text-slate-600">Time</span>
-                                <span className="text-sm font-bold text-slate-900">
-                                    {formatTime(bookingData.startTime)} - {formatTime(bookingData.endTime)}
-                                </span>
-                            </div>
-
-                            {bookingData.playerName && (
-                                <div className="flex justify-between items-start">
-                                    <span className="text-sm font-medium text-slate-600">Booked By</span>
-                                    <span className="text-sm font-bold text-slate-900">{bookingData.playerName}</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Pricing */}
-                    <div className="mb-6 pb-6 border-b-2 border-slate-900">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Payment Summary</h3>
-
-                        <div className="space-y-2 mb-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-slate-600">Hourly Rate</span>
-                                <span className="text-sm font-bold text-slate-900">₱{bookingData.pricePerHour.toFixed(2)}</span>
-                            </div>
-
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-slate-600">Duration</span>
-                                <span className="text-sm font-bold text-slate-900">1 hour</span>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-4">
-                            <span className="text-lg font-black text-slate-900 uppercase">Total Amount</span>
-                            <span className="text-2xl font-black text-slate-900">₱{bookingData.totalPrice.toFixed(2)}</span>
-                        </div>
-                    </div>
-
-                    {/* QR Code Section */}
-                    <div className="mb-6 pb-6 border-b border-slate-200">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Booking QR Code</h3>
-                        <div className="flex flex-col items-center">
-                            {qrCodeDataUrl ? (
-                                <>
-                                    <div className="bg-white p-4 rounded-2xl border-4 border-slate-900 shadow-lg mb-3">
-                                        <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-48 h-48" />
+                {/* Receipt Wrapper for Image Export */}
+                <div id="receipt-content" className="bg-white">
+                    <div ref={receiptRef} className="p-10 bg-white">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                            {/* Left Side: Booking Details */}
+                            <div className="lg:col-span-7">
+                                {/* Receipt Aesthetic Header */}
+                                <div className="mb-10 pb-8 border-b-2 border-dashed border-slate-100">
+                                    <div className="inline-block px-4 py-1.5 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em] mb-4">
+                                        OFFICIAL RECEIPT
                                     </div>
-                                    <div className="text-center bg-blue-50 rounded-xl p-3 max-w-sm">
-                                        <p className="text-xs font-bold text-blue-900 mb-1">📱 Show this QR code at the court</p>
-                                        <p className="text-[10px] text-blue-700">The court owner will scan this to verify your booking</p>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="w-48 h-48 bg-slate-100 rounded-2xl flex items-center justify-center">
-                                    <QrCode className="text-slate-400" size={48} />
+                                    <h1 className="text-4xl font-black text-slate-950 uppercase tracking-tighter mb-1">PicklePlay</h1>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Philippines Network</p>
                                 </div>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* Cancellation Policy */}
-                    <div className="mb-8 p-5 bg-amber-50 rounded-2xl border border-amber-100/50">
-                        <div className="flex items-center gap-2 mb-2 text-amber-700">
-                            <AlertCircle size={16} />
-                            <h3 className="text-xs font-black uppercase tracking-widest">Late Cancellation Policy</h3>
-                        </div>
-                        <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                            To ensure fair access for all players, please be advised that bookings are subject to <span className="font-bold underline">automatic cancellation</span> if you are more than <span className="font-bold">10 minutes late</span> for your scheduled time.
-                        </p>
-                    </div>
+                                {/* Status Banner */}
+                                <div className={`mb-8 p-4 rounded-2xl border-2 text-center font-black uppercase tracking-[0.2em] text-sm ${isConfirmed
+                                    ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                    : 'bg-amber-50 border-amber-100 text-amber-600'
+                                    }`}>
+                                    STATUS: {bookingData.status?.toUpperCase() || 'PENDING'}
+                                </div>
 
-                    {/* Footer */}
-                    <div className="text-center">
-                        <p className="text-xs text-slate-500 font-medium mb-2">Thank you for booking with PicklePlay!</p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                            For inquiries, please contact support@pickleplays.com
-                        </p>
+                                {/* Receipt Info Grid */}
+                                <div className="grid grid-cols-2 gap-8 mb-8 pb-8 border-b border-slate-100">
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Receipt No.</p>
+                                        <p className="text-lg font-black text-slate-900 font-mono">#{bookingData.id.slice(0, 8).toUpperCase()}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Issue Date</p>
+                                        <p className="text-sm font-black text-slate-900 uppercase">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                    </div>
+                                </div>
+
+                                {/* Detailed Table */}
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Venue & Schedule</h3>
+
+                                        <div className="flex justify-between items-start gap-8">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Court</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase italic text-right">{bookingData.courtName}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-start gap-8">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Location</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase text-right max-w-[240px] leading-tight">{bookingData.courtLocation}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Date</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase">{formatDate(bookingData.date)}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Time Slot</span>
+                                            <span className="text-sm font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg uppercase">
+                                                {formatTime(bookingData.startTime)} - {formatTime(bookingData.endTime)}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-6 space-y-4 border-t border-slate-100">
+                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Financials</h3>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Player</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase">{bookingData.playerName || 'Guest'}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Rate / HR</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase">₱{bookingData.pricePerHour.toFixed(2)}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Payment Method</span>
+                                            <span className="text-sm font-black text-slate-900 uppercase flex items-center gap-1.5">
+                                                <Banknote size={14} className="text-slate-400" />
+                                                {bookingData.paymentMethod || 'Cash'}
+                                            </span>
+                                        </div>
+
+                                        <div className="pt-4 border-t-2 border-slate-950 flex justify-between items-center">
+                                            <div className="space-y-1">
+                                                <span className="text-lg font-black text-slate-950 uppercase tracking-tighter">TOTAL AMOUNT</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                                                        }`}>
+                                                        {bookingData.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="text-3xl font-black text-slate-950 tracking-tighter">₱{bookingData.totalPrice.toFixed(2)}</span>
+                                        </div>
+
+                                        {bookingData.paymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (
+                                            <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                                                <div className="flex justify-between items-center opacity-60">
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase">Cash Received</span>
+                                                    <span className="text-xs font-black text-slate-900">₱{bookingData.amountTendered.toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] font-black text-blue-600 uppercase">Change Returned</span>
+                                                    <span className="text-sm font-black text-blue-600">₱{(bookingData.changeAmount || 0).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Side: QR Pass */}
+                            <div className="lg:col-span-5 flex flex-col">
+                                <div className={`flex-1 p-8 rounded-[40px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-700 ${isConfirmed ? 'bg-slate-50 border-2 border-slate-900' : 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
+                                    }`}>
+
+                                    {/* Confirmation/Submission Stamp */}
+                                    <div className="absolute top-6 right-6 -rotate-12 pointer-events-none opacity-20">
+                                        <div className={`border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-amber-600 text-amber-600'} px-4 py-2 rounded-xl`}>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-center leading-none">
+                                                {isConfirmed ? 'Confirmed' : 'Submitted'}
+                                            </p>
+                                            <p className="text-[8px] font-bold mt-1 uppercase text-center">
+                                                {bookingData.confirmedAt
+                                                    ? new Date(bookingData.confirmedAt).toLocaleDateString()
+                                                    : new Date().toLocaleDateString()
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 mb-8 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+                                        <QrCode size={14} className={isConfirmed ? 'text-slate-950' : 'text-slate-300'} />
+                                        Digital Check-in Pass
+                                    </div>
+
+                                    {isConfirmed ? (
+                                        <div className="p-6 bg-white rounded-[32px] shadow-2xl border-4 border-slate-950 mb-8 transform hover:scale-105 transition-transform duration-500">
+                                            <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-56 h-56" />
+                                        </div>
+                                    ) : (
+                                        <div className="w-56 h-56 bg-white/50 rounded-[32px] flex flex-col items-center justify-center border-4 border-dashed border-slate-200 mb-8 relative overflow-hidden group">
+                                            <QrCode className="text-slate-200 group-hover:scale-110 transition-transform duration-500" size={80} />
+                                            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center p-8 text-center text-balance">
+                                                <p className="text-xs font-black text-slate-400 uppercase leading-relaxed tracking-widest">
+                                                    Locked Until Confirmation
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className={`text-center max-w-sm p-5 rounded-3xl ${isConfirmed ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-slate-100/80 text-slate-400'}`}>
+                                        {isConfirmed ? (
+                                            <>
+                                                <p className="text-xs font-black uppercase tracking-widest mb-1">Pass Activated</p>
+                                                <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">Present this QR code to the court manager upon arrival.</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-xs font-black uppercase tracking-widest mb-1">Pass Pending</p>
+                                                <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">Your QR code will generate once the owner confirms your booking.</p>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Confirmation Timestamp Footnote */}
+                                    <div className="mt-8 pt-8 border-t border-slate-200/50 w-full text-center">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Confirmation Details</p>
+                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                                            {isConfirmed
+                                                ? `Verified at ${new Date(bookingData.confirmedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString()}`
+                                                : 'Awaiting Verification'
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Verification Note */}
+                        <div className="mt-12 text-center space-y-2 border-t border-slate-50 pt-8">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Verified Secure Transaction • 2026</p>
+                            <p className="text-[8px] text-slate-300 font-bold uppercase tracking-widest">PicklePlay Philippines • www.pickleplay.ph</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Action Buttons - Hidden when printing */}
-                <div className="flex gap-3 p-6 border-t border-slate-200 print:hidden">
+                {/* Desktop Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4 p-8 border-t border-slate-100 print:hidden bg-slate-50/50 rounded-b-[40px]">
                     <button
                         onClick={handlePrint}
-                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg"
+                        className="flex-1 h-14 bg-white border-2 border-slate-900 text-slate-900 rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 hover:text-white transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2"
                     >
-                        <Printer size={18} />
-                        Print Receipt
+                        <Printer size={16} />
+                        Print Order
                     </button>
                     <button
                         onClick={handleDownload}
-                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg"
+                        disabled={isDownloading}
+                        className="flex-1 h-14 bg-blue-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-blue-200/50 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        <Download size={18} />
-                        Download
+                        {isDownloading ? (
+                            <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <>
+                                <Download size={16} />
+                                Export Pass
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="flex-1 h-14 bg-slate-900 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2"
+                    >
+                        Done
                     </button>
                 </div>
             </div>
 
             {/* Print Styles */}
             <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print\\:hidden {
-            display: none !important;
-          }
-          ${receiptRef.current ? `
-            #receipt-content,
-            #receipt-content * {
-              visibility: visible;
-            }
-            #receipt-content {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-            }
-          ` : ''}
-        }
-      `}</style>
+                @media print {
+                    body * { visibility: hidden; }
+                    #receipt-content, #receipt-content * { 
+                        visibility: visible; 
+                        box-shadow: none !important; 
+                        border: none !important;
+                    }
+                    #receipt-content {
+                        position: fixed;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        background: white !important;
+                    }
+                    .print\\:hidden { display: none !important; }
+                }
+            `}</style>
         </div>
     );
+
+    if (!mounted) return null;
+
+    return createPortal(modalContent, document.body);
 };
 
 export default Receipt;

@@ -147,9 +147,9 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
         if (isSettingNew && currentUserId) {
           await supabase
             .from('security_settings')
-            .upsert({ 
-              user_id: currentUserId, 
-              password_set_at: new Date().toISOString() 
+            .upsert({
+              user_id: currentUserId,
+              password_set_at: new Date().toISOString()
             }, { onConflict: 'user_id' });
         }
         setSecurityMessage({ type: 'success', text: isSettingNew ? 'Password set! You can now enable 2FA.' : 'Password updated successfully!' });
@@ -259,16 +259,16 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       const result = await verifyCode(currentUserId, verificationCode);
       if (result.success) {
         setSecurityMessage({ type: 'success', text: result.message });
-        
+
         // Generate and save backup codes
         const codes = generateBackupCodes();
         await saveBackupCodes(currentUserId, codes);
         setBackupCodes(codes);
-        
+
         // Update 2FA status
         await enableTwoFactorAuth(currentUserId);
         setTwoFactorEnabled(true);
-        
+
         // Don't auto-close - let user see and copy backup codes
         // User can manually click Cancel when done
       } else {
@@ -306,7 +306,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       setIsLoadingStats(true);
       try {
         let targetId = profileId;
-        
+
         if (profileId === 'player-current') {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
@@ -341,7 +341,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
         });
 
         // Get member since date from profile
-        const memberSince = profileData?.created_at 
+        const memberSince = profileData?.created_at
           ? new Date(profileData.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
           : '';
 
@@ -442,34 +442,34 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!currentUserId || !isCurrentUser || !e.target.files || !e.target.files[0]) return;
-    
+
     const file = e.target.files[0];
     const fileExt = file.name.split('.').pop();
     const fileName = `${currentUserId}-${Date.now()}.${fileExt}`;
-    
+
     setIsUploadingAvatar(true);
-    
+
     try {
       // Upload to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, file, { upsert: true });
-      
+
       if (uploadError) throw uploadError;
-      
+
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);
-      
+
       // Update profile with new avatar URL
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
         .eq('id', currentUserId);
-      
+
       if (updateError) throw updateError;
-      
+
       // Update local state
       setAvatarUrl(publicUrl);
       setProfileData((prev: any) => ({ ...prev, avatar_url: publicUrl }));
@@ -544,7 +544,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       // Update local state
       setSelectedLanguage(language);
       localStorage.setItem('preferredLanguage', language);
-      
+
       alert('✅ Language preference saved successfully!');
     } catch (err: any) {
       console.error('Error saving language preference:', err);
@@ -686,51 +686,49 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             {/* Mobile Role Switcher (md:hidden) */}
             {isCurrentUser && (
               <div className="md:hidden mt-4">
-                  {authorizedProRoles.length === 1 && (
+                {authorizedProRoles.length === 1 && (
+                  <button
+                    onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
+                    className="w-full p-3 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800 mt-2"
+                  >
+                    <span className="font-black text-[10px] uppercase tracking-widest">
+                      {displayRole === 'PLAYER' ? 'Pro Mode' : `${displayRole.replace('_', ' ')} Mode`}
+                    </span>
+                    <span className="font-bold text-[9px] uppercase tracking-widest text-slate-400 ml-2">
+                      Switch to {displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
+                    </span>
+                  </button>
+                )}
+                {authorizedProRoles.length >= 2 && (
+                  <div className="space-y-2 mt-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Switch Role</span>
                     <button
-                      onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
-                      className="w-full p-3 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800 mt-2"
+                      onClick={() => onRoleSwitch && onRoleSwitch('PLAYER')}
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === 'PLAYER'
+                          ? 'bg-lime-400 text-slate-900'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
                     >
-                      <span className="font-black text-[10px] uppercase tracking-widest">
-                        {displayRole === 'PLAYER' ? 'Pro Mode' : `${displayRole.replace('_', ' ')} Mode`}
-                      </span>
-                      <span className="font-bold text-[9px] uppercase tracking-widest text-slate-400 ml-2">
-                        Switch to {displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
-                      </span>
+                      <User size={16} />
+                      <span className="font-black text-[11px] uppercase tracking-widest">Player</span>
+                      {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
                     </button>
-                  )}
-                  {authorizedProRoles.length >= 2 && (
-                    <div className="space-y-2 mt-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Switch Role</span>
+                    {authorizedProRoles.map((proRole) => (
                       <button
-                        onClick={() => onRoleSwitch && onRoleSwitch('PLAYER')}
-                        className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
-                          displayRole === 'PLAYER'
+                        key={proRole}
+                        onClick={() => onRoleSwitch && onRoleSwitch(proRole)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === proRole
                             ? 'bg-lime-400 text-slate-900'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        <User size={16} />
-                        <span className="font-black text-[11px] uppercase tracking-widest">Player</span>
-                        {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
-                      </button>
-                      {authorizedProRoles.map((proRole) => (
-                        <button
-                          key={proRole}
-                          onClick={() => onRoleSwitch && onRoleSwitch(proRole)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${
-                            displayRole === proRole
-                              ? 'bg-lime-400 text-slate-900'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
-                        >
-                          {proRole === 'COACH' ? <UserCheck size={16} /> : <UserPlus size={16} />}
-                          <span className="font-black text-[11px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
-                          {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                      >
+                        {proRole === 'COACH' ? <UserCheck size={16} /> : <UserPlus size={16} />}
+                        <span className="font-black text-[11px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                        {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -851,6 +849,12 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       onToggleComments={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
                       postsState={posts}
                       setPostsState={setPosts}
+                      currentUserId={currentUserId}
+                      currentUserProfile={{
+                        name: profileData?.full_name || 'Anonymous',
+                        avatar: profileData?.avatar_url || '',
+                        role: profileData?.active_role || 'PLAYER'
+                      }}
                     />
                   ))
                 ) : (
@@ -886,19 +890,17 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-8">
               {/* Success/Error Message */}
               {privacyMessage && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 ${
-                  privacyMessage.type === 'success' 
-                    ? 'bg-green-50 border border-green-200' 
+                <div className={`p-4 rounded-xl flex items-center gap-3 ${privacyMessage.type === 'success'
+                    ? 'bg-green-50 border border-green-200'
                     : 'bg-red-50 border border-red-200'
-                }`}>
+                  }`}>
                   {privacyMessage.type === 'success' ? (
                     <CheckCircle className="text-green-600" size={20} />
                   ) : (
                     <AlertCircle className="text-red-600" size={20} />
                   )}
-                  <p className={`text-sm font-semibold ${
-                    privacyMessage.type === 'success' ? 'text-green-800' : 'text-red-800'
-                  }`}>
+                  <p className={`text-sm font-semibold ${privacyMessage.type === 'success' ? 'text-green-800' : 'text-red-800'
+                    }`}>
                     {privacyMessage.text}
                   </p>
                 </div>
@@ -910,13 +912,12 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
               <div className="space-y-6 border-t border-slate-100 pt-8">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profile Visibility</p>
-                
+
                 <div className="space-y-3">
-                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                    tempVisibility === 'public' 
-                      ? 'bg-emerald-50 border-emerald-200' 
+                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'public'
+                      ? 'bg-emerald-50 border-emerald-200'
                       : 'bg-slate-50 border-slate-200 hover:border-emerald-200'
-                  } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
                       checked={tempVisibility === 'public'}
@@ -930,11 +931,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     </div>
                   </label>
 
-                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                    tempVisibility === 'friends' 
-                      ? 'bg-blue-50 border-blue-200' 
+                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'friends'
+                      ? 'bg-blue-50 border-blue-200'
                       : 'bg-slate-50 border-slate-200 hover:border-blue-200'
-                  } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
                       checked={tempVisibility === 'friends'}
@@ -948,11 +948,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     </div>
                   </label>
 
-                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                    tempVisibility === 'private' 
-                      ? 'bg-slate-100 border-slate-300' 
+                  <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'private'
+                      ? 'bg-slate-100 border-slate-300'
                       : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-                  } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
                       checked={tempVisibility === 'private'}
@@ -1008,8 +1007,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   <div>
                     <p className="font-bold text-slate-900">{hasPasswordAuth ? 'Change Password' : 'Set Password'}</p>
                     <p className="text-xs text-slate-500">
-                      {hasPasswordAuth 
-                        ? 'Update your account password' 
+                      {hasPasswordAuth
+                        ? 'Update your account password'
                         : 'Add a password to your Google account for email login & 2FA'
                       }
                     </p>
@@ -1017,13 +1016,12 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       <p className="text-xs text-indigo-500 mt-1 font-bold">Google account detected</p>
                     )}
                   </div>
-                  <button 
+                  <button
                     onClick={() => setShowPasswordModal(true)}
-                    className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${
-                      hasPasswordAuth 
-                        ? 'bg-slate-900 text-white hover:bg-slate-800' 
+                    className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${hasPasswordAuth
+                        ? 'bg-slate-900 text-white hover:bg-slate-800'
                         : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    }`}
+                      }`}
                   >
                     {hasPasswordAuth ? 'Update' : 'Set Password'}
                   </button>
@@ -1057,11 +1055,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                             setSecurityMessage({ type: 'success', text: '2FA disabled' });
                           }
                         }}
-                        className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${
-                          twoFactorEnabled
+                        className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${twoFactorEnabled
                             ? 'bg-red-600 text-white hover:bg-red-700'
                             : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        }`}
+                          }`}
                       >
                         {twoFactorEnabled ? 'Disable' : 'Enable'}
                       </button>
@@ -1298,19 +1295,17 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     {newPassword && (
                       <div className="mt-2">
                         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${
-                              passwordStrength < 30 ? 'bg-red-500 w-1/3' :
-                              passwordStrength < 60 ? 'bg-yellow-500 w-2/3' :
-                              'bg-emerald-500 w-full'
-                            }`}
+                          <div
+                            className={`h-full transition-all ${passwordStrength < 30 ? 'bg-red-500 w-1/3' :
+                                passwordStrength < 60 ? 'bg-yellow-500 w-2/3' :
+                                  'bg-emerald-500 w-full'
+                              }`}
                           />
                         </div>
-                        <p className={`text-xs mt-1 font-bold ${
-                          passwordStrength < 30 ? 'text-red-600' :
-                          passwordStrength < 60 ? 'text-yellow-600' :
-                          'text-emerald-600'
-                        }`}>
+                        <p className={`text-xs mt-1 font-bold ${passwordStrength < 30 ? 'text-red-600' :
+                            passwordStrength < 60 ? 'text-yellow-600' :
+                              'text-emerald-600'
+                          }`}>
                           Strength: {passwordStrength < 30 ? 'Weak' : passwordStrength < 60 ? 'Fair' : 'Strong'}
                         </p>
                       </div>
@@ -1367,7 +1362,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
               <div className="space-y-6 border-t border-slate-100 pt-8">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Language</label>
-                  <select 
+                  <select
                     value={selectedLanguage}
                     onChange={(e) => setSelectedLanguage(e.target.value)}
                     className="w-full bg-slate-50 border-2 border-slate-200 focus:border-rose-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all"
