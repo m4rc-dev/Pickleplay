@@ -889,7 +889,7 @@ const Booking: React.FC = () => {
   };
 
   return (
-    <div className="pt-32 md:pt-44 pb-24 md:pb-12 px-0 md:px-24 lg:px-32 max-w-[1800px] mx-auto min-h-screen relative">
+    <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
       <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-3">
           {isSearchExpanded ? (
@@ -991,22 +991,22 @@ const Booking: React.FC = () => {
           ) : (
             <>
               <button
-                className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-colors"
+                className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-colors"
                 onClick={() => setIsSearchExpanded(true)}
               >
-                <Search size={20} />
+                <Search size={18} />
               </button>
-              <div className="flex-1 flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
                 {(['Courts', 'Games', 'Lessons'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setFilterType(type === 'Courts' ? 'All' : 'All' as any)}
-                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap border-2 transition-all ${type === 'Courts'
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
                       ? 'border-blue-600 bg-white text-slate-900 shadow-sm'
                       : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                       }`}
                   >
-                    <span className={`w-2 h-2 rounded-full ${type === 'Courts' ? 'bg-blue-500' :
+                    <span className={`w-1.5 h-1.5 rounded-full ${type === 'Courts' ? 'bg-blue-500' :
                       type === 'Games' ? 'bg-cyan-400' : 'bg-yellow-400'
                       }`}></span>
                     {type}
@@ -1018,7 +1018,7 @@ const Booking: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-8 px-6 md:px-0">
+      <div className="">
         {/* Desktop Header */}
         <div className="hidden md:block space-y-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
@@ -1062,7 +1062,7 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-8">
           {/* Sidebar - List View */}
           <div className={`lg:col-span-4 space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
             <form
@@ -1469,7 +1469,7 @@ const Booking: React.FC = () => {
 
           {/* Map View */}
           <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-            <div className={`bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[750px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[100vh] md:h-[750px] opacity-100'}`}>
+            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[750px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[80vh] md:h-[750px] opacity-100'}`}>
               {isLoading ? (
                 <div className="h-full bg-slate-100 flex items-center justify-center">
                   <Loader2 className="animate-spin text-blue-600" size={40} />
@@ -1477,6 +1477,43 @@ const Booking: React.FC = () => {
               ) : (
                 <div ref={mapRef} className="h-full w-full" />
               )}
+              {/* Mobile Court Slider - Visible only on map view mobile */}
+              {!isLoading && isMobile && viewMode === 'map' && (
+                <div className="absolute bottom-4 left-0 right-0 z-10">
+                  <div className="flex gap-3 overflow-x-auto px-4 pb-4 no-scrollbar snap-x">
+                    {locationGroups.map(location => (
+                      <button
+                        key={location.locationId}
+                        onClick={() => {
+                          setSelectedLocation(location);
+                          if (googleMapRef.current) {
+                            googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                            googleMapRef.current.setZoom(16);
+                          }
+                        }}
+                        className="flex-shrink-0 w-[240px] bg-white rounded-2xl shadow-xl border border-slate-100 p-3 flex gap-3 snap-center text-left"
+                      >
+                        <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0">
+                          <img
+                            src={location.courts[0]?.imageUrl || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200'}
+                            alt={location.locationName}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-black text-slate-900 text-[10px] uppercase truncate italic">{location.locationName}</h4>
+                          <p className="text-[9px] text-slate-500 line-clamp-1 mb-1">{location.address}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-black text-blue-600">₱{location.courts[0]?.pricePerHour}/hr</span>
+                            <span className="text-[8px] bg-lime-400/20 text-lime-700 px-1.5 py-0.5 rounded font-bold">BOOK NOW</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Desktop Zoom Control */}
               <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
                 <button
@@ -1493,30 +1530,38 @@ const Booking: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Sticky Toggle Button - Fixed to phone edge */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[60] pb-6 pt-4 px-4 bg-gradient-to-t from-white via-white/90 to-transparent">
-        <div className="flex justify-center">
-          <div className="bg-slate-900 rounded-full p-1 flex items-center gap-0.5 shadow-2xl">
-            <button
-              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-              className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all active:scale-95 ${viewMode === 'map'
-                ? 'bg-blue-500 text-white shadow-lg'
-                : 'bg-lime-400 text-slate-900 shadow-lg'
-                }`}
-            >
-              {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
-              <span>{viewMode === 'map' ? 'List' : 'Map'}</span>
-            </button>
-            <button
-              onClick={() => setShowFilters(true)}
-              className="flex items-center gap-2 px-5 py-3 text-white/70 hover:text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all active:scale-95"
-            >
-              <Filter size={16} />
-              <span>Filter</span>
-            </button>
+      {/* Mobile Bottom Navigation Menu */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center z-[100] shadow-[0_-8px_30px_rgb(0,0,0,0.04)] pb-[env(safe-area-inset-bottom)]">
+        <button
+          onClick={() => setViewMode('list')}
+          className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'list' ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <div className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-blue-50' : ''}`}>
+            <List size={20} />
           </div>
-        </div>
-      </div>
+          <span className="text-[9px] font-black uppercase tracking-tighter text-center">List View</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('map')}
+          className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'map' ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <div className={`p-2 rounded-xl transition-all ${viewMode === 'map' ? 'bg-blue-50' : ''}`}>
+            <MapPin size={20} />
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-tighter text-center">Map View</span>
+        </button>
+
+        <button
+          onClick={() => setShowFilters(true)}
+          className="flex flex-col items-center gap-1 transition-all text-slate-400"
+        >
+          <div className="p-2 rounded-xl transition-all">
+            <Filter size={20} />
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-tighter text-center">Filters</span>
+        </button>
+      </nav>
 
       {/* Mobile Filters Drawer */}
       {showFilters && (

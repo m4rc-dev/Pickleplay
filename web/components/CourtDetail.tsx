@@ -353,7 +353,7 @@ const CourtDetail: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="max-w-4xl mx-auto p-6 md:p-8 space-y-8 animate-pulse pt-40">
+            <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
                 <div className="h-10 bg-slate-200 rounded-2xl w-48"></div>
                 <div className="aspect-[21/9] bg-slate-200 rounded-[48px]"></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -367,242 +367,244 @@ const CourtDetail: React.FC = () => {
     if (!court) return null;
 
     return (
-        <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8 pb-32 pt-60">
-            {/* Header Navigation */}
-            <div className="flex items-center justify-between mt-20">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="group inline-flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all"
-                >
-                    <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-                    Back to discovery
-                </button>
-                <div className="flex items-center gap-4">
+        <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
+            <div className="space-y-8">
+                {/* Header Navigation */}
+                <div className="flex items-center justify-between">
                     <button
-                        onClick={() => navigate('/')}
-                        className="px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm"
+                        onClick={() => navigate(-1)}
+                        className="group inline-flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all"
                     >
-                        Back to Home
+                        <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                        Back to discovery
                     </button>
-                    {user && (
+                    <div className="flex items-center gap-4">
                         <button
-                            onClick={fetchMyBookings}
-                            className="px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
+                            onClick={() => navigate('/')}
+                            className="px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm"
                         >
-                            View Booked Courts
+                            Back to Home
                         </button>
-                    )}
-                    <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
-                        }`}>
-                        {court.type}
-                    </span>
-                </div>
-            </div>
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-
-                {/* Left: Court Details & Map */}
-                <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white p-8 md:p-12 rounded-[48px] border border-slate-200 shadow-sm space-y-8">
-                        <div>
-                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-3">COURT DETAILS</p>
-                            <h1 className="text-4xl md:text-5xl font-black text-slate-950 tracking-tighter leading-tight mb-4">{court.name}</h1>
-                            <div className="flex items-center gap-3 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
-                                <MapPin size={16} className="text-blue-500" />
-                                <span>{court.location}</span>
-                            </div>
-                        </div>
-
-                        {/* Map Section */}
-                        <div className="relative aspect-[16/9] md:aspect-[21/9] group">
-                            <MiniMap lat={court.latitude || 0} lng={court.longitude || 0} />
-                            <div className="absolute top-4 right-4 h-10 w-10 bg-white rounded-xl shadow-lg border border-slate-100 flex items-center justify-center text-slate-900 hover:scale-110 transition-transform cursor-pointer">
-                                <Navigation size={18} />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Price</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
-                                    <span className="text-[10px] font-bold text-slate-400 lowercase">/hr</span>
-                                </div>
-                            </div>
-                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Capacity</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-slate-950">{court.numCourts}</span>
-                                    <span className="text-[10px] font-bold text-slate-400 lowercase">units</span>
-                                </div>
-                            </div>
+                        {user && (
                             <button
-                                onClick={() => setShowReviewsModal(true)}
-                                className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
+                                onClick={fetchMyBookings}
+                                className="px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
                             >
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600">Rating</p>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
-                                    <Star size={16} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
-                                    {totalReviews > 0 && <span className="text-[10px] font-bold text-slate-400">({totalReviews})</span>}
-                                </div>
+                                View Booked Courts
                             </button>
-                            <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Category</p>
-                                <span className="text-sm font-black text-slate-950 uppercase">{court.type}</span>
-                            </div>
-                        </div>
-
-                        {/* Amenities */}
-                        <div className="space-y-4">
-                            <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-2">Available Amenities</p>
-                            <div className="flex flex-wrap gap-2">
-                                {(court.amenities || []).map((amenity, idx) => (
-                                    <span key={idx} className="px-5 py-2.5 bg-slate-50 text-slate-700 text-[11px] font-black rounded-2xl border border-slate-200 uppercase tracking-wide hover:bg-white hover:border-blue-400 transition-all cursor-default">
-                                        {amenity}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Location Info */}
-                        <div className="p-8 bg-blue-50 rounded-[32px] border border-blue-100 flex items-start gap-4">
-                            <div className="p-3 bg-blue-600 text-white rounded-2xl">
-                                <Info size={20} />
-                            </div>
-                            <div>
-                                <h4 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">About this Court</h4>
-                                <p className="text-xs text-blue-800/70 font-medium leading-relaxed">
-                                    This premium {court.type.toLowerCase()} facility is maintained daily to ensure professional playing standards.
-                                    Located at {court.location}, it features state-of-the-art surfacing and amenities for all skill levels.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right: Booking Sidebar */}
-                <div className="lg:sticky lg:top-32 space-y-6">
-                    <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl space-y-8">
-                        <div>
-                            <h3 className="text-xl font-black text-slate-950 tracking-tight mb-2">Select Schedule</h3>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">When will you be playing?</p>
-                        </div>
-
-                        {/* Date Picker */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
-                                <span>Choose Date</span>
-                                <CalendarIcon size={14} className="text-blue-600" />
-                            </div>
-                            <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
-                                {Array.from({ length: 7 }).map((_, i) => {
-                                    const date = new Date();
-                                    date.setDate(date.getDate() + i);
-                                    const isSelected = selectedDate.toDateString() === date.toDateString();
-                                    return (
-                                        <button
-                                            key={i}
-                                            onClick={() => {
-                                                setSelectedDate(date);
-                                                setSelectedSlot(null);
-                                            }}
-                                            className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
-                                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
-                                                }`}
-                                        >
-                                            <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                                                {date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
-                                            </span>
-                                            <span className="text-sm font-black tracking-tighter">{date.getDate()}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Slots */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
-                                <span>Choose Slot</span>
-                                <Clock size={14} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
-                                {TIME_SLOTS.map(slot => {
-                                    const isBlocked = blockedSlots.has(slot);
-                                    const isBookedSlot = bookedSlots.has(slot);
-                                    const isOccupied = isBlocked || isBookedSlot;
-                                    const isSelected = selectedSlot === slot;
-
-                                    return (
-                                        <button
-                                            key={slot}
-                                            disabled={isOccupied}
-                                            onClick={() => setSelectedSlot(slot)}
-                                            className={`py-3 px-2 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${isSelected
-                                                ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
-                                                : isOccupied
-                                                    ? 'bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed opacity-50'
-                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'
-                                                }`}
-                                        >
-                                            {isBookedSlot ? 'N/A' : slot}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Price Summary */}
-                        {selectedSlot && (
-                            <div className="p-6 bg-slate-950 rounded-[32px] text-white animate-in zoom-in-95 duration-300">
-                                <div className="flex justify-between items-center mb-4">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Total Price</span>
-                                    <span className="text-2xl font-black">₱{court.pricePerHour}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 italic">
-                                    <CheckCircle2 size={12} className="text-lime-400" />
-                                    Includes gear storage & locker usage
-                                </div>
-                            </div>
                         )}
+                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
+                            }`}>
+                            {court.type}
+                        </span>
+                    </div>
+                </div>
 
-                        <button
-                            onClick={handleBooking}
-                            disabled={!selectedSlot || isProcessing || isBooked}
-                            className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${isBooked
-                                ? 'bg-lime-400 text-slate-900 shadow-none'
-                                : 'bg-lime-400 hover:bg-lime-500 text-slate-900 shadow-2xl shadow-lime-200 disabled:opacity-50 disabled:shadow-none'
-                                }`}
-                        >
-                            {isProcessing ? <Loader2 className="animate-spin" /> : (
-                                isBooked ? (
-                                    <>
-                                        <CheckCircle2 size={20} />
-                                        Success!
-                                    </>
-                                ) : (
-                                    <>
-                                        {user ? 'Proceed to Book' : 'Login to Book'}
-                                        <ArrowRight size={18} />
-                                    </>
-                                )
-                            )}
-                        </button>
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+
+                    {/* Left: Court Details & Map */}
+                    <div className="lg:col-span-2 space-y-8">
+                        <div className="bg-white p-8 md:p-12 rounded-[48px] border border-slate-200 shadow-sm space-y-8">
+                            <div>
+                                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-3">COURT DETAILS</p>
+                                <h1 className="text-4xl md:text-5xl font-black text-slate-950 tracking-tighter leading-tight mb-4">{court.name}</h1>
+                                <div className="flex items-center gap-3 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
+                                    <MapPin size={16} className="text-blue-500" />
+                                    <span>{court.location}</span>
+                                </div>
+                            </div>
+
+                            {/* Map Section */}
+                            <div className="relative aspect-[16/9] md:aspect-[21/9] group">
+                                <MiniMap lat={court.latitude || 0} lng={court.longitude || 0} />
+                                <div className="absolute top-4 right-4 h-10 w-10 bg-white rounded-xl shadow-lg border border-slate-100 flex items-center justify-center text-slate-900 hover:scale-110 transition-transform cursor-pointer">
+                                    <Navigation size={18} />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Price</p>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
+                                        <span className="text-[10px] font-bold text-slate-400 lowercase">/hr</span>
+                                    </div>
+                                </div>
+                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Capacity</p>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-2xl font-black text-slate-950">{court.numCourts}</span>
+                                        <span className="text-[10px] font-bold text-slate-400 lowercase">units</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowReviewsModal(true)}
+                                    className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
+                                >
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600">Rating</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
+                                        <Star size={16} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
+                                        {totalReviews > 0 && <span className="text-[10px] font-bold text-slate-400">({totalReviews})</span>}
+                                    </div>
+                                </button>
+                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Category</p>
+                                    <span className="text-sm font-black text-slate-950 uppercase">{court.type}</span>
+                                </div>
+                            </div>
+
+                            {/* Amenities */}
+                            <div className="space-y-4">
+                                <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-2">Available Amenities</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {(court.amenities || []).map((amenity, idx) => (
+                                        <span key={idx} className="px-5 py-2.5 bg-slate-50 text-slate-700 text-[11px] font-black rounded-2xl border border-slate-200 uppercase tracking-wide hover:bg-white hover:border-blue-400 transition-all cursor-default">
+                                            {amenity}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Location Info */}
+                            <div className="p-8 bg-blue-50 rounded-[32px] border border-blue-100 flex items-start gap-4">
+                                <div className="p-3 bg-blue-600 text-white rounded-2xl">
+                                    <Info size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">About this Court</h4>
+                                    <p className="text-xs text-blue-800/70 font-medium leading-relaxed">
+                                        This premium {court.type.toLowerCase()} facility is maintained daily to ensure professional playing standards.
+                                        Located at {court.location}, it features state-of-the-art surfacing and amenities for all skill levels.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 flex gap-3">
-                        <Shield size={20} className="text-amber-600 shrink-0" />
-                        <div>
-                            <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1">PicklePlay verified</p>
-                            <p className="text-[10px] text-amber-800/70 font-medium">This venue undergoes monthly quality inspections.</p>
+                    {/* Right: Booking Sidebar */}
+                    <div className="lg:sticky lg:top-32 space-y-6">
+                        <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl space-y-8">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-950 tracking-tight mb-2">Select Schedule</h3>
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">When will you be playing?</p>
+                            </div>
+
+                            {/* Date Picker */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
+                                    <span>Choose Date</span>
+                                    <CalendarIcon size={14} className="text-blue-600" />
+                                </div>
+                                <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
+                                    {Array.from({ length: 7 }).map((_, i) => {
+                                        const date = new Date();
+                                        date.setDate(date.getDate() + i);
+                                        const isSelected = selectedDate.toDateString() === date.toDateString();
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => {
+                                                    setSelectedDate(date);
+                                                    setSelectedSlot(null);
+                                                }}
+                                                className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                    {date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
+                                                </span>
+                                                <span className="text-sm font-black tracking-tighter">{date.getDate()}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Slots */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                                    <span>Choose Slot</span>
+                                    <Clock size={14} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                                    {TIME_SLOTS.map(slot => {
+                                        const isBlocked = blockedSlots.has(slot);
+                                        const isBookedSlot = bookedSlots.has(slot);
+                                        const isOccupied = isBlocked || isBookedSlot;
+                                        const isSelected = selectedSlot === slot;
+
+                                        return (
+                                            <button
+                                                key={slot}
+                                                disabled={isOccupied}
+                                                onClick={() => setSelectedSlot(slot)}
+                                                className={`py-3 px-2 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${isSelected
+                                                    ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
+                                                    : isOccupied
+                                                        ? 'bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed opacity-50'
+                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'
+                                                    }`}
+                                            >
+                                                {isBookedSlot ? 'N/A' : slot}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Price Summary */}
+                            {selectedSlot && (
+                                <div className="p-6 bg-slate-950 rounded-[32px] text-white animate-in zoom-in-95 duration-300">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Total Price</span>
+                                        <span className="text-2xl font-black">₱{court.pricePerHour}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 italic">
+                                        <CheckCircle2 size={12} className="text-lime-400" />
+                                        Includes gear storage & locker usage
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleBooking}
+                                disabled={!selectedSlot || isProcessing || isBooked}
+                                className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${isBooked
+                                    ? 'bg-lime-400 text-slate-900 shadow-none'
+                                    : 'bg-lime-400 hover:bg-lime-500 text-slate-900 shadow-2xl shadow-lime-200 disabled:opacity-50 disabled:shadow-none'
+                                    }`}
+                            >
+                                {isProcessing ? <Loader2 className="animate-spin" /> : (
+                                    isBooked ? (
+                                        <>
+                                            <CheckCircle2 size={20} />
+                                            Success!
+                                        </>
+                                    ) : (
+                                        <>
+                                            {user ? 'Proceed to Book' : 'Login to Book'}
+                                            <ArrowRight size={18} />
+                                        </>
+                                    )
+                                )}
+                            </button>
+                        </div>
+
+                        <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 flex gap-3">
+                            <Shield size={20} className="text-amber-600 shrink-0" />
+                            <div>
+                                <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1">PicklePlay verified</p>
+                                <p className="text-[10px] text-amber-800/70 font-medium">This venue undergoes monthly quality inspections.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
+            </div>
             {/* Confirmation Modal */}
             {showConfirmModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">

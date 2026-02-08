@@ -553,7 +553,7 @@ const Home: React.FC = () => {
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[90vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-16 md:pt-24 pb-28 md:pb-40 bg-slate-950 z-40">
+      <section className="relative min-h-screen md:min-h-[95vh] flex flex-col items-center justify-center pt-16 md:pt-24 pb-28 md:pb-40 bg-slate-950 z-40">
         {/* Overlapping player faces and user count - Desktop: Corner positioning, Mobile: Hidden (moved below title) */}
         <div className="hidden md:flex absolute left-8 bottom-8 md:bottom-14 z-40 items-center gap-3 select-none">
           <div className="flex -space-x-4">
@@ -623,7 +623,7 @@ const Home: React.FC = () => {
           </p>
           <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2 md:p-2.5 h-14 md:h-16 shadow-3xl">
+              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
                 <Search className="ml-3 md:ml-6 text-slate-500" size={18} />
                 <input
                   type="text"
@@ -635,11 +635,11 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
+                  className="flex-1 min-w-0 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
                 <button
                   type="submit"
-                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-10 md:h-12 px-5 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
+                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-11 md:h-12 px-4 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
                 >
                   LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
                 </button>
