@@ -26,7 +26,8 @@ import {
   Twitter,
   Mail,
   Phone,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import { Product } from '../types';
 import { supabase } from '../services/supabase';
@@ -201,6 +202,8 @@ const Home: React.FC = () => {
 
     fetchPlayerFacesAndCount();
     fetchTournaments();
+    // Auto-detect location on mount if permissions allow
+    getUserLocation();
   }, []);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -214,6 +217,7 @@ const Home: React.FC = () => {
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [isTournamentsLoading, setIsTournamentsLoading] = useState(false);
+  const [selectedTournament, setSelectedTournament] = useState<any | null>(null);
   const navigate = useNavigate();
 
   // Fetch courts from Supabase for search suggestions
@@ -278,6 +282,7 @@ const Home: React.FC = () => {
         async (position) => {
           const { latitude, longitude } = position.coords;
           setUserLocation({ lat: latitude, lng: longitude });
+          setGpsEnabled(true); // Immediately set to true so the UI can react
 
           // Calculate distances for courts and sort by nearest FIRST
           const courtsWithDistance = courts.map(court => {
@@ -293,7 +298,7 @@ const Home: React.FC = () => {
 
           // Try to get city from nearest court as fallback
           const nearestCourt = courtsWithDistance[0];
-          let fallbackCity = nearestCourt?.city || '';
+          let fallbackCity = nearestCourt?.city || 'Your Location';
           let fallbackRegion = nearestCourt?.region || 'Luzon';
 
           // Reverse geocode to get city name using Google Maps API
@@ -326,48 +331,68 @@ const Home: React.FC = () => {
                   }
                 }
 
-                // Build display string: "Cebu City, Philippines 6000"
-                let displayCity = city || adminArea || fallbackCity || 'Your Location';
-                if (country) displayCity += `, ${country}`;
-                if (postalCode) displayCity += ` ${postalCode}`;
-
+                // Build display string - just the city/admin area name for the header
+                let displayCity = city || adminArea || fallbackCity;
                 setUserCity(displayCity);
-                setGpsEnabled(true);
 
                 // Determine region based on city
                 const region = getRegion(city || adminArea || fallbackCity);
                 setUserRegion(region);
               } else {
                 // No results from geocoding, use fallback
-                setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+                setUserCity(fallbackCity);
                 setUserRegion(fallbackRegion);
-                setGpsEnabled(true);
               }
             } else {
               // No API key, use fallback from nearest court
-              setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+              setUserCity(fallbackCity);
               setUserRegion(fallbackRegion);
-              setGpsEnabled(true);
             }
           } catch (err) {
             console.error('Error getting city name:', err);
             // Use fallback from nearest court
-            setUserCity(fallbackCity ? `${fallbackCity}, Philippines` : 'Your Location');
+            setUserCity(fallbackCity);
             setUserRegion(fallbackRegion);
-            setGpsEnabled(true);
           }
 
           setIsLoadingLocation(false);
         },
         (error) => {
-          console.error('Error getting location:', error);
-          setGpsEnabled(false); // GPS denied or failed
-          setIsLoadingLocation(false);
+          console.warn(`Geolocation error (${error.code}): ${error.message}. Trying low accuracy...`);
+          if (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE) {
+            // Define success handler as a variable to reuse
+            const onSecondSuccess = async (pos: GeolocationPosition) => {
+              const { latitude: lat, longitude: lng } = pos.coords;
+              setUserLocation({ lat, lng });
+              setGpsEnabled(true);
+              // Recalculate distances
+              const courtsWithDist = courts.map(c => {
+                if (c.latitude && c.longitude) {
+                  return { ...c, distance: calculateDistance(lat, lng, c.latitude, c.longitude) };
+                }
+                return c;
+              }).filter(c => c.distance !== undefined).sort((a, b) => (a.distance || 0) - (b.distance || 0));
+              setNearbyCourts(courtsWithDist);
+              const nc = courtsWithDist[0];
+              setUserCity(nc?.city || 'Your Location');
+              setUserRegion(nc?.region || 'Luzon');
+              setIsLoadingLocation(false);
+            };
+
+            navigator.geolocation.getCurrentPosition(onSecondSuccess, (secondError) => {
+              console.error('Geolocation failed completely:', secondError);
+              setGpsEnabled(false);
+              setIsLoadingLocation(false);
+            }, { enableHighAccuracy: false, timeout: 5000 });
+          } else {
+            setGpsEnabled(false);
+            setIsLoadingLocation(false);
+          }
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 8000 }
       );
     } else {
-      setGpsEnabled(false); // Geolocation not supported
+      setGpsEnabled(false);
       setIsLoadingLocation(false);
     }
   };
@@ -467,25 +492,84 @@ const Home: React.FC = () => {
     navigate(`/booking?q=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
   };
 
+  // Derive Featured Courts and Title based on GPS status and user location
+  const getFeaturedData = () => {
+    let title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+    let featuredList = [];
+
+    // All courts sorted by rating (5 to 1) for neutral/fallback use
+    const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+    if (gpsEnabled) {
+      if (userCity) {
+        const locationParts = userCity.split(",");
+        const cityName = locationParts[0].trim();
+        // If we have a region but it's not in the city string, we can show "City, Region"
+        const displayLocation = (userRegion && !cityName.includes(userRegion) && cityName !== 'Your Location')
+          ? `${cityName}, ${userRegion}`
+          : (cityName === 'Your Location' && userRegion ? userRegion : cityName);
+
+        title = <span>Featured Courts in <span className="text-lime-500">{displayLocation}.</span></span>;
+      } else {
+        // GPS enabled but city info still loading or unavailable
+        title = <span>Featured Courts <span className="text-lime-500">Near You.</span></span>;
+      }
+
+      // Logic for selecting courts based on GPS
+      if (userCity && userCity !== 'Your Location') {
+        const cityName = userCity.split(",")[0].trim().toLowerCase();
+
+        // Filter by city and sort by rating descending (5 to 1)
+        featuredList = courts
+          .filter(court => court.city.toLowerCase().includes(cityName))
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+        // Fallback if no courts found in that specific city - show top 4 nearby/rated
+        if (featuredList.length === 0) {
+          featuredList = (nearbyCourts.length > 0 ? [...nearbyCourts] : allCourtsSorted)
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+            .slice(0, 4);
+        }
+      } else if (nearbyCourts.length > 0) {
+        // GPS enabled but city name not specific yet - show top 4 nearby
+        featuredList = [...nearbyCourts]
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+          .slice(0, 4);
+      } else {
+        // Fallback to top rated if nearby hasn't calculated yet
+        featuredList = allCourtsSorted.slice(0, 4);
+      }
+    } else {
+      // Location OFF: Show top 4 rated courts across PH (5 to 1 stars)
+      title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+      featuredList = allCourtsSorted.slice(0, 4);
+    }
+
+    return { title, featuredList };
+  };
+
+  const { title: featuredSectionTitle, featuredList } = getFeaturedData();
+
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
       {/* Cinematic Hero */}
-      <section className="relative min-h-[90vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-12 pb-4 md:pb-0 bg-slate-950 z-40">
-        {/* Overlapping player faces and user count - responsive positioning */}
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-2 md:left-16 md:bottom-16 md:translate-x-0 z-40 flex flex-col md:flex-row items-center gap-2 md:gap-3 select-none w-full px-6 md:px-0">
+      <section className="relative min-h-[90vh] md:min-h-[95vh] flex flex-col items-center justify-center pt-16 md:pt-24 pb-28 md:pb-40 bg-slate-950 z-40">
+        {/* Overlapping player faces and user count - Desktop: Corner positioning, Mobile: Hidden (moved below title) */}
+        <div className="hidden md:flex absolute left-8 bottom-8 md:bottom-14 z-40 items-center gap-3 select-none">
           <div className="flex -space-x-4">
             {playerFaces.map((face, idx) => (
               <img
                 key={idx}
                 src={face}
                 alt={`Player ${idx + 1}`}
-                className={`w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-white shadow-lg object-cover ${idx !== 0 ? '-ml-4' : ''}`}
+                className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md object-cover"
                 style={{ zIndex: playerFaces.length - idx }}
               />
             ))}
           </div>
-          <span className="bg-white/80 text-slate-900 font-bold text-xs md:text-base px-4 py-2 rounded-full shadow-md border border-slate-200">
-            Over {totalUsers.toLocaleString()}+ Pickleplay players registered
+          <span className="bg-white/95 text-slate-900 font-black text-xs md:text-sm uppercase tracking-wider px-5 py-2.5 rounded-full shadow-lg border border-slate-100 flex items-center gap-2 backdrop-blur-md">
+            <span className="w-2 h-2 bg-lime-500 rounded-full animate-pulse" />
+            {totalUsers.toLocaleString()}+ Players Active
           </span>
         </div>
         <div className="absolute inset-0 overflow-hidden z-0 pointer-events-none">
@@ -512,16 +596,35 @@ const Home: React.FC = () => {
             The National Network for Philippines
           </div>
           <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
-            <span className="text-5xl sm:text-6xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
-            <span className="text-lime-400 text-4xl sm:text-7xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
+            <span className="text-6xl sm:text-7xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
+            <span className="text-lime-400 text-5xl sm:text-8xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
           </h1>
-          <p className="text-base md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-4 md:mb-12">
+
+          {/* Mobile-only Player Badge */}
+          <div className="flex md:hidden items-center gap-3 mb-6 animate-slide-up">
+            <div className="flex -space-x-3">
+              {playerFaces.map((face, idx) => (
+                <img
+                  key={idx}
+                  src={face}
+                  alt={`Player ${idx + 1}`}
+                  className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
+                  style={{ zIndex: playerFaces.length - idx }}
+                />
+              ))}
+            </div>
+            <span className="bg-white/95 text-slate-900 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full shadow-md border border-slate-100 flex items-center gap-1.5 backdrop-blur-md">
+              <span className="w-1 h-1 bg-lime-500 rounded-full animate-pulse" />
+              {totalUsers.toLocaleString()}+ Active
+            </span>
+          </div>
+          <p className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-8 md:mb-12">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
           <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2.5 h-16 md:h-20 shadow-3xl">
-                <Search className="ml-2 md:ml-6 text-slate-500" size={20} />
+              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-2 md:p-2.5 h-14 md:h-16 shadow-3xl">
+                <Search className="ml-3 md:ml-6 text-slate-500" size={18} />
                 <input
                   type="text"
                   placeholder="Find courts..."
@@ -532,11 +635,11 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
+                  className="flex-1 bg-transparent border-none text-white px-3 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
                 />
                 <button
                   type="submit"
-                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-10 md:h-16 px-2 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-[11px] md:text-lg flex-shrink-0 mr-1"
+                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-10 md:h-12 px-5 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
                 >
                   LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
                 </button>
@@ -656,24 +759,19 @@ const Home: React.FC = () => {
             <div>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
-                Featured Courts <span className="text-lime-500">Near You.</span>
+                {featuredSectionTitle}
               </h2>
-              {userCity && (
-                <p className="text-slate-500 font-medium mt-4 flex items-center gap-2">
-                  <MapPin size={16} className="text-blue-600" />
-                  Showing courts near <span className="font-bold text-slate-700">{userCity}</span>
-                </p>
-              )}
             </div>
             <Link
-              to="/booking"
+              to={userLocation
+                ? `/booking?lat=${userLocation.lat}&lng=${userLocation.lng}&zoom=12${userCity ? `&loc=${encodeURIComponent(userCity)}` : ''}`
+                : "/booking"}
               className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors"
             >
               VIEW ALL COURTS <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
 
-          {/* Courts Row - Horizontal Scroll */}
           {isLoadingLocation ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-4">
@@ -681,7 +779,7 @@ const Home: React.FC = () => {
                 <p className="text-slate-500 font-medium">Finding courts near you...</p>
               </div>
             </div>
-          ) : nearbyCourts.length > 0 ? (
+          ) : featuredList.length > 0 ? (
             <div className="relative">
               {/* Left Scroll Button */}
               <button
@@ -711,11 +809,17 @@ const Home: React.FC = () => {
                 id="courts-carousel"
                 className="flex gap-6 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
               >
-                {nearbyCourts.slice(0, 10).map((court, idx) => (
+                {featuredList.slice(0, 10).map((court, idx) => (
                   <div
                     key={idx}
-                    className="flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 snap-start"
+                    className="group relative flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl hover:scale-[1.02] transition-all duration-500 snap-start overflow-hidden"
                   >
+                    {/* Modern Gradient Glow Effect */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-lime-400/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-lime-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+
+                    {/* Lime Gradient Accent at bottom */}
+                    <div className="absolute inset-x-0 bottom-0 h-1.5 group-hover:h-2 bg-gradient-to-r from-lime-400 via-lime-500 to-lime-600 opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
                     {/* Court Image */}
                     <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
                       <img
@@ -781,26 +885,26 @@ const Home: React.FC = () => {
 
               {/* Scroll Indicator Dots */}
               <div className="flex justify-center gap-2 mt-4 md:hidden">
-                {nearbyCourts.slice(0, Math.min(10, nearbyCourts.length)).map((_, idx) => (
+                {featuredList.slice(0, Math.min(10, featuredList.length)).map((_, idx) => (
                   <div key={idx} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="text-center py-16">
-              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <MapPin size={32} className="text-slate-400" />
+            <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm">
+              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <MapPin size={32} className="text-slate-300" />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">Enable Location to See Nearby Courts</h3>
-              <p className="text-slate-500 font-medium mb-6 max-w-md mx-auto">
-                Allow location access to discover pickleball courts near you and start playing today!
+              <h3 className="text-xl font-black text-slate-900 mb-2">No Featured Courts Found</h3>
+              <p className="text-slate-500 font-medium mb-8 max-w-md mx-auto">
+                We couldn't find any courts matching the criteria in your area yet.
               </p>
               <button
                 onClick={getUserLocation}
                 className="px-8 py-4 bg-lime-400 hover:bg-lime-500 text-slate-900 rounded-2xl font-black text-sm uppercase tracking-wider transition-all active:scale-95 shadow-xl shadow-lime-100"
               >
                 <Navigation size={18} className="inline mr-2" />
-                Find Courts Near Me
+                Try Refreshing Location
               </button>
             </div>
           )}
@@ -808,71 +912,71 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-16 md:py-24 bg-slate-950 px-6 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
-          <div className="mb-12 md:mb-16">
-            <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
-              Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-4 underline-offset-8">how to play guides  →</span>
+          <div className="mb-8 md:mb-16">
+            <h2 className="text-2xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+              Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-2 md:decoration-4 underline-offset-4 md:underline-offset-8">how to play guides  →</span>
             </h2>
           </div>
 
           {/* Two Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-12">
             {/* Left Column - Guide Cards */}
-            <div className="space-y-8">
+            <div className="space-y-4 md:space-y-8">
               {/* Guide Card 1 */}
-              <Link to="/guides/rules" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
-                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/rules" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb13.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Players on court"
                   />
                 </div>
-                <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
+                <div className="flex-1 pt-1 md:pt-2">
+                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     How to play pickleball - 9 simple rules for beginners
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 2 */}
-              <Link to="/guides/skill-rating" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
-                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/skill-rating" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb14.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Player serving"
                   />
                 </div>
-                <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
+                <div className="flex-1 pt-1 md:pt-2">
+                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     What is my pickleball skill rating? Take this quiz to get rated
                   </h3>
                 </div>
               </Link>
 
               {/* Guide Card 3 */}
-              <Link to="/guides/equipment" className="group flex gap-6 md:gap-8 items-start hover:bg-white/5 p-6 rounded-3xl transition-all">
-                <div className="w-40 h-32 md:w-64 md:h-44 rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              <Link to="/guides/equipment" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
                   <img
                     src="/images/home-images/pb16.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Pickleball equipment"
                   />
                 </div>
-                <div className="flex-1 pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4">
+                <div className="flex-1 pt-1 md:pt-2">
+                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
                     Guides
                   </span>
-                  <h3 className="text-xl md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
+                  <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     Essential gear guide - What you need to start playing
                   </h3>
                 </div>
@@ -881,7 +985,7 @@ const Home: React.FC = () => {
 
             {/* Right Column - Video Player */}
             <div className="relative">
-              <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
+              <div className="aspect-[4/3] rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
                   src="/images/home-images/pb18.jpg"
                   className="w-full h-full object-cover"
@@ -892,37 +996,37 @@ const Home: React.FC = () => {
 
                 {/* Play Button */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 md:w-28 md:h-28 bg-lime-500 rounded-full flex items-center justify-center shadow-2xl shadow-lime-500/30 group-hover:scale-110 group-hover:bg-lime-400 transition-all duration-300">
-                    <Play className="text-white fill-white" size={40} />
+                  <div className="w-16 h-16 md:w-28 md:h-28 bg-lime-500 rounded-full flex items-center justify-center shadow-2xl shadow-lime-500/30 group-hover:scale-110 group-hover:bg-lime-400 transition-all duration-300">
+                    <Play className="text-white fill-white" size={32} />
                   </div>
                 </div>
               </div>
 
               {/* Video Description */}
-              <div className="mt-8 space-y-6">
+              <div className="mt-4 md:mt-8 space-y-3 md:space-y-6">
                 {/* Tags */}
-                <div className="flex gap-3">
-                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                <div className="flex gap-2 md:gap-3">
+                  <span className="bg-blue-100 text-black px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
                     Guides
                   </span>
-                  <span className="bg-blue-100 text-black px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-wide">
+                  <span className="bg-blue-100 text-black px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
                     Learn
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
+                <h3 className="text-xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
                   How To Play Pickleball: Free Virtual Clinic for Beginners
                 </h3>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-wrap items-center gap-4">
-                  <button className="bg-lime-500 hover:bg-lime-600 text-white px-8 py-4 rounded-full font-black text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
+                <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                  <button className="bg-lime-500 hover:bg-lime-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-full font-black text-sm md:text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
                     Watch Now
                   </button>
-                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-base hover:text-lime-400 transition-colors group">
+                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-sm md:text-base hover:text-lime-400 transition-colors group">
                     Or read our guides
-                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </div>
@@ -932,85 +1036,88 @@ const Home: React.FC = () => {
       </section >
 
       {/* Tournaments Section - Real data from Supabase */}
-      <section className="py-20 md:py-32 bg-slate-50 relative overflow-hidden">
+      <section className="py-12 md:py-32 bg-slate-50 relative overflow-hidden">
         {/* Abstract Background Accents */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[150px] -z-10"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
 
-        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
+        <div className="max-w-[1800px] mx-auto px-4 md:px-24 lg:px-32">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 md:mb-16 gap-4 md:gap-8">
             <div className="max-w-2xl">
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COMPETITIVE CIRCUIT / 2026</p>
-              <h2 className="text-4xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
+              <p className="text-[9px] md:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-2 md:mb-4">COMPETITIVE CIRCUIT / 2026</p>
+              <h2 className="text-3xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
                 Elite PH <br />
                 <span className="text-lime-500 italic">Tournaments.</span>
               </h2>
             </div>
             <Link
               to="/tournaments"
-              className="group flex items-center gap-4 bg-white border border-slate-200 hover:border-blue-400 text-slate-900 px-8 py-4 rounded-2xl transition-all shadow-sm"
+              className="group flex items-center gap-3 md:gap-4 bg-white border border-slate-200 hover:border-blue-400 text-slate-900 px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl transition-all shadow-sm self-start md:self-auto"
             >
-              <span className="text-xs font-black uppercase tracking-widest">View All Events</span>
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                <ArrowRight size={16} />
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">View All Events</span>
+              <div className="w-7 md:w-8 h-7 md:h-8 rounded-full bg-blue-600 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                <ArrowRight size={14} className="md:w-4 md:h-4" />
               </div>
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
             {isTournamentsLoading ? (
               Array(3).fill(0).map((_, i) => (
-                <div key={i} className="aspect-[4/5] rounded-[40px] bg-white/5 animate-pulse border border-white/10"></div>
+                <div key={i} className="aspect-[4/5] rounded-3xl md:rounded-[40px] bg-white/5 animate-pulse border border-white/10"></div>
               ))
             ) : tournaments.length > 0 ? (
               tournaments.map((tournament) => (
-                <Link
-                  to="/tournaments"
+                <button
                   key={tournament.id}
-                  className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl"
+                  onClick={() => setSelectedTournament(tournament)}
+                  className="group relative aspect-[4/5] rounded-3xl md:rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left w-full"
                 >
                   <img
                     src={tournament.image || "/images/home-images/pb20.jpg"}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
                     alt={tournament.name}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent"></div>
+
+                  {/* Lime Gradient Accent at bottom */}
+                  <div className="absolute inset-x-0 bottom-0 h-24 md:h-32 bg-gradient-to-t from-lime-500/30 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                   {/* Status Badge */}
-                  <div className="absolute top-8 left-8">
-                    <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
+                  <div className="absolute top-4 md:top-8 left-4 md:left-8">
+                    <span className="bg-blue-600 text-white px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest shadow-lg">
                       {tournament.status}
                     </span>
                   </div>
 
-                  <div className="absolute bottom-10 left-10 right-10">
-                    <div className="flex items-center gap-2 text-lime-400 text-[10px] font-black uppercase tracking-widest mb-4">
-                      <Trophy size={14} />
-                      {tournament.prizePool || "Ranked Event"}
+                  <div className="absolute bottom-6 md:bottom-10 left-6 md:left-10 right-6 md:right-10">
+                    <div className="flex items-center gap-2 md:gap-3 text-lime-400 text-[10px] md:text-xs font-black uppercase tracking-widest mb-3 md:mb-4">
+                      <Trophy size={14} className="md:w-[18px] md:h-[18px]" />
+                      {tournament.prizePool ? `₱${tournament.prizePool}` : "Ranked Event"}
                     </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight leading-tight uppercase mb-6 group-hover:text-lime-400 transition-colors">
+                    <h3 className="text-xl md:text-4xl font-black text-white tracking-tight leading-tight uppercase mb-4 md:mb-8 group-hover:text-lime-400 transition-colors line-clamp-2">
                       {tournament.name}
                     </h3>
 
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 text-slate-200">
-                        <Calendar size={16} className="text-white" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">
+                    <div className="space-y-3 md:space-y-6">
+                      <div className="flex items-center gap-2 md:gap-4 text-slate-200">
+                        <Calendar size={16} className="text-white md:w-5 md:h-5" />
+                        <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest">
                           {new Date(tournament.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-slate-200">
-                        <MapPin size={16} className="text-white" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest truncate">{tournament.location}</span>
+                      <div className="flex items-center gap-2 md:gap-4 text-slate-200">
+                        <MapPin size={16} className="text-white md:w-5 md:h-5 flex-shrink-0" />
+                        <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest truncate">{tournament.location}</span>
                       </div>
                     </div>
                   </div>
-                </Link>
+                </button>
               ))
             ) : (
-              <div className="col-span-full py-20 text-center bg-white/5 rounded-[40px] border border-dashed border-white/10">
-                <Trophy className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">No live tournaments found</p>
+              <div className="col-span-full py-16 md:py-20 text-center bg-white/5 rounded-3xl md:rounded-[40px] border border-dashed border-white/10">
+                <Trophy className="w-10 h-10 md:w-12 md:h-12 text-slate-700 mx-auto mb-3 md:mb-4" />
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs md:text-sm">No live tournaments found</p>
               </div>
             )}
           </div>
@@ -1194,6 +1301,142 @@ const Home: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Tournament Details Modal */}
+      {selectedTournament && (
+        <div
+          className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300 flex items-center justify-center p-4"
+          onClick={() => setSelectedTournament(null)}
+        >
+          <div
+            className="bg-white w-full max-w-2xl rounded-2xl md:rounded-3xl shadow-2xl relative animate-in slide-in-from-bottom-4 duration-500 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedTournament(null)}
+              className="absolute top-4 right-4 md:top-6 md:right-6 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 hover:text-slate-900 transition-all z-10"
+            >
+              <X size={20} className="md:w-6 md:h-6" />
+            </button>
+
+            {/* Tournament Image */}
+            <div className="aspect-[16/9] md:aspect-[21/9] w-full rounded-t-2xl md:rounded-t-3xl overflow-hidden relative">
+              <img
+                src={selectedTournament.image || "/images/home-images/pb20.jpg"}
+                alt={selectedTournament.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent"></div>
+
+              {/* Status Badge on Image */}
+              <div className="absolute top-4 left-4 md:top-6 md:left-6">
+                <span className="bg-blue-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest shadow-lg">
+                  {selectedTournament.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 md:p-10 space-y-6 md:space-y-8">
+              {/* Title and Prize */}
+              <div>
+                <div className="flex items-center gap-2 md:gap-3 text-lime-500 text-xs md:text-sm font-black uppercase tracking-widest mb-3 md:mb-4">
+                  <Trophy size={16} className="md:w-5 md:h-5" />
+                  {selectedTournament.prizePool ? `₱${selectedTournament.prizePool.toLocaleString()} Prize Pool` : "Ranked Event"}
+                </div>
+                <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-950 tracking-tighter leading-tight mb-4 md:mb-6">
+                  {selectedTournament.name}
+                </h2>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                {/* Date */}
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <Calendar size={20} className="text-blue-600 md:w-6 md:h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                    <p className="text-sm md:text-lg font-bold text-slate-900 break-words">
+                      {new Date(selectedTournament.date).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-lime-50 flex items-center justify-center flex-shrink-0">
+                    <MapPin size={20} className="text-lime-600 md:w-6 md:h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Location</p>
+                    <p className="text-sm md:text-lg font-bold text-slate-900 break-words">{selectedTournament.location}</p>
+                  </div>
+                </div>
+
+                {/* Skill Level */}
+                {selectedTournament.skillLevel && (
+                  <div className="flex items-start gap-3 md:gap-4">
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                      <Star size={20} className="text-amber-600 md:w-6 md:h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Skill Level</p>
+                      <p className="text-sm md:text-lg font-bold text-slate-900">{selectedTournament.skillLevel}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Players */}
+                {selectedTournament.maxPlayers && (
+                  <div className="flex items-start gap-3 md:gap-4">
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+                      <Activity size={20} className="text-purple-600 md:w-6 md:h-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Players</p>
+                      <p className="text-sm md:text-lg font-bold text-slate-900">
+                        {selectedTournament.registeredCount || 0} / {selectedTournament.maxPlayers}
+                      </p>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2 mt-2">
+                        <div
+                          className="bg-purple-600 h-1.5 md:h-2 rounded-full transition-all"
+                          style={{ width: `${((selectedTournament.registeredCount || 0) / selectedTournament.maxPlayers) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-2 md:pt-4">
+                <Link
+                  to="/tournaments"
+                  className="flex-1 px-6 md:px-8 py-3 md:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl md:rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-200 hover:shadow-xl flex items-center justify-center gap-2"
+                  onClick={() => setSelectedTournament(null)}
+                >
+                  <Trophy size={16} className="md:w-[18px] md:h-[18px]" />
+                  Register Now
+                </Link>
+                <button
+                  onClick={() => setSelectedTournament(null)}
+                  className="px-6 md:px-8 py-3 md:py-4 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl md:rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

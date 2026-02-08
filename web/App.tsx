@@ -564,13 +564,13 @@ const NavigationHandler: React.FC<{
 
       {/* Mobile Sidebar/Menu Overlay */}
       {isMobileMenuOpen && role !== 'guest' && (
-        <div className="md:hidden fixed inset-0 z-[60] bg-slate-950/20 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="md:hidden fixed inset-0 z-[110] bg-slate-950/20 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-2xl animate-in slide-in-from-right duration-500 p-8 flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Menu</h2>
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X size={24} /></button>
             </div>
-            <nav className="flex-1 space-y-2">
+            <nav className="flex-1 space-y-2 overflow-y-auto scrollbar-hide py-2">
               <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
@@ -602,7 +602,10 @@ const NavigationHandler: React.FC<{
               <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               <NavItem to="/profile" icon={<User size={22} />} label="Profile" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
             </nav>
-            <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-4 text-rose-600 font-black uppercase text-xs tracking-widest"><LogOut size={20} /> Log Out</button>
+            <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-6 text-rose-600 hover:text-rose-700 transition-colors font-black uppercase text-xs tracking-widest border-t border-slate-50 -mx-8 px-8 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
+              <LogOut size={20} />
+              <span>Log Out</span>
+            </button>
           </div>
         </div>
       )}
@@ -636,7 +639,7 @@ const NavigationHandler: React.FC<{
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><News /></div>} />
+              <Route path="/news" element={<div className="p-4 md:p-8 pt-32 md:pt-52 max-w-[1800px] mx-auto w-full"><News /></div>} />
               <Route path="/academy" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/rankings" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />

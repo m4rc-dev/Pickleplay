@@ -44,6 +44,7 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
     const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
     const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
     const [clinicCoachFilter, setClinicCoachFilter] = useState<string | null>(null);
+    const [lessonDate, setLessonDate] = useState<Date>(new Date());
     const clinicsSectionRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -171,7 +172,7 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
                 .insert({
                     coach_id: selectedCoach.id,
                     student_id: currentUserId,
-                    date: formData.get('date'),
+                    date: lessonDate.toISOString().split('T')[0],
                     time: formData.get('time'),
                     duration: formData.get('duration'),
                     type: formData.get('type'),
@@ -523,18 +524,41 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
                         </div>
 
                         <form onSubmit={handleRequestLesson} className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Preferred Date</label>
-                                    <input required name="date" type="date" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                                    <span>Choose Date</span>
+                                    <Calendar size={14} className="text-blue-600" />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Preferred Time</label>
-                                    <input required name="time" type="text" placeholder="e.g. 08:30 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
+                                <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
+                                    {Array.from({ length: 7 }).map((_, i) => {
+                                        const date = new Date();
+                                        date.setDate(date.getDate() + i);
+                                        const isSelected = lessonDate.toDateString() === date.toDateString();
+                                        return (
+                                            <button
+                                                key={i}
+                                                type="button"
+                                                onClick={() => setLessonDate(date)}
+                                                className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                    {date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
+                                                </span>
+                                                <span className="text-sm font-black tracking-tighter">{date.getDate()}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Preferred Time</label>
+                                    <input required name="time" type="text" placeholder="e.g. 08:30 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
+                                </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Duration</label>
                                     <select name="duration" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold">
@@ -543,6 +567,9 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
                                         <option value="120 min">120 minutes</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Session Type</label>
                                     <select name="type" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold">
