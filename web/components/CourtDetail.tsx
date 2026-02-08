@@ -53,12 +53,9 @@ const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
                 position: { lat, lng },
                 map,
                 icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 12,
-                    fillColor: '#a3e635', // lime-400
-                    fillOpacity: 1,
-                    strokeColor: '#ffffff',
-                    strokeWeight: 3,
+                    url: '/images/PinMarker.png',
+                    scaledSize: new window.google.maps.Size(28, 40),
+                    anchor: new window.google.maps.Point(14, 40)
                 },
             });
         }
@@ -387,12 +384,14 @@ const CourtDetail: React.FC = () => {
                     >
                         Back to Home
                     </button>
-                    <button
-                        onClick={fetchMyBookings}
-                        className="px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
-                    >
-                        View Booked Courts
-                    </button>
+                    {user && (
+                        <button
+                            onClick={fetchMyBookings}
+                            className="px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
+                        >
+                            View Booked Courts
+                        </button>
+                    )}
                     <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
                         }`}>
                         {court.type}
@@ -493,11 +492,11 @@ const CourtDetail: React.FC = () => {
 
                         {/* Date Picker */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
                                 <span>Choose Date</span>
-                                <CalendarIcon size={14} />
+                                <CalendarIcon size={14} className="text-blue-600" />
                             </div>
-                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
+                            <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
                                 {Array.from({ length: 7 }).map((_, i) => {
                                     const date = new Date();
                                     date.setDate(date.getDate() + i);
@@ -509,13 +508,15 @@ const CourtDetail: React.FC = () => {
                                                 setSelectedDate(date);
                                                 setSelectedSlot(null);
                                             }}
-                                            className={`flex flex-col items-center min-w-[64px] py-4 rounded-2xl border transition-all duration-300 ${isSelected
-                                                ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-100'
+                                            className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
+                                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
                                                 : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
                                                 }`}
                                         >
-                                            <span className="text-[10px] font-black uppercase mb-1">{date.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                                            <span className="text-lg font-black">{date.getDate()}</span>
+                                            <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                {date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
+                                            </span>
+                                            <span className="text-sm font-black tracking-tighter">{date.getDate()}</span>
                                         </button>
                                     );
                                 })}
