@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -297,6 +297,7 @@ const GuestBooking: React.FC = () => {
             mapTypeControl: false,
             fullscreenControl: false,
             streetViewControl: false,
+            panControl: false,
         });
 
         googleMapRef.current = map;
@@ -498,7 +499,7 @@ const GuestBooking: React.FC = () => {
         );
 
     return (
-        <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
+        <div className="pt-16 md:pt-24 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative">
             <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
                 <div className="flex items-center gap-3">
                     {isSearchExpanded ? (
@@ -548,7 +549,7 @@ const GuestBooking: React.FC = () => {
 
                                 {/* Courts Section */}
                                 <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Courts</p>
-                                <div className="max-h-[300px] overflow-y-auto">
+                                <div className="space-y-4 md:space-y-1 custom-scrollbar pb-32">
                                     {courts
                                         .filter(c => {
                                             if (!searchQuery.trim()) return true;
@@ -603,12 +604,12 @@ const GuestBooking: React.FC = () => {
                             >
                                 <Search size={18} />
                             </button>
-                            <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
+                            <div className="flex-1 flex gap-2">
                                 {(['Courts', 'Games', 'Lessons'] as const).map((type) => (
                                     <button
                                         key={type}
                                         onClick={() => setFilterType(type === 'Courts' ? 'All' : 'All' as any)}
-                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
+                                        className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
                                             ? 'border-blue-600 bg-white text-slate-900 shadow-sm'
                                             : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                                             }`}
@@ -627,20 +628,17 @@ const GuestBooking: React.FC = () => {
 
             <div className="">
                 {/* Header Section - Desktop Only */}
-                <div className="hidden md:block space-y-6">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                <div className="hidden md:block space-y-6 mt-6">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                         <div>
-                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2026</p>
-                            <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase leading-[0.8]">
-                                Book a Court <span className="text-blue-600">in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
+                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / LIVE</p>
+                            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">
+                                Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
                             </h1>
                         </div>
-                        <button
-                            onClick={() => navigate('/')}
-                            className="px-6 md:px-8 py-3 md:py-4 bg-lime-400 border-2 border-lime-400 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-2xl shadow-lime-200/50 shrink-0"
-                        >
-                            Back to Home
-                        </button>
+                        <p className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                            {filteredCourts.length} {filteredCourts.length === 1 ? 'Court' : 'Courts'} — Page 1 of 1
+                        </p>
                     </div>
 
                     {/* Filter Pills */}
@@ -661,7 +659,7 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-4 mt-0">
                     {/* Sidebar - List View */}
                     <div className={`lg:col-span-4 space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
                         <form
@@ -696,21 +694,16 @@ const GuestBooking: React.FC = () => {
                             </button>
                         </form>
 
-                        <div className="md:hidden mb-4">
-                            <p className="text-sm font-bold text-slate-600">
-                                {filteredCourts.length} pickleball courts near you
-                            </p>
-                        </div>
 
                         {/* Courts List Container */}
-                        <div className="bg-white md:bg-transparent rounded-[32px] md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col min-h-[500px]">
+                        <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-[calc(100vh-140px)] md:min-h-[500px] pt-12 md:pt-0">
                             <div className="hidden md:block p-8 border-b border-slate-50">
                                 <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
                                     Courts in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]} ({filteredCourts.length})
                                 </h2>
                             </div>
 
-                            <div className="space-y-4 md:space-y-2 max-h-none md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1">
+                            <div className="space-y-4 md:space-y-2 h-full md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1 pb-14 md:pb-0">
                                 {isLoading ? (
                                     Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
                                 ) : (
@@ -718,9 +711,9 @@ const GuestBooking: React.FC = () => {
                                         <button
                                             key={court.id}
                                             onClick={() => navigate(`/court/${court.id}`)}
-                                            className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent rounded-2xl md:rounded-[28px] border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
+                                            className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
                                         >
-                                            <div className="w-20 h-20 md:w-16 md:h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0">
+                                            <div className="w-20 h-20 md:w-16 md:h-16 bg-slate-100 overflow-hidden shrink-0">
                                                 <img
                                                     src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
                                                     alt={court.name}
@@ -750,7 +743,8 @@ const GuestBooking: React.FC = () => {
 
                     {/* Interactive Map */}
                     <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-                        <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[750px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[80vh] md:h-[750px] opacity-100'}`}>
+                        <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
+
                             {isLoading ? (
                                 <div className="h-full bg-slate-100 flex items-center justify-center">
                                     <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -761,8 +755,8 @@ const GuestBooking: React.FC = () => {
 
                             {/* Mobile Court Slider - Visible only on map view mobile */}
                             {!isLoading && isMobile && viewMode === 'map' && (
-                                <div className="absolute bottom-4 left-0 right-0 z-10">
-                                    <div className="flex gap-3 overflow-x-auto px-4 pb-4 no-scrollbar snap-x">
+                                <div className="absolute bottom-14 left-0 right-0 z-10">
+                                    <div className="flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar snap-x">
                                         {filteredCourts.map(court => (
                                             <button
                                                 key={court.id}
@@ -803,38 +797,29 @@ const GuestBooking: React.FC = () => {
                 </div>
             </div>
 
-            {/* Mobile Bottom Navigation Menu */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center z-[100] shadow-[0_-8px_30px_rgb(0,0,0,0.04)] pb-[env(safe-area-inset-bottom)]">
-                <button
-                    onClick={() => setViewMode('list')}
-                    className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'list' ? 'text-blue-600' : 'text-slate-400'}`}
-                >
-                    <div className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-blue-50' : ''}`}>
-                        <List size={20} />
+            {/* Floating Navigation Bar - Always visible on mobile */}
+            {isMobile && (
+                <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] h-14">
+                    <div className="flex justify-center items-center gap-2 px-4 h-full">
+                        <button
+                            onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                        >
+                            {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
+                            <span className="text-[10px] uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
+                        </button>
+                        <button
+                            onClick={() => setShowFilters(true)}
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                        >
+                            <Funnel size={16} />
+                            <span className="text-[10px] uppercase tracking-widest">Filters</span>
+                        </button>
                     </div>
-                    <span className="text-[9px] font-black uppercase tracking-tighter text-center">List View</span>
-                </button>
+                </nav>
+            )}
 
-                <button
-                    onClick={() => setViewMode('map')}
-                    className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'map' ? 'text-blue-600' : 'text-slate-400'}`}
-                >
-                    <div className={`p-2 rounded-xl transition-all ${viewMode === 'map' ? 'bg-blue-50' : ''}`}>
-                        <MapPin size={20} />
-                    </div>
-                    <span className="text-[9px] font-black uppercase tracking-tighter text-center">Map View</span>
-                </button>
-
-                <button
-                    onClick={() => setShowFilters(true)}
-                    className="flex flex-col items-center gap-1 transition-all text-slate-400"
-                >
-                    <div className="p-2 rounded-xl transition-all">
-                        <Filter size={20} />
-                    </div>
-                    <span className="text-[9px] font-black uppercase tracking-tighter text-center">Filters</span>
-                </button>
-            </nav>
+            {/* Mobile Bottom Navigation Menu Removed */}
 
             {/* Mobile Filters Drawer */}
             {showFilters && (

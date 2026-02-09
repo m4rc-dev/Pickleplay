@@ -353,7 +353,7 @@ const CourtDetail: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
+            <div className="pt-20 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
                 <div className="h-10 bg-slate-200 rounded-2xl w-48"></div>
                 <div className="aspect-[21/9] bg-slate-200 rounded-[48px]"></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -367,7 +367,7 @@ const CourtDetail: React.FC = () => {
     if (!court) return null;
 
     return (
-        <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
+        <div className="pt-20 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
             <div className="space-y-8">
                 {/* Header Navigation */}
                 <div className="flex items-center justify-between">

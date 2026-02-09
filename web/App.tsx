@@ -152,9 +152,10 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
   ];
 
   if (role === 'guest') return null;
+  if (location.pathname === '/booking') return null;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center z-[100] safe-area-bottom shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
+    <nav className="md:hidden fixed bottom-6 left-6 right-6 bg-white/95 backdrop-blur-2xl border border-slate-200/60 px-6 py-3 flex justify-between items-center z-[110] shadow-[0_15px_40px_rgba(0,0,0,0.12)] rounded-[28px]">
       {items.map((item) => {
         const isActive = location.pathname === item.to;
         return (
@@ -542,7 +543,7 @@ const NavigationHandler: React.FC<{
 
       {/* Mobile Top Header */}
       {!isAuthPage && (
-        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white border-b border-slate-100' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 ${isMobileMenuOpen ? 'z-[105]' : 'z-50'} transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white border-b border-slate-100' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
             <div className="flex flex-col leading-none">
@@ -630,7 +631,7 @@ const NavigationHandler: React.FC<{
       )}
 
       <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: '#EBEBE6' }}>
-        <div className={`${role === 'guest' ? '' : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'} transition-colors duration-300`}>
+        <div className={`${role === 'guest' || location.pathname === '/booking' ? '' : 'p-4 md:p-8 lg:p-8 max-w-[1920px] mx-auto w-full'} transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>
               <Route path="/" element={role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
@@ -639,9 +640,13 @@ const NavigationHandler: React.FC<{
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={<Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={<div className="p-4 md:p-8 pt-32 md:pt-52 max-w-[1800px] mx-auto w-full"><News /></div>} />
-              <Route path="/academy" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
-              <Route path="/rankings" element={<div className="p-4 md:p-8 pt-44 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
+              <Route path="/news" element={
+                role === 'guest'
+                  ? <div className="pt-28 md:pt-32 px-4 md:px-12 pb-12 max-w-[1800px] mx-auto w-full"><News /></div>
+                  : <div className="max-w-[1800px] mx-auto w-full"><News /></div>
+              } />
+              <Route path="/academy" element={<div className="p-4 md:p-8 pt-0 md:pt-0 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
+              <Route path="/rankings" element={<div className="p-4 md:p-8 pt-0 md:pt-0 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/booking" element={role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />

@@ -294,7 +294,7 @@ const News: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
-            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST <br />UPDATES.</h1>
+            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST UPDATES.</h1>
           </div>
         </div>
 
@@ -322,7 +322,7 @@ const News: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
-            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST <br />UPDATES.</h1>
+            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST UPDATES.</h1>
           </div>
         </div>
 
@@ -368,19 +368,22 @@ const News: React.FC = () => {
   const gridArticles = articles.slice(1);
 
   return (
-    <div className="space-y-12 animate-fade-in pb-20">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED / LIVE</p>
-          <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST <br />UPDATES.</h1>
+    <div>
+      <div className="space-y-12 animate-fade-in pb-20">
+        {/* Header Section - Desktop Only */}
+        <div className="hidden md:block space-y-6 mt-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED / LIVE</p>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST <br />UPDATES.</h1>
+            </div>
+            {pagination && (
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                {pagination.total} article{pagination.total !== 1 ? 's' : ''} — Page {pagination.current_page} of {pagination.last_page}
+              </p>
+            )}
+          </div>
         </div>
-        {pagination && (
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            {pagination.total} article{pagination.total !== 1 ? 's' : ''} — Page {pagination.current_page} of {pagination.last_page}
-          </p>
-        )}
-      </div>
 
       {/* Loading */}
       {loading ? (
@@ -553,6 +556,7 @@ const News: React.FC = () => {
           <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest opacity-60">Zero spam. Pure pickleball.</p>
         </div>
       </section>
+      </div>
     </div>
   );
 };

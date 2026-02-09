@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -97,6 +97,7 @@ const Booking: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
   const [user, setUser] = useState<any>(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [blockedSlots, setBlockedSlots] = useState<Set<string>>(new Set());
@@ -174,9 +175,21 @@ const Booking: React.FC = () => {
   const [lastBookingTime, setLastBookingTime] = useState<number | null>(null);
 
   useEffect(() => {
+    setIsUserLoading(true);
     supabase.auth.getUser().then(({ data: { user } }) => {
+      console.log('User state in Booking component:', user);
       setUser(user);
+      setIsUserLoading(false);
     });
+
+    // Also listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user);
+      setUser(session?.user || null);
+      setIsUserLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Receipt state
@@ -889,8 +902,8 @@ const Booking: React.FC = () => {
   };
 
   return (
-    <div className="pt-16 md:pt-44 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
-      <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
+    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-3">
           {isSearchExpanded ? (
             <div className="flex-1 relative">
@@ -939,7 +952,7 @@ const Booking: React.FC = () => {
 
                 {/* Courts Section */}
                 <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Courts</p>
-                <div className="max-h-[300px] overflow-y-auto">
+                <div className="space-y-4 md:space-y-1 custom-scrollbar pb-32">
                   {locationGroups
                     .filter(l => {
                       if (!searchQuery.trim()) return true;
@@ -996,12 +1009,12 @@ const Booking: React.FC = () => {
               >
                 <Search size={18} />
               </button>
-              <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
+              <div className="flex-1 flex gap-2">
                 {(['Courts', 'Games', 'Lessons'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setFilterType(type === 'Courts' ? 'All' : 'All' as any)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
                       ? 'border-blue-600 bg-white text-slate-900 shadow-sm'
                       : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
                       }`}
@@ -1020,24 +1033,19 @@ const Booking: React.FC = () => {
 
       <div className="">
         {/* Desktop Header */}
-        <div className="hidden md:block space-y-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+        <div className="hidden md:block space-y-6 mt-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2026</p>
-              <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase leading-[0.8]">
-                Book a Court {searchParams.get('loc') || userCity ? (
-                  <span className="text-blue-600">in {(searchParams.get('loc') || userCity || '').split(',')[0]}.</span>
-                ) : <span className="text-blue-600">Now.</span>}
+              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / LIVE</p>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">
+                Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
               </h1>
             </div>
-            <div className="flex flex-wrap gap-3 shrink-0">
-              <button
-                onClick={() => navigate('/')}
-                className="px-6 md:px-8 py-3 md:py-4 bg-lime-400 border-2 border-lime-400 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-2xl shadow-lime-200/50"
-              >
-                Back to Home
-              </button>
-              <button
+            <div className="flex items-center gap-4">
+              <p className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                {locationGroups.length} {locationGroups.length === 1 ? 'Location' : 'Locations'}
+              </p>
+              <button 
                 onClick={handleViewBookings}
                 className="px-6 md:px-8 py-3 md:py-4 bg-white border-2 border-slate-950 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
               >
@@ -1062,7 +1070,7 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-4 mt-0">
           {/* Sidebar - List View */}
           <div className={`lg:col-span-4 space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
             <form
@@ -1097,20 +1105,15 @@ const Booking: React.FC = () => {
               </button>
             </form>
 
-            <div className="md:hidden mb-4">
-              <p className="text-sm font-bold text-slate-600">
-                {locationGroups.length} pickleball courts near you
-              </p>
-            </div>
 
             {selectedCourt ? (
               /* Court Selected - Show availability and booking interface */
-              <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
+              <div className="bg-white p-6 rounded-[48px] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-right duration-500">
                 <div>
                   {/* Back to location button */}
                   <button
                     onClick={() => setSelectedCourt(null)}
-                    className="group inline-flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest mb-6 px-4 py-2 bg-blue-50 rounded-full hover:bg-blue-100 transition-all"
+                    className="group inline-flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] mb-8 px-6 py-3 bg-blue-50 rounded-full hover:bg-blue-100 transition-all active:scale-95"
                   >
                     <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Courts
                   </button>
@@ -1398,13 +1401,13 @@ const Booking: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="bg-white md:bg-transparent rounded-[32px] md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col min-h-[500px]">
+              <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-[calc(100vh-140px)] md:min-h-[500px] pt-12 md:pt-0">
                 <div className="hidden md:block p-8 border-b border-slate-50">
                   <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
                     {searchParams.get('loc') || userCity ? `Courts in ${(searchParams.get('loc') || userCity || '').split(',')[0]}` : 'All Locations'} ({locationGroups.length})
                   </h2>
                 </div>
-                <div className="space-y-4 md:space-y-2 max-h-none md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1">
+                <div className="space-y-4 md:space-y-2 h-full md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1 pb-14 md:pb-0">
                   {isLoading ? (
                     Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
                   ) : (
@@ -1433,23 +1436,22 @@ const Booking: React.FC = () => {
                               }
                             }
                           }}
-                          className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent rounded-2xl md:rounded-[28px] border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
+                          className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
                         >
-                          <div className="w-20 h-20 md:w-16 md:h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0">
+                          <div className="w-20 h-20 md:w-16 md:h-16 bg-slate-100 overflow-hidden shrink-0">
                             <img
                               src={`https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
                               alt={location.locationName}
                               className="w-full h-full object-cover"
                             />
                           </div>
-                          <div className="flex-1 text-left">
-                            <p className="font-black text-slate-900 text-sm md:text-base tracking-tight mb-1 group-hover:text-blue-600 transition-colors uppercase italic line-clamp-1">{location.locationName}</p>
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <h3 className="font-black text-slate-950 text-sm md:text-base tracking-tight group-hover:text-blue-600 transition-colors uppercase italic line-clamp-1">{location.locationName}</h3>
+                            </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-1">
                               <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                 <span className="text-blue-500">🎾</span> {location.courts.length} Courts
-                              </div>
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                <span className="text-blue-500">⊞</span> Perm. Lines
                               </div>
                               <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                 <span className="text-blue-500">₱</span> Fee
@@ -1469,7 +1471,10 @@ const Booking: React.FC = () => {
 
           {/* Map View */}
           <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[750px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[80vh] md:h-[750px] opacity-100'}`}>
+            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
+
+              {/* Mobile Map View Toggle removed - using bottom nav bar instead */}
+
               {isLoading ? (
                 <div className="h-full bg-slate-100 flex items-center justify-center">
                   <Loader2 className="animate-spin text-blue-600" size={40} />
@@ -1479,8 +1484,8 @@ const Booking: React.FC = () => {
               )}
               {/* Mobile Court Slider - Visible only on map view mobile */}
               {!isLoading && isMobile && viewMode === 'map' && (
-                <div className="absolute bottom-4 left-0 right-0 z-10">
-                  <div className="flex gap-3 overflow-x-auto px-4 pb-4 no-scrollbar snap-x">
+                <div className="absolute bottom-14 left-0 right-0 z-10">
+                  <div className="flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar snap-x">
                     {locationGroups.map(location => (
                       <button
                         key={location.locationId}
@@ -1502,10 +1507,10 @@ const Booking: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="font-black text-slate-900 text-[10px] uppercase truncate italic">{location.locationName}</h4>
-                          <p className="text-[9px] text-slate-500 line-clamp-1 mb-1">{location.address}</p>
+                          <p className="text-[9px] text-slate-500 line-clamp-1 mb-1">Explore court details</p>
                           <div className="flex items-center justify-between">
                             <span className="text-[9px] font-black text-blue-600">₱{location.courts[0]?.pricePerHour}/hr</span>
-                            <span className="text-[8px] bg-lime-400/20 text-lime-700 px-1.5 py-0.5 rounded font-bold">BOOK NOW</span>
+                            <span className="text-[8px] bg-lime-400/20 text-lime-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">BOOK NOW</span>
                           </div>
                         </div>
                       </button>
@@ -1524,44 +1529,31 @@ const Booking: React.FC = () => {
                 </button>
               </div>
 
-              {/* Mobile Floating Action Buttons - Removed from here to be global */}
+              {/* Mobile Floating Navigation Bar - Inside map */}
+              {isMobile && (
+                <nav className="absolute bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] h-14">
+                  <div className="flex justify-center items-center gap-2 px-4 h-full">
+                    <button
+                      onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                    >
+                      {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
+                      <span className="text-[10px] uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
+                    </button>
+                    <button
+                      onClick={() => setShowFilters(true)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                    >
+                      <Funnel size={16} />
+                      <span className="text-[10px] uppercase tracking-widest">Filters</span>
+                    </button>
+                  </div>
+                </nav>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Mobile Bottom Navigation Menu */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-between items-center z-[100] shadow-[0_-8px_30px_rgb(0,0,0,0.04)] pb-[env(safe-area-inset-bottom)]">
-        <button
-          onClick={() => setViewMode('list')}
-          className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'list' ? 'text-blue-600' : 'text-slate-400'}`}
-        >
-          <div className={`p-2 rounded-xl transition-all ${viewMode === 'list' ? 'bg-blue-50' : ''}`}>
-            <List size={20} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-tighter text-center">List View</span>
-        </button>
-
-        <button
-          onClick={() => setViewMode('map')}
-          className={`flex flex-col items-center gap-1 transition-all ${viewMode === 'map' ? 'text-blue-600' : 'text-slate-400'}`}
-        >
-          <div className={`p-2 rounded-xl transition-all ${viewMode === 'map' ? 'bg-blue-50' : ''}`}>
-            <MapPin size={20} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-tighter text-center">Map View</span>
-        </button>
-
-        <button
-          onClick={() => setShowFilters(true)}
-          className="flex flex-col items-center gap-1 transition-all text-slate-400"
-        >
-          <div className="p-2 rounded-xl transition-all">
-            <Filter size={20} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-tighter text-center">Filters</span>
-        </button>
-      </nav>
 
       {/* Mobile Filters Drawer */}
       {showFilters && (
