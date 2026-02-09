@@ -103,22 +103,25 @@ const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantit
 
   return (
     <>
-      <div className="min-h-screen">
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-12 space-y-12 animate-fade-in">
-          <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY PRO SHOP</p>
-              <h1 className="text-6xl md:text-8xl font-black text-slate-950 tracking-tighter">EQUIP FOR VICTORY.</h1>
-            </div>
-            <button key={cartCount} onClick={() => setIsCartOpen(true)} className="bg-slate-900 text-white w-16 h-16 rounded-2xl flex items-center justify-center relative transition-transform hover:scale-110 active:scale-95 shrink-0 shadow-xl">
-              <ShoppingBag size={24} />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-lime-400 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black border-2 border-white animate-in zoom-in-50 duration-300">
-                  {cartCount}
-                </span>
-              )}
-            </button>
-          </header>
+      <div className="min-h-screen pt-20 md:pt-24">
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pb-12 space-y-12 animate-fade-in">
+          {/* Header Section - Desktop Only */}
+          <div className="hidden md:block space-y-6 mt-6">
+            <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+              <div>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY PRO SHOP</p>
+                <h1 className="text-6xl md:text-8xl font-black text-slate-950 tracking-tighter">EQUIP FOR VICTORY.</h1>
+              </div>
+              <button key={cartCount} onClick={() => setIsCartOpen(true)} className="bg-slate-900 text-white w-16 h-16 rounded-2xl flex items-center justify-center relative transition-transform hover:scale-110 active:scale-95 shrink-0 shadow-xl">
+                <ShoppingBag size={24} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-lime-400 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black border-2 border-white animate-in zoom-in-50 duration-300">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+            </header>
+          </div>
 
           <section className="relative h-[450px] rounded-[40px] overflow-hidden bg-slate-900 shadow-2xl">
             <img
