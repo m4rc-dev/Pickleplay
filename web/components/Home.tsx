@@ -117,6 +117,7 @@ interface CourtWithDistance {
   base_price?: number;
   rating?: number;
   reviewCount?: number;
+  imageUrl?: string;
 }
 
 // Philippine regions mapping
@@ -218,6 +219,7 @@ const Home: React.FC = () => {
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [isTournamentsLoading, setIsTournamentsLoading] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<any | null>(null);
+  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
   const navigate = useNavigate();
 
   // Fetch courts from Supabase for search suggestions
@@ -227,7 +229,7 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('courts')
           .select(`
-            name, base_price, latitude, longitude, location_id,
+            name, base_price, latitude, longitude, location_id, image_url,
             locations (
               address,
               city,
@@ -261,7 +263,8 @@ const Home: React.FC = () => {
             region: getRegion(city),
             base_price: c.base_price ?? 0,
             rating: avgRating,
-            reviewCount: reviews.length
+            reviewCount: reviews.length,
+            imageUrl: c.image_url
           };
         });
         setCourts(courtData);
@@ -490,6 +493,15 @@ const Home: React.FC = () => {
     setShowSuggestions(false);
     setUserRegion(city.region); // Set region for court filtering
     navigate(`/booking?q=${encodeURIComponent(city.name)}&lat=${city.lat}&lng=${city.lng}&zoom=${city.zoom}`);
+  };
+
+  // Handle carousel scroll to update active dot
+  const handleCarouselScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const scrollLeft = container.scrollLeft;
+    const cardWidth = 280 + 16; // card width (280px) + gap (16px)
+    const index = Math.round(scrollLeft / cardWidth);
+    setActiveCarouselIndex(index);
   };
 
   // Derive Featured Courts and Title based on GPS status and user location
@@ -808,6 +820,7 @@ const Home: React.FC = () => {
               <div
                 id="courts-carousel"
                 className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
+                onScroll={handleCarouselScroll}
               >
                 {featuredList.slice(0, 10).map((court, idx) => (
                   <div
@@ -817,7 +830,7 @@ const Home: React.FC = () => {
                     {/* Court Image */}
                     <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`} className="relative block overflow-hidden">
                       <img
-                        src={COURT_IMAGES[idx % COURT_IMAGES.length]}
+                        src={court.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
                         alt={court.name}
                         className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -881,7 +894,16 @@ const Home: React.FC = () => {
               {/* Scroll Indicator Dots */}
               <div className="flex justify-center gap-2 mt-4 md:hidden">
                 {featuredList.slice(0, Math.min(10, featuredList.length)).map((_, idx) => (
-                  <div key={idx} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
+                  idx === activeCarouselIndex ? (
+                    <img 
+                      key={idx}
+                      src="/images/Ball.png" 
+                      alt="Active" 
+                      className="w-3 h-3 object-contain"
+                    />
+                  ) : (
+                    <div key={idx} className="w-2 h-2 rounded-full bg-slate-300"></div>
+                  )
                 ))}
               </div>
             </div>
@@ -1197,11 +1219,11 @@ const Home: React.FC = () => {
       <section className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-4xl mx-auto">
           {/* Section Header */}
-          <div className="text-center mb-8 md:mb-24">
-            <h2 className="text-2xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase mb-3 md:mb-6">
+          <div className="text-center mb-8 md:mb-16">
+            <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase mb-3 md:mb-4">
               Frequently Asked Questions
             </h2>
-            <p className="text-slate-600 text-sm md:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+            <p className="text-slate-600 text-sm md:text-base font-medium max-w-2xl mx-auto leading-relaxed">
               Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
             </p>
           </div>
@@ -1215,19 +1237,19 @@ const Home: React.FC = () => {
               >
                 <button
                   onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
-                  className="w-full text-left px-4 py-4 md:px-8 md:py-8 flex items-center justify-between gap-3 group"
+                  className="w-full text-left px-4 py-4 md:px-6 md:py-5 flex items-center justify-between gap-3 group"
                 >
-                  <span className="text-base md:text-2xl font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
+                  <span className="text-base md:text-lg font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
                     {item.question}
                   </span>
-                  <div className={`w-8 h-8 md:w-12 md:h-12 flex-shrink-0 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
-                    <Plus size={activeFaqIndex === idx ? 20 : 16} className="md:w-6 md:h-6 transition-transform" />
+                  <div className={`w-8 h-8 md:w-10 md:h-10 flex-shrink-0 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
+                    <Plus size={activeFaqIndex === idx ? 18 : 14} className="md:w-5 md:h-5 transition-transform" />
                   </div>
                 </button>
                 <div
                   className={`transition-all duration-500 ease-in-out border-t border-slate-50 ${activeFaqIndex === idx ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
                 >
-                  <div className="px-4 py-4 md:px-12 md:py-10 text-slate-500 text-sm md:text-lg font-medium leading-relaxed bg-slate-50/50">
+                  <div className="px-4 py-4 md:px-8 md:py-6 text-slate-500 text-sm md:text-base font-medium leading-relaxed bg-slate-50/50">
                     {item.answer}
                   </div>
                 </div>
@@ -1284,78 +1306,78 @@ const Home: React.FC = () => {
         </div>
       </section >
 
-      <footer className="py-20 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white">
+      <footer className="py-10 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white">
         <div className="max-w-[1800px] mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 md:gap-16 mb-20">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-16 mb-10 md:mb-20">
             {/* Brand Section */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 text-slate-950 font-black text-2xl tracking-tighter uppercase">
-                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
+            <div className="space-y-3 md:space-y-6">
+              <div className="flex items-center gap-2 md:gap-3 text-slate-950 font-black text-xl md:text-2xl tracking-tighter uppercase">
+                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 md:w-10 md:h-10 object-contain rounded-xl" />
                 <div className="flex flex-col leading-none">
-                  <span className="text-2xl">PICKLEPLAY</span>
-                  <span className="text-sm tracking-wider text-blue-600">PHILIPPINES</span>
+                  <span className="text-xl md:text-2xl">PICKLEPLAY</span>
+                  <span className="text-xs md:text-sm tracking-wider text-blue-600">PHILIPPINES</span>
                 </div>
               </div>
-              <p className="text-slate-500 text-sm leading-relaxed max-w-xs font-medium">
+              <p className="text-slate-500 text-xs md:text-sm leading-relaxed max-w-xs font-medium">
                 The premier destination for the Philippine pickleball community. Join the movement, find your squad, and dominate the court.
               </p>
-              <div className="flex gap-4 pt-2">
-                <a href="#" className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                  <Facebook size={18} />
+              <div className="flex gap-3 md:gap-4 pt-1 md:pt-2">
+                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                  <Facebook size={16} className="md:w-[18px] md:h-[18px]" />
                 </a>
-                <a href="#" className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                  <Instagram size={18} />
+                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                  <Instagram size={16} className="md:w-[18px] md:h-[18px]" />
                 </a>
-                <a href="#" className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                  <Twitter size={18} />
+                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                  <Twitter size={16} className="md:w-[18px] md:h-[18px]" />
                 </a>
               </div>
             </div>
 
             {/* Quick Links */}
             <div>
-              <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest mb-8">Platform</h4>
-              <ul className="space-y-4">
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Booking System</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Academy Classes</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Community Hub</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Pro Shop</a></li>
+              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Platform</h4>
+              <ul className="space-y-2 md:space-y-4">
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Booking System</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Academy Classes</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Community Hub</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Pro Shop</a></li>
               </ul>
             </div>
 
             {/* Legal Section */}
             <div>
-              <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest mb-8">Legal & Policy</h4>
-              <ul className="space-y-4">
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">PH Partners Agreement</a></li>
-                <li><a href="#" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Cookie Settings</a></li>
+              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Legal & Policy</h4>
+              <ul className="space-y-2 md:space-y-4">
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Terms of Service</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">PH Partners Agreement</a></li>
+                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Cookie Settings</a></li>
               </ul>
             </div>
 
             {/* Contact Section */}
             <div>
-              <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest mb-8">Contact Us</h4>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <MapPin size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                  <span className="text-sm font-bold text-slate-500">Cebu City, Philippines</span>
+              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Contact Us</h4>
+              <ul className="space-y-2 md:space-y-4">
+                <li className="flex items-start gap-2 md:gap-3">
+                  <MapPin size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0 mt-0.5" />
+                  <span className="text-xs md:text-sm font-bold text-slate-500">Cebu City, Philippines</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <Mail size={18} className="text-blue-600 shrink-0" />
-                  <span className="text-sm font-bold text-slate-500">hello@pickleballph.com</span>
+                <li className="flex items-center gap-2 md:gap-3">
+                  <Mail size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0" />
+                  <span className="text-xs md:text-sm font-bold text-slate-500">hello@pickleballph.com</span>
                 </li>
-                <li className="flex items-center gap-3">
-                  <Phone size={18} className="text-blue-600 shrink-0" />
-                  <span className="text-sm font-bold text-slate-500">+63 (2) 123 4567</span>
+                <li className="flex items-center gap-2 md:gap-3">
+                  <Phone size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0" />
+                  <span className="text-xs md:text-sm font-bold text-slate-500">+63 (2) 123 4567</span>
                 </li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-10 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
+          <div className="pt-6 md:pt-10 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6">
+            <p className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em]">
               © 2026 PICKLEBALL PHILIPPINES LTD. ALL RIGHTS RESERVED.
             </p>
           </div>

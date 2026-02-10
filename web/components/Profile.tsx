@@ -116,6 +116,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   // Avatar Viewer state
   const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+  const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
 
   // Background Editor state
   const [showBgEditor, setShowBgEditor] = useState(false);
@@ -843,7 +844,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
                     alt="Profile"
                     className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer overflow-hidden"
-                    onClick={() => setShowAvatarViewer(true)}
+                    onClick={() => setShowAvatarDropdown(!showAvatarDropdown)}
                   />
                   {isCurrentUser && (
                     <>
@@ -851,19 +852,9 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                         type="file"
                         id="avatar-upload-mobile"
                         accept="image/*"
-                        onChange={handleAvatarUpload}
+                        onChange={(e) => { handleAvatarUpload(e); setShowAvatarDropdown(false); }}
                         className="hidden"
                       />
-                      <label
-                        htmlFor="avatar-upload-mobile"
-                        className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      >
-                        {isUploadingAvatar ? (
-                          <Loader2 className="animate-spin text-white" size={24} />
-                        ) : (
-                          <Sparkles className="text-white" size={24} />
-                        )}
-                      </label>
                       <button
                         onClick={() => setShowBgEditor(true)}
                         className="absolute -bottom-0.5 -right-0.5 w-7 h-7 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
@@ -871,6 +862,43 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       >
                         <ImageIcon size={12} />
                       </button>
+                    </>
+                  )}
+
+                  {/* Mobile Avatar Dropdown */}
+                  {showAvatarDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowAvatarDropdown(false)} />
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden min-w-[180px]">
+                        <div className="p-1.5">
+                          <button
+                            onClick={() => { setShowAvatarViewer(true); setShowAvatarDropdown(false); }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                              <Eye size={14} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">View Profile</p>
+                              <p className="text-[9px] text-slate-400 font-medium">See full photo</p>
+                            </div>
+                          </button>
+                          {isCurrentUser && (
+                            <label
+                              htmlFor="avatar-upload-mobile"
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-left cursor-pointer"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                <Camera size={14} />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-900">Upload Photo</p>
+                                <p className="text-[9px] text-slate-400 font-medium">Change your avatar</p>
+                              </div>
+                            </label>
+                          )}
+                        </div>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1052,7 +1080,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
                   alt="Profile"
                   className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer"
-                  onClick={() => setShowAvatarViewer(true)}
+                  onClick={() => setShowAvatarDropdown(!showAvatarDropdown)}
                 />
                 {isCurrentUser && (
                   <>
@@ -1060,23 +1088,9 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       type="file"
                       id="avatar-upload"
                       accept="image/*"
-                      onChange={handleAvatarUpload}
+                      onChange={(e) => { handleAvatarUpload(e); setShowAvatarDropdown(false); }}
                       className="hidden"
                     />
-                    <label
-                      htmlFor="avatar-upload"
-                      className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    >
-                      {isUploadingAvatar ? (
-                        <div className="text-white text-xs font-bold">Uploading...</div>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                          <polyline points="17 8 12 3 7 8"></polyline>
-                          <line x1="12" x2="12" y1="3" y2="15"></line>
-                        </svg>
-                      )}
-                    </label>
                     <button
                       onClick={() => setShowBgEditor(true)}
                       className="absolute -bottom-1 -right-1 w-8 h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
@@ -1084,6 +1098,43 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     >
                       <ImageIcon size={14} />
                     </button>
+                  </>
+                )}
+
+                {/* Avatar Dropdown Menu */}
+                {showAvatarDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowAvatarDropdown(false)} />
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-3 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden min-w-[200px] animate-in slide-in-from-top-2 duration-200">
+                      <div className="p-1.5">
+                        <button
+                          onClick={() => { setShowAvatarViewer(true); setShowAvatarDropdown(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/item:bg-blue-100 transition-colors">
+                            <Eye size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">View Profile</p>
+                            <p className="text-[10px] text-slate-400 font-medium">See full photo</p>
+                          </div>
+                        </button>
+                        {isCurrentUser && (
+                          <label
+                            htmlFor="avatar-upload"
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors text-left cursor-pointer group/item"
+                          >
+                            <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover/item:bg-emerald-100 transition-colors">
+                              <Camera size={16} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">Upload Photo</p>
+                              <p className="text-[10px] text-slate-400 font-medium">Change your avatar</p>
+                            </div>
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -1632,47 +1683,51 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             document.body
           )}
 
-          {/* Avatar Viewer Modal */}
+          {/* Avatar Viewer Modal - Modern Design */}
           {showAvatarViewer && ReactDOM.createPortal(
             <div
-              className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4 cursor-pointer"
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center z-[9999] p-4 cursor-pointer animate-in fade-in duration-300"
               onClick={() => setShowAvatarViewer(false)}
             >
-              {/* Close hint */}
+              {/* Close button */}
               <button
                 onClick={() => setShowAvatarViewer(false)}
-                className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
+                className="absolute top-5 right-5 md:top-8 md:right-8 w-10 h-10 md:w-12 md:h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all z-10 backdrop-blur-sm border border-white/10"
               >
-                <X size={24} className="text-white" />
+                <X size={20} className="text-white" />
               </button>
 
-              {/* Name badge */}
-              <div className="absolute top-6 left-6 flex items-center gap-3 z-10">
-                <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2">
-                  <p className="text-white font-black text-sm uppercase tracking-wider">{displayName}</p>
-                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{displayRole.replace('_', ' ')}</p>
-                </div>
-              </div>
-
-              {/* Full-size avatar */}
+              {/* Modal Content */}
               <div
-                className="relative"
+                className="relative flex flex-col items-center gap-6 md:gap-8"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className={`w-[80vw] h-[80vw] max-w-[500px] max-h-[500px] rounded-full p-1 border-4 border-white/20 shadow-2xl overflow-hidden`}>
-                  <img
-                    src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-                    alt="Profile"
-                    className="w-full h-full rounded-full object-cover"
-                  />
+                {/* Glowing ring effect */}
+                <div className="relative">
+                  <div className={`absolute -inset-3 rounded-full bg-gradient-to-tr from-${themeColor}-400/30 to-lime-300/30 blur-xl animate-pulse`} />
+                  <div className={`relative w-[70vw] h-[70vw] max-w-[420px] max-h-[420px] rounded-full p-1 bg-gradient-to-tr from-${themeColor}-400 to-lime-300 shadow-2xl`}>
+                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-1">
+                      <img
+                        src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                        alt="Profile"
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Action buttons below image */}
+                {/* Name & Role Card */}
+                <div className="text-center">
+                  <h3 className="text-white font-black text-2xl md:text-3xl tracking-tight uppercase">{displayName}</h3>
+                  <p className={`text-${themeColor}-400 text-xs font-black uppercase tracking-[0.3em] mt-1`}>{displayRole.replace('_', ' ')}</p>
+                </div>
+
+                {/* Action buttons */}
                 {isCurrentUser && (
-                  <div className="flex items-center justify-center gap-3 mt-6">
+                  <div className="flex items-center gap-3">
                     <label
                       htmlFor="avatar-upload-viewer"
-                      className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all backdrop-blur-sm"
+                      className="flex items-center gap-2.5 px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold text-xs uppercase tracking-wider transition-all backdrop-blur-sm border border-white/10 cursor-pointer active:scale-95"
                     >
                       <Camera size={16} />
                       Change Photo
@@ -1686,7 +1741,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     </label>
                     <button
                       onClick={() => { setShowBgEditor(true); setShowAvatarViewer(false); }}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all backdrop-blur-sm"
+                      className="flex items-center gap-2.5 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 active:scale-95"
                     >
                       <ImageIcon size={16} />
                       Edit Background

@@ -274,15 +274,32 @@ const GuestBooking: React.FC = () => {
         }
     }, [isLoading, courts]);
 
+    // Re-center map when GPS location becomes available
+    useEffect(() => {
+        if (userLocation && googleMapRef.current && !urlLat && !urlLng) {
+            googleMapRef.current.panTo(userLocation);
+            googleMapRef.current.setZoom(13);
+        }
+    }, [userLocation]);
+
     const initializeMap = () => {
         if (!mapRef.current || !window.google) return;
 
-        // Use URL params for center/zoom, or default to Manila
-        const center = urlLat && urlLng
-            ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
-            : { lat: 14.5995, lng: 121.0437 };
+        // Use URL params first, then user GPS location, then default to Philippines view
+        let center: { lat: number; lng: number };
+        let zoom: number;
 
-        const zoom = urlZoom ? parseInt(urlZoom) : 12;
+        if (urlLat && urlLng) {
+            center = { lat: parseFloat(urlLat), lng: parseFloat(urlLng) };
+            zoom = urlZoom ? parseInt(urlZoom) : 12;
+        } else if (userLocation) {
+            center = userLocation;
+            zoom = 13;
+        } else {
+            // Default to Philippines center view
+            center = { lat: 12.8797, lng: 121.774 };
+            zoom = 6;
+        }
 
         const map = new window.google.maps.Map(mapRef.current, {
             center,
@@ -317,8 +334,8 @@ const GuestBooking: React.FC = () => {
                     title: court.name,
                     icon: {
                         url: '/images/PinMarker.png',
-                        scaledSize: new window.google.maps.Size(28, 40),
-                        anchor: new window.google.maps.Point(14, 40)
+                        scaledSize: new window.google.maps.Size(42, 60),
+                        anchor: new window.google.maps.Point(21, 60)
                     },
                 });
 
@@ -400,9 +417,19 @@ const GuestBooking: React.FC = () => {
     };
 
     const handleNearMe = () => {
-        if (navigator.geolocation && googleMapRef.current) {
+        // Ensure map is initialized first
+        if (!googleMapRef.current && mapRef.current && window.google) {
+            initializeMap();
+        }
+        
+        // Switch to map view first
+        setViewMode('map');
+        
+        if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
+                    if (!googleMapRef.current) return;
+                    
                     const userLocation = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
@@ -474,12 +501,27 @@ const GuestBooking: React.FC = () => {
                 },
                 (error) => {
                     console.error('Error getting location:', error);
-                    alert('Unable to get your location. Please enable location services.');
+                    
+                    // Wait a bit for map to be ready if it's still initializing
+                    setTimeout(() => {
+                        if (googleMapRef.current) {
+                            const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+                            googleMapRef.current.panTo(philippinesCenter);
+                            googleMapRef.current.setZoom(6);
+                        }
+                    }, 100);
                 },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         } else {
-            alert('Geolocation is not supported by your browser.');
+            // If geolocation not supported, show Philippines view
+            setTimeout(() => {
+                if (googleMapRef.current) {
+                    const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+                    googleMapRef.current.panTo(philippinesCenter);
+                    googleMapRef.current.setZoom(6);
+                }
+            }, 100);
         }
     };
 
@@ -636,9 +678,6 @@ const GuestBooking: React.FC = () => {
                                 Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
                             </h1>
                         </div>
-                        <p className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            {filteredCourts.length} {filteredCourts.length === 1 ? 'Court' : 'Courts'} — Page 1 of 1
-                        </p>
                     </div>
 
                     {/* Filter Pills */}
@@ -659,9 +698,9 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-4 mt-0">
-                    {/* Sidebar - List View */}
-                    <div className={`lg:col-span-4 space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start md:mt-4 mt-0">
+                    {/* Left Column - Search and List View */}
+                    <div className={`space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();
@@ -741,9 +780,9 @@ const GuestBooking: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Interactive Map */}
-                    <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-                        <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
+                    {/* Right Column - Map View Only */}
+                    <div className={`${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
+                        <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative md:sticky md:top-36 ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
 
                             {isLoading ? (
                                 <div className="h-full bg-slate-100 flex items-center justify-center">
