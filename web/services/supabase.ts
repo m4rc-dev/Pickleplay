@@ -100,6 +100,21 @@ export const revokeSession = async (sessionId: string) => {
     }
 };
 
+export const revokeAllSessions = async (userId: string) => {
+    try {
+        const { error } = await supabase
+            .from('sessions')
+            .update({ is_active: false })
+            .eq('user_id', userId)
+            .eq('is_active', true);
+
+        if (error) throw error;
+        return { success: true, message: 'All sessions revoked successfully' };
+    } catch (err: any) {
+        return { success: false, message: err.message };
+    }
+};
+
 export const createSession = async (userId: string, deviceName: string, ipAddress?: string) => {
     try {
         const { data, error } = await supabase

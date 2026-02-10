@@ -21,6 +21,7 @@ import {
   Loader2,
   ArrowLeftRight,
   ChevronDown,
+  Clock,
   Move,
   X,
   Camera,
@@ -28,10 +29,11 @@ import {
   Image as ImageIcon,
   ZoomIn,
   ZoomOut,
-  RotateCw
+  RotateCw,
+  Download
 } from 'lucide-react';
 import { UserRole, SocialPost } from '../types';
-import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, getSecuritySettings, createSession } from '../services/supabase';
+import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings, createSession } from '../services/supabase';
 import { sendEmailCode, verifyCode, generateBackupCodes, saveBackupCodes } from '../services/twoFactorAuth';
 import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
@@ -49,6 +51,9 @@ interface ProfileProps {
 }
 
 const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, currentUserId, followedUsers, onFollow, posts, setPosts, onRoleSwitch }) => {
+  const MAX_NAME = 40;
+  const MAX_LOCATION = 60;
+  const MAX_BIO = 160;
   const { userId } = useParams<{ userId?: string }>();
   const isCurrentUser = !userId || userId === 'player-current';
   const profileId = isCurrentUser ? 'player-current' : userId;
@@ -62,6 +67,18 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [editedName, setEditedName] = useState('');
   const [editedLocation, setEditedLocation] = useState('');
   const [editedBio, setEditedBio] = useState('');
+  const [availabilityStatus, setAvailabilityStatus] = useState<'looking' | 'busy' | 'offline'>('offline');
+  const [availabilityStart, setAvailabilityStart] = useState('');
+  const [availabilityEnd, setAvailabilityEnd] = useState('');
+  const [availabilityNote, setAvailabilityNote] = useState('');
+  const [preferredSkillMin, setPreferredSkillMin] = useState('');
+  const [preferredSkillMax, setPreferredSkillMax] = useState('');
+  const [preferredLocationIds, setPreferredLocationIds] = useState<string[]>([]);
+  const [preferredCourtIds, setPreferredCourtIds] = useState<string[]>([]);
+  const [preferredLocationMode, setPreferredLocationMode] = useState<'auto' | 'manual'>('auto');
+  const [preferredCourtType, setPreferredCourtType] = useState<'Indoor' | 'Outdoor' | 'Both'>('Both');
+  const [availableLocations, setAvailableLocations] = useState<{ id: string; name: string; city?: string | null }[]>([]);
+  const [availableCourts, setAvailableCourts] = useState<{ id: string; name: string; locationId?: string | null; courtType?: string | null }[]>([]);
 
   // Settings state
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -83,6 +100,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isRevokingAllSessions, setIsRevokingAllSessions] = useState(false);
   const [securityMessage, setSecurityMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // 2FA Configuration State
@@ -95,6 +113,11 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   // Confirmation Dialog State
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [profileSections, setProfileSections] = useState({
+    identity: true,
+    availability: false,
+    matchmaking: false
+  });
 
   // Profile message state
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -281,6 +304,61 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     }
   };
 
+  const handleRevokeSessionGroup = async (sessionIds: string[]) => {
+    if (sessionIds.length === 0) return;
+
+    try {
+      await Promise.all(sessionIds.map((id) => revokeSession(id)));
+      setActiveSessions(activeSessions.filter((s) => !sessionIds.includes(s.id)));
+      setSecurityMessage({ type: 'success', text: 'Sessions revoked successfully' });
+      setTimeout(() => setSecurityMessage(null), 3000);
+    } catch (err) {
+      setSecurityMessage({ type: 'error', text: 'Failed to revoke sessions' });
+    }
+  };
+
+  const getBrowserLabel = (userAgent?: string) => {
+    if (!userAgent) return 'Unknown Browser';
+    if (/Edg\//.test(userAgent)) return 'Edge';
+    if (/Chrome\//.test(userAgent) && !/Edg\//.test(userAgent)) return 'Chrome';
+    if (/Firefox\//.test(userAgent)) return 'Firefox';
+    if (/Safari\//.test(userAgent) && !/Chrome\//.test(userAgent)) return 'Safari';
+    return 'Unknown Browser';
+  };
+
+  const getDeviceLabel = (userAgent?: string, fallbackName?: string) => {
+    if (!userAgent) return fallbackName || 'Unknown Device';
+    if (/iPhone/.test(userAgent)) return 'iPhone';
+    if (/iPad/.test(userAgent)) return 'iPad';
+    if (/Android/.test(userAgent)) return /Mobile/.test(userAgent) ? 'Android Phone' : 'Android Tablet';
+    if (/Windows/.test(userAgent)) return 'Windows PC';
+    if (/Mac/.test(userAgent)) return 'Mac';
+    if (/Linux/.test(userAgent)) return 'Linux PC';
+    return fallbackName || 'Unknown Device';
+  };
+
+  const handleRevokeAllSessions = async () => {
+    if (!currentUserId || !isCurrentUser) return;
+    if (!confirm('Sign out of all devices? This will log you out here too.')) return;
+
+    setIsRevokingAllSessions(true);
+    try {
+      const result = await revokeAllSessions(currentUserId);
+      if (!result.success) throw new Error(result.message);
+
+      await supabase.auth.signOut({ scope: 'global' });
+      localStorage.removeItem('two_factor_pending');
+      localStorage.removeItem('auth_redirect');
+      setActiveSessions([]);
+      setSecurityMessage({ type: 'success', text: 'Signed out of all devices' });
+      setTimeout(() => setSecurityMessage(null), 3000);
+    } catch (err) {
+      setSecurityMessage({ type: 'error', text: 'Failed to sign out of all devices' });
+    } finally {
+      setIsRevokingAllSessions(false);
+    }
+  };
+
   const handleSetup2FA = async () => {
     if (!currentUserId || !isCurrentUser) return;
 
@@ -334,6 +412,35 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     }
   };
 
+  const downloadBackupCodes = () => {
+    if (backupCodes.length === 0) return;
+    
+    const content = `PicklePlay 2FA Backup Codes
+Generated: ${new Date().toLocaleString()}
+
+⚠️ IMPORTANT: Store these codes in a safe place. Each code can only be used once.
+If you lose access to your email, use these codes to recover your account.
+
+${'─'.repeat(50)}
+
+${backupCodes.map((code, idx) => `${idx + 1}. ${code}`).join('\n')}
+
+${'─'.repeat(50)}
+
+These backup codes were generated for your PicklePlay account.
+Never share them with anyone.`;
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pickleplay-backup-codes-${new Date().getTime()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
   useEffect(() => {
     if (isCurrentUser && activeTab === 'security') {
       loadActiveSessions();
@@ -351,6 +458,39 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       checkAuthProvider();
     }
   }, [activeTab]);
+
+  const groupedSessions = activeSessions.reduce((acc: any[], session: any) => {
+    const deviceLabel = getDeviceLabel(session.user_agent, session.device_name);
+    const browserLabel = getBrowserLabel(session.user_agent);
+    const groupKey = `${deviceLabel}||${browserLabel}`;
+    const existing = acc.find((item) => item.key === groupKey);
+    const lastActivity = new Date(session.last_activity).getTime();
+
+    if (existing) {
+      existing.sessionIds.push(session.id);
+      existing.count += 1;
+      existing.lastActivity = Math.max(existing.lastActivity, lastActivity);
+      if (session.ip_address) existing.ipAddresses.add(session.ip_address);
+      return acc;
+    }
+
+    const ipSet = new Set<string>();
+    if (session.ip_address) ipSet.add(session.ip_address);
+
+    acc.push({
+      key: groupKey,
+      deviceLabel,
+      browserLabel,
+      sessionIds: [session.id],
+      count: 1,
+      lastActivity,
+      ipAddresses: ipSet,
+    });
+
+    return acc;
+  }, [] as any[]);
+
+  groupedSessions.sort((a, b) => b.lastActivity - a.lastActivity);
 
   useEffect(() => {
     const loadActivityStats = async () => {
@@ -442,6 +582,16 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             setEditedLocation(data.location || '');
             setEditedBio(data.bio || '');
             setAvatarUrl(data.avatar_url || '');
+            setAvailabilityStatus((data.availability_status || 'offline') as 'looking' | 'busy' | 'offline');
+            setAvailabilityStart(data.availability_start || '');
+            setAvailabilityEnd(data.availability_end || '');
+            setAvailabilityNote(data.availability_note || '');
+            setPreferredSkillMin(data.preferred_skill_min != null ? String(data.preferred_skill_min) : '');
+            setPreferredSkillMax(data.preferred_skill_max != null ? String(data.preferred_skill_max) : '');
+            setPreferredLocationIds(data.preferred_location_ids || []);
+            setPreferredCourtIds(data.preferred_court_ids || []);
+            setPreferredLocationMode((data.preferred_location_mode || 'auto') as 'auto' | 'manual');
+            setPreferredCourtType((data.preferred_court_type || 'Both') as 'Indoor' | 'Outdoor' | 'Both');
             // Set language preference from database
             if (data.preferred_language) {
               setSelectedLanguage(data.preferred_language);
@@ -471,6 +621,29 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
     fetchProfile();
   }, [userId]);
+
+  useEffect(() => {
+    const fetchPreferenceOptions = async () => {
+      try {
+        const [{ data: locations }, { data: courts }] = await Promise.all([
+          supabase.from('locations').select('id, name, city').order('name', { ascending: true }),
+          supabase.from('courts').select('id, name, location_id, court_type, surface_type').order('name', { ascending: true })
+        ]);
+
+        setAvailableLocations((locations || []).map((l: any) => ({ id: l.id, name: l.name, city: l.city })));
+        setAvailableCourts((courts || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          locationId: c.location_id,
+          courtType: c.court_type || c.surface_type || null
+        })));
+      } catch (err) {
+        console.error('Error loading preference options:', err);
+      }
+    };
+
+    fetchPreferenceOptions();
+  }, []);
 
   const handlePrivacyChange = async () => {
     if (!currentUserId || !isCurrentUser) return;
@@ -748,14 +921,62 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const handleSave = async () => {
     if (!currentUserId || !isCurrentUser) return;
 
+    const trimmedName = editedName.trim();
+    const trimmedLocation = editedLocation.trim();
+    const trimmedBio = editedBio.trim();
+    const trimmedNote = availabilityNote.trim();
+    const skillMinValue = preferredSkillMin ? Number(preferredSkillMin) : null;
+    const skillMaxValue = preferredSkillMax ? Number(preferredSkillMax) : null;
+
+    if (availabilityStatus === 'looking') {
+      if (!availabilityStart || !availabilityEnd) {
+        setProfileMessage({ type: 'error', text: 'Set your availability time window.' });
+        return;
+      }
+      if (availabilityStart >= availabilityEnd) {
+        setProfileMessage({ type: 'error', text: 'End time must be after start time.' });
+        return;
+      }
+    }
+
+    if (skillMinValue != null && Number.isNaN(skillMinValue)) {
+      setProfileMessage({ type: 'error', text: 'Preferred skill min must be a number.' });
+      return;
+    }
+
+    if (skillMaxValue != null && Number.isNaN(skillMaxValue)) {
+      setProfileMessage({ type: 'error', text: 'Preferred skill max must be a number.' });
+      return;
+    }
+
+    if (skillMinValue != null && skillMaxValue != null && skillMinValue > skillMaxValue) {
+      setProfileMessage({ type: 'error', text: 'Preferred skill min cannot exceed max.' });
+      return;
+    }
+
+    if (trimmedName.length < 2) {
+      setProfileMessage({ type: 'error', text: 'Display name must be at least 2 characters.' });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: editedName,
-          location: editedLocation,
-          bio: editedBio
+          full_name: trimmedName,
+          location: trimmedLocation,
+          bio: trimmedBio,
+          availability_status: availabilityStatus,
+          availability_start: availabilityStatus === 'looking' ? (availabilityStart || null) : null,
+          availability_end: availabilityStatus === 'looking' ? (availabilityEnd || null) : null,
+          availability_note: trimmedNote || null,
+          preferred_skill_min: skillMinValue,
+          preferred_skill_max: skillMaxValue,
+          preferred_location_ids: preferredLocationIds,
+          preferred_court_ids: preferredCourtIds,
+          preferred_location_mode: preferredLocationMode,
+          preferred_court_type: preferredCourtType
         })
         .eq('id', currentUserId);
 
@@ -764,9 +985,19 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       // Update local state
       setProfileData((prev: any) => ({
         ...prev,
-        full_name: editedName,
-        location: editedLocation,
-        bio: editedBio
+        full_name: trimmedName,
+        location: trimmedLocation,
+        bio: trimmedBio,
+        availability_status: availabilityStatus,
+        availability_start: availabilityStatus === 'looking' ? (availabilityStart || null) : null,
+        availability_end: availabilityStatus === 'looking' ? (availabilityEnd || null) : null,
+        availability_note: trimmedNote || null,
+        preferred_skill_min: skillMinValue,
+        preferred_skill_max: skillMaxValue,
+        preferred_location_ids: preferredLocationIds,
+        preferred_court_ids: preferredCourtIds,
+        preferred_location_mode: preferredLocationMode,
+        preferred_court_type: preferredCourtType
       }));
 
       setProfileMessage({ type: 'success', text: 'Profile updated successfully!' });
@@ -778,6 +1009,54 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       setIsSaving(false);
     }
   };
+
+  const togglePreferredLocation = (id: string) => {
+    setPreferredLocationIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const togglePreferredCourt = (id: string) => {
+    setPreferredCourtIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const toggleProfileSection = (section: 'identity' | 'availability' | 'matchmaking') => {
+    setProfileSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const computeAutoPreferences = useCallback(() => {
+    const query = editedLocation.trim().toLowerCase();
+    if (!query) {
+      setPreferredLocationIds([]);
+      setPreferredCourtIds([]);
+      return;
+    }
+
+    const matchedLocations = availableLocations.filter((loc) => {
+      const name = (loc.name || '').toLowerCase();
+      const city = (loc.city || '').toLowerCase();
+      return name.includes(query) || city.includes(query);
+    });
+
+    const matchedLocationIds = matchedLocations.map((loc) => loc.id);
+
+    const normalizeCourtType = (value?: string | null) => (value || '').toLowerCase();
+    const preferredType = preferredCourtType.toLowerCase();
+
+    const matchedCourts = availableCourts.filter((court) => {
+      if (!matchedLocationIds.includes(court.locationId || '')) return false;
+      if (preferredType === 'both') return true;
+      const courtType = normalizeCourtType(court.courtType);
+      return courtType.includes(preferredType);
+    });
+
+    setPreferredLocationIds(matchedLocationIds);
+    setPreferredCourtIds(matchedCourts.map((court) => court.id));
+  }, [editedLocation, availableLocations, availableCourts, preferredCourtType]);
+
+  useEffect(() => {
+    if (preferredLocationMode === 'auto') {
+      computeAutoPreferences();
+    }
+  }, [preferredLocationMode, computeAutoPreferences]);
 
   const handleLike = (postId: string) => {
     setPosts(currentPosts => currentPosts.map(p => {
@@ -829,6 +1108,40 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const userPosts = posts.filter(post => post.authorId === profileId);
   const displayRole = profileData.active_role || 'PLAYER';
   const displayName = profileData.full_name || 'Player';
+  const savedName = profileData.full_name || '';
+  const savedLocation = profileData.location || '';
+  const savedBio = profileData.bio || '';
+  const savedAvailabilityStatus = (profileData.availability_status || 'offline') as 'looking' | 'busy' | 'offline';
+  const savedAvailabilityStart = profileData.availability_start || '';
+  const savedAvailabilityEnd = profileData.availability_end || '';
+  const savedAvailabilityNote = profileData.availability_note || '';
+  const savedPreferredSkillMin = profileData.preferred_skill_min != null ? String(profileData.preferred_skill_min) : '';
+  const savedPreferredSkillMax = profileData.preferred_skill_max != null ? String(profileData.preferred_skill_max) : '';
+  const savedPreferredLocationIds = profileData.preferred_location_ids || [];
+  const savedPreferredCourtIds = profileData.preferred_court_ids || [];
+  const savedPreferredLocationMode = (profileData.preferred_location_mode || 'auto') as 'auto' | 'manual';
+  const savedPreferredCourtType = (profileData.preferred_court_type || 'Both') as 'Indoor' | 'Outdoor' | 'Both';
+  const trimmedName = editedName.trim();
+  const trimmedLocation = editedLocation.trim();
+  const trimmedBio = editedBio.trim();
+  const locationNameMap = new Map(availableLocations.map((loc) => [loc.id, loc.name]));
+  const courtNameMap = new Map(availableCourts.map((court) => [court.id, court.name]));
+  const preferredLocationNames = preferredLocationIds.map((id) => locationNameMap.get(id)).filter(Boolean) as string[];
+  const preferredCourtNames = preferredCourtIds.map((id) => courtNameMap.get(id)).filter(Boolean) as string[];
+  const isProfileDirty = trimmedName !== savedName
+    || trimmedLocation !== savedLocation
+    || trimmedBio !== savedBio
+    || availabilityStatus !== savedAvailabilityStatus
+    || availabilityStart !== savedAvailabilityStart
+    || availabilityEnd !== savedAvailabilityEnd
+    || availabilityNote.trim() !== savedAvailabilityNote
+    || preferredSkillMin !== savedPreferredSkillMin
+    || preferredSkillMax !== savedPreferredSkillMax
+    || preferredLocationIds.join(',') !== savedPreferredLocationIds.join(',')
+    || preferredCourtIds.join(',') !== savedPreferredCourtIds.join(',')
+    || preferredLocationMode !== savedPreferredLocationMode
+    || preferredCourtType !== savedPreferredCourtType;
+  const isNameValid = trimmedName.length >= 2 && trimmedName.length <= MAX_NAME;
 
   return (
     <div className="max-w-7xl mx-auto space-y-10 animate-fade-in pb-20">
@@ -1230,75 +1543,427 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   </div>
                 )}
 
-                <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
-                  <User className={`text-${themeColor}-600`} /> Player Identity
-                </h3>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3">
+                  <Sparkles className="text-slate-500 mt-0.5" size={16} />
+                  <p className="text-xs text-slate-600 font-semibold">
+                    These fields are optional. Customize only what you want other players to see.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleProfileSection('identity')}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
+                    <User className={`text-${themeColor}-600`} /> Player Identity
+                  </h3>
+                  <ChevronDown className={`transition-transform ${profileSections.identity ? 'rotate-180' : ''}`} size={18} />
+                </button>
 
-                <div className="space-y-8">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Display Name</label>
-                    {isCurrentUser ? (
-                      <input
-                        type="text"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 transition-all outline-none"
-                        placeholder="Enter your name"
-                      />
-                    ) : (
-                      <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">{displayName}</div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Home Location</label>
-                    {isCurrentUser ? (
-                      <div className="relative">
-                        <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                {profileSections.identity && (
+                  <div className="space-y-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Display Name</label>
+                      {isCurrentUser ? (
                         <input
                           type="text"
-                          value={editedLocation}
-                          onChange={(e) => setEditedLocation(e.target.value)}
-                          className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 pl-14 pr-6 font-bold text-slate-700 transition-all outline-none"
-                          placeholder="e.g., Metro Manila, PH"
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          onBlur={() => setEditedName(editedName.trim())}
+                          maxLength={MAX_NAME}
+                          className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 transition-all outline-none"
+                          placeholder="Enter your name"
                         />
-                      </div>
-                    ) : (
-                      <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 flex items-center gap-3">
-                        <MapPin className="text-slate-400" size={16} />
-                        {profileData.location || 'Not specified'}
-                      </div>
-                    )}
-                  </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">{displayName}</div>
+                      )}
+                      {isCurrentUser && (
+                        <div className="flex items-center justify-between text-[10px] font-bold">
+                          <span className={isNameValid ? 'text-slate-400' : 'text-rose-500'}>
+                            {isNameValid ? 'Looks good' : 'Min 2 characters'}
+                          </span>
+                          <span className="text-slate-400">{MAX_NAME - editedName.length} left</span>
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Short Manifesto (Bio)</label>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Home Location</label>
+                      {isCurrentUser ? (
+                        <div className="relative">
+                          <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input
+                            type="text"
+                            value={editedLocation}
+                            onChange={(e) => setEditedLocation(e.target.value)}
+                            onBlur={() => setEditedLocation(editedLocation.trim())}
+                            maxLength={MAX_LOCATION}
+                            className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 pl-14 pr-6 font-bold text-slate-700 transition-all outline-none"
+                            placeholder="e.g., Metro Manila, PH"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 flex items-center gap-3">
+                          <MapPin className="text-slate-400" size={16} />
+                          {profileData.location || 'Not specified'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Short Manifesto (Bio)</label>
+                      {isCurrentUser ? (
+                        <textarea
+                          value={editedBio}
+                          onChange={(e) => setEditedBio(e.target.value)}
+                          onBlur={() => setEditedBio(editedBio.trim())}
+                          maxLength={MAX_BIO}
+                          rows={4}
+                          className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed transition-all outline-none resize-none"
+                          placeholder="Tell us about yourself..."
+                        />
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed">{profileData.bio || 'No bio yet.'}</div>
+                      )}
+                      {isCurrentUser && (
+                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                          <span>Keep it short and real.</span>
+                          <span>{MAX_BIO - editedBio.length} left</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => toggleProfileSection('availability')}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
+                    <Clock className="text-emerald-600" size={18} /> Availability
+                  </h3>
+                  <ChevronDown className={`transition-transform ${profileSections.availability ? 'rotate-180' : ''}`} size={18} />
+                </button>
+
+                {profileSections.availability && (
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Availability</label>
                     {isCurrentUser ? (
-                      <textarea
-                        value={editedBio}
-                        onChange={(e) => setEditedBio(e.target.value)}
-                        rows={4}
-                        className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed transition-all outline-none resize-none"
-                        placeholder="Tell us about yourself..."
-                      />
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                          {(['looking', 'busy', 'offline'] as const).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => setAvailabilityStatus(status)}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${availabilityStatus === status
+                                  ? status === 'looking'
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : status === 'busy'
+                                      ? 'bg-amber-500 text-white border-amber-500'
+                                      : 'bg-slate-900 text-white border-slate-900'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                              {status === 'looking' ? 'Looking to Play' : status === 'busy' ? 'Busy' : 'Offline'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {availabilityStatus === 'looking' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start</label>
+                              <input
+                                type="time"
+                                value={availabilityStart}
+                                onChange={(e) => setAvailabilityStart(e.target.value)}
+                                className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">End</label>
+                              <input
+                                type="time"
+                                value={availabilityEnd}
+                                onChange={(e) => setAvailabilityEnd(e.target.value)}
+                                className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          value={availabilityNote}
+                          onChange={(e) => setAvailabilityNote(e.target.value)}
+                          maxLength={60}
+                          className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                          placeholder="Optional: Open for doubles"
+                        />
+                        <div className="text-[10px] font-bold text-slate-400 text-right">
+                          {60 - availabilityNote.length} left
+                        </div>
+                      </div>
                     ) : (
-                      <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 leading-relaxed">{profileData.bio || 'No bio yet.'}</div>
+                      <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 flex flex-col gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${availabilityStatus === 'looking'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : availabilityStatus === 'busy'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-slate-200 text-slate-600'
+                            }`}>
+                            {availabilityStatus === 'looking' ? 'Looking to Play' : availabilityStatus === 'busy' ? 'Busy' : 'Offline'}
+                          </span>
+                          {availabilityStatus === 'looking' && availabilityStart && availabilityEnd && (
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{availabilityStart} - {availabilityEnd}</span>
+                          )}
+                        </div>
+                        {availabilityNote && (
+                          <p className="text-[11px] text-slate-500 font-semibold">{availabilityNote}</p>
+                        )}
+                      </div>
                     )}
                   </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => toggleProfileSection('matchmaking')}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
+                    <ArrowLeftRight className="text-blue-600" size={18} /> Match Preferences
+                  </h3>
+                  <ChevronDown className={`transition-transform ${profileSections.matchmaking ? 'rotate-180' : ''}`} size={18} />
+                </button>
+
+                {profileSections.matchmaking && (
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preferred Skill Range (DUPR)</label>
+                      {isCurrentUser ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input
+                            type="number"
+                            min={1}
+                            max={8}
+                            step={0.1}
+                            value={preferredSkillMin}
+                            onChange={(e) => setPreferredSkillMin(e.target.value)}
+                            className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                            placeholder="Min (e.g. 3.0)"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            max={8}
+                            step={0.1}
+                            value={preferredSkillMax}
+                            onChange={(e) => setPreferredSkillMax(e.target.value)}
+                            className="w-full bg-slate-50/80 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                            placeholder="Max (e.g. 4.0)"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">
+                          {preferredSkillMin || preferredSkillMax ? `DUPR ${preferredSkillMin || '?'} - ${preferredSkillMax || '?'}` : 'Not specified'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preferred Court Type</label>
+                      {isCurrentUser ? (
+                        <div className="flex flex-wrap gap-2">
+                          {(['Indoor', 'Outdoor', 'Both'] as const).map((type) => (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => setPreferredCourtType(type)}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredCourtType === type
+                                  ? 'bg-slate-900 text-white border-slate-900'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">
+                          {preferredCourtType || 'Not specified'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preferred Locations</label>
+                      {isCurrentUser ? (
+                        <div className="space-y-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPreferredLocationMode('auto')}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationMode === 'auto'
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                              Auto (near me)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPreferredLocationMode('manual')}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationMode === 'manual'
+                                  ? 'bg-slate-900 text-white border-slate-900'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                }`}
+                            >
+                              Manual select
+                            </button>
+                          </div>
+
+                          {preferredLocationMode === 'auto' ? (
+                            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Based on your Home Location</p>
+                              <p className="text-xs text-slate-600 font-semibold mt-2">
+                                {editedLocation ? `Using "${editedLocation}"` : 'Set your Home Location to auto-match'}
+                              </p>
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {preferredLocationNames.length > 0 ? (
+                                  preferredLocationNames.map((name) => (
+                                    <span key={name} className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-blue-50 text-blue-700 border border-blue-100">
+                                      {name}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-bold">No nearby locations found.</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {availableLocations.length > 0 ? (
+                                availableLocations.map((loc) => (
+                                  <button
+                                    key={loc.id}
+                                    type="button"
+                                    onClick={() => togglePreferredLocation(loc.id)}
+                                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationIds.includes(loc.id)
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                      }`}
+                                  >
+                                    {loc.name}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="text-xs text-slate-400 font-bold">No locations found.</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">
+                          {preferredLocationNames.length > 0 ? preferredLocationNames.join(', ') : 'Not specified'}
+                          {preferredLocationMode && (
+                            <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-slate-400">({preferredLocationMode})</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preferred Courts</label>
+                      {isCurrentUser ? (
+                        <div className="space-y-3">
+                          {preferredLocationMode === 'auto' ? (
+                            <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Auto-selected from nearby locations</p>
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {preferredCourtNames.length > 0 ? (
+                                  preferredCourtNames.map((name) => (
+                                    <span key={name} className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-700 border border-slate-200">
+                                      {name}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-bold">No courts matched.</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {availableCourts.length > 0 ? (
+                                availableCourts.map((court) => (
+                                  <button
+                                    key={court.id}
+                                    type="button"
+                                    onClick={() => togglePreferredCourt(court.id)}
+                                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredCourtIds.includes(court.id)
+                                        ? 'bg-slate-900 text-white border-slate-900'
+                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                      }`}
+                                  >
+                                    {court.name}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="text-xs text-slate-400 font-bold">No courts found.</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700">
+                          {preferredCourtNames.length > 0 ? preferredCourtNames.join(', ') : 'Not specified'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                   {/* Save Changes Button */}
                   {isCurrentUser && (
-                    <div className="pt-6 border-t border-slate-100">
-                      <button
-                        onClick={() => setShowSaveConfirm(true)}
-                        disabled={isSaving}
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white h-14 px-6 rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                      >
-                        {isSaving ? 'SAVING...' : 'SAVE CHANGES'} <Save size={18} />
-                      </button>
+                    <div className="pt-6 border-t border-slate-100 space-y-3">
+                      {isProfileDirty && (
+                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Unsaved changes</div>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={() => {
+                            setEditedName(savedName);
+                            setEditedLocation(savedLocation);
+                            setEditedBio(savedBio);
+                            setAvailabilityStatus(savedAvailabilityStatus);
+                            setAvailabilityStart(savedAvailabilityStart);
+                            setAvailabilityEnd(savedAvailabilityEnd);
+                            setAvailabilityNote(savedAvailabilityNote);
+                            setPreferredSkillMin(savedPreferredSkillMin);
+                            setPreferredSkillMax(savedPreferredSkillMax);
+                            setPreferredLocationIds(savedPreferredLocationIds);
+                            setPreferredCourtIds(savedPreferredCourtIds);
+                            setPreferredLocationMode(savedPreferredLocationMode);
+                            setPreferredCourtType(savedPreferredCourtType);
+                          }}
+                          disabled={!isProfileDirty || isSaving}
+                          className="h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => setShowSaveConfirm(true)}
+                          disabled={isSaving || !isProfileDirty || !isNameValid}
+                          className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                        >
+                          {isSaving ? 'Saving...' : 'Save Changes'} <Save size={16} />
+                        </button>
+                      </div>
                     </div>
                   )}
-                </div>
               </div>
 
               <div className="space-y-8">
@@ -1546,30 +2211,60 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       <p className="font-bold text-slate-900">Active Sessions</p>
                       <p className="text-xs text-slate-500">Manage your active logins</p>
                     </div>
+                    {isCurrentUser && (
+                      <button
+                        onClick={handleRevokeAllSessions}
+                        disabled={isRevokingAllSessions}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold text-xs hover:bg-red-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isRevokingAllSessions ? 'Signing out...' : 'Sign out all'}
+                      </button>
+                    )}
                   </div>
 
                   {isLoadingSessions ? (
                     <div className="p-4 text-center text-slate-500">Loading sessions...</div>
-                  ) : activeSessions.length > 0 ? (
+                  ) : groupedSessions.length > 0 ? (
                     <div className="space-y-3 ml-4">
-                      {activeSessions.map((session) => (
-                        <div key={session.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                          <div className="flex-1">
-                            <p className="font-bold text-slate-900 text-sm">{session.device_name || 'Unknown Device'}</p>
-                            <p className="text-xs text-slate-500">{session.ip_address || 'Unknown IP'}</p>
-                            <p className="text-[10px] text-slate-400 mt-1">
-                              Last active: {new Date(session.last_activity).toLocaleDateString()}
-                            </p>
+                      {groupedSessions.map((group) => {
+                        const ipList = Array.from(group.ipAddresses);
+                        const ipLabel = ipList.length === 0
+                          ? 'Unknown IP'
+                          : ipList.length === 1
+                            ? ipList[0]
+                            : `Multiple IPs (${ipList.length})`;
+
+                        return (
+                          <div key={group.key} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-slate-900 text-sm">
+                                  {group.deviceLabel}
+                                </p>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                  {group.browserLabel}
+                                </span>
+                                {group.count > 1 && (
+                                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                                    {group.count} sessions
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500">{ipLabel}</p>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                Last active: {new Date(group.lastActivity).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleRevokeSessionGroup(group.sessionIds)}
+                              className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-2 whitespace-nowrap ml-3"
+                            >
+                              <LogOut size={14} />
+                              Revoke
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleRevokeSession(session.id)}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-2 whitespace-nowrap ml-3"
-                          >
-                            <LogOut size={14} />
-                            Revoke
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-4 text-center text-slate-500 text-sm">No active sessions to display</div>
@@ -1665,6 +2360,15 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                 )}
 
                 <div className="flex gap-3 mt-8">
+                  {backupCodes.length > 0 && (
+                    <button
+                      onClick={downloadBackupCodes}
+                      className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download size={16} />
+                      Download as .txt
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setShow2FASetup(false);
@@ -1673,7 +2377,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                       setBackupCodes([]);
                       setSecurityMessage(null);
                     }}
-                    className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
+                    className={`${backupCodes.length > 0 ? 'flex-1' : 'w-full'} py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all`}
                   >
                     {backupCodes.length > 0 ? 'Close' : 'Cancel'}
                   </button>

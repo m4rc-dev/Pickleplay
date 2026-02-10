@@ -63,7 +63,21 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
   const [partners, setPartners] = useState<any[]>([]);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, avatar: string, role: string } | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<{
+    name: string;
+    avatar: string;
+    role: string;
+    availabilityStatus?: 'looking' | 'busy' | 'offline';
+    availabilityStart?: string | null;
+    availabilityEnd?: string | null;
+    availabilityNote?: string | null;
+    preferredSkillMin?: number | null;
+    preferredSkillMax?: number | null;
+    preferredLocationIds?: string[] | null;
+    preferredCourtIds?: string[] | null;
+    preferredCourtType?: 'Indoor' | 'Outdoor' | 'Both' | null;
+    preferredLocationMode?: 'auto' | 'manual' | null;
+  } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
@@ -92,7 +106,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         setCurrentUserId(session.user.id);
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name, avatar_url, active_role')
+          .select('full_name, avatar_url, active_role, availability_status, availability_start, availability_end, availability_note, preferred_skill_min, preferred_skill_max, preferred_location_ids, preferred_court_ids, preferred_court_type, preferred_location_mode')
           .eq('id', session.user.id)
           .single();
 
@@ -100,14 +114,24 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
           setCurrentUserProfile({
             name: profile.full_name,
             avatar: profile.avatar_url,
-            role: profile.active_role
+            role: profile.active_role,
+            availabilityStatus: profile.availability_status || 'offline',
+            availabilityStart: profile.availability_start,
+            availabilityEnd: profile.availability_end,
+            availabilityNote: profile.availability_note,
+            preferredSkillMin: profile.preferred_skill_min,
+            preferredSkillMax: profile.preferred_skill_max,
+            preferredLocationIds: profile.preferred_location_ids || [],
+            preferredCourtIds: profile.preferred_court_ids || [],
+            preferredCourtType: profile.preferred_court_type || 'Both',
+            preferredLocationMode: profile.preferred_location_mode || 'auto'
           });
         }
 
         // Fetch other users for partners tab
         const { data: otherUsers } = await supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, active_role')
+          .select('id, full_name, avatar_url, active_role, availability_status, availability_start, availability_end, availability_note, preferred_skill_min, preferred_skill_max, preferred_location_ids, preferred_court_ids, preferred_court_type, preferred_location_mode')
           .neq('id', session.user.id)
           .limit(10);
 
@@ -118,7 +142,17 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
             level: 'N/A', // Assuming level is not in profile yet or needs calculation
             location: 'Nearby',
             tags: [u.active_role || 'PLAYER'],
-            avatar: u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`
+            avatar: u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`,
+            availabilityStatus: u.availability_status || 'offline',
+            availabilityStart: u.availability_start,
+            availabilityEnd: u.availability_end,
+            availabilityNote: u.availability_note,
+            preferredSkillMin: u.preferred_skill_min,
+            preferredSkillMax: u.preferred_skill_max,
+            preferredLocationIds: u.preferred_location_ids || [],
+            preferredCourtIds: u.preferred_court_ids || [],
+            preferredCourtType: u.preferred_court_type || 'Both',
+            preferredLocationMode: u.preferred_location_mode || 'auto'
           })));
         }
       }
@@ -206,7 +240,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         })
         .select(`
           *,
-          profiles!profile_id (full_name, avatar_url, active_role)
+          profiles!profile_id (full_name, avatar_url, active_role, availability_status, availability_start, availability_end, availability_note, preferred_skill_min, preferred_skill_max, preferred_location_ids, preferred_court_ids, preferred_court_type, preferred_location_mode)
         `)
         .single();
 
@@ -218,6 +252,16 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         authorName: data.profiles?.full_name || currentUserProfile.name,
         authorAvatar: data.profiles?.avatar_url || currentUserProfile.avatar,
         authorRole: (data.profiles?.active_role as UserRole) || (currentUserProfile.role as UserRole),
+        authorAvailabilityStatus: data.profiles?.availability_status || 'offline',
+        authorAvailabilityStart: data.profiles?.availability_start,
+        authorAvailabilityEnd: data.profiles?.availability_end,
+        authorAvailabilityNote: data.profiles?.availability_note,
+        authorPreferredSkillMin: data.profiles?.preferred_skill_min,
+        authorPreferredSkillMax: data.profiles?.preferred_skill_max,
+        authorPreferredLocationIds: data.profiles?.preferred_location_ids || [],
+        authorPreferredCourtIds: data.profiles?.preferred_court_ids || [],
+        authorPreferredCourtType: data.profiles?.preferred_court_type || 'Both',
+        authorPreferredLocationMode: data.profiles?.preferred_location_mode || 'auto',
         content: data.content,
         image: data.image_url,
         tags: data.tags || [],
@@ -432,6 +476,42 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5 mt-1">
                           <MapPin size={12} className="text-indigo-600" /> {partner.location}
                         </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${partner.availabilityStatus === 'looking'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : partner.availabilityStatus === 'busy'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-slate-200 text-slate-600'
+                            }`}>
+                            {partner.availabilityStatus === 'looking' ? 'Looking to Play' : partner.availabilityStatus === 'busy' ? 'Busy' : 'Offline'}
+                          </span>
+                          {partner.availabilityStatus === 'looking' && partner.availabilityStart && partner.availabilityEnd && (
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{partner.availabilityStart} - {partner.availabilityEnd}</span>
+                          )}
+                        </div>
+                        {partner.availabilityNote && (
+                          <p className="text-[10px] text-slate-500 font-semibold mt-1">{partner.availabilityNote}</p>
+                        )}
+                        {(partner.preferredSkillMin || partner.preferredSkillMax) && (
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
+                            Prefers DUPR {partner.preferredSkillMin || '?'}-{partner.preferredSkillMax || '?'}
+                          </p>
+                        )}
+                        {partner.preferredCourtType && (
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
+                            Court Type: {partner.preferredCourtType}
+                          </p>
+                        )}
+                        {(partner.preferredLocationIds?.length || partner.preferredCourtIds?.length) && (
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">
+                            Prefers {partner.preferredLocationIds?.length || 0} locations • {partner.preferredCourtIds?.length || 0} courts
+                          </p>
+                        )}
+                        {partner.preferredLocationMode && (
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">
+                            Locations: {partner.preferredLocationMode === 'auto' ? 'Auto' : 'Manual'}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 mb-8">
@@ -674,6 +754,31 @@ export const PostCard: React.FC<{
                 {post.authorRole === 'COACH' && <Sparkles size={16} className="text-lime-500" />}
               </h4>
               <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest">{post.authorRole}</p>
+              {post.authorAvailabilityStatus && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${post.authorAvailabilityStatus === 'looking'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : post.authorAvailabilityStatus === 'busy'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}>
+                    {post.authorAvailabilityStatus === 'looking' ? 'Looking' : post.authorAvailabilityStatus === 'busy' ? 'Busy' : 'Offline'}
+                  </span>
+                  {post.authorAvailabilityStatus === 'looking' && post.authorAvailabilityStart && post.authorAvailabilityEnd && (
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{post.authorAvailabilityStart} - {post.authorAvailabilityEnd}</span>
+                  )}
+                </div>
+              )}
+              {(post.authorPreferredSkillMin || post.authorPreferredSkillMax) && (
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
+                  Prefers DUPR {post.authorPreferredSkillMin || '?'}-{post.authorPreferredSkillMax || '?'}
+                </div>
+              )}
+              {post.authorPreferredCourtType && (
+                <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
+                  Court Type: {post.authorPreferredCourtType}
+                </div>
+              )}
             </div>
           </Link>
 

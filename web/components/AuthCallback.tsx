@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { supabase, getSecuritySettings } from '../services/supabase';
 import { Loader2 } from 'lucide-react';
 
 const AuthCallback: React.FC = () => {
@@ -19,10 +19,17 @@ const AuthCallback: React.FC = () => {
                 }
 
                 if (session) {
-                    // Check for stored redirect URL
+                    const settings = await getSecuritySettings(session.user.id);
+
+                    if (settings.data?.two_factor_enabled) {
+                        localStorage.setItem('two_factor_pending', 'true');
+                        navigate('/verify-2fa');
+                        return;
+                    }
+
                     const storedRedirect = localStorage.getItem('auth_redirect');
-                    localStorage.removeItem('auth_redirect'); // Clean up
-                    
+                    localStorage.removeItem('auth_redirect');
+
                     if (storedRedirect) {
                         navigate(storedRedirect);
                     } else {

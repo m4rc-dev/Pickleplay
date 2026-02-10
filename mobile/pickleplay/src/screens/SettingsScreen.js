@@ -122,6 +122,16 @@ const SettingsScreen = ({ navigation }) => {
         {/* Advanced Options */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Advanced</Text>
+          <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('QRLogin')}>
+            <View style={styles.actionInfo}>
+              <MaterialIcons name="qr-code-scanner" size={24} color={thematicBlue} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>Web QR Login</Text>
+                <Text style={styles.actionDescription}>Scan a desktop login QR code</Text>
+              </View>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color={Colors.border} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionItem}>
             <View style={styles.actionInfo}>
               <MaterialIcons name="delete-sweep" size={24} color={thematicBlue} />

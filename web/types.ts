@@ -118,6 +118,16 @@ export interface SocialPost {
   authorAvatar: string;
   // Fix: Use the centralized UserRole type for better type safety.
   authorRole: UserRole;
+  authorAvailabilityStatus?: 'looking' | 'busy' | 'offline';
+  authorAvailabilityStart?: string | null;
+  authorAvailabilityEnd?: string | null;
+  authorAvailabilityNote?: string | null;
+  authorPreferredSkillMin?: number | null;
+  authorPreferredSkillMax?: number | null;
+  authorPreferredLocationIds?: string[] | null;
+  authorPreferredCourtIds?: string[] | null;
+  authorPreferredCourtType?: 'Indoor' | 'Outdoor' | 'Both' | null;
+  authorPreferredLocationMode?: 'auto' | 'manual' | null;
   content: string;
   image?: string;
   likes: string[]; // Array of user IDs

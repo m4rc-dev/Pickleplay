@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 dotenv.config({ path: '.env.local' });
@@ -9,6 +11,22 @@ dotenv.config({ path: '../.env.local' }); // Try root as well
 
 const app = express();
 const PORT = 5001;
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const WEB_AUTH_REDIRECT_URL = process.env.WEB_AUTH_REDIRECT_URL;
+
+let supabaseAdmin = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+} else {
+  console.warn('⚠️ Supabase admin credentials missing. QR login endpoints will be disabled.');
+}
 
 // Initialize Resend - only if API key is present
 let resend = null;
@@ -184,4 +202,145 @@ app.post('/api/send-email', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`📧 Email server running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
+});
+
+const requireSupabaseAdmin = () => {
+  if (!supabaseAdmin || !WEB_AUTH_REDIRECT_URL) {
+    const message = !supabaseAdmin
+      ? 'Supabase admin client not configured.'
+      : 'WEB_AUTH_REDIRECT_URL is missing.';
+    return { ok: false, message };
+  }
+
+  return { ok: true };
+};
+
+// ─── QR Login Endpoints ───────────────────────────────────────
+app.post('/api/auth/qr/start', async (_req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from('login_challenges')
+      .insert({ nonce, expires_at: expiresAt })
+      .select('id, expires_at')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ challengeId: data.id, expiresAt: data.expires_at });
+  } catch (error) {
+    console.error('❌ QR login start error:', error.message);
+    res.status(500).json({ error: 'Failed to start QR login' });
+  }
+});
+
+app.post('/api/auth/qr/approve', async (req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const authHeader = req.headers.authorization || '';
+    const accessToken = authHeader.replace('Bearer ', '').trim();
+    const { challengeId } = req.body || {};
+
+    if (!accessToken) return res.status(401).json({ error: 'Missing access token' });
+    if (!challengeId) return res.status(400).json({ error: 'Missing challengeId' });
+
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
+    if (userError || !userData?.user) {
+      return res.status(401).json({ error: 'Invalid access token' });
+    }
+
+    const { data: challenge, error: challengeError } = await supabaseAdmin
+      .from('login_challenges')
+      .select('*')
+      .eq('id', challengeId)
+      .single();
+
+    if (challengeError || !challenge) {
+      return res.status(404).json({ error: 'Challenge not found' });
+    }
+
+    if (challenge.status !== 'pending') {
+      return res.status(400).json({ error: 'Challenge already used' });
+    }
+
+    if (new Date(challenge.expires_at).getTime() < Date.now()) {
+      await supabaseAdmin
+        .from('login_challenges')
+        .update({ status: 'expired' })
+        .eq('id', challengeId);
+      return res.status(400).json({ error: 'Challenge expired' });
+    }
+
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: userData.user.email,
+      options: { redirectTo: WEB_AUTH_REDIRECT_URL },
+    });
+
+    if (linkError) throw linkError;
+
+    const actionLink = linkData?.properties?.action_link;
+    if (!actionLink) throw new Error('Missing action link');
+
+    const { error: updateError } = await supabaseAdmin
+      .from('login_challenges')
+      .update({
+        status: 'approved',
+        user_id: userData.user.id,
+        approved_at: new Date().toISOString(),
+        action_link: actionLink,
+      })
+      .eq('id', challengeId);
+
+    if (updateError) throw updateError;
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ QR login approve error:', error.message);
+    res.status(500).json({ error: 'Failed to approve QR login' });
+  }
+});
+
+app.get('/api/auth/qr/status/:challengeId', async (req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const { challengeId } = req.params;
+
+    const { data: challenge, error } = await supabaseAdmin
+      .from('login_challenges')
+      .select('status, expires_at, action_link')
+      .eq('id', challengeId)
+      .single();
+
+    if (error || !challenge) {
+      return res.status(404).json({ error: 'Challenge not found' });
+    }
+
+    const isExpired = new Date(challenge.expires_at).getTime() < Date.now();
+    if (isExpired && challenge.status === 'pending') {
+      await supabaseAdmin
+        .from('login_challenges')
+        .update({ status: 'expired' })
+        .eq('id', challengeId);
+      return res.json({ status: 'expired', expiresAt: challenge.expires_at });
+    }
+
+    res.json({
+      status: challenge.status,
+      expiresAt: challenge.expires_at,
+      actionLink: challenge.action_link,
+    });
+  } catch (error) {
+    console.error('❌ QR login status error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch QR login status' });
+  }
 });

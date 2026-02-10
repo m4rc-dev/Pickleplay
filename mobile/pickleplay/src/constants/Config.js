@@ -4,6 +4,9 @@
 export const SUPABASE_URL = 'https://hdruhslfadbaadtgvetf.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkcnVoc2xmYWRiYWFkdGd2ZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwMTUsImV4cCI6MjA4NTUyNzAxNX0.qmN6_w4J9Y6Jof6RVrEHq3cW8-EE8Bietq8_U4OVehM';
 
+// Backend API base URL (used for QR login approval)
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5001';
+
 // Google Maps API Key
 export const GOOGLE_MAPS_API_KEY = 'AIzaSyDpAWwwpxilvwrDvVeXZm9OImBEXKe0YJo';
 

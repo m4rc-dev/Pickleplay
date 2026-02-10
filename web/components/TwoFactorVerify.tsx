@@ -32,6 +32,7 @@ const TwoFactorVerify: React.FC = () => {
       const settings = await getSecuritySettings(user.id);
       if (!settings.data?.two_factor_enabled) {
         // No 2FA, go straight to dashboard
+        localStorage.removeItem('two_factor_pending');
         const storedRedirect = localStorage.getItem('auth_redirect');
         localStorage.removeItem('auth_redirect');
         navigate(storedRedirect || '/dashboard');
@@ -120,6 +121,7 @@ const TwoFactorVerify: React.FC = () => {
         setSuccess('Verified! Redirecting...');
         // Re-enable 2FA since verifyCode sets it to true (it's already enabled)
         setTimeout(() => {
+          localStorage.removeItem('two_factor_pending');
           const storedRedirect = localStorage.getItem('auth_redirect');
           localStorage.removeItem('auth_redirect');
           navigate(storedRedirect || '/dashboard');
@@ -143,7 +145,7 @@ const TwoFactorVerify: React.FC = () => {
     setError(null);
 
     try {
-      const result = await sendEmailCode(userEmail, userId);
+      const result = await sendEmailCode(userEmail, userId, true); // Force resend
       if (result.success) {
         setSuccess('New code sent to your email!');
         setResendCooldown(60);
@@ -159,6 +161,7 @@ const TwoFactorVerify: React.FC = () => {
   };
 
   const handleBackToLogin = async () => {
+    localStorage.removeItem('two_factor_pending');
     await supabase.auth.signOut();
     navigate('/login');
   };
