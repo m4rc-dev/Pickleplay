@@ -33,6 +33,9 @@ const LocationsList: React.FC = () => {
     const [formCleaningTime, setFormCleaningTime] = useState(0);
     const [previewCoords, setPreviewCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [isGeocoding, setIsGeocoding] = useState(false);
+    const [formImageFile, setFormImageFile] = useState<File | null>(null);
+    const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
+    const [formCourtType, setFormCourtType] = useState<'Indoor' | 'Outdoor' | 'Both'>('Indoor');
 
     const geocodeAddress = async (address: string, city: string): Promise<{ lat: number; lng: number } | null> => {
         if (!window.google || !address || !city) return null;
@@ -105,6 +108,9 @@ const LocationsList: React.FC = () => {
         setFormAmenities('');
         setFormCleaningTime(0);
         setPreviewCoords(null);
+        setFormImageFile(null);
+        setFormImagePreview(null);
+        setFormCourtType('Indoor');
     };
 
     const handleAddLocation = async (e: React.FormEvent) => {
@@ -113,6 +119,15 @@ const LocationsList: React.FC = () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
+
+            // 1. Handle image upload if exists
+            let imageUrl = null;
+            if (formImageFile) {
+                const uploadResult = await uploadCourtImage(formImageFile, user.id);
+                if (uploadResult.success) {
+                    imageUrl = uploadResult.publicUrl;
+                }
+            }
 
             const { error } = await supabase
                 .from('locations')
@@ -127,7 +142,9 @@ const LocationsList: React.FC = () => {
                     base_cleaning_time: formCleaningTime,
                     latitude: previewCoords?.lat || 14.5995,
                     longitude: previewCoords?.lng || 120.9842,
-                    is_active: true
+                    is_active: true,
+                    image_url: imageUrl,
+                    court_type: formCourtType
                 });
 
             if (error) throw error;
@@ -147,6 +164,18 @@ const LocationsList: React.FC = () => {
         if (!editingLocation) return;
         setIsSubmitting(true);
         try {
+            // 1. Handle image upload if exists
+            let imageUrl = editingLocation.image_url;
+            if (formImageFile) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const uploadResult = await uploadCourtImage(formImageFile, user.id);
+                    if (uploadResult.success) {
+                        imageUrl = uploadResult.publicUrl;
+                    }
+                }
+            }
+
             const { error } = await supabase
                 .from('locations')
                 .update({
@@ -158,7 +187,9 @@ const LocationsList: React.FC = () => {
                     amenities: formAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     base_cleaning_time: formCleaningTime,
                     latitude: previewCoords?.lat,
-                    longitude: previewCoords?.lng
+                    longitude: previewCoords?.lng,
+                    image_url: imageUrl,
+                    court_type: formCourtType
                 })
                 .eq('id', editingLocation.id);
 
@@ -203,6 +234,9 @@ const LocationsList: React.FC = () => {
         } else {
             setPreviewCoords(null);
         }
+        setFormImagePreview(loc.image_url || null);
+        setFormImageFile(null);
+        setFormCourtType(loc.court_type || 'Indoor');
         setIsEditModalOpen(true);
     };
 
@@ -219,6 +253,54 @@ const LocationsList: React.FC = () => {
         <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
             {/* Left Column: Image & Form Fields */}
             <div className="space-y-6">
+
+                {/* Image Upload */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 px-1">Location Image</label>
+                    <div className="relative group">
+                        <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${formImagePreview ? 'border-amber-200 shadow-xl' : 'border-slate-100 hover:border-amber-300 hover:bg-amber-50/30'}`}>
+                            {formImagePreview ? (
+                                <>
+                                    <img src={formImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                                        <div className="bg-white/90 p-4 rounded-2xl shadow-xl flex items-center gap-2 scale-90 group-hover:scale-100 transition-transform">
+                                            <Camera size={20} className="text-amber-500" />
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">Change Photo</span>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-center p-4">
+                                    <div className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-slate-50 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                                        <Image size={24} className="text-slate-200 group-hover:text-amber-400 transition-colors" />
+                                    </div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Click to upload <span className="text-amber-500 text-[10px]">location image</span></p>
+                                </div>
+                            )}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        setFormImageFile(file);
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => {
+                                            setFormImagePreview(reader.result as string);
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }
+                                }}
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                            />
+                        </div>
+                        {formImageFile && (
+                            <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-2 rounded-xl shadow-lg animate-in zoom-in duration-300">
+                                <Check size={16} strokeWidth={4} />
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Venue Name</label>
@@ -239,6 +321,26 @@ const LocationsList: React.FC = () => {
                         <input type="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)}
                             placeholder="09XX XXX XXXX"
                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                    </div>
+                </div>
+
+                {/* Court Type Selector */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Type</label>
+                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                        {['Indoor', 'Outdoor', 'Both'].map((type) => (
+                            <button
+                                key={type}
+                                type="button"
+                                onClick={() => setFormCourtType(type as any)}
+                                className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${formCourtType === type
+                                    ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
+                                    : 'text-slate-400 hover:text-slate-600'
+                                    }`}
+                            >
+                                {type}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -506,6 +608,16 @@ const LocationCard: React.FC<{
             className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden cursor-pointer">
             {/* Image/Map Preview Header */}
             <div className="h-44 bg-slate-100 relative overflow-hidden">
+                {/* Display location image if available, otherwise show map */}
+                {location.image_url ? (
+                    <img
+                        src={location.image_url}
+                        alt={location.name}
+                        className="w-full h-full object-cover"
+                    />
+                ) : location.latitude && location.longitude ? (
+                    <MiniMapPreview lat={location.latitude} lng={location.longitude} />
+                ) : null}
                 <div className="absolute top-4 right-4 flex gap-2">
                     <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-sm ${location.is_active
                         ? 'bg-emerald-50/90 border-emerald-100 text-emerald-600'

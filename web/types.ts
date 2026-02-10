@@ -48,6 +48,8 @@ export interface Location {
   created_at?: string;
   updated_at?: string;
   court_count?: number; // Virtual field for UI
+  image_url?: string;
+  court_type?: 'Indoor' | 'Outdoor' | 'Both';
 }
 
 export interface Match {

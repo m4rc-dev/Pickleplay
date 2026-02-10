@@ -301,88 +301,96 @@ const Booking: React.FC = () => {
     const fetchCourts = async () => {
       setIsLoading(true);
       try {
-        // Join with locations and get court count per location
-        const { data, error } = await supabase
-          .from('courts')
+        // Fetch locations with their courts
+        const { data: locationsData, error: locationsError } = await supabase
+          .from('locations')
           .select(`
-            *,
-            locations!inner (
+            id,
+            name,
+            address,
+            city,
+            latitude,
+            longitude,
+            image_url,
+            court_type,
+            is_active,
+            courts (
               id,
-              address,
-              city,
-              latitude,
-              longitude,
-              latitude,
-              longitude
+              name,
+              surface_type,
+              base_price,
+              cleaning_time_minutes,
+              amenities,
+              owner_id,
+              court_type,
+              is_active
             )
           `)
           .eq('is_active', true);
 
-        if (error) throw error;
+        if (locationsError) throw locationsError;
 
+        console.log('Fetched locations from database:', locationsData);
 
-        // Get court counts per location
-        const locationCourtCounts = new Map<string, number>();
-        if (data) {
-          const locationIds = [...new Set(data.map(c => c.location_id).filter(Boolean))];
-          for (const locationId of locationIds) {
-            const { count } = await supabase
-              .from('courts')
-              .select('*', { count: 'exact', head: true })
-              .eq('location_id', locationId)
-              .eq('is_active', true);
-            if (count !== null) locationCourtCounts.set(locationId, count);
-          }
-        }
+        // Map locations to LocationGroup format
+        const mappedLocationGroups: LocationGroup[] = (locationsData || [])
+          .map(loc => {
+            const activeCourts = (loc.courts || []).filter((c: any) => c.is_active);
+            console.log(`Location "${loc.name}": ${loc.courts?.length || 0} total courts, ${activeCourts.length} active courts`);
 
-        const mappedCourts: Court[] = (data || []).map(c => {
-          const loc = c.locations;
-          return {
-            id: c.id,
-            name: c.name,
-            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
-            location: loc ? `${loc.address}, ${loc.city}` : 'Location not available',
-            pricePerHour: parseFloat(c.base_price) || 0,
-            availability: [],
-            latitude: loc?.latitude || c.latitude,
-            longitude: loc?.longitude || c.longitude,
-            numCourts: c.num_courts || 1,
-            amenities: Array.isArray(c.amenities) ? c.amenities : [],
-            ownerId: c.owner_id,
-            cleaningTimeMinutes: c.cleaning_time_minutes || 0,
-            locationId: c.location_id,
-            locationCourtCount: c.location_id ? locationCourtCounts.get(c.location_id) : undefined,
-            imageUrl: c.image_url,
-            courtType: c.court_type || 'Outdoor'
-          };
-        });
+            return {
+              loc,
+              activeCourts,
+              hasActiveCourts: activeCourts.length > 0
+            };
+          })
+          .filter(({ hasActiveCourts, loc }) => {
+            if (!hasActiveCourts) {
+              console.warn(`⚠️ Location "${loc.name}" excluded: No active courts`);
+              return false;
+            }
+            return true;
+          })
+          .map(({ loc, activeCourts }) => {
+            // Map courts for this location
+            const mappedCourts: Court[] = activeCourts.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+              location: `${loc.address}, ${loc.city}`,
+              pricePerHour: parseFloat(c.base_price) || 0,
+              availability: [],
+              latitude: loc.latitude || 14.5995,
+              longitude: loc.longitude || 120.9842,
+              numCourts: 1,
+              amenities: Array.isArray(c.amenities) ? c.amenities : [],
+              ownerId: c.owner_id,
+              cleaningTimeMinutes: c.cleaning_time_minutes || 0,
+              locationId: loc.id,
+              locationCourtCount: activeCourts.length,
+              imageUrl: loc.image_url, // Use location image
+              courtType: c.court_type || loc.court_type || 'Outdoor'
+            }));
 
+            return {
+              locationId: loc.id,
+              locationName: loc.name,
+              address: `${loc.address}, ${loc.city}`,
+              city: loc.city,
+              latitude: loc.latitude || 14.5995,
+              longitude: loc.longitude || 120.9842,
+              courts: mappedCourts
+            };
+          });
 
-        setCourts(mappedCourts);
+        console.log('Final location groups:', mappedLocationGroups);
+        setLocationGroups(mappedLocationGroups);
 
-        // Group courts by location
-        const groupedByLocation = new Map<string, LocationGroup>();
-        mappedCourts.forEach(court => {
-          if (!court.locationId) return;
-
-          if (!groupedByLocation.has(court.locationId)) {
-            const loc = (data || []).find((c: any) => c.id === court.id)?.locations;
-            groupedByLocation.set(court.locationId, {
-              locationId: court.locationId,
-              locationName: loc ? loc.address.split(',')[0] : 'Court Location',
-              address: court.location,
-              city: loc?.city || '',
-              latitude: court.latitude || 14.5995,
-              longitude: court.longitude || 120.9842,
-              courts: []
-            });
-          }
-          groupedByLocation.get(court.locationId)!.courts.push(court);
-        });
-
-        setLocationGroups(Array.from(groupedByLocation.values()));
+        // Flatten courts for the courts array (for backward compatibility)
+        const allCourts = mappedLocationGroups.flatMap(loc => loc.courts);
+        setCourts(allCourts);
       } catch (err) {
-        console.error('Error fetching courts:', err);
+        console.error('Error fetching locations:', err);
       } finally {
         setIsLoading(false);
       }
@@ -577,8 +585,20 @@ const Booking: React.FC = () => {
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
-    // Add markers for each location (not individual courts)
-    locationGroups.forEach(location => {
+    // Apply the same filters as the list
+    const filteredLocations = locationGroups.filter(l => {
+      const q = searchQuery.toLowerCase();
+      const locParam = searchParams.get('loc')?.toLowerCase() || '';
+      const matchesSearch = !searchQuery || l.city.toLowerCase().includes(q) || l.locationName.toLowerCase().includes(q) || l.address.toLowerCase().includes(q);
+      const matchesLoc = !locParam || searchQuery || l.city.toLowerCase().includes(locParam) || l.address.toLowerCase().includes(locParam);
+      const matchesFilter = filterType === 'All' || l.courts.some(c => c.type === filterType);
+      return matchesSearch && matchesLoc && matchesFilter;
+    });
+
+    console.log(`📍 Displaying ${filteredLocations.length} location markers on map (filtered from ${locationGroups.length} total)`);
+
+    // Add markers for each filtered location
+    filteredLocations.forEach(location => {
       const marker = new window.google.maps.Marker({
         position: { lat: location.latitude, lng: location.longitude },
         map,
@@ -593,7 +613,7 @@ const Booking: React.FC = () => {
           color: '#ffffff',
           fontSize: '10px',
           fontWeight: 'bold',
-          className: 'marker-label' // For fine-tuning if needed
+          className: 'marker-label'
         }
       });
 
@@ -933,7 +953,7 @@ const Booking: React.FC = () => {
                 {searchQuery || 'Search courts or places...'}
               </span>
             </button>
-            
+
             {/* Near Me Button */}
             <button
               onClick={handleNearMe}
@@ -950,11 +970,10 @@ const Booking: React.FC = () => {
             {/* View Mode Toggle (Map/List) */}
             <button
               onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${
-                viewMode === 'map'
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200/50'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-              }`}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${viewMode === 'map'
+                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200/50'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
             >
               {viewMode === 'map' ? <MapPin size={16} /> : <List size={16} />}
               <span>{viewMode === 'map' ? 'Map' : 'List'}</span>
@@ -965,16 +984,14 @@ const Booking: React.FC = () => {
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${
-                  filterType === type
-                    ? 'bg-white border-blue-600 text-blue-600 shadow-sm'
-                    : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                }`}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${filterType === type
+                  ? 'bg-white border-blue-600 text-blue-600 shadow-sm'
+                  : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                  }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  type === 'All' ? 'bg-blue-500' : 
+                <span className={`w-1.5 h-1.5 rounded-full ${type === 'All' ? 'bg-blue-500' :
                   type === 'Indoor' ? 'bg-cyan-400' : 'bg-lime-400'
-                }`}></span>
+                  }`}></span>
                 {type}
               </button>
             ))}
@@ -1009,11 +1026,11 @@ const Booking: React.FC = () => {
                   }}
                   className="flex-1 bg-transparent border-none outline-none py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                 />
-                <button 
-                  onClick={() => { 
-                    setIsSearchExpanded(false); 
-                    setSearchQuery(''); 
-                  }} 
+                <button
+                  onClick={() => {
+                    setIsSearchExpanded(false);
+                    setSearchQuery('');
+                  }}
                   className="px-3 py-1 text-blue-600 font-bold text-xs uppercase tracking-wider hover:text-blue-700 transition-colors"
                 >
                   Done
@@ -1111,7 +1128,7 @@ const Booking: React.FC = () => {
               <p className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">
                 {locationGroups.length} {locationGroups.length === 1 ? 'Location' : 'Locations'}
               </p>
-              <button 
+              <button
                 onClick={handleViewBookings}
                 className="px-6 md:px-8 py-3 md:py-4 bg-white border-2 border-slate-950 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
               >
@@ -1124,7 +1141,15 @@ const Booking: React.FC = () => {
             {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
               <button
                 key={type}
-                onClick={() => setFilterType(type)}
+                onClick={() => {
+                  setFilterType(type);
+                  // When clicking "All", clear the location filter to show all locations
+                  if (type === 'All') {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.delete('loc');
+                    navigate(`?${newParams.toString()}`, { replace: true });
+                  }
+                }}
                 className={`px-10 py-3.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 active:scale-95 ${filterType === type
                   ? 'bg-blue-600 text-white shadow-2xl shadow-blue-400/40 ring-4 ring-blue-600/10'
                   : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-400 hover:text-blue-600 shadow-sm'
@@ -1484,7 +1509,41 @@ const Booking: React.FC = () => {
                         const matchesSearch = !searchQuery || l.city.toLowerCase().includes(q) || l.locationName.toLowerCase().includes(q) || l.address.toLowerCase().includes(q);
                         const matchesLoc = !locParam || searchQuery || l.city.toLowerCase().includes(locParam) || l.address.toLowerCase().includes(locParam);
                         const matchesFilter = filterType === 'All' || l.courts.some(c => c.type === filterType);
+
+                        // Debug logging
+                        if (l.locationName.toLowerCase().includes('cebu sports')) {
+                          console.log(`🔍 Filtering "${l.locationName}":`, {
+                            city: l.city,
+                            address: l.address,
+                            searchQuery,
+                            locParam,
+                            matchesSearch,
+                            matchesLoc,
+                            matchesFilter,
+                            finalResult: matchesSearch && matchesLoc && matchesFilter
+                          });
+                        }
+
                         return matchesSearch && matchesLoc && matchesFilter;
+                      })
+                      .sort((a, b) => {
+                        // Sort by distance from user location (nearest first)
+                        if (userLocation) {
+                          const distanceA = calculateDistance(
+                            userLocation.lat,
+                            userLocation.lng,
+                            a.latitude,
+                            a.longitude
+                          );
+                          const distanceB = calculateDistance(
+                            userLocation.lat,
+                            userLocation.lng,
+                            b.latitude,
+                            b.longitude
+                          );
+                          return distanceA - distanceB;
+                        }
+                        return 0; // No sorting if user location is not available
                       })
                       .map(location => (
                         <button
