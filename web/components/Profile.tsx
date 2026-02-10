@@ -18,7 +18,10 @@ import {
   BarChart3,
   AlertCircle,
   CheckCircle,
-  LogOut
+  LogOut,
+  Loader2,
+  ArrowLeftRight,
+  ChevronDown
 } from 'lucide-react';
 import { UserRole, SocialPost } from '../types';
 import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, getSecuritySettings, createSession } from '../services/supabase';
@@ -84,6 +87,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   // Confirmation Dialog State
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   // Profile message state
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -571,10 +575,155 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   return (
     <div className="max-w-7xl mx-auto space-y-10 animate-fade-in pb-20">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Mobile Profile Header - Matches Reference Design */}
+        <div className="md:hidden">
+          <div className="flex items-start gap-5">
+            {/* Avatar with Gradient Ring */}
+            <div className="shrink-0">
+              <div className={`w-24 h-24 rounded-full p-[3px] bg-gradient-to-tr from-${themeColor}-400 to-lime-300 shadow-xl`}>
+                <div className="w-full h-full rounded-full bg-white p-1 relative overflow-hidden group">
+                  <img
+                    src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                    alt="Profile"
+                    className="w-full h-full rounded-full bg-slate-50 object-cover"
+                  />
+                  {isCurrentUser && (
+                    <>
+                      <input
+                        type="file"
+                        id="avatar-upload-mobile"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="avatar-upload-mobile"
+                        className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      >
+                        {isUploadingAvatar ? (
+                          <Loader2 className="animate-spin text-white" size={24} />
+                        ) : (
+                          <Sparkles className="text-white" size={24} />
+                        )}
+                      </label>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Identity + Stats + Button Stacked */}
+            <div className="flex-1 space-y-4 pt-1">
+              {/* Identity */}
+              <div>
+                <p className={`text-[10px] font-black text-${themeColor}-600 uppercase tracking-[0.3em] mb-1`}>
+                  User Identity / {displayRole.replace('_', ' ')}
+                </p>
+                <h1 className="text-[26px] font-black text-slate-950 tracking-tight uppercase leading-none">{displayName}.</h1>
+              </div>
+
+              {/* Stats Row + Button */}
+              <div className="flex items-center gap-4">
+                {/* Stats */}
+                <div className="flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Matches</p>
+                    <p className="font-black text-slate-950 text-base leading-none">{profileData.matches_played || 0}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Rating</p>
+                    <p className="font-black text-slate-950 text-base leading-none">{profileData.dupr_rating?.toFixed(2) || '0.00'}</p>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-8 w-px bg-slate-200" />
+
+                {/* Role Switcher - Smart: Toggle for 2 roles, Dropdown for 3+ */}
+                {isCurrentUser && authorizedProRoles.length > 0 && (
+                  <>
+                    {/* 2 Roles: Simple Toggle Switch */}
+                    {authorizedProRoles.length === 1 && (
+                      <button
+                        onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
+                        className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                      >
+                        <ArrowLeftRight size={14} className="text-lime-400" />
+                        <span>{displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}</span>
+                      </button>
+                    )}
+
+                    {/* 3+ Roles: Dropdown Menu */}
+                    {authorizedProRoles.length >= 2 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                          className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                        >
+                          <Sparkles size={12} className="text-lime-400" />
+                          <span>{displayRole.replace('_', ' ')}</span>
+                          <ChevronDown size={12} className={`transition-transform ${showRoleDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {showRoleDropdown && (
+                          <>
+                            {/* Backdrop */}
+                            <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
+
+                            {/* Menu */}
+                            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                              <div className="p-2 space-y-1">
+                                {/* Player Role */}
+                                <button
+                                  onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
+                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                                >
+                                  <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
+                                  <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
+                                  {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
+                                </button>
+
+                                {/* Pro Roles */}
+                                {authorizedProRoles.map((role) => (
+                                  <button
+                                    key={role}
+                                    onClick={() => { onRoleSwitch && onRoleSwitch(role); setShowRoleDropdown(false); }}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === role ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                                  >
+                                    <Sparkles size={16} className={displayRole === role ? 'text-lime-600' : 'text-slate-400'} />
+                                    <span className="font-black text-[10px] uppercase tracking-widest">{role.replace('_', ' ')}</span>
+                                    {displayRole === role && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Follow Button for Other Users */}
+                {!isCurrentUser && (
+                  <button onClick={() => onFollow(profileId!, displayName)} className={`h-10 px-5 rounded-full font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${isFollowing ? `bg-blue-600 text-white shadow-xl` : `bg-slate-900 text-white hover:bg-blue-600 shadow-lg`}`}>
+                    {isFollowing ? <UserCheck size={14} /> : <UserPlus size={14} />}
+                    {isFollowing ? 'Following' : 'Follow'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Profile Header */}
+        <div className="hidden md:flex md:flex-row md:items-center justify-between">
           <div>
-            <p className={`text-xs font-black text-${themeColor}-600 uppercase tracking-[0.4em] mb-2`}>User Identity / {displayRole}</p>
-            <h1 className="text-3xl md:text-4xl font-black text-slate-950 tracking-tighter uppercase">{displayName}.</h1>
+            <p className={`text-xs font-black text-${themeColor}-600 uppercase tracking-[0.4em] mb-2`}>
+              User Identity / {displayRole.replace('_', ' ')}
+            </p>
+            <h1 className="text-4xl font-black text-slate-950 tracking-tighter uppercase">{displayName}.</h1>
           </div>
 
           {!isCurrentUser && (
@@ -587,62 +736,67 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
         {/* Navigation Tabs - Only show for current user */}
         {isCurrentUser && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pt-2 border-b border-slate-200">
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'profile' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <User size={14} className="inline mr-2" />
-              Profile
-            </button>
-            <button
-              onClick={() => setActiveTab('notifications')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'notifications' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <Bell size={14} className="inline mr-2" />
-              Notifications
-            </button>
-            <button
-              onClick={() => setActiveTab('privacy')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'privacy' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <Eye size={14} className="inline mr-2" />
-              Privacy
-            </button>
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'security' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <Shield size={14} className="inline mr-2" />
-              Security
-            </button>
-            <button
-              onClick={() => setActiveTab('preferences')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'preferences' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <Globe size={14} className="inline mr-2" />
-              Preferences
-            </button>
-            <button
-              onClick={() => setActiveTab('billing')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'billing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <CreditCard size={14} className="inline mr-2" />
-              Billing
-            </button>
-            <button
-              onClick={() => setActiveTab('stats')}
-              className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'stats' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-            >
-              <BarChart3 size={14} className="inline mr-2" />
-              Activity
-            </button>
+          <div className="relative group/tabs">
+            {/* Scroll Indication Gradient (Right) */}
+            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none z-10 md:hidden" />
+
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pt-2 border-b border-slate-200 relative">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'profile' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <User size={14} className="inline mr-2" />
+                Profile
+              </button>
+              <button
+                onClick={() => setActiveTab('notifications')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'notifications' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <Bell size={14} className="inline mr-2" />
+                Notifications
+              </button>
+              <button
+                onClick={() => setActiveTab('privacy')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'privacy' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <Eye size={14} className="inline mr-2" />
+                Privacy
+              </button>
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'security' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <Shield size={14} className="inline mr-2" />
+                Security
+              </button>
+              <button
+                onClick={() => setActiveTab('preferences')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'preferences' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <Globe size={14} className="inline mr-2" />
+                Preferences
+              </button>
+              <button
+                onClick={() => setActiveTab('billing')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'billing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <CreditCard size={14} className="inline mr-2" />
+                Billing
+              </button>
+              <button
+                onClick={() => setActiveTab('stats')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'stats' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <BarChart3 size={14} className="inline mr-2" />
+                Activity
+              </button>
+            </div>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
-        <div className="lg:col-span-1 space-y-8">
+        <div className="hidden lg:block lg:col-span-1 space-y-8">
           <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm text-center">
             <div className="relative inline-block mb-6">
               <div className={`w-32 h-32 rounded-full p-1 border-4 border-${themeColor}-200 shadow-2xl group relative`}>
@@ -705,8 +859,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     <button
                       onClick={() => onRoleSwitch && onRoleSwitch('PLAYER')}
                       className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === 'PLAYER'
-                          ? 'bg-lime-400 text-slate-900'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-lime-400 text-slate-900'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                     >
                       <User size={16} />
@@ -718,8 +872,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                         key={proRole}
                         onClick={() => onRoleSwitch && onRoleSwitch(proRole)}
                         className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === proRole
-                            ? 'bg-lime-400 text-slate-900'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          ? 'bg-lime-400 text-slate-900'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
                       >
                         {proRole === 'COACH' ? <UserCheck size={16} /> : <UserPlus size={16} />}
@@ -891,8 +1045,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
               {/* Success/Error Message */}
               {privacyMessage && (
                 <div className={`p-4 rounded-xl flex items-center gap-3 ${privacyMessage.type === 'success'
-                    ? 'bg-green-50 border border-green-200'
-                    : 'bg-red-50 border border-red-200'
+                  ? 'bg-green-50 border border-green-200'
+                  : 'bg-red-50 border border-red-200'
                   }`}>
                   {privacyMessage.type === 'success' ? (
                     <CheckCircle className="text-green-600" size={20} />
@@ -915,8 +1069,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
                 <div className="space-y-3">
                   <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'public'
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : 'bg-slate-50 border-slate-200 hover:border-emerald-200'
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-slate-50 border-slate-200 hover:border-emerald-200'
                     } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
@@ -932,8 +1086,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   </label>
 
                   <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'friends'
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-slate-50 border-slate-200 hover:border-blue-200'
+                    ? 'bg-blue-50 border-blue-200'
+                    : 'bg-slate-50 border-slate-200 hover:border-blue-200'
                     } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
@@ -949,8 +1103,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   </label>
 
                   <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${tempVisibility === 'private'
-                      ? 'bg-slate-100 border-slate-300'
-                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                    ? 'bg-slate-100 border-slate-300'
+                    : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                     } ${isCurrentUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                     <input
                       type="radio"
@@ -1019,8 +1173,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                   <button
                     onClick={() => setShowPasswordModal(true)}
                     className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${hasPasswordAuth
-                        ? 'bg-slate-900 text-white hover:bg-slate-800'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      ? 'bg-slate-900 text-white hover:bg-slate-800'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                   >
                     {hasPasswordAuth ? 'Update' : 'Set Password'}
@@ -1056,8 +1210,8 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                           }
                         }}
                         className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${twoFactorEnabled
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          ? 'bg-red-600 text-white hover:bg-red-700'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
                           }`}
                       >
                         {twoFactorEnabled ? 'Disable' : 'Enable'}
@@ -1297,14 +1451,14 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all ${passwordStrength < 30 ? 'bg-red-500 w-1/3' :
-                                passwordStrength < 60 ? 'bg-yellow-500 w-2/3' :
-                                  'bg-emerald-500 w-full'
+                              passwordStrength < 60 ? 'bg-yellow-500 w-2/3' :
+                                'bg-emerald-500 w-full'
                               }`}
                           />
                         </div>
                         <p className={`text-xs mt-1 font-bold ${passwordStrength < 30 ? 'text-red-600' :
-                            passwordStrength < 60 ? 'text-yellow-600' :
-                              'text-emerald-600'
+                          passwordStrength < 60 ? 'text-yellow-600' :
+                            'text-emerald-600'
                           }`}>
                           Strength: {passwordStrength < 30 ? 'Weak' : passwordStrength < 60 ? 'Fair' : 'Strong'}
                         </p>
