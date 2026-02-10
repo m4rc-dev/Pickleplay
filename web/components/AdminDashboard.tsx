@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Shield,
   Activity,
@@ -68,6 +69,7 @@ interface PlatformUser {
   status: 'Active' | 'Suspended' | 'Pending';
   joinedDate: string;
   dupr: number;
+  avatarUrl?: string;
 }
 
 const MOCK_USERS: PlatformUser[] = [
@@ -125,7 +127,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
     // 2. Fetch Users List
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, full_name, email, active_role, created_at, account_status')
+      .select('id, full_name, email, active_role, created_at, account_status, avatar_url')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -137,7 +139,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
         role: p.active_role as UserRole,
         status: (p.account_status as any) || 'Active',
         joinedDate: p.created_at?.split('T')[0] || '',
-        dupr: 0 // Placeholder
+        dupr: 0, // Placeholder
+        avatarUrl: p.avatar_url
       }));
       setUserList(mappedUsers);
     }
@@ -715,7 +718,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     <tr key={user.id}>
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-slate-100" />
+                          {user.avatarUrl ? (
+                            <img
+                              src={user.avatarUrl}
+                              alt={user.name}
+                              className="w-10 h-10 rounded-xl object-cover border border-slate-100 shadow-sm"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">
+                              {user.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div>
                             <p className="font-black text-slate-950 text-sm">{user.name}</p>
                             <p className="text-[11px] text-slate-400">{user.email}</p>
@@ -1027,10 +1040,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
         )}
       </div>
 
-      {/* MODAL IS NOW OUTSIDE THE WRAPPER TO PREVENT TRANSFORM TRAPPING */}
-      {showTournamentModal && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-xl rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500">
+      {/* MODAL IS NOW PORTALED TO DOCUMENT BODY TO IGNORE PARENT CONSTRAINTS */}
+      {showTournamentModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-xl rounded-[48px] p-10 md:p-14 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500 z-[100]">
             <button
               onClick={() => {
                 setShowTournamentModal(false);
@@ -1113,13 +1126,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                   <select
                     value={newTournament.skillLevel}
                     onChange={e => setNewTournament({ ...newTournament, skillLevel: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold appearance-none"
                   >
-                    <option value="Newbie">Newbie (2.0)</option>
-                    <option value="Novice">Novice (2.5)</option>
-                    <option value="Intermediate">Intermediate (3.0 - 3.5)</option>
-                    <option value="Advanced">Advanced (4.0)</option>
-                    <option value="Expert">Expert (4.5+)</option>
+                    <option>Newbie (2.0)</option>
+                    <option>Intermediate (3.0 - 3.5)</option>
+                    <option>Advanced (4.0 - 4.5)</option>
+                    <option>Pro (5.0+)</option>
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -1138,9 +1150,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 {editingTournamentId && (
                   <button
                     type="button"
-                    onClick={handleDeleteTournament}
-                    disabled={isCreating}
-                    className="px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest transition-all bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white"
+                    onClick={async () => {
+                      if (confirm('Permanently terminate this event? This action is irreversible.')) {
+                        const { error } = await supabase.from('tournaments').delete().eq('id', editingTournamentId);
+                        if (!error) {
+                          alert('Event terminated successfully.');
+                          setShowTournamentModal(false);
+                          loadTournaments();
+                        }
+                      }
+                    }}
+                    className="flex-1 py-5 bg-rose-50 text-rose-600 font-black rounded-3xl text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all"
                   >
                     Terminate
                   </button>
@@ -1148,18 +1168,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 <button
                   type="submit"
                   disabled={isCreating}
-                  className={`flex-1 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-3 ${isCreating
-                    ? 'bg-slate-100 text-slate-400'
-                    : 'bg-indigo-600 text-white hover:bg-lime-400 hover:text-slate-950'
-                    }`}
+                  className="flex-[2] py-5 bg-indigo-600 text-white font-black rounded-3xl text-[10px] uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {isCreating ? 'PROCESSING...' : (editingTournamentId ? 'SAVE CHANGES' : 'DEPLOY TOURNAMENT')}
-                  {!isCreating && <Radio size={18} className="animate-pulse" />}
+                  {!isCreating && <Radio size={16} className="animate-pulse" />}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

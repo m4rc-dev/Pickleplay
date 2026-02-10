@@ -111,6 +111,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [userGrowthData, setUserGrowthData] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState<'7D' | '1M' | '6M' | '1Y'>('6M');
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [activeLogs, setActiveLogs] = useState<any[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
@@ -214,7 +218,99 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           if (count !== null) setActiveSessions(count);
         });
 
-      // 3. Fetch Court Metrics for Admin's own courts
+      // 3. User Growth Data
+      const fetchUserGrowth = async () => {
+        try {
+          const now = new Date();
+          let startDate = new Date();
+          let granularity: 'day' | 'week' | 'month' = 'month';
+
+          if (timeRange === '7D') {
+            startDate.setDate(now.getDate() - 7);
+            granularity = 'day';
+          } else if (timeRange === '1M') {
+            startDate.setMonth(now.getMonth() - 1);
+            granularity = 'week';
+          } else if (timeRange === '6M') {
+            startDate.setMonth(now.getMonth() - 6);
+            granularity = 'month';
+          } else if (timeRange === '1Y') {
+            startDate.setFullYear(now.getFullYear() - 1);
+            granularity = 'month';
+          }
+
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('created_at')
+            .gte('created_at', startDate.toISOString())
+            .order('created_at', { ascending: true });
+
+          if (profiles) {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const labels: string[] = [];
+            const tempDate = new Date(startDate);
+
+            // Generate labels based on granularity
+            while (tempDate <= now) {
+              if (granularity === 'day') {
+                labels.push(tempDate.toLocaleDateString([], { weekday: 'short' }));
+                tempDate.setDate(tempDate.getDate() + 1);
+              } else if (granularity === 'week') {
+                labels.push(`W${Math.ceil(tempDate.getDate() / 7)}`);
+                tempDate.setDate(tempDate.getDate() + 7);
+              } else {
+                labels.push(months[tempDate.getMonth()]);
+                tempDate.setMonth(tempDate.getMonth() + 1);
+              }
+            }
+
+            // Get total count before startDate for cumulative baseline
+            const { count: baselineCount } = await supabase
+              .from('profiles')
+              .select('*', { count: 'exact', head: true })
+              .lt('created_at', startDate.toISOString());
+
+            let cumulative = baselineCount || 0;
+            const counts: Record<string, number> = {};
+
+            profiles.forEach(p => {
+              const d = new Date(p.created_at);
+              let label = '';
+              if (granularity === 'day') label = d.toLocaleDateString([], { weekday: 'short' });
+              else if (granularity === 'week') label = `W${Math.ceil(d.getDate() / 7)}`;
+              else label = months[d.getMonth()];
+              counts[label] = (counts[label] || 0) + 1;
+            });
+
+            const aggregatedData = labels.map(label => {
+              cumulative += (counts[label] || 0);
+              return { name: label, growth: cumulative };
+            });
+
+            setUserGrowthData(aggregatedData);
+          }
+        } catch (err) {
+          console.error('Error fetching user growth:', err);
+        }
+      };
+      fetchUserGrowth();
+
+      // 4. Fetch System Logs
+      const fetchSystemLogs = async () => {
+        try {
+          const { data } = await supabase
+            .from('system_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(20);
+          if (data) setActiveLogs(data);
+        } catch (err) {
+          console.error('Error fetching logs:', err);
+        }
+      };
+      fetchSystemLogs();
+
+      // 5. Fetch Court Metrics for Admin's own courts
       fetchCourtOwnerMetrics();
     } else if (userRole === 'PLAYER') {
       // Fetch Player Stats
@@ -230,8 +326,43 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         }
       });
 
+      const fetchRatingHistory = async () => {
+        if (!currentUserId) return;
+        try {
+          const now = new Date();
+          let startDate = new Date();
+          if (timeRange === '7D') startDate.setDate(now.getDate() - 7);
+          else if (timeRange === '1M') startDate.setMonth(now.getMonth() - 1);
+          else if (timeRange === '6M') startDate.setMonth(now.getMonth() - 6);
+          else if (timeRange === '1Y') startDate.setFullYear(now.getFullYear() - 1);
+
+          const { data } = await supabase
+            .from('dupr_logs')
+            .select('*')
+            .eq('player_id', currentUserId)
+            .gte('recorded_at', startDate.toISOString())
+            .order('recorded_at', { ascending: true });
+
+          if (data && data.length > 0) {
+            const mappedHistory = data.map(log => ({
+              name: new Date(log.recorded_at).toLocaleDateString([], {
+                month: (timeRange === '6M' || timeRange === '1Y') ? 'short' : undefined,
+                day: (timeRange === '7D' || timeRange === '1M') ? 'numeric' : undefined,
+                weekday: timeRange === '7D' ? 'short' : undefined
+              }),
+              rating: Number(log.rating)
+            }));
+            setRatingHistory(mappedHistory);
+          } else {
+            setRatingHistory([{ name: 'No Data', rating: 3.5 }]);
+          }
+        } catch (err) {
+          console.error('Error fetching rating history:', err);
+        }
+      };
       fetchRatingHistory();
-    } else if (userRole === 'COACH' && currentUserId) {
+    }
+    else if (userRole === 'COACH' && currentUserId) {
       // Fetch Coach Metrics
       const fetchCoachMetrics = async () => {
         try {
@@ -285,7 +416,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     }
 
     return () => clearTimeout(timer);
-  }, [userRole, currentUserId]);
+  }, [userRole, currentUserId, timeRange]);
 
   console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
@@ -635,9 +766,19 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
         {!isLoading && (
           <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-            <button className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm">
-              <History size={16} /> Logs
-            </button>
+            {userRole === 'ADMIN' && (
+              <button
+                onClick={() => setShowLogsModal(true)}
+                className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm"
+              >
+                <History size={16} /> Logs
+              </button>
+            )}
+            {userRole !== 'ADMIN' && (
+              <button className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm">
+                <History size={16} /> Logs
+              </button>
+            )}
             <button
               onClick={() => {
                 console.log('Action Button Clicked - Role:', userRole);
@@ -668,12 +809,27 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
-              <Activity className={`text-${themeColor}-600`} />
-              Rating Velocity
+              {userRole === 'ADMIN' ? (
+                <>
+                  <Users className="text-indigo-600" />
+                  User Growth Velocity
+                </>
+              ) : (
+                <>
+                  <Activity className={`text-${themeColor}-600`} />
+                  Rating Velocity
+                </>
+              )}
             </h2>
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-              {['7D', '1M', '6M', '1Y'].map(t => (
-                <button key={t} className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === '6M' ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}>{t}</button>
+              {(['7D', '1M', '6M', '1Y'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTimeRange(t)}
+                  className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === timeRange ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                  {t}
+                </button>
               ))}
             </div>
           </div>
@@ -682,16 +838,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <Skeleton className="w-full h-full rounded-2xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                <LineChart data={userRole === 'ADMIN' ? (userGrowthData.length > 0 ? userGrowthData : PERFORMANCE_DATA.map(d => ({ ...d, growth: d.rating * 10 }))) : (ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                  <YAxis hide domain={['dataMin - 0.2', 'dataMax + 0.2']} />
+                  <YAxis hide domain={userRole === 'ADMIN' ? ['auto', 'auto'] : ['dataMin - 0.2', 'dataMax + 0.2']} />
                   <Tooltip
                     contentStyle={{ borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', padding: '12px' }}
                     itemStyle={{ fontWeight: 'bold' }}
                     labelStyle={{ color: '#64748b' }}
+                    formatter={(value: any) => [value, userRole === 'ADMIN' ? 'Total Users' : 'Rating']}
                   />
-                  <Line type="monotone" dataKey="rating" stroke={`#3b82f6`} strokeWidth={4} dot={{ r: 5, fill: '#3b82f6' }} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey={userRole === 'ADMIN' ? "growth" : "rating"} stroke={userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6"} strokeWidth={4} dot={{ r: 5, fill: userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6" }} activeDot={{ r: 8 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -1436,6 +1593,80 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           document.body
         )
       }
+      {/* Admin Logs Modal */}
+      {showLogsModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh] z-[100]">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter flex items-center gap-3">
+                  <History className="text-indigo-600" /> System Activity.
+                </h3>
+                <p className="text-slate-500 font-medium text-sm mt-1">Real-time administrative and security events.</p>
+              </div>
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-4 no-scrollbar">
+              {activeLogs.length > 0 ? (
+                activeLogs.map((log, i) => (
+                  <div key={i} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-100 hover:bg-white transition-all">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.event_type === 'SECURITY' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                          {log.event_type}
+                        </span>
+                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">{log.action}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        {new Date(log.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">
+                        {log.agent_name?.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-black text-slate-900 leading-tight mb-1">{log.details}</p>
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">
+                          Target: <span className="font-bold text-slate-700">{log.target_name}</span> • Agent: <span className="font-bold text-slate-700">{log.agent_name}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-20 opacity-30 uppercase font-black text-xs">No recent activity found</div>
+              )}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-slate-100 flex gap-4">
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogsModal(false);
+                  navigate('/admin?tab=audit');
+                }}
+                className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"
+              >
+                Go to Audit Console <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 };
