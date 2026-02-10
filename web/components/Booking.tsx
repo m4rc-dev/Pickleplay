@@ -917,7 +917,7 @@ const Booking: React.FC = () => {
   };
 
   return (
-    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative overflow-hidden">
+    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto h-screen md:min-h-screen relative overflow-hidden touch-none md:touch-auto">
       {/* Enhanced Mobile Header with Search & Filter Controls */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-gradient-to-b from-white via-white/98 to-white/95 backdrop-blur-xl border-b border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
         {/* Top Row - Search and Menu Toggle */}
@@ -1467,7 +1467,7 @@ const Booking: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-[calc(100vh-140px)] md:min-h-[500px] pt-12 md:pt-0">
+              <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-screen md:min-h-[500px] pt-24 md:pt-0">
                 <div className="hidden md:block p-8 border-b border-slate-50">
                   <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
                     {searchParams.get('loc') || userCity ? `Courts in ${(searchParams.get('loc') || userCity || '').split(',')[0]}` : 'All Locations'} ({locationGroups.length})
@@ -1537,7 +1537,7 @@ const Booking: React.FC = () => {
 
           {/* Map View */}
           <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
+            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-screen md:h-[850px] opacity-100'} overscroll-none`}>
 
               {/* Mobile Map View Toggle removed - using bottom nav bar instead */}
 
@@ -1546,7 +1546,7 @@ const Booking: React.FC = () => {
                   <Loader2 className="animate-spin text-blue-600" size={40} />
                 </div>
               ) : (
-                <div ref={mapRef} className="h-full w-full" />
+                <div ref={mapRef} className="h-full w-full touch-none" />
               )}
               {/* Desktop Zoom Control */}
               <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
