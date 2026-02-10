@@ -807,73 +807,68 @@ const Home: React.FC = () => {
               {/* Scrollable Container */}
               <div
                 id="courts-carousel"
-                className="flex gap-6 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
+                className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
               >
                 {featuredList.slice(0, 10).map((court, idx) => (
                   <div
                     key={idx}
-                    className="group relative flex-shrink-0 w-[340px] md:w-[400px] bg-white p-8 border border-slate-200 rounded-3xl shadow-lg hover:shadow-2xl hover:scale-[1.02] transition-all duration-500 snap-start overflow-hidden"
+                    className="group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden"
                   >
-                    {/* Modern Gradient Glow Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-lime-400/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-lime-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-
-                    {/* Lime Gradient Accent at bottom */}
-                    <div className="absolute inset-x-0 bottom-0 h-1.5 group-hover:h-2 bg-gradient-to-r from-lime-400 via-lime-500 to-lime-600 opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
                     {/* Court Image */}
-                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
+                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`} className="relative block overflow-hidden">
                       <img
                         src={COURT_IMAGES[idx % COURT_IMAGES.length]}
                         alt={court.name}
-                        className="w-full h-64 object-cover rounded-2xl mb-7"
+                        className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                    </Link>
-
-                    {/* Rating Section */}
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="flex items-center gap-0.5">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <svg
-                            key={star}
-                            className={`w-5 h-5 ${star <= Math.round(court.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
-                            fill="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
-                          </svg>
-                        ))}
+                      {/* Price Badge on Image */}
+                      <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                        <span className="text-lg font-black text-slate-900">₱{court.base_price ?? 0}</span>
+                        <span className="text-xs font-semibold text-slate-500">/hr</span>
                       </div>
-                      <span className="bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded">
-                        {court.rating && court.rating > 0 ? `${court.rating} out of 5` : 'New Venue'}
-                        {court.reviewCount && court.reviewCount > 0 ? ` (${court.reviewCount})` : ''}
-                      </span>
-                    </div>
-
-                    {/* Court Name & Location */}
-                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
-                      <h5 className="text-2xl text-slate-900 font-black tracking-tight leading-snug hover:text-blue-600 transition-colors">
-                        {court.name}
-                      </h5>
                     </Link>
-                    <p className="text-base text-slate-500 mt-2 flex items-center gap-2">
-                      <MapPin size={18} className="text-slate-400" />
-                      {court.city}, {court.region || 'Philippines'}
-                      {court.distance !== undefined && (
-                        <span className="text-blue-600 font-semibold ml-2">• {court.distance.toFixed(1)} mi</span>
-                      )}
-                    </p>
 
-                    {/* Price & Book Button */}
-                    <div className="flex items-center justify-between mt-8">
-                      <span className="text-3xl font-extrabold text-slate-900">
-                        ₱{court.base_price ?? 0}
-                        <span className="text-lg font-medium text-slate-400">/hr</span>
-                      </span>
+                    {/* Content */}
+                    <div className="p-4">
+                      {/* Rating Badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <svg
+                              key={star}
+                              className={`w-3.5 h-3.5 ${star <= Math.round(court.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                            </svg>
+                          ))}
+                        </div>
+                        <span className="text-xs font-bold text-slate-600">
+                          {court.rating && court.rating > 0 ? `${court.rating}` : 'New'}
+                          {court.reviewCount && court.reviewCount > 0 ? ` (${court.reviewCount})` : ''}
+                        </span>
+                      </div>
+
+                      {/* Court Name */}
+                      <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
+                        <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                          {court.name}
+                        </h5>
+                      </Link>
+                      
+                      {/* Location */}
+                      <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
+                        <MapPin size={14} className="text-slate-400" />
+                        <span className="line-clamp-1">{court.city}, {court.region || 'PH'}</span>
+                      </p>
+
+                      {/* Book Button */}
                       <Link
                         to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}
-                        className="inline-flex items-center text-white bg-blue-600 hover:bg-blue-700 border border-transparent focus:ring-4 focus:ring-blue-200 shadow-md font-black rounded-2xl text-base px-6 py-3 transition-all active:scale-95"
+                        className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
                       >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                         Book Now
@@ -1061,7 +1056,72 @@ const Home: React.FC = () => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
+          {/* Mobile: Horizontal Scroll Carousel */}
+          <div className="md:hidden overflow-x-auto scrollbar-hide -mx-4 px-4">
+            <div className="flex gap-4 pb-4">
+              {isTournamentsLoading ? (
+                Array(3).fill(0).map((_, i) => (
+                  <div key={i} className="flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl bg-white/5 animate-pulse border border-white/10"></div>
+                ))
+              ) : tournaments.length > 0 ? (
+                tournaments.map((tournament) => (
+                  <button
+                    key={tournament.id}
+                    onClick={() => setSelectedTournament(tournament)}
+                    className="group relative flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left"
+                  >
+                    <img
+                      src={tournament.image || "/images/home-images/pb20.jpg"}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                      alt={tournament.name}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent"></div>
+
+                    {/* Lime Gradient Accent at bottom */}
+                    <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-lime-500/30 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                    {/* Status Badge */}
+                    <div className="absolute top-4 left-4">
+                      <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-lg">
+                        {tournament.status}
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-6 left-6 right-6">
+                      <div className="flex items-center gap-2 text-lime-400 text-[10px] font-black uppercase tracking-widest mb-3">
+                        <Trophy size={14} />
+                        {tournament.prizePool ? `₱${tournament.prizePool}` : "Ranked Event"}
+                      </div>
+                      <h3 className="text-xl font-black text-white tracking-tight leading-tight uppercase mb-4 group-hover:text-lime-400 transition-colors line-clamp-2">
+                        {tournament.name}
+                      </h3>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-slate-200">
+                          <Calendar size={16} className="text-white" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest">
+                            {new Date(tournament.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-200">
+                          <MapPin size={16} className="text-white flex-shrink-0" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest truncate">{tournament.location}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="w-full py-16 text-center bg-white/5 rounded-3xl border border-dashed border-white/10">
+                  <Trophy className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">No live tournaments found</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Desktop: Grid Layout */}
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
             {isTournamentsLoading ? (
               Array(3).fill(0).map((_, i) => (
                 <div key={i} className="aspect-[4/5] rounded-3xl md:rounded-[40px] bg-white/5 animate-pulse border border-white/10"></div>
@@ -1134,40 +1194,40 @@ const Home: React.FC = () => {
       </div>
 
       {/* FAQ Section */}
-      <section className="py-20 md:py-32 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-4xl mx-auto">
           {/* Section Header */}
-          <div className="text-center mb-16 md:mb-24">
-            <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase mb-6">
+          <div className="text-center mb-8 md:mb-24">
+            <h2 className="text-2xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase mb-3 md:mb-6">
               Frequently Asked Questions
             </h2>
-            <p className="text-slate-600 text-lg md:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+            <p className="text-slate-600 text-sm md:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
               Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
             </p>
           </div>
 
           {/* Accordion List */}
-          <div className="space-y-4">
+          <div className="space-y-3 md:space-y-4">
             {FAQ_ITEMS.map((item, idx) => (
               <div
                 key={idx}
-                className="bg-white border-2 border-slate-100 rounded-3xl overflow-hidden shadow-sm transition-all duration-300"
+                className="bg-white border-2 border-slate-100 rounded-2xl md:rounded-3xl overflow-hidden shadow-sm transition-all duration-300"
               >
                 <button
                   onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
-                  className="w-full text-left px-8 py-6 md:py-8 flex items-center justify-between group"
+                  className="w-full text-left px-4 py-4 md:px-8 md:py-8 flex items-center justify-between gap-3 group"
                 >
-                  <span className="text-lg md:text-2xl font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
+                  <span className="text-base md:text-2xl font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
                     {item.question}
                   </span>
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
-                    <Plus size={activeFaqIndex === idx ? 24 : 20} className="transition-transform" />
+                  <div className={`w-8 h-8 md:w-12 md:h-12 flex-shrink-0 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
+                    <Plus size={activeFaqIndex === idx ? 20 : 16} className="md:w-6 md:h-6 transition-transform" />
                   </div>
                 </button>
                 <div
                   className={`transition-all duration-500 ease-in-out border-t border-slate-50 ${activeFaqIndex === idx ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
                 >
-                  <div className="px-8 py-8 md:px-12 md:py-10 text-slate-500 text-base md:text-lg font-medium leading-relaxed bg-slate-50/50">
+                  <div className="px-4 py-4 md:px-12 md:py-10 text-slate-500 text-sm md:text-lg font-medium leading-relaxed bg-slate-50/50">
                     {item.answer}
                   </div>
                 </div>

@@ -141,7 +141,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
   );
 };
 
-const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ role, themeColor }) => {
+const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string, isMobileMenuOpen: boolean }> = ({ role, themeColor, isMobileMenuOpen }) => {
   const location = useLocation();
   const items = [
     { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
@@ -153,6 +153,7 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
 
   if (role === 'guest') return null;
   if (location.pathname === '/booking') return null;
+  if (isMobileMenuOpen) return null;
 
   return (
     <nav className="md:hidden fixed bottom-6 left-6 right-6 bg-white/95 backdrop-blur-2xl border border-slate-200/60 px-6 py-3 flex justify-between items-center z-[110] shadow-[0_15px_40px_rgba(0,0,0,0.12)] rounded-[28px]">
@@ -390,8 +391,57 @@ const NavigationHandler: React.FC<{
           </nav>
 
           <div className="relative p-4 border-t space-y-3 border-white/20" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-            {canSwitchRole && !isSidebarCollapsed && (
+            {/* Expanded sidebar role switcher */}
+            {!isSidebarCollapsed && (
               <div className="relative">
+                {/* Only PLAYER role - show current role with dropdown to all roles */}
+                {authorizedProRoles.length === 0 && !isSimulating && (
+                  <>
+                    <button
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
+                          <RefreshCw size={18} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[10px] font-black uppercase tracking-widest leading-none">
+                            {role === 'PLAYER' ? 'Player Mode' : `${role.replace('_', ' ')} Mode`}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                            Switch Role
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isRoleDropdownOpen && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                        <div className="p-2 space-y-1">
+                          {(['PLAYER', 'COACH', 'COURT_OWNER'] as UserRole[]).map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => {
+                                handleRoleSwitch(r);
+                                setIsRoleDropdownOpen(false);
+                              }}
+                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === r
+                                ? 'bg-lime-400 text-slate-900'
+                                : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                                }`}
+                            >
+                              {r === 'PLAYER' ? <User size={16} /> : r === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
+                              <span className="text-[11px] font-black uppercase tracking-widest">{r.replace('_', ' ')}</span>
+                              {role === r && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* 2 roles: Simple toggle button */}
                 {authorizedProRoles.length === 1 && (
                   <button onClick={async () => {
@@ -501,6 +551,97 @@ const NavigationHandler: React.FC<{
               </div>
             )}
 
+            {/* Collapsed sidebar role switcher - icon only */}
+            {isSidebarCollapsed && (
+              <div className="relative flex justify-center">
+                {authorizedProRoles.length === 0 && !isSimulating ? (
+                  <>
+                    <button
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all ${isRoleDropdownOpen ? 'bg-white text-slate-900' : 'bg-lime-400 text-slate-950'}`}
+                      title="Switch Role"
+                    >
+                      <RefreshCw size={20} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isRoleDropdownOpen && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                        <div className="p-2 space-y-1">
+                          {(['PLAYER', 'COACH', 'COURT_OWNER'] as UserRole[]).map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => { handleRoleSwitch(r); setIsRoleDropdownOpen(false); }}
+                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === r ? 'bg-lime-400 text-slate-900' : 'text-white/80 hover:bg-slate-700 hover:text-white'}`}
+                            >
+                              {r === 'PLAYER' ? <User size={16} /> : r === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
+                              <span className="text-[11px] font-black uppercase tracking-widest">{r.replace('_', ' ')}</span>
+                              {role === r && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : authorizedProRoles.length === 1 ? (
+                  <button
+                    onClick={() => {
+                      const nextRole: UserRole = role === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER';
+                      handleRoleSwitch(nextRole);
+                    }}
+                    className="w-12 h-12 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg hover:scale-110 active:scale-95 transition-all"
+                    title={`Switch to ${role === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}`}
+                  >
+                    <RefreshCw size={20} />
+                  </button>
+                ) : authorizedProRoles.length >= 2 ? (
+                  <>
+                    <button
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-all ${isRoleDropdownOpen ? 'bg-white text-slate-900' : 'bg-lime-400 text-slate-950'}`}
+                      title="Switch Role"
+                    >
+                      <RefreshCw size={20} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isRoleDropdownOpen && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                        <div className="p-2 space-y-1">
+                          <button
+                            onClick={() => { handleRoleSwitch('PLAYER'); setIsRoleDropdownOpen(false); }}
+                            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === 'PLAYER' ? 'bg-lime-400 text-slate-900' : 'text-white/80 hover:bg-slate-700 hover:text-white'}`}
+                          >
+                            <User size={16} />
+                            <span className="text-[11px] font-black uppercase tracking-widest">Player</span>
+                            {role === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                          </button>
+                          {authorizedProRoles.map((proRole) => (
+                            <button
+                              key={proRole}
+                              onClick={() => { handleRoleSwitch(proRole); setIsRoleDropdownOpen(false); }}
+                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === proRole ? 'bg-lime-400 text-slate-900' : 'text-white/80 hover:bg-slate-700 hover:text-white'}`}
+                            >
+                              {proRole === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
+                              <span className="text-[11px] font-black uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                              {role === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : isSimulating ? (
+                  <button
+                    onClick={() => {
+                      const nextRole: UserRole = role === 'PLAYER' ? 'COACH' : 'PLAYER';
+                      handleRoleSwitch(nextRole);
+                    }}
+                    className="w-12 h-12 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg hover:scale-110 active:scale-95 transition-all"
+                    title="Switch Role"
+                  >
+                    <RefreshCw size={20} />
+                  </button>
+                ) : null}
+              </div>
+            )}
+
             <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
               <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? 'justify-center' : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
                 <div className={`relative shrink-0 rounded-full p-0.5`}>
@@ -543,7 +684,7 @@ const NavigationHandler: React.FC<{
 
       {/* Mobile Top Header */}
       {!isAuthPage && (
-        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 ${isMobileMenuOpen ? 'z-[105]' : 'z-50'} transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white border-b border-slate-100' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 ${isMobileMenuOpen ? 'z-[105]' : 'z-50'} transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white' : 'bg-transparent'} ${headerActive && role !== 'guest' ? 'border-b border-slate-100' : ''} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
             <div className="flex flex-col leading-none">
@@ -553,7 +694,7 @@ const NavigationHandler: React.FC<{
           </Link>
           <div className="flex items-center gap-4">
             {role === 'guest' ? (
-              <Link to="/login" className={`px-4 py-2 rounded-xl border font-black text-xs tracking-wider ${headerActive ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/10 text-white border-white/20'}`}>LOGIN</Link>
+              <Link to="/login" className={`px-4 py-2 rounded-xl font-black text-xs tracking-wider ${headerActive ? 'bg-slate-900 text-white border border-slate-900' : 'bg-white/10 text-white'}`}>LOGIN</Link>
             ) : (
               <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all">
                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -603,6 +744,7 @@ const NavigationHandler: React.FC<{
               <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               <NavItem to="/profile" icon={<User size={22} />} label="Profile" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
             </nav>
+
             <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-6 text-rose-600 hover:text-rose-700 transition-colors font-black uppercase text-xs tracking-widest border-t border-slate-50 -mx-8 px-8 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
               <LogOut size={20} />
               <span>Log Out</span>
@@ -679,7 +821,7 @@ const NavigationHandler: React.FC<{
         </div>
       </main>
 
-      <MobileBottomNav role={role} themeColor={themeColor} />
+      <MobileBottomNav role={role} themeColor={themeColor} isMobileMenuOpen={isMobileMenuOpen} />
 
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">

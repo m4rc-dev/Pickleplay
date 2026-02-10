@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useParams } from 'react-router-dom';
 import {
@@ -21,7 +20,15 @@ import {
   LogOut,
   Loader2,
   ArrowLeftRight,
-  ChevronDown
+  ChevronDown,
+  Move,
+  X,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  ZoomIn,
+  ZoomOut,
+  RotateCw
 } from 'lucide-react';
 import { UserRole, SocialPost } from '../types';
 import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, getSecuritySettings, createSession } from '../services/supabase';
@@ -95,6 +102,47 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   // Avatar upload state
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
+
+  // Image Cropper state
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [cropImageNaturalSize, setCropImageNaturalSize] = useState({ w: 0, h: 0 });
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cropImageRef = useRef<HTMLImageElement>(null);
+
+  // Avatar Viewer state
+  const [showAvatarViewer, setShowAvatarViewer] = useState(false);
+
+  // Background Editor state
+  const [showBgEditor, setShowBgEditor] = useState(false);
+  const [selectedBg, setSelectedBg] = useState<string>('gradient-1');
+  const [bgOverlayImage, setBgOverlayImage] = useState<string | null>(null);
+  const [bgOverlayPosition, setBgOverlayPosition] = useState({ x: 0, y: 0 });
+  const [bgOverlayScale, setBgOverlayScale] = useState(1);
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
+  const [overlayDragStart, setOverlayDragStart] = useState({ x: 0, y: 0 });
+  const bgCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bgPreviewRef = useRef<HTMLDivElement>(null);
+
+  // Predefined background options
+  const backgroundOptions = [
+    { id: 'gradient-1', label: 'Ocean', style: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+    { id: 'gradient-2', label: 'Sunset', style: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
+    { id: 'gradient-3', label: 'Forest', style: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
+    { id: 'gradient-4', label: 'Lime', style: 'linear-gradient(135deg, #a8e063 0%, #56ab2f 100%)' },
+    { id: 'gradient-5', label: 'Night', style: 'linear-gradient(135deg, #0c0c1d 0%, #1a1a3e 50%, #2d2d6b 100%)' },
+    { id: 'gradient-6', label: 'Gold', style: 'linear-gradient(135deg, #f7971e 0%, #ffd200 100%)' },
+    { id: 'gradient-7', label: 'Rose', style: 'linear-gradient(135deg, #ee9ca7 0%, #ffdde1 100%)' },
+    { id: 'gradient-8', label: 'Arctic', style: 'linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%)' },
+    { id: 'solid-1', label: 'White', style: '#ffffff' },
+    { id: 'solid-2', label: 'Black', style: '#000000' },
+    { id: 'solid-3', label: 'Blue', style: '#3b82f6' },
+    { id: 'solid-4', label: 'Red', style: '#ef4444' },
+  ];
 
   // Privacy message state
   const [privacyMessage, setPrivacyMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -444,37 +492,35 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     }
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Open crop modal when user selects image
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!currentUserId || !isCurrentUser || !e.target.files || !e.target.files[0]) return;
-
     const file = e.target.files[0];
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${currentUserId}-${Date.now()}.${fileExt}`;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropImageSrc(reader.result as string);
+      setCropPosition({ x: 0, y: 0 });
+      setCropZoom(1);
+      setShowCropModal(true);
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
 
+  // Upload cropped avatar blob
+  const uploadCroppedAvatar = async (blob: Blob) => {
+    if (!currentUserId) return;
+    const fileName = `${currentUserId}-${Date.now()}.jpg`;
     setIsUploadingAvatar(true);
-
     try {
-      // Upload to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, { upsert: true });
-
+        .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
       if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      // Update profile with new avatar URL
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', currentUserId);
-
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', currentUserId);
       if (updateError) throw updateError;
-
-      // Update local state
       setAvatarUrl(publicUrl);
       setProfileData((prev: any) => ({ ...prev, avatar_url: publicUrl }));
       setProfileMessage({ type: 'success', text: 'Avatar updated successfully!' });
@@ -486,6 +532,217 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       setIsUploadingAvatar(false);
     }
   };
+
+  // Perform the square crop on canvas and upload
+  const handleCropConfirm = useCallback(() => {
+    if (!cropImageSrc) return;
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const outputSize = 512; // final square size
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const ctx = canvas.getContext('2d')!;
+
+      // Calculate source crop area
+      const minDim = Math.min(img.width, img.height);
+      const cropSize = minDim / cropZoom;
+      // Center offset adjusted by user drag
+      const cx = (img.width / 2) - (cropPosition.x * (minDim / outputSize));
+      const cy = (img.height / 2) - (cropPosition.y * (minDim / outputSize));
+      const sx = Math.max(0, Math.min(cx - cropSize / 2, img.width - cropSize));
+      const sy = Math.max(0, Math.min(cy - cropSize / 2, img.height - cropSize));
+
+      ctx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, outputSize, outputSize);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          uploadCroppedAvatar(blob);
+          setShowCropModal(false);
+          setCropImageSrc(null);
+        }
+      }, 'image/jpeg', 0.92);
+    };
+    img.src = cropImageSrc;
+  }, [cropImageSrc, cropZoom, cropPosition]);
+
+  // Crop drag handlers
+  const handleCropMouseDown = (e: React.MouseEvent) => {
+    setIsDraggingCrop(true);
+    setDragStart({ x: e.clientX - cropPosition.x, y: e.clientY - cropPosition.y });
+  };
+  const handleCropMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingCrop) return;
+    setCropPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  };
+  const handleCropMouseUp = () => setIsDraggingCrop(false);
+
+  // Touch support for crop
+  const handleCropTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    setIsDraggingCrop(true);
+    setDragStart({ x: t.clientX - cropPosition.x, y: t.clientY - cropPosition.y });
+  };
+  const handleCropTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingCrop) return;
+    const t = e.touches[0];
+    setCropPosition({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
+  };
+
+  // Background overlay drag handlers
+  const handleOverlayMouseDown = (e: React.MouseEvent) => {
+    setIsDraggingOverlay(true);
+    setOverlayDragStart({ x: e.clientX - bgOverlayPosition.x, y: e.clientY - bgOverlayPosition.y });
+  };
+  const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingOverlay) return;
+    setBgOverlayPosition({ x: e.clientX - overlayDragStart.x, y: e.clientY - overlayDragStart.y });
+  };
+  const handleOverlayMouseUp = () => setIsDraggingOverlay(false);
+
+  // Touch support for overlay
+  const handleOverlayTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    setIsDraggingOverlay(true);
+    setOverlayDragStart({ x: t.clientX - bgOverlayPosition.x, y: t.clientY - bgOverlayPosition.y });
+  };
+  const handleOverlayTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingOverlay) return;
+    const t = e.touches[0];
+    setBgOverlayPosition({ x: t.clientX - overlayDragStart.x, y: t.clientY - overlayDragStart.y });
+  };
+
+  // Handle background overlay image upload
+  const handleBgOverlayUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBgOverlayImage(reader.result as string);
+      setBgOverlayPosition({ x: 0, y: 0 });
+      setBgOverlayScale(1);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Render background editor result to canvas and upload
+  const handleBgEditorConfirm = useCallback(() => {
+    const size = 512;
+    const previewSize = 300; // matches the CSS preview size
+    const ratio = size / previewSize;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+
+    // Draw background
+    const bg = backgroundOptions.find(b => b.id === selectedBg);
+    if (bg) {
+      if (bg.style.startsWith('linear-gradient')) {
+        const colorMatches = bg.style.match(/#[0-9a-fA-F]{6}/g) || ['#667eea', '#764ba2'];
+        const grad = ctx.createLinearGradient(0, 0, size, size);
+        colorMatches.forEach((color, i) => {
+          grad.addColorStop(i / (colorMatches.length - 1), color);
+        });
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, size, size);
+      } else {
+        ctx.fillStyle = bg.style;
+        ctx.fillRect(0, 0, size, size);
+      }
+    }
+
+    // Helper to clip to circle and export
+    const clipAndExport = () => {
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = size;
+      finalCanvas.height = size;
+      const fCtx = finalCanvas.getContext('2d')!;
+      fCtx.beginPath();
+      fCtx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      fCtx.closePath();
+      fCtx.clip();
+      fCtx.drawImage(canvas, 0, 0);
+      finalCanvas.toBlob((blob) => {
+        if (blob) {
+          uploadCroppedAvatar(blob);
+          setShowBgEditor(false);
+          setBgOverlayImage(null);
+        }
+      }, 'image/jpeg', 0.92);
+    };
+
+    // Draw overlay image if present
+    if (bgOverlayImage) {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // Replicate CSS object-fit:contain within the 300×300 preview box
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        let fitW: number, fitH: number;
+        if (imgAspect > 1) {
+          // landscape: width fills 300, height shrinks
+          fitW = previewSize;
+          fitH = previewSize / imgAspect;
+        } else {
+          // portrait or square: height fills 300, width shrinks
+          fitH = previewSize;
+          fitW = previewSize * imgAspect;
+        }
+
+        // In the preview CSS the image is placed at:
+        //   left:50%, top:50%, margin: -150px, width:300px, height:300px, object-fit:contain
+        //   then transformed by translate(pos.x, pos.y) scale(scale)
+        // The object-fit:contain draws the image centered inside the 300×300 element
+        // so the effective drawn origin (top-left of the fitted image) in preview coords is:
+        const fitOffX = (previewSize - fitW) / 2; // within the 300×300 element
+        const fitOffY = (previewSize - fitH) / 2;
+
+        // The element itself is centered: its top-left in preview coords is at (0,0)
+        // because margin -150 + left 50% of 300 = 0
+        // So the drawn image top-left in preview coords =
+        //   element_topLeft + fitOffset, then scaled & translated:
+        //   finalX = (fitOffX - 150 + 150) * scale + posX + 150 - (fitW*scale)/2
+        // Actually, let's just replicate the transform exactly:
+
+        // The CSS transform-origin is "center center" of the element (which is 300×300)
+        // Element center in preview space = (150, 150) because element is at (0,0) in preview
+        // transform: translate(pos.x, pos.y) scale(scale)
+        // This means: first scale around center, then translate.
+
+        // The fitted image rect before transform (in preview space):
+        const rectX = fitOffX; // within the 300×300 element at (0,0)
+        const rectY = fitOffY;
+
+        // After scale around element center (150,150):
+        const scaledRectX = 150 + (rectX - 150) * bgOverlayScale;
+        const scaledRectY = 150 + (rectY - 150) * bgOverlayScale;
+        const scaledW = fitW * bgOverlayScale;
+        const scaledH = fitH * bgOverlayScale;
+
+        // After translate:
+        const finalX = scaledRectX + bgOverlayPosition.x;
+        const finalY = scaledRectY + bgOverlayPosition.y;
+
+        // Scale everything up to the 512 canvas
+        ctx.drawImage(
+          img,
+          finalX * ratio,
+          finalY * ratio,
+          scaledW * ratio,
+          scaledH * ratio
+        );
+
+        clipAndExport();
+      };
+      img.src = bgOverlayImage;
+    } else {
+      clipAndExport();
+    }
+  }, [selectedBg, bgOverlayImage, bgOverlayPosition, bgOverlayScale, backgroundOptions]);
 
   const handleSave = async () => {
     if (!currentUserId || !isCurrentUser) return;
@@ -581,11 +838,12 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             {/* Avatar with Gradient Ring */}
             <div className="shrink-0">
               <div className={`w-24 h-24 rounded-full p-[3px] bg-gradient-to-tr from-${themeColor}-400 to-lime-300 shadow-xl`}>
-                <div className="w-full h-full rounded-full bg-white p-1 relative overflow-hidden group">
+                <div className="w-full h-full rounded-full bg-white p-1 relative group">
                   <img
                     src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
                     alt="Profile"
-                    className="w-full h-full rounded-full bg-slate-50 object-cover"
+                    className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer overflow-hidden"
+                    onClick={() => setShowAvatarViewer(true)}
                   />
                   {isCurrentUser && (
                     <>
@@ -606,6 +864,13 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                           <Sparkles className="text-white" size={24} />
                         )}
                       </label>
+                      <button
+                        onClick={() => setShowBgEditor(true)}
+                        className="absolute -bottom-0.5 -right-0.5 w-7 h-7 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                        title="Edit with Background"
+                      >
+                        <ImageIcon size={12} />
+                      </button>
                     </>
                   )}
                 </div>
@@ -639,70 +904,53 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                 {/* Divider */}
                 <div className="h-8 w-px bg-slate-200" />
 
-                {/* Role Switcher - Smart: Toggle for 2 roles, Dropdown for 3+ */}
-                {isCurrentUser && authorizedProRoles.length > 0 && (
-                  <>
-                    {/* 2 Roles: Simple Toggle Switch */}
-                    {authorizedProRoles.length === 1 && (
-                      <button
-                        onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
-                        className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
-                      >
-                        <ArrowLeftRight size={14} className="text-lime-400" />
-                        <span>{displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}</span>
-                      </button>
+                {/* Role Switcher - Always visible for current user */}
+                {isCurrentUser && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                      className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                    >
+                      <Sparkles size={12} className="text-lime-400" />
+                      <span>{displayRole.replace('_', ' ')} Mode</span>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showRoleDropdown && (
+                      <>
+                        {/* Backdrop */}
+                        <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
+
+                        {/* Menu */}
+                        <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="p-2 space-y-1">
+                            {/* Player Role */}
+                            <button
+                              onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                            >
+                              <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
+                              <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
+                              {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
+                            </button>
+
+                            {/* Pro Roles - show authorized or all available */}
+                            {(authorizedProRoles.length > 0 ? authorizedProRoles : (['COACH', 'COURT_OWNER'] as UserRole[])).map((role) => (
+                              <button
+                                key={role}
+                                onClick={() => { onRoleSwitch && onRoleSwitch(role); setShowRoleDropdown(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === role ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                              >
+                                <Sparkles size={16} className={displayRole === role ? 'text-lime-600' : 'text-slate-400'} />
+                                <span className="font-black text-[10px] uppercase tracking-widest">{role.replace('_', ' ')}</span>
+                                {displayRole === role && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
                     )}
-
-                    {/* 3+ Roles: Dropdown Menu */}
-                    {authorizedProRoles.length >= 2 && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                          className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
-                        >
-                          <Sparkles size={12} className="text-lime-400" />
-                          <span>{displayRole.replace('_', ' ')}</span>
-                          <ChevronDown size={12} className={`transition-transform ${showRoleDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {/* Dropdown Menu */}
-                        {showRoleDropdown && (
-                          <>
-                            {/* Backdrop */}
-                            <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
-
-                            {/* Menu */}
-                            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                              <div className="p-2 space-y-1">
-                                {/* Player Role */}
-                                <button
-                                  onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
-                                >
-                                  <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
-                                  <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
-                                  {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
-                                </button>
-
-                                {/* Pro Roles */}
-                                {authorizedProRoles.map((role) => (
-                                  <button
-                                    key={role}
-                                    onClick={() => { onRoleSwitch && onRoleSwitch(role); setShowRoleDropdown(false); }}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === role ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
-                                  >
-                                    <Sparkles size={16} className={displayRole === role ? 'text-lime-600' : 'text-slate-400'} />
-                                    <span className="font-black text-[10px] uppercase tracking-widest">{role.replace('_', ' ')}</span>
-                                    {displayRole === role && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  </div>
                 )}
 
                 {/* Follow Button for Other Users */}
@@ -799,11 +1047,12 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
         <div className="hidden lg:block lg:col-span-1 space-y-8">
           <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm text-center">
             <div className="relative inline-block mb-6">
-              <div className={`w-32 h-32 rounded-full p-1 border-4 border-${themeColor}-200 shadow-2xl group relative`}>
+              <div className={`w-40 h-40 rounded-full p-1 border-4 border-${themeColor}-200 shadow-2xl group relative`}>
                 <img
                   src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
                   alt="Profile"
-                  className="w-full h-full rounded-full bg-slate-50"
+                  className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer"
+                  onClick={() => setShowAvatarViewer(true)}
                 />
                 {isCurrentUser && (
                   <>
@@ -828,6 +1077,13 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                         </svg>
                       )}
                     </label>
+                    <button
+                      onClick={() => setShowBgEditor(true)}
+                      className="absolute -bottom-1 -right-1 w-8 h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                      title="Edit with Background"
+                    >
+                      <ImageIcon size={14} />
+                    </button>
                   </>
                 )}
               </div>
@@ -837,52 +1093,57 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
             <p className={`text-[10px] text-${themeColor}-600 font-black uppercase tracking-widest mt-1 mb-8`}>
               {displayRole.replace('_', ' ')}
             </p>
-            {/* Mobile Role Switcher (md:hidden) */}
+            {/* Mobile Role Switcher (md:hidden) - Compact pill button */}
             {isCurrentUser && (
-              <div className="md:hidden mt-4">
-                {authorizedProRoles.length === 1 && (
-                  <button
-                    onClick={() => onRoleSwitch && onRoleSwitch(displayRole === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER')}
-                    className="w-full p-3 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800 mt-2"
-                  >
-                    <span className="font-black text-[10px] uppercase tracking-widest">
-                      {displayRole === 'PLAYER' ? 'Pro Mode' : `${displayRole.replace('_', ' ')} Mode`}
-                    </span>
-                    <span className="font-bold text-[9px] uppercase tracking-widest text-slate-400 ml-2">
-                      Switch to {displayRole === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
-                    </span>
-                  </button>
-                )}
-                {authorizedProRoles.length >= 2 && (
-                  <div className="space-y-2 mt-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Switch Role</span>
-                    <button
-                      onClick={() => onRoleSwitch && onRoleSwitch('PLAYER')}
-                      className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === 'PLAYER'
-                        ? 'bg-lime-400 text-slate-900'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                    >
-                      <User size={16} />
-                      <span className="font-black text-[11px] uppercase tracking-widest">Player</span>
-                      {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
-                    </button>
-                    {authorizedProRoles.map((proRole) => (
-                      <button
-                        key={proRole}
-                        onClick={() => onRoleSwitch && onRoleSwitch(proRole)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all ${displayRole === proRole
-                          ? 'bg-lime-400 text-slate-900'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                      >
-                        {proRole === 'COACH' ? <UserCheck size={16} /> : <UserPlus size={16} />}
-                        <span className="font-black text-[11px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
-                        {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
-                      </button>
-                    ))}
+              <div className="md:hidden mt-6 flex items-center justify-center gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Matches</p>
+                    <p className="font-black text-slate-950 text-base leading-none">{profileData.matches_played || 0}</p>
                   </div>
-                )}
+                  <div className="text-center">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Rating</p>
+                    <p className="font-black text-slate-950 text-base leading-none">{profileData.dupr_rating?.toFixed(2) || '0.00'}</p>
+                  </div>
+                </div>
+                <div className="h-8 w-px bg-slate-200" />
+                <div className="relative">
+                  <button
+                    onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                    className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                  >
+                    <Sparkles size={12} className="text-lime-400" />
+                    <span>{displayRole.replace('_', ' ')} Mode</span>
+                  </button>
+                  {showRoleDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="p-2 space-y-1">
+                          <button
+                            onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                          >
+                            <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
+                            <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
+                            {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
+                          </button>
+                          {(authorizedProRoles.length > 0 ? authorizedProRoles : (['COACH', 'COURT_OWNER'] as UserRole[])).map((proRole) => (
+                            <button
+                              key={proRole}
+                              onClick={() => { onRoleSwitch && onRoleSwitch(proRole); setShowRoleDropdown(false); }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === proRole ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                            >
+                              <Sparkles size={16} className={displayRole === proRole ? 'text-lime-600' : 'text-slate-400'} />
+                              <span className="font-black text-[10px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                              {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1364,6 +1625,336 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
                     className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
                   >
                     {backupCodes.length > 0 ? 'Close' : 'Cancel'}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Avatar Viewer Modal */}
+          {showAvatarViewer && ReactDOM.createPortal(
+            <div
+              className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4 cursor-pointer"
+              onClick={() => setShowAvatarViewer(false)}
+            >
+              {/* Close hint */}
+              <button
+                onClick={() => setShowAvatarViewer(false)}
+                className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
+              >
+                <X size={24} className="text-white" />
+              </button>
+
+              {/* Name badge */}
+              <div className="absolute top-6 left-6 flex items-center gap-3 z-10">
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2">
+                  <p className="text-white font-black text-sm uppercase tracking-wider">{displayName}</p>
+                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{displayRole.replace('_', ' ')}</p>
+                </div>
+              </div>
+
+              {/* Full-size avatar */}
+              <div
+                className="relative"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className={`w-[80vw] h-[80vw] max-w-[500px] max-h-[500px] rounded-full p-1 border-4 border-white/20 shadow-2xl overflow-hidden`}>
+                  <img
+                    src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                    alt="Profile"
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                </div>
+
+                {/* Action buttons below image */}
+                {isCurrentUser && (
+                  <div className="flex items-center justify-center gap-3 mt-6">
+                    <label
+                      htmlFor="avatar-upload-viewer"
+                      className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all backdrop-blur-sm"
+                    >
+                      <Camera size={16} />
+                      Change Photo
+                      <input
+                        type="file"
+                        id="avatar-upload-viewer"
+                        accept="image/*"
+                        onChange={(e) => { handleAvatarUpload(e); setShowAvatarViewer(false); }}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      onClick={() => { setShowBgEditor(true); setShowAvatarViewer(false); }}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-full font-bold text-xs uppercase tracking-wider transition-all backdrop-blur-sm"
+                    >
+                      <ImageIcon size={16} />
+                      Edit Background
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Image Crop Modal (Square) */}
+          {showCropModal && cropImageSrc && ReactDOM.createPortal(
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <Camera size={20} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-950">Crop Photo</h4>
+                      <p className="text-xs text-slate-500">Drag to reposition · Square crop</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowCropModal(false); setCropImageSrc(null); }} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Crop Area */}
+                <div
+                  className="relative w-[300px] h-[300px] mx-auto rounded-2xl overflow-hidden bg-slate-900 cursor-grab active:cursor-grabbing select-none"
+                  onMouseDown={handleCropMouseDown}
+                  onMouseMove={handleCropMouseMove}
+                  onMouseUp={handleCropMouseUp}
+                  onMouseLeave={handleCropMouseUp}
+                  onTouchStart={handleCropTouchStart}
+                  onTouchMove={handleCropTouchMove}
+                  onTouchEnd={handleCropMouseUp}
+                >
+                  <img
+                    ref={cropImageRef}
+                    src={cropImageSrc}
+                    alt="Crop preview"
+                    className="absolute select-none pointer-events-none"
+                    draggable={false}
+                    style={{
+                      transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${cropZoom})`,
+                      transformOrigin: 'center center',
+                      left: '50%',
+                      top: '50%',
+                      marginLeft: '-150px',
+                      marginTop: '-150px',
+                      minWidth: '300px',
+                      minHeight: '300px',
+                      objectFit: 'cover',
+                      width: '300px',
+                      height: '300px',
+                    }}
+                  />
+                  {/* Square crop overlay */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute inset-0 border-2 border-white/40 rounded-2xl" />
+                    {/* Grid lines */}
+                    <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/20" />
+                    <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/20" />
+                    <div className="absolute top-1/3 left-0 right-0 h-px bg-white/20" />
+                    <div className="absolute top-2/3 left-0 right-0 h-px bg-white/20" />
+                  </div>
+                  {/* Move icon hint */}
+                  <div className="absolute bottom-3 right-3 bg-black/50 rounded-full p-1.5">
+                    <Move size={14} className="text-white/70" />
+                  </div>
+                </div>
+
+                {/* Zoom Controls */}
+                <div className="flex items-center gap-4 mt-4 justify-center">
+                  <button onClick={() => setCropZoom(z => Math.max(1, z - 0.1))} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
+                    <ZoomOut size={18} className="text-slate-600" />
+                  </button>
+                  <div className="flex-1 max-w-[180px]">
+                    <input
+                      type="range"
+                      min="1"
+                      max="3"
+                      step="0.05"
+                      value={cropZoom}
+                      onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                      className="w-full accent-blue-600"
+                    />
+                  </div>
+                  <button onClick={() => setCropZoom(z => Math.min(3, z + 0.1))} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
+                    <ZoomIn size={18} className="text-slate-600" />
+                  </button>
+                  <button onClick={() => { setCropPosition({ x: 0, y: 0 }); setCropZoom(1); }} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors" title="Reset">
+                    <RotateCw size={18} className="text-slate-600" />
+                  </button>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={() => { setShowCropModal(false); setCropImageSrc(null); }}
+                    className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCropConfirm}
+                    disabled={isUploadingAvatar}
+                    className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isUploadingAvatar ? <><Loader2 size={16} className="animate-spin" /> Uploading...</> : 'Apply & Save'}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Background Editor Modal */}
+          {showBgEditor && ReactDOM.createPortal(
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 rounded-xl">
+                      <ImageIcon size={20} className="text-indigo-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-950">Profile Photo Editor</h4>
+                      <p className="text-xs text-slate-500">Choose background · Upload & position your photo</p>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowBgEditor(false); setBgOverlayImage(null); }} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Step 1: Choose Background */}
+                <div className="mb-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">1. Choose Background</p>
+                  <div className="grid grid-cols-6 gap-2">
+                    {backgroundOptions.map((bg) => (
+                      <button
+                        key={bg.id}
+                        onClick={() => setSelectedBg(bg.id)}
+                        className={`w-full aspect-square rounded-xl border-2 transition-all relative overflow-hidden ${
+                          selectedBg === bg.id ? 'border-indigo-500 ring-2 ring-indigo-200 scale-105' : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                        style={{ background: bg.style }}
+                        title={bg.label}
+                      >
+                        {selectedBg === bg.id && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <CheckCircle size={16} className="text-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step 2: Upload PNG Photo */}
+                <div className="mb-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">2. Upload Your Photo (PNG recommended)</p>
+                  <label className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 rounded-2xl cursor-pointer transition-all border-2 border-dashed border-slate-300 hover:border-indigo-400">
+                    <Upload size={18} className="text-slate-500" />
+                    <span className="text-sm font-bold text-slate-600">{bgOverlayImage ? 'Change Photo' : 'Upload Photo'}</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/webp,image/*"
+                      onChange={handleBgOverlayUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Step 3: Preview & Position */}
+                <div className="mb-5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">3. Preview & Position</p>
+                  <div className="flex justify-center">
+                    <div
+                      ref={bgPreviewRef}
+                      className="relative w-[300px] h-[300px] rounded-full overflow-hidden border-4 border-slate-200 shadow-xl cursor-grab active:cursor-grabbing select-none"
+                      style={{ background: backgroundOptions.find(b => b.id === selectedBg)?.style || '#667eea' }}
+                      onMouseDown={bgOverlayImage ? handleOverlayMouseDown : undefined}
+                      onMouseMove={bgOverlayImage ? handleOverlayMouseMove : undefined}
+                      onMouseUp={handleOverlayMouseUp}
+                      onMouseLeave={handleOverlayMouseUp}
+                      onTouchStart={bgOverlayImage ? handleOverlayTouchStart : undefined}
+                      onTouchMove={bgOverlayImage ? handleOverlayTouchMove : undefined}
+                      onTouchEnd={handleOverlayMouseUp}
+                    >
+                      {bgOverlayImage ? (
+                        <img
+                          src={bgOverlayImage}
+                          alt="Overlay"
+                          className="absolute select-none pointer-events-none"
+                          draggable={false}
+                          style={{
+                            transform: `translate(${bgOverlayPosition.x}px, ${bgOverlayPosition.y}px) scale(${bgOverlayScale})`,
+                            transformOrigin: 'center center',
+                            left: '50%',
+                            top: '50%',
+                            marginLeft: '-150px',
+                            marginTop: '-150px',
+                            width: '300px',
+                            height: '300px',
+                            objectFit: 'contain',
+                          }}
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/60">
+                          <Upload size={32} />
+                          <p className="text-xs mt-2 font-bold">Upload a photo above</p>
+                        </div>
+                      )}
+                      {bgOverlayImage && (
+                        <div className="absolute bottom-4 right-4 bg-black/50 rounded-full p-1.5">
+                          <Move size={14} className="text-white/70" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scale Controls */}
+                  {bgOverlayImage && (
+                    <div className="flex items-center gap-4 mt-4 justify-center">
+                      <button onClick={() => setBgOverlayScale(s => Math.max(0.3, s - 0.1))} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
+                        <ZoomOut size={18} className="text-slate-600" />
+                      </button>
+                      <div className="flex-1 max-w-[180px]">
+                        <input
+                          type="range"
+                          min="0.3"
+                          max="3"
+                          step="0.05"
+                          value={bgOverlayScale}
+                          onChange={(e) => setBgOverlayScale(parseFloat(e.target.value))}
+                          className="w-full accent-indigo-600"
+                        />
+                      </div>
+                      <button onClick={() => setBgOverlayScale(s => Math.min(3, s + 0.1))} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
+                        <ZoomIn size={18} className="text-slate-600" />
+                      </button>
+                      <button onClick={() => { setBgOverlayPosition({ x: 0, y: 0 }); setBgOverlayScale(1); }} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors" title="Reset">
+                        <RotateCw size={18} className="text-slate-600" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowBgEditor(false); setBgOverlayImage(null); }}
+                    className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBgEditorConfirm}
+                    disabled={isUploadingAvatar}
+                    className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isUploadingAvatar ? <><Loader2 size={16} className="animate-spin" /> Uploading...</> : 'Apply & Save'}
                   </button>
                 </div>
               </div>
