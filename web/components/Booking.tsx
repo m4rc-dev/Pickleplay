@@ -605,8 +605,8 @@ const Booking: React.FC = () => {
         title: location.locationName,
         icon: {
           url: '/images/PinMarker.png',
-          scaledSize: new window.google.maps.Size(28, 40),
-          anchor: new window.google.maps.Point(14, 40)
+          scaledSize: new window.google.maps.Size(42, 60),
+          anchor: new window.google.maps.Point(21, 60)
         },
         label: {
           text: location.courts.length.toString(),
@@ -1602,7 +1602,45 @@ const Booking: React.FC = () => {
 
               {isLoading ? (
                 <div className="h-full bg-slate-100 flex items-center justify-center">
-                  <Loader2 className="animate-spin text-blue-600" size={40} />
+                  <style>{`
+                    @keyframes paddleHit {
+                      0%, 100% { transform: rotate(0deg); }
+                      40%, 60% { transform: rotate(-25deg); }
+                    }
+                    @keyframes ballBounce {
+                      0%, 100% { transform: translateY(0); }
+                      50% { transform: translateY(90px); }
+                    }
+                    @keyframes pulse {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0.5; }
+                    }
+                    .animate-paddleHit {
+                      animation: paddleHit 1.4s ease-in-out infinite;
+                    }
+                    .animate-ballBounce {
+                      animation: ballBounce 1.4s ease-in-out infinite;
+                    }
+                    .animate-textPulse {
+                      animation: pulse 1.4s ease-in-out infinite;
+                    }
+                  `}</style>
+                  <div className="relative w-[200px] h-[200px]">
+                    <img 
+                      src="/images/Ball.png" 
+                      className="absolute w-10 h-10 left-[90px] top-5 animate-ballBounce" 
+                      alt="Ball" 
+                    />
+                    <img 
+                      src="/images/Paddle.png" 
+                      className="absolute w-[110px] bottom-2.5 left-11 animate-paddleHit" 
+                      style={{ transformOrigin: 'bottom center' }}
+                      alt="Paddle" 
+                    />
+                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-sm text-slate-700 animate-textPulse whitespace-nowrap">
+                      Loading...
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div ref={mapRef} className="h-full w-full touch-none" />
