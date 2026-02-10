@@ -54,8 +54,8 @@ const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
                 map,
                 icon: {
                     url: '/images/PinMarker.png',
-                    scaledSize: new window.google.maps.Size(28, 40),
-                    anchor: new window.google.maps.Point(14, 40)
+                    scaledSize: new window.google.maps.Size(42, 60),
+                    anchor: new window.google.maps.Point(21, 60)
                 },
             });
         }
