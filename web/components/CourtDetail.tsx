@@ -353,7 +353,7 @@ const CourtDetail: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="pt-20 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
+            <div className="pt-0 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
                 <div className="h-10 bg-slate-200 rounded-2xl w-48"></div>
                 <div className="aspect-[21/9] bg-slate-200 rounded-[48px]"></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -368,32 +368,32 @@ const CourtDetail: React.FC = () => {
 
     return (
         <div className="pt-20 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
-            <div className="space-y-8">
+            <div className="space-y-4 md:space-y-8">
                 {/* Header Navigation */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
                     <button
                         onClick={() => navigate(-1)}
-                        className="group inline-flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all"
+                        className="group inline-flex items-center justify-center md:justify-start gap-2 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all"
                     >
                         <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                         Back to discovery
                     </button>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
                         <button
                             onClick={() => navigate('/')}
-                            className="px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm"
+                            className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm active:scale-95"
                         >
                             Back to Home
                         </button>
                         {user && (
                             <button
                                 onClick={fetchMyBookings}
-                                className="px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
+                                className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm active:scale-95"
                             >
                                 View Booked Courts
                             </button>
                         )}
-                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
+                        <span className={`w-full md:w-auto text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
                             }`}>
                             {court.type}
                         </span>
@@ -401,14 +401,14 @@ const CourtDetail: React.FC = () => {
                 </div>
 
                 {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
 
                     {/* Left: Court Details & Map */}
-                    <div className="lg:col-span-2 space-y-8">
-                        <div className="bg-white p-8 md:p-12 rounded-[48px] border border-slate-200 shadow-sm space-y-8">
+                    <div className="lg:col-span-2 space-y-8 md:space-y-12">
+                        <div className="bg-white p-6 md:p-16 rounded-3xl md:rounded-[48px] border border-slate-200 shadow-sm space-y-8 md:space-y-12">
                             <div>
-                                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-3">COURT DETAILS</p>
-                                <h1 className="text-4xl md:text-5xl font-black text-slate-950 tracking-tighter leading-tight mb-4">{court.name}</h1>
+                                <p className="text-[10px] md:text-xs font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-4 md:mb-6">COURT DETAILS</p>
+                                <h1 className="text-2xl md:text-5xl font-black text-slate-950 tracking-tighter leading-tight mb-4 md:mb-6">{court.name}</h1>
                                 <div className="flex items-center gap-3 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
                                     <MapPin size={16} className="text-blue-500" />
                                     <span>{court.location}</span>
@@ -423,41 +423,41 @@ const CourtDetail: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Price</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
+                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Price</p>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
-                                        <span className="text-[10px] font-bold text-slate-400 lowercase">/hr</span>
+                                        <span className="text-lg md:text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
+                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-400 lowercase">/hr</span>
                                     </div>
                                 </div>
-                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Capacity</p>
+                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
+                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Capacity</p>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-2xl font-black text-slate-950">{court.numCourts}</span>
-                                        <span className="text-[10px] font-bold text-slate-400 lowercase">units</span>
+                                        <span className="text-lg md:text-2xl font-black text-slate-950">{court.numCourts}</span>
+                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-400 lowercase">units</span>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setShowReviewsModal(true)}
-                                    className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
+                                    className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
                                 >
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600">Rating</p>
+                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3 group-hover:text-amber-600">Rating</p>
                                     <div className="flex items-center gap-1.5">
-                                        <span className="text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
+                                        <span className="text-lg md:text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
                                         <Star size={16} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
-                                        {totalReviews > 0 && <span className="text-[10px] font-bold text-slate-400">({totalReviews})</span>}
+                                        {totalReviews > 0 && <span className="text-[9px] md:text-[10px] font-bold text-slate-400">({totalReviews})</span>}
                                     </div>
                                 </button>
-                                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Category</p>
-                                    <span className="text-sm font-black text-slate-950 uppercase">{court.type}</span>
+                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
+                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Category</p>
+                                    <span className="text-xs md:text-sm font-black text-slate-950 uppercase">{court.type}</span>
                                 </div>
                             </div>
 
                             {/* Amenities */}
-                            <div className="space-y-4">
-                                <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-2">Available Amenities</p>
+                            <div className="space-y-4 md:space-y-6">
+                                <p className="text-[10px] md:text-xs font-black text-slate-900 uppercase tracking-widest mb-2 md:mb-3">Available Amenities</p>
                                 <div className="flex flex-wrap gap-2">
                                     {(court.amenities || []).map((amenity, idx) => (
                                         <span key={idx} className="px-5 py-2.5 bg-slate-50 text-slate-700 text-[11px] font-black rounded-2xl border border-slate-200 uppercase tracking-wide hover:bg-white hover:border-blue-400 transition-all cursor-default">
@@ -468,13 +468,13 @@ const CourtDetail: React.FC = () => {
                             </div>
 
                             {/* Location Info */}
-                            <div className="p-8 bg-blue-50 rounded-[32px] border border-blue-100 flex items-start gap-4">
-                                <div className="p-3 bg-blue-600 text-white rounded-2xl">
-                                    <Info size={20} />
+                            <div className="p-6 md:p-10 bg-blue-50 rounded-2xl md:rounded-[32px] border border-blue-100 flex items-start gap-3 md:gap-4">
+                                <div className="p-2 md:p-3 bg-blue-600 text-white rounded-xl md:rounded-2xl">
+                                    <Info size={16} className="md:w-5 md:h-5" />
                                 </div>
                                 <div>
-                                    <h4 className="text-sm font-black text-blue-900 uppercase tracking-wide mb-1">About this Court</h4>
-                                    <p className="text-xs text-blue-800/70 font-medium leading-relaxed">
+                                    <h4 className="text-xs md:text-sm font-black text-blue-900 uppercase tracking-wide mb-1">About this Court</h4>
+                                    <p className="text-[10px] md:text-xs text-blue-800/70 font-medium leading-relaxed">
                                         This premium {court.type.toLowerCase()} facility is maintained daily to ensure professional playing standards.
                                         Located at {court.location}, it features state-of-the-art surfacing and amenities for all skill levels.
                                     </p>
@@ -484,20 +484,20 @@ const CourtDetail: React.FC = () => {
                     </div>
 
                     {/* Right: Booking Sidebar */}
-                    <div className="lg:sticky lg:top-32 space-y-6">
-                        <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl space-y-8">
+                    <div className="lg:sticky lg:top-32 space-y-6 md:space-y-8">
+                        <div className="bg-white p-6 md:p-10 rounded-3xl md:rounded-[40px] border border-slate-200 shadow-xl space-y-6 md:space-y-10">
                             <div>
-                                <h3 className="text-xl font-black text-slate-950 tracking-tight mb-2">Select Schedule</h3>
-                                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">When will you be playing?</p>
+                                <h3 className="text-lg md:text-xl font-black text-slate-950 tracking-tight mb-2 md:mb-3">Select Schedule</h3>
+                                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-wider md:tracking-widest">When will you be playing?</p>
                             </div>
 
                             {/* Date Picker */}
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
                                     <span>Choose Date</span>
                                     <CalendarIcon size={14} className="text-blue-600" />
                                 </div>
-                                <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
+                                <div className="grid grid-cols-7 gap-2 -mx-2 px-2">
                                     {Array.from({ length: 7 }).map((_, i) => {
                                         const date = new Date();
                                         date.setDate(date.getDate() + i);
@@ -525,12 +525,12 @@ const CourtDetail: React.FC = () => {
                             </div>
 
                             {/* Slots */}
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
                                     <span>Choose Slot</span>
                                     <Clock size={14} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                                <div className="grid grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
                                     {TIME_SLOTS.map(slot => {
                                         const isBlocked = blockedSlots.has(slot);
                                         const isBookedSlot = bookedSlots.has(slot);

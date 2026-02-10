@@ -157,21 +157,21 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                 {/* Receipt Wrapper for Image Export */}
                 <div id="receipt-content" className="bg-white">
-                    <div ref={receiptRef} className="p-10 bg-white">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                    <div ref={receiptRef} className="p-4 md:p-10 bg-white">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-12">
                             {/* Left Side: Booking Details */}
                             <div className="lg:col-span-7">
                                 {/* Receipt Aesthetic Header */}
-                                <div className="mb-10 pb-8 border-b-2 border-dashed border-slate-100">
-                                    <div className="inline-block px-4 py-1.5 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em] mb-4">
+                                <div className="mb-6 md:mb-10 pb-4 md:pb-8 border-b-2 border-dashed border-slate-100">
+                                    <div className="inline-block px-3 md:px-4 py-1 md:py-1.5 bg-slate-950 text-white rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-3 md:mb-4">
                                         OFFICIAL RECEIPT
                                     </div>
-                                    <h1 className="text-4xl font-black text-slate-950 uppercase tracking-tighter mb-1">PicklePlay</h1>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Philippines Network</p>
+                                    <h1 className="text-2xl md:text-4xl font-black text-slate-950 uppercase tracking-tighter mb-1">PicklePlay</h1>
+                                    <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] md:tracking-[0.4em]">Philippines Network</p>
                                 </div>
 
                                 {/* Status Banner */}
-                                <div className={`mb-8 p-4 rounded-2xl border-2 text-center font-black uppercase tracking-[0.2em] text-sm ${isConfirmed
+                                <div className={`mb-4 md:mb-8 p-3 md:p-4 rounded-xl md:rounded-2xl border-2 text-center font-black uppercase tracking-[0.15em] md:tracking-[0.2em] text-xs md:text-sm ${isConfirmed
                                     ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                                     : 'bg-amber-50 border-amber-100 text-amber-600'
                                     }`}>
@@ -179,77 +179,77 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                 </div>
 
                                 {/* Receipt Info Grid */}
-                                <div className="grid grid-cols-2 gap-8 mb-8 pb-8 border-b border-slate-100">
+                                <div className="grid grid-cols-2 gap-4 md:gap-8 mb-4 md:mb-8 pb-4 md:pb-8 border-b border-slate-100">
                                     <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Receipt No.</p>
-                                        <p className="text-lg font-black text-slate-900 font-mono">#{bookingData.id.slice(0, 8).toUpperCase()}</p>
+                                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1 md:mb-2">Receipt No.</p>
+                                        <p className="text-sm md:text-lg font-black text-slate-900 font-mono">#{bookingData.id.slice(0, 8).toUpperCase()}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Issue Date</p>
-                                        <p className="text-sm font-black text-slate-900 uppercase">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1 md:mb-2">Issue Date</p>
+                                        <p className="text-xs md:text-sm font-black text-slate-900 uppercase">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                     </div>
                                 </div>
 
                                 {/* Detailed Table */}
-                                <div className="space-y-6">
-                                    <div className="space-y-4">
-                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Venue & Schedule</h3>
+                                <div className="space-y-4 md:space-y-6">
+                                    <div className="space-y-3 md:space-y-4">
+                                        <h3 className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest border-b border-slate-50 pb-2">Venue & Schedule</h3>
 
-                                        <div className="flex justify-between items-start gap-8">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Court</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase italic text-right">{bookingData.courtName}</span>
+                                        <div className="flex justify-between items-start gap-4 md:gap-8">
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Court</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase italic text-right">{bookingData.courtName}</span>
                                         </div>
 
-                                        <div className="flex justify-between items-start gap-8">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Location</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase text-right max-w-[240px] leading-tight">{bookingData.courtLocation}</span>
-                                        </div>
-
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Date</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase">{formatDate(bookingData.date)}</span>
+                                        <div className="flex justify-between items-start gap-4 md:gap-8">
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Location</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase text-right max-w-[180px] md:max-w-[240px] leading-tight">{bookingData.courtLocation}</span>
                                         </div>
 
                                         <div className="flex justify-between items-center">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Time Slot</span>
-                                            <span className="text-sm font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg uppercase">
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Date</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">{formatDate(bookingData.date)}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Time Slot</span>
+                                            <span className="text-xs md:text-sm font-black text-blue-600 bg-blue-50 px-2 md:px-3 py-0.5 md:py-1 rounded-lg uppercase">
                                                 {formatTime(bookingData.startTime)} - {formatTime(bookingData.endTime)}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="pt-6 space-y-4 border-t border-slate-100">
-                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Financials</h3>
+                                    <div className="pt-4 md:pt-6 space-y-3 md:space-y-4 border-t border-slate-100">
+                                        <h3 className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest border-b border-slate-50 pb-2">Financials</h3>
 
                                         <div className="flex justify-between items-center">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Player</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase">{bookingData.playerName || 'Guest'}</span>
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Player</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">{bookingData.playerName || 'Guest'}</span>
                                         </div>
 
                                         <div className="flex justify-between items-center">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Rate / HR</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase">₱{bookingData.pricePerHour.toFixed(2)}</span>
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Rate / HR</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">₱{bookingData.pricePerHour.toFixed(2)}</span>
                                         </div>
 
                                         <div className="flex justify-between items-center">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Payment Method</span>
-                                            <span className="text-sm font-black text-slate-900 uppercase flex items-center gap-1.5">
-                                                <Banknote size={14} className="text-slate-400" />
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Payment Method</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase flex items-center gap-1.5">
+                                                <Banknote size={12} className="md:w-[14px] md:h-[14px] text-slate-400" />
                                                 {bookingData.paymentMethod || 'Cash'}
                                             </span>
                                         </div>
 
-                                        <div className="pt-4 border-t-2 border-slate-950 flex justify-between items-center">
+                                        <div className="pt-3 md:pt-4 border-t-2 border-slate-950 flex justify-between items-center">
                                             <div className="space-y-1">
-                                                <span className="text-lg font-black text-slate-950 uppercase tracking-tighter">TOTAL AMOUNT</span>
+                                                <span className="text-base md:text-lg font-black text-slate-950 uppercase tracking-tighter">TOTAL AMOUNT</span>
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                                                    <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
                                                         }`}>
                                                         {bookingData.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
                                                     </span>
                                                 </div>
                                             </div>
-                                            <span className="text-3xl font-black text-slate-950 tracking-tighter">₱{bookingData.totalPrice.toFixed(2)}</span>
+                                            <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">₱{bookingData.totalPrice.toFixed(2)}</span>
                                         </div>
 
                                         {bookingData.paymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (
@@ -270,16 +270,16 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                             {/* Right Side: QR Pass */}
                             <div className="lg:col-span-5 flex flex-col">
-                                <div className={`flex-1 p-8 rounded-[40px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-700 ${isConfirmed ? 'bg-slate-50 border-2 border-slate-900' : 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
+                                <div className={`flex-1 p-4 md:p-8 rounded-3xl md:rounded-[40px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-700 ${isConfirmed ? 'bg-slate-50 border-2 border-slate-900' : 'bg-slate-50 border-2 border-dashed border-slate-200 opacity-80'
                                     }`}>
 
                                     {/* Confirmation/Submission Stamp */}
-                                    <div className="absolute top-6 right-6 -rotate-12 pointer-events-none opacity-20">
-                                        <div className={`border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-amber-600 text-amber-600'} px-4 py-2 rounded-xl`}>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-center leading-none">
+                                    <div className="absolute top-3 md:top-6 right-3 md:right-6 -rotate-12 pointer-events-none opacity-20">
+                                        <div className={`border-2 md:border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-amber-600 text-amber-600'} px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl`}>
+                                            <p className="text-[8px] md:text-[10px] font-black uppercase tracking-wider md:tracking-widest text-center leading-none">
                                                 {isConfirmed ? 'Confirmed' : 'Submitted'}
                                             </p>
-                                            <p className="text-[8px] font-bold mt-1 uppercase text-center">
+                                            <p className="text-[7px] md:text-[8px] font-bold mt-0.5 md:mt-1 uppercase text-center">
                                                 {bookingData.confirmedAt
                                                     ? new Date(bookingData.confirmedAt).toLocaleDateString()
                                                     : new Date().toLocaleDateString()
@@ -288,44 +288,44 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2 mb-8 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
-                                        <QrCode size={14} className={isConfirmed ? 'text-slate-950' : 'text-slate-300'} />
+                                    <div className="flex items-center gap-2 mb-4 md:mb-8 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-slate-400">
+                                        <QrCode size={12} className={`md:w-[14px] md:h-[14px] ${isConfirmed ? 'text-slate-950' : 'text-slate-300'}`} />
                                         Digital Check-in Pass
                                     </div>
 
                                     {isConfirmed ? (
-                                        <div className="p-6 bg-white rounded-[32px] shadow-2xl border-4 border-slate-950 mb-8 transform hover:scale-105 transition-transform duration-500">
-                                            <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-56 h-56" />
+                                        <div className="p-4 md:p-6 bg-white rounded-2xl md:rounded-[32px] shadow-2xl border-2 md:border-4 border-slate-950 mb-4 md:mb-8 transform hover:scale-105 transition-transform duration-500">
+                                            <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-40 h-40 md:w-56 md:h-56" />
                                         </div>
                                     ) : (
-                                        <div className="w-56 h-56 bg-white/50 rounded-[32px] flex flex-col items-center justify-center border-4 border-dashed border-slate-200 mb-8 relative overflow-hidden group">
-                                            <QrCode className="text-slate-200 group-hover:scale-110 transition-transform duration-500" size={80} />
-                                            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center p-8 text-center text-balance">
-                                                <p className="text-xs font-black text-slate-400 uppercase leading-relaxed tracking-widest">
+                                        <div className="w-40 h-40 md:w-56 md:h-56 bg-white/50 rounded-2xl md:rounded-[32px] flex flex-col items-center justify-center border-2 md:border-4 border-dashed border-slate-200 mb-4 md:mb-8 relative overflow-hidden group">
+                                            <QrCode className="text-slate-200 group-hover:scale-110 transition-transform duration-500" size={60} />
+                                            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center p-4 md:p-8 text-center text-balance">
+                                                <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase leading-relaxed tracking-widest">
                                                     Locked Until Confirmation
                                                 </p>
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className={`text-center max-w-sm p-5 rounded-3xl ${isConfirmed ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-slate-100/80 text-slate-400'}`}>
+                                    <div className={`text-center max-w-sm p-3 md:p-5 rounded-2xl md:rounded-3xl ${isConfirmed ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-slate-100/80 text-slate-400'}`}>
                                         {isConfirmed ? (
                                             <>
-                                                <p className="text-xs font-black uppercase tracking-widest mb-1">Pass Activated</p>
-                                                <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">Present this QR code to the court manager upon arrival.</p>
+                                                <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Pass Activated</p>
+                                                <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Present this QR code to the court manager upon arrival.</p>
                                             </>
                                         ) : (
                                             <>
-                                                <p className="text-xs font-black uppercase tracking-widest mb-1">Pass Pending</p>
-                                                <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">Your QR code will generate once the owner confirms your booking.</p>
+                                                <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Pass Pending</p>
+                                                <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Your QR code will generate once the owner confirms your booking.</p>
                                             </>
                                         )}
                                     </div>
 
                                     {/* Confirmation Timestamp Footnote */}
-                                    <div className="mt-8 pt-8 border-t border-slate-200/50 w-full text-center">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Confirmation Details</p>
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                                    <div className="mt-4 md:mt-8 pt-4 md:pt-8 border-t border-slate-200/50 w-full text-center">
+                                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1">Confirmation Details</p>
+                                        <p className="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-wider">
                                             {isConfirmed
                                                 ? `Verified at ${new Date(bookingData.confirmedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString()}`
                                                 : 'Awaiting Verification'
@@ -337,39 +337,39 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                         </div>
 
                         {/* Verification Note */}
-                        <div className="mt-12 text-center space-y-2 border-t border-slate-50 pt-8">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Verified Secure Transaction • 2026</p>
-                            <p className="text-[8px] text-slate-300 font-bold uppercase tracking-widest">PicklePlay Philippines • www.pickleplay.ph</p>
+                        <div className="mt-6 md:mt-12 text-center space-y-1 md:space-y-2 border-t border-slate-50 pt-4 md:pt-8">
+                            <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] md:tracking-[0.3em]">Verified Secure Transaction • 2026</p>
+                            <p className="text-[7px] md:text-[8px] text-slate-300 font-bold uppercase tracking-wider md:tracking-widest">PicklePlay Philippines • www.pickleplay.ph</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Desktop Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 p-8 border-t border-slate-100 print:hidden bg-slate-50/50 rounded-b-[40px]">
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 p-4 md:p-8 border-t border-slate-100 print:hidden bg-slate-50/50 rounded-b-3xl md:rounded-b-[40px]">
                     <button
                         onClick={handlePrint}
-                        className="flex-1 h-14 bg-white border-2 border-slate-900 text-slate-900 rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 hover:text-white transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2"
+                        className="flex-1 h-12 md:h-14 bg-white border-2 border-slate-900 text-slate-900 rounded-2xl md:rounded-[20px] font-black text-xs md:text-sm uppercase tracking-wide md:tracking-widest hover:bg-slate-950 hover:text-white transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2 active:scale-95"
                     >
-                        <Printer size={16} />
+                        <Printer size={18} className="md:w-4 md:h-4" />
                         Print Order
                     </button>
                     <button
                         onClick={handleDownload}
                         disabled={isDownloading}
-                        className="flex-1 h-14 bg-blue-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-blue-200/50 flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="flex-1 h-12 md:h-14 bg-blue-600 text-white rounded-2xl md:rounded-[20px] font-black text-xs md:text-sm uppercase tracking-wide md:tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-blue-200/50 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95"
                     >
                         {isDownloading ? (
                             <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                         ) : (
                             <>
-                                <Download size={16} />
+                                <Download size={18} className="md:w-4 md:h-4" />
                                 Export Pass
                             </>
                         )}
                     </button>
                     <button
                         onClick={onClose}
-                        className="flex-1 h-14 bg-slate-900 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2"
+                        className="flex-1 h-12 md:h-14 bg-slate-900 text-white rounded-2xl md:rounded-[20px] font-black text-xs md:text-sm uppercase tracking-wide md:tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2 active:scale-95"
                     >
                         Done
                     </button>
