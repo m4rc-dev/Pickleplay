@@ -499,7 +499,7 @@ const GuestBooking: React.FC = () => {
         );
 
     return (
-        <div className="pt-16 md:pt-24 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative">
+        <div className="pt-16 md:pt-24 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative overflow-hidden">
             <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
                 <div className="flex items-center gap-3">
                     {isSearchExpanded ? (
@@ -753,39 +753,6 @@ const GuestBooking: React.FC = () => {
                                 <div ref={mapRef} className="h-full w-full" />
                             )}
 
-                            {/* Mobile Court Slider - Visible only on map view mobile */}
-                            {!isLoading && isMobile && viewMode === 'map' && (
-                                <div className="absolute bottom-14 left-0 right-0 z-10">
-                                    <div className="flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar snap-x">
-                                        {filteredCourts.map(court => (
-                                            <button
-                                                key={court.id}
-                                                onClick={() => {
-                                                    navigate(`/court/${court.id}`)
-                                                }}
-                                                className="flex-shrink-0 w-[240px] bg-white rounded-2xl shadow-xl border border-slate-100 p-3 flex gap-3 snap-center text-left"
-                                            >
-                                                <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0">
-                                                    <img
-                                                        src={court.imageUrl || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200'}
-                                                        alt={court.name}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <h4 className="font-black text-slate-900 text-[10px] uppercase truncate italic">{court.name}</h4>
-                                                    <p className="text-[9px] text-slate-500 line-clamp-1 mb-1 line-clamp-1">Explore court details</p>
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-[9px] font-black text-blue-600">₱{court.pricePerHour}/hr</span>
-                                                        <span className="text-[8px] bg-lime-400/20 text-lime-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">BOOK NOW</span>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Map Floating Actions - Desktop Only */}
                             <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
                                 <button className="w-12 h-12 bg-white rounded-2xl shadow-xl flex items-center justify-center text-slate-600 hover:text-blue-600 transition-all border border-slate-100">
@@ -799,21 +766,21 @@ const GuestBooking: React.FC = () => {
 
             {/* Floating Navigation Bar - Always visible on mobile */}
             {isMobile && (
-                <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] h-14">
-                    <div className="flex justify-center items-center gap-2 px-4 h-full">
+                <nav className="fixed bottom-14 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+                    <div className="flex justify-center items-center gap-3 px-4 py-3">
                         <button
                             onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                            className="flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
                         >
-                            {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
-                            <span className="text-[10px] uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
+                            {viewMode === 'map' ? <List size={20} /> : <MapPin size={20} />}
+                            <span className="text-xs uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
                         </button>
                         <button
                             onClick={() => setShowFilters(true)}
-                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                            className="flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
                         >
-                            <Funnel size={16} />
-                            <span className="text-[10px] uppercase tracking-widest">Filters</span>
+                            <Funnel size={20} />
+                            <span className="text-xs uppercase tracking-widest">Filters</span>
                         </button>
                     </div>
                 </nav>

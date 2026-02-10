@@ -534,8 +534,17 @@ const Booking: React.FC = () => {
   useEffect(() => {
     if (!isLoading && courts.length > 0 && mapRef.current && window.google) {
       initializeMap();
+      // Auto-center on user location if GPS is enabled
+      if (userLocation && gpsEnabled) {
+        setTimeout(() => {
+          if (googleMapRef.current) {
+            googleMapRef.current.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+            googleMapRef.current.setZoom(14);
+          }
+        }, 500);
+      }
     }
-  }, [isLoading, courts]);
+  }, [isLoading, courts, userLocation, gpsEnabled]);
 
   const initializeMap = () => {
     if (!mapRef.current || !window.google) return;
@@ -622,12 +631,18 @@ const Booking: React.FC = () => {
       });
 
       marker.addListener('click', () => {
-        setSelectedLocation(location);
-        setSelectedCourt(null); // Reset court selection
-        setSelectedSlot(null); // Reset slot
-        map.panTo({ lat: location.latitude, lng: location.longitude });
-        map.setZoom(16);
-        triggerPulse(location.latitude, location.longitude);
+        // If there's only one court at this location, navigate directly to court detail
+        if (location.courts.length === 1) {
+          navigate(`/court/${location.courts[0].id}`);
+        } else {
+          // Multiple courts, show location selection
+          setSelectedLocation(location);
+          setSelectedCourt(null); // Reset court selection
+          setSelectedSlot(null); // Reset slot
+          map.panTo({ lat: location.latitude, lng: location.longitude });
+          map.setZoom(16);
+          triggerPulse(location.latitude, location.longitude);
+        }
       });
 
       // Show info window on hover
@@ -902,12 +917,83 @@ const Booking: React.FC = () => {
   };
 
   return (
-    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative">
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
-        <div className="flex items-center gap-3">
-          {isSearchExpanded ? (
-            <div className="flex-1 relative">
-              <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-1">
+    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative overflow-hidden">
+      {/* Enhanced Mobile Header with Search & Filter Controls */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-gradient-to-b from-white via-white/98 to-white/95 backdrop-blur-xl border-b border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+        {/* Top Row - Search and Menu Toggle */}
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2">
+            {/* Search Button */}
+            <button
+              onClick={() => setIsSearchExpanded(!isSearchExpanded)}
+              className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-100/80 hover:bg-slate-100 rounded-2xl transition-all active:scale-95 group"
+            >
+              <Search size={18} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
+              <span className="text-sm font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
+                {searchQuery || 'Search courts or places...'}
+              </span>
+            </button>
+            
+            {/* Near Me Button */}
+            <button
+              onClick={handleNearMe}
+              className="p-3 bg-lime-400 hover:bg-lime-500 rounded-2xl shadow-lg shadow-lime-200/50 transition-all active:scale-95"
+            >
+              <Navigation size={20} fill="currentColor" className="text-slate-900" />
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Row - View Mode & Filter Tabs */}
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-2">
+            {/* View Mode Toggle (Map/List) */}
+            <button
+              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${
+                viewMode === 'map'
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200/50'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              {viewMode === 'map' ? <MapPin size={16} /> : <List size={16} />}
+              <span>{viewMode === 'map' ? 'Map' : 'List'}</span>
+            </button>
+
+            {/* Filter Type Buttons */}
+            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${
+                  filterType === type
+                    ? 'bg-white border-blue-600 text-blue-600 shadow-sm'
+                    : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  type === 'All' ? 'bg-blue-500' : 
+                  type === 'Indoor' ? 'bg-cyan-400' : 'bg-lime-400'
+                }`}></span>
+                {type}
+              </button>
+            ))}
+
+            {/* More Filters Button */}
+            <button
+              onClick={() => setShowFilters(true)}
+              className="p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl transition-all active:scale-95"
+            >
+              <Funnel size={16} className="text-slate-600" />
+            </button>
+          </div>
+        </div>
+
+        {/* Expandable Search Panel */}
+        {isSearchExpanded && (
+          <div className="absolute top-full left-0 right-0 bg-white border-b border-slate-200 shadow-xl z-50 animate-in slide-in-from-top duration-200">
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2">
                 <Search size={18} className="text-slate-400" />
                 <input
                   autoFocus
@@ -921,38 +1007,44 @@ const Booking: React.FC = () => {
                       setIsSearchExpanded(false);
                     }
                   }}
-                  className="flex-1 bg-transparent border-none outline-none py-2 text-sm font-bold text-slate-900"
+                  className="flex-1 bg-transparent border-none outline-none py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                 />
-                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="p-1 text-slate-400 font-bold text-xs uppercase tracking-tighter hover:text-slate-600">
-                  Cancel
+                <button 
+                  onClick={() => { 
+                    setIsSearchExpanded(false); 
+                    setSearchQuery(''); 
+                  }} 
+                  className="px-3 py-1 text-blue-600 font-bold text-xs uppercase tracking-wider hover:text-blue-700 transition-colors"
+                >
+                  Done
                 </button>
               </div>
 
-              {/* Search Dropdown */}
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-[60vh] overflow-y-auto">
+              {/* Search Results Dropdown */}
+              <div className="mt-3 bg-white border border-slate-200 rounded-2xl shadow-lg max-h-[60vh] overflow-y-auto">
                 {/* Places Section */}
                 {userCity && (
                   <>
-                    <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Places</p>
+                    <p className="px-4 py-2 text-[10px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-100">Places</p>
                     <button
                       onClick={() => {
                         setSearchQuery(userCity.split(',')[0]);
                         handleSearch(userCity.split(',')[0]);
                         setIsSearchExpanded(false);
                       }}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                      className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center gap-3 transition-colors"
                     >
-                      <div className="w-9 h-9 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
-                        <MapPin size={16} />
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                        <MapPin size={18} />
                       </div>
-                      <span className="text-slate-800 font-semibold text-sm">{userCity}</span>
+                      <span className="text-slate-900 font-bold text-sm">{userCity}</span>
                     </button>
                   </>
                 )}
 
                 {/* Courts Section */}
-                <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Courts</p>
-                <div className="space-y-4 md:space-y-1 custom-scrollbar pb-32">
+                <p className="px-4 py-2 text-[10px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-100">Courts</p>
+                <div className="pb-4">
                   {locationGroups
                     .filter(l => {
                       if (!searchQuery.trim()) return true;
@@ -976,9 +1068,9 @@ const Booking: React.FC = () => {
                           setViewMode('map');
                           setIsSearchExpanded(false);
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center gap-3 transition-colors"
                       >
-                        <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
                             <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -994,41 +1086,15 @@ const Booking: React.FC = () => {
                       </button>
                     ))}
                   {locationGroups.length === 0 && (
-                    <div className="px-4 py-6 text-center">
-                      <p className="text-sm text-slate-400">No courts found</p>
+                    <div className="px-4 py-8 text-center">
+                      <p className="text-sm text-slate-400 font-medium">No courts found</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-          ) : (
-            <>
-              <button
-                className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-colors"
-                onClick={() => setIsSearchExpanded(true)}
-              >
-                <Search size={18} />
-              </button>
-              <div className="flex-1 flex gap-2">
-                {(['Courts', 'Games', 'Lessons'] as const).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setFilterType(type === 'Courts' ? 'All' : 'All' as any)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
-                      ? 'border-blue-600 bg-white text-slate-900 shadow-sm'
-                      : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
-                      }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${type === 'Courts' ? 'bg-blue-500' :
-                      type === 'Games' ? 'bg-cyan-400' : 'bg-yellow-400'
-                      }`}></span>
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="">
@@ -1482,43 +1548,6 @@ const Booking: React.FC = () => {
               ) : (
                 <div ref={mapRef} className="h-full w-full" />
               )}
-              {/* Mobile Court Slider - Visible only on map view mobile */}
-              {!isLoading && isMobile && viewMode === 'map' && (
-                <div className="absolute bottom-14 left-0 right-0 z-10">
-                  <div className="flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar snap-x">
-                    {locationGroups.map(location => (
-                      <button
-                        key={location.locationId}
-                        onClick={() => {
-                          setSelectedLocation(location);
-                          if (googleMapRef.current) {
-                            googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                            googleMapRef.current.setZoom(16);
-                          }
-                        }}
-                        className="flex-shrink-0 w-[240px] bg-white rounded-2xl shadow-xl border border-slate-100 p-3 flex gap-3 snap-center text-left"
-                      >
-                        <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0">
-                          <img
-                            src={location.courts[0]?.imageUrl || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200'}
-                            alt={location.locationName}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-black text-slate-900 text-[10px] uppercase truncate italic">{location.locationName}</h4>
-                          <p className="text-[9px] text-slate-500 line-clamp-1 mb-1">Explore court details</p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] font-black text-blue-600">₱{location.courts[0]?.pricePerHour}/hr</span>
-                            <span className="text-[8px] bg-lime-400/20 text-lime-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">BOOK NOW</span>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Desktop Zoom Control */}
               <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
                 <button
@@ -1528,28 +1557,6 @@ const Booking: React.FC = () => {
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg>
                 </button>
               </div>
-
-              {/* Mobile Floating Navigation Bar - Inside map */}
-              {isMobile && (
-                <nav className="absolute bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] h-14">
-                  <div className="flex justify-center items-center gap-2 px-4 h-full">
-                    <button
-                      onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-                      className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
-                    >
-                      {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
-                      <span className="text-[10px] uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
-                    </button>
-                    <button
-                      onClick={() => setShowFilters(true)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
-                    >
-                      <Funnel size={16} />
-                      <span className="text-[10px] uppercase tracking-widest">Filters</span>
-                    </button>
-                  </div>
-                </nav>
-              )}
             </div>
           </div>
         </div>
