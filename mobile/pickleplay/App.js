@@ -13,6 +13,7 @@ import LoadingScreen from './src/screens/LoadingScreen';
 import LandingScreen from './src/screens/LandingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import QRLoginScreen from './src/screens/QRLoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import FindCourtsScreen from './src/screens/FindCourtsScreen';
 import CourtDetailScreen from './src/screens/CourtDetailScreen';
@@ -288,6 +289,7 @@ const App = () => {
               <Stack.Screen name="Landing" component={LandingScreen} />
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Register" component={RegisterScreen} />
+              <Stack.Screen name="QRLogin" component={QRLoginScreen} />
               
               {/* Main App Flow */}
               <Stack.Screen name="Home">

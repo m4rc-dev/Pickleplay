@@ -11,9 +11,40 @@ export const generateVerificationCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Send Email verification code via EmailJS (no backend needed)
-export const sendEmailCode = async (email: string, userId: string) => {
+// Check if there's already a valid code that hasn't expired
+export const hasValidCode = async (userId: string): Promise<boolean> => {
   try {
+    const { data: settings, error } = await supabase
+      .from('security_settings')
+      .select('verification_code, verification_code_expires_at')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !settings?.verification_code || !settings?.verification_code_expires_at) {
+      return false;
+    }
+
+    // Check if code hasn't expired
+    const expiresAtUTC = new Date(settings.verification_code_expires_at + 'Z');
+    const nowUTC = new Date();
+    
+    return nowUTC <= expiresAtUTC;
+  } catch {
+    return false;
+  }
+};
+
+// Send Email verification code via EmailJS (no backend needed)
+export const sendEmailCode = async (email: string, userId: string, forceResend: boolean = false) => {
+  try {
+    // Check if there's already a valid code (unless forcing resend)
+    if (!forceResend) {
+      const hasValid = await hasValidCode(userId);
+      if (hasValid) {
+        return { success: true, message: 'Code already sent. Check your email.', alreadySent: true };
+      }
+    }
+
     const code = generateVerificationCode();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes in milliseconds
 
@@ -120,7 +151,7 @@ export const resendCode = async (userId: string) => {
     const email = authUser.user?.email;
 
     if (!email) throw new Error('Email not found');
-    return sendEmailCode(email, userId);
+    return sendEmailCode(email, userId, true); // Force resend
   } catch (err: any) {
     return { success: false, message: err.message };
   }

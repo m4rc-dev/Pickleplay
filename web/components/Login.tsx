@@ -71,6 +71,7 @@ const Login: React.FC = () => {
                 // Check if user has 2FA enabled
                 const settings = await getSecuritySettings(data.user.id);
                 if (settings.data?.two_factor_enabled) {
+                    localStorage.setItem('two_factor_pending', 'true');
                     // Store redirect for after 2FA verification
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     const finalRedirect = storedRedirect || redirectUrl;
@@ -79,6 +80,7 @@ const Login: React.FC = () => {
                     }
                     navigate('/verify-2fa');
                 } else {
+                    localStorage.removeItem('two_factor_pending');
                     // No 2FA, go directly to dashboard
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     localStorage.removeItem('auth_redirect');
@@ -92,6 +94,90 @@ const Login: React.FC = () => {
             setLoading(false);
         }
     };
+
+    /*
+    QR login (disabled for now)
+    const [qrVisible, setQrVisible] = useState(false);
+    const [qrStatus, setQrStatus] = useState<'idle' | 'loading' | 'pending' | 'approved' | 'expired' | 'error'>('idle');
+    const [qrDataUrl, setQrDataUrl] = useState('');
+    const [qrChallengeId, setQrChallengeId] = useState<string | null>(null);
+    const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
+    const [qrMessage, setQrMessage] = useState<string | null>(null);
+
+    const resetQrLogin = () => {
+        setQrVisible(false);
+        setQrStatus('idle');
+        setQrDataUrl('');
+        setQrChallengeId(null);
+        setQrExpiresAt(null);
+        setQrMessage(null);
+    };
+
+    const startQrLogin = async () => {
+        setQrVisible(true);
+        setQrStatus('loading');
+        setQrMessage(null);
+
+        try {
+            const response = await fetch('/api/auth/qr/start', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Failed to start QR login');
+            }
+
+            const data = await response.json();
+            const challengeId = data.challengeId as string;
+            const expiresAt = data.expiresAt as string;
+
+            const payload = JSON.stringify({ type: 'qr_login', challengeId });
+            const dataUrl = await QRCodeLib.toDataURL(payload, {
+                width: 220,
+                margin: 2,
+                color: {
+                    dark: '#a3ff01',
+                    light: '#0f172a'
+                }
+            });
+
+            setQrChallengeId(challengeId);
+            setQrExpiresAt(expiresAt);
+            setQrDataUrl(dataUrl);
+            setQrStatus('pending');
+        } catch (err: any) {
+            setQrStatus('error');
+            setQrMessage(err.message || 'Unable to start QR login');
+        }
+    };
+
+    useEffect(() => {
+        if (!qrChallengeId || !qrVisible || qrStatus === 'error' || qrStatus === 'expired') return;
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/auth/qr/status/${qrChallengeId}`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const status = data.status as string;
+
+                if (status === 'approved' && data.actionLink) {
+                    setQrStatus('approved');
+                    window.location.href = data.actionLink;
+                    return;
+                }
+
+                if (status === 'expired') {
+                    setQrStatus('expired');
+                    setQrMessage('QR login expired. Generate a new code.');
+                }
+            } catch {
+                setQrStatus('error');
+                setQrMessage('Failed to check QR status');
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [qrChallengeId, qrVisible, qrStatus]);
+    */
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-950">
@@ -217,6 +303,47 @@ const Login: React.FC = () => {
                             <span className="text-white text-xs font-black uppercase tracking-widest">Google</span>
                         </button>
                     </div>
+
+                    {/*
+                    QR login (disabled for now)
+                    <div className="mt-6">
+                        <button
+                            type="button"
+                            onClick={startQrLogin}
+                            className="w-full flex items-center justify-center gap-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl py-4 transition-all active:scale-[0.95]"
+                        >
+                            <QrCode size={18} className="text-lime-400" />
+                            <span className="text-white text-xs font-black uppercase tracking-widest">Login with QR</span>
+                        </button>
+
+                        {qrVisible && (
+                            <div className="mt-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-center">
+                                <div className="flex items-center justify-between text-xs uppercase tracking-widest font-black text-slate-400">
+                                    <span>Scan with mobile app</span>
+                                    <button
+                                        type="button"
+                                        onClick={resetQrLogin}
+                                        className="text-slate-500 hover:text-white transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-center">
+                                    {qrStatus === 'loading' ? (
+                                        <Loader2 size={28} className="animate-spin text-lime-400" />
+                                    ) : (
+                                        qrDataUrl && <img src={qrDataUrl} alt="QR login" className="w-56 h-56" />
+                                    )}
+                                </div>
+
+                                <div className="mt-3 text-xs text-slate-400">
+                                    {qrMessage || (qrStatus === 'pending' ? 'Waiting for approval...' : null)}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    */}
 
                     <p className="mt-8 text-center text-slate-400 text-sm font-medium">
                         Don't have an account?{' '}
