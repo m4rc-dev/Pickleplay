@@ -367,7 +367,7 @@ const CourtDetail: React.FC = () => {
     if (!court) return null;
 
     return (
-        <div className="pt-20 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
+        <div className="pt-8 md:pt-12 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
             <div className="space-y-4 md:space-y-8">
                 {/* Header Navigation */}
                 <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
@@ -379,12 +379,14 @@ const CourtDetail: React.FC = () => {
                         Back to discovery
                     </button>
                     <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm active:scale-95"
-                        >
-                            Back to Home
-                        </button>
+                        {!user && (
+                            <button
+                                onClick={() => navigate('/')}
+                                className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm active:scale-95"
+                            >
+                                Back to Home
+                            </button>
+                        )}
                         {user && (
                             <button
                                 onClick={fetchMyBookings}

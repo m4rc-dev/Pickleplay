@@ -43,14 +43,11 @@ const LocationDetailPage: React.FC = () => {
 
     // Court form state
     const [courtName, setCourtName] = useState('');
-    const [courtNumCourts, setCourtNumCourts] = useState(1);
     const [courtSurface, setCourtSurface] = useState('Pro-Cushion');
     const [courtPrice, setCourtPrice] = useState(0);
     const [courtCleaningTime, setCourtCleaningTime] = useState(0);
     const [courtAmenities, setCourtAmenities] = useState('');
-    const [courtType, setCourtType] = useState<'Indoor' | 'Outdoor' | 'Both'>('Indoor');
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [courtType, setCourtType] = useState<'Indoor' | 'Outdoor'>('Indoor');
 
     useEffect(() => {
         if (locationId) fetchLocationData();
@@ -95,14 +92,11 @@ const LocationDetailPage: React.FC = () => {
 
     const resetCourtForm = () => {
         setCourtName('');
-        setCourtNumCourts(1);
         setCourtSurface('Pro-Cushion');
         setCourtPrice(0);
         setCourtCleaningTime(location?.base_cleaning_time || 0);
         setCourtAmenities('');
         setCourtType('Indoor');
-        setImageFile(null);
-        setImagePreview(null);
     };
 
     const handleAddCourt = async (e: React.FormEvent) => {
@@ -112,27 +106,16 @@ const LocationDetailPage: React.FC = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
-            // 1. Handle image upload if exists
-            let imageUrl = null;
-            if (imageFile) {
-                const uploadResult = await uploadCourtImage(imageFile, user.id);
-                if (uploadResult.success) {
-                    imageUrl = uploadResult.publicUrl;
-                }
-            }
-
             const { error } = await supabase
                 .from('courts')
                 .insert({
                     owner_id: user.id,
                     location_id: locationId,
                     name: courtName,
-                    num_courts: courtNumCourts,
                     surface_type: courtSurface,
                     base_price: courtPrice,
                     cleaning_time_minutes: courtCleaningTime,
                     court_type: courtType,
-                    image_url: imageUrl,
                     amenities: courtAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     latitude: location?.latitude,
                     longitude: location?.longitude,
@@ -156,28 +139,14 @@ const LocationDetailPage: React.FC = () => {
         if (!editingCourt) return;
         setIsSubmitting(true);
         try {
-            // 1. Handle image upload if exists
-            let imageUrl = editingCourt.image_url;
-            if (imageFile) {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    const uploadResult = await uploadCourtImage(imageFile, user.id);
-                    if (uploadResult.success) {
-                        imageUrl = uploadResult.publicUrl;
-                    }
-                }
-            }
-
             const { error } = await supabase
                 .from('courts')
                 .update({
                     name: courtName,
-                    num_courts: courtNumCourts,
                     surface_type: courtSurface,
                     base_price: courtPrice,
                     cleaning_time_minutes: courtCleaningTime,
                     court_type: courtType,
-                    image_url: imageUrl,
                     amenities: courtAmenities.split(',').map(a => a.trim()).filter(Boolean),
                 })
                 .eq('id', editingCourt.id);
@@ -212,14 +181,11 @@ const LocationDetailPage: React.FC = () => {
     const openEditCourt = (court: CourtItem) => {
         setEditingCourt(court);
         setCourtName(court.name);
-        setCourtNumCourts(court.num_courts);
         setCourtSurface(court.surface_type);
         setCourtPrice(court.base_price || 0);
         setCourtCleaningTime(court.cleaning_time_minutes || 0);
         setCourtAmenities(Array.isArray(court.amenities) ? court.amenities.join(', ') : '');
-        setCourtType(court.court_type || 'Indoor');
-        setImagePreview(court.image_url || null);
-        setImageFile(null);
+        setCourtType((court.court_type as 'Indoor' | 'Outdoor') || 'Indoor');
         setIsEditCourtOpen(true);
     };
 
@@ -228,54 +194,6 @@ const LocationDetailPage: React.FC = () => {
     // Shared court form
     const renderCourtForm = (onSubmit: (e: React.FormEvent) => void, isEdit: boolean) => (
         <form onSubmit={onSubmit} className="space-y-6">
-            {/* Image Upload Area */}
-            <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 px-1">Court Image</label>
-                <div className="relative group">
-                    <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${imagePreview ? 'border-amber-200 shadow-xl' : 'border-slate-100 hover:border-amber-300 hover:bg-amber-50/30'}`}>
-                        {imagePreview ? (
-                            <>
-                                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                                    <div className="bg-white/90 p-4 rounded-2xl shadow-xl flex items-center gap-2 scale-90 group-hover:scale-100 transition-transform">
-                                        <Camera size={20} className="text-amber-500" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">Change Photo</span>
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="text-center p-4">
-                                <div className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-slate-50 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                                    <Image size={24} className="text-slate-200 group-hover:text-amber-400 transition-colors" />
-                                </div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Click to upload <span className="text-amber-500 text-[10px]">court image</span></p>
-                            </div>
-                        )}
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    setImageFile(file);
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                        setImagePreview(reader.result as string);
-                                    };
-                                    reader.readAsDataURL(file);
-                                }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                    </div>
-                    {imageFile && (
-                        <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-2 rounded-xl shadow-lg animate-in zoom-in duration-300">
-                            <Check size={16} strokeWidth={4} />
-                        </div>
-                    )}
-                </div>
-            </div>
-
             <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
                 <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
@@ -283,29 +201,23 @@ const LocationDetailPage: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
-                    <input required type="number" min="1" value={courtNumCourts} onChange={e => setCourtNumCourts(Number(e.target.value))}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
-                </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Type</label>
-                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                        {['Indoor', 'Outdoor', 'Both'].map((type) => (
-                            <button
-                                key={type}
-                                type="button"
-                                onClick={() => setCourtType(type as any)}
-                                className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
-                                    ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
-                                    : 'text-slate-400 hover:text-slate-600'
-                                    }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
-                    </div>
+            {/* Court Type Selector */}
+            <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Type</label>
+                <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                    {['Indoor', 'Outdoor'].map((type) => (
+                        <button
+                            key={type}
+                            type="button"
+                            onClick={() => setCourtType(type as 'Indoor' | 'Outdoor')}
+                            className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
+                                ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
+                                : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            {type}
+                        </button>
+                    ))}
                 </div>
             </div>
 
