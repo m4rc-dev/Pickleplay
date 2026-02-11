@@ -120,6 +120,23 @@ interface CourtWithDistance {
   imageUrl?: string;
 }
 
+interface LocationWithDistance {
+  id: string;
+  name: string;
+  city: string;
+  state?: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  distance?: number;
+  region?: string;
+  court_count?: number;
+  imageUrl?: string;
+  avg_price?: number;
+  avg_rating?: number;
+  total_reviews?: number;
+}
+
 // Philippine regions mapping
 const VISAYAS_CITIES = ['cebu', 'mandaue', 'lapu-lapu', 'talisay', 'danao', 'bogo', 'carcar', 'naga', 'toledo', 'tacloban', 'ormoc', 'bacolod', 'iloilo', 'roxas', 'dumaguete', 'tagbilaran', 'bohol', 'leyte', 'samar', 'negros', 'panay', 'siquijor', 'biliran'];
 const MINDANAO_CITIES = ['davao', 'cagayan de oro', 'zamboanga', 'general santos', 'butuan', 'iligan', 'cotabato', 'koronadal', 'tagum', 'panabo', 'digos', 'mati', 'surigao', 'tandag', 'bislig', 'ozamiz', 'dipolog', 'pagadian', 'marawi', 'kidapawan', 'tacurong', 'malaybalay', 'valencia'];
@@ -209,10 +226,12 @@ const Home: React.FC = () => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [courts, setCourts] = useState<CourtWithDistance[]>([]);
+  const [locations, setLocations] = useState<LocationWithDistance[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [userCity, setUserCity] = useState<string | null>(null);
   const [userRegion, setUserRegion] = useState<string | null>(null);
   const [nearbyCourts, setNearbyCourts] = useState<CourtWithDistance[]>([]);
+  const [nearbyLocations, setNearbyLocations] = useState<LocationWithDistance[]>([]);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
@@ -272,7 +291,71 @@ const Home: React.FC = () => {
         console.error('Error fetching courts for search:', err);
       }
     };
+
+    const fetchLocations = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select(`
+            id, name, city, state, address, latitude, longitude, image_url,
+            courts (
+              id, base_price,
+              court_reviews (
+                rating
+              )
+            )
+          `)
+          .eq('is_active', true);
+
+        if (error) throw error;
+
+        const locationData = (data || []).map(loc => {
+          const courts = (loc as any).courts || [];
+          const city = loc.city || '';
+          
+          // Calculate aggregated data from courts
+          let totalRating = 0;
+          let totalReviews = 0;
+          let totalPrice = 0;
+          let courtCount = 0;
+          
+          courts.forEach((court: any) => {
+            courtCount++;
+            if (court.base_price) totalPrice += court.base_price;
+            
+            const reviews = court.court_reviews || [];
+            reviews.forEach((review: any) => {
+              totalRating += review.rating;
+              totalReviews++;
+            });
+          });
+
+          return {
+            id: loc.id,
+            name: loc.name,
+            city: city,
+            state: loc.state,
+            address: loc.address,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            region: getRegion(city),
+            court_count: courtCount,
+            avg_price: courtCount > 0 ? Math.round(totalPrice / courtCount) : 0,
+            avg_rating: totalReviews > 0 ? Math.round((totalRating / totalReviews) * 10) / 10 : 0,
+            total_reviews: totalReviews,
+            imageUrl: loc.image_url
+          };
+        });
+        setLocations(locationData);
+        console.log('📍 Fetched locations:', locationData.length, 'locations');
+        console.log('📍 Sample location data:', locationData[0]);
+      } catch (err) {
+        console.error('Error fetching locations:', err);
+      }
+    };
+    
     fetchCourts();
+    fetchLocations();
   }, []);
 
   // Get user's GPS location when they focus on search
@@ -298,6 +381,18 @@ const Home: React.FC = () => {
             .sort((a, b) => (a.distance || 999) - (b.distance || 999));
 
           setNearbyCourts(courtsWithDistance);
+
+          // Calculate distances for locations and sort by nearest
+          const locationsWithDistance = locations.map(location => {
+            if (location.latitude && location.longitude) {
+              const distance = calculateDistance(latitude, longitude, location.latitude, location.longitude);
+              return { ...location, distance };
+            }
+            return location;
+          }).filter(l => l.distance !== undefined)
+            .sort((a, b) => (a.distance || 999) - (b.distance || 999));
+
+          setNearbyLocations(locationsWithDistance);
 
           // Try to get city from nearest court as fallback
           const nearestCourt = courtsWithDistance[0];
@@ -416,6 +511,22 @@ const Home: React.FC = () => {
     }
   }, [userLocation, courts]);
 
+  // Recalculate distances when locations or userLocation changes
+  useEffect(() => {
+    if (userLocation && locations.length > 0) {
+      const locationsWithDistance = locations.map(location => {
+        if (location.latitude && location.longitude) {
+          const distance = calculateDistance(userLocation.lat, userLocation.lng, location.latitude, location.longitude);
+          return { ...location, distance };
+        }
+        return location;
+      }).filter(l => l.distance !== undefined)
+        .sort((a, b) => (a.distance || 999) - (b.distance || 999));
+
+      setNearbyLocations(locationsWithDistance);
+    }
+  }, [userLocation, locations]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveImageIndex((prev) => (prev + 1) % HERO_IMAGES.length);
@@ -504,55 +615,64 @@ const Home: React.FC = () => {
     setActiveCarouselIndex(index);
   };
 
-  // Derive Featured Courts and Title based on GPS status and user location
+  // Derive Featured Locations and Title based on GPS status and user location
   const getFeaturedData = () => {
-    let title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+    let title = <span>Featured Locations in the <span className="text-lime-500">Philippines.</span></span>;
     let featuredList = [];
 
-    // All courts sorted by rating (5 to 1) for neutral/fallback use
-    const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    // Prioritize locations over courts
+    if (locations.length > 0) {
+      // All locations sorted by rating (5 to 1) for neutral/fallback use
+      const allLocationsSorted = [...locations].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
 
-    if (gpsEnabled) {
-      if (userCity) {
-        const locationParts = userCity.split(",");
-        const cityName = locationParts[0].trim();
-        // If we have a region but it's not in the city string, we can show "City, Region"
-        const displayLocation = (userRegion && !cityName.includes(userRegion) && cityName !== 'Your Location')
-          ? `${cityName}, ${userRegion}`
-          : (cityName === 'Your Location' && userRegion ? userRegion : cityName);
+      if (gpsEnabled) {
+        if (userCity) {
+          const locationParts = userCity.split(",");
+          const cityName = locationParts[0].trim();
+          // If we have a region but it's not in the city string, we can show "City, Region"
+          const displayLocation = (userRegion && !cityName.includes(userRegion) && cityName !== 'Your Location')
+            ? `${cityName}, ${userRegion}`
+            : (cityName === 'Your Location' && userRegion ? userRegion : cityName);
 
-        title = <span>Featured Courts in <span className="text-lime-500">{displayLocation}.</span></span>;
-      } else {
-        // GPS enabled but city info still loading or unavailable
-        title = <span>Featured Courts <span className="text-lime-500">Near You.</span></span>;
-      }
-
-      // Logic for selecting courts based on GPS
-      if (userCity && userCity !== 'Your Location') {
-        const cityName = userCity.split(",")[0].trim().toLowerCase();
-
-        // Filter by city and sort by rating descending (5 to 1)
-        featuredList = courts
-          .filter(court => court.city.toLowerCase().includes(cityName))
-          .sort((a, b) => (b.rating || 0) - (a.rating || 0));
-
-        // Fallback if no courts found in that specific city - show top 4 nearby/rated
-        if (featuredList.length === 0) {
-          featuredList = (nearbyCourts.length > 0 ? [...nearbyCourts] : allCourtsSorted)
-            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-            .slice(0, 4);
+          title = <span>Featured Locations in <span className="text-lime-500">{displayLocation}.</span></span>;
+        } else {
+          // GPS enabled but city info still loading or unavailable
+          title = <span>Featured Locations <span className="text-lime-500">Near You.</span></span>;
         }
-      } else if (nearbyCourts.length > 0) {
-        // GPS enabled but city name not specific yet - show top 4 nearby
-        featuredList = [...nearbyCourts]
-          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-          .slice(0, 4);
+
+        // Logic for selecting locations based on GPS
+        if (userCity && userCity !== 'Your Location') {
+          const cityName = userCity.split(",")[0].trim().toLowerCase();
+
+          // Filter by city and sort by rating descending (5 to 1)
+          featuredList = locations
+            .filter(location => location.city.toLowerCase().includes(cityName))
+            .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+
+          // Fallback if no locations found in that specific city - show top 4 nearby/rated
+          if (featuredList.length === 0) {
+            featuredList = (nearbyLocations.length > 0 ? [...nearbyLocations] : allLocationsSorted)
+              .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
+              .slice(0, 4);
+          }
+        } else if (nearbyLocations.length > 0) {
+          // GPS enabled but city name not specific yet - show top 4 nearby
+          featuredList = [...nearbyLocations]
+            .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
+            .slice(0, 4);
+        } else {
+          // Fallback to top rated if nearby hasn't calculated yet
+          featuredList = allLocationsSorted.slice(0, 4);
+        }
       } else {
-        // Fallback to top rated if nearby hasn't calculated yet
-        featuredList = allCourtsSorted.slice(0, 4);
+        // Location OFF: Show top 4 rated locations across PH (5 to 1 stars)
+        title = <span>Featured Locations in the <span className="text-lime-500">Philippines.</span></span>;
+        featuredList = allLocationsSorted.slice(0, 4);
       }
     } else {
-      // Location OFF: Show top 4 rated courts across PH (5 to 1 stars)
+      // Fallback to courts if no locations are available (temporary)
+      console.warn('⚠️ No locations found, falling back to courts');
+      const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
       title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
       featuredList = allCourtsSorted.slice(0, 4);
     }
@@ -561,6 +681,9 @@ const Home: React.FC = () => {
   };
 
   const { title: featuredSectionTitle, featuredList } = getFeaturedData();
+
+  console.log('🏠 Featured list data:', featuredList);
+  console.log('🏠 Is using locations?', featuredList.length > 0 && featuredList[0].hasOwnProperty('court_count'));
 
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
@@ -822,73 +945,138 @@ const Home: React.FC = () => {
                 className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
                 onScroll={handleCarouselScroll}
               >
-                {featuredList.slice(0, 10).map((court, idx) => (
+                {featuredList.slice(0, 10).map((item, idx) => {
+                  // Check if item is a location (has court_count) or court (has base_price)
+                  const isLocation = item.hasOwnProperty('court_count');
+                  
+                  return (
                   <div
                     key={idx}
                     className="group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden"
                   >
-                    {/* Court Image */}
-                    <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`} className="relative block overflow-hidden">
-                      <img
-                        src={court.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
-                        alt={court.name}
-                        className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      {/* Price Badge on Image */}
-                      <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                        <span className="text-lg font-black text-slate-900">₱{court.base_price ?? 0}</span>
-                        <span className="text-xs font-semibold text-slate-500">/hr</span>
-                      </div>
-                    </Link>
+                    {isLocation ? (
+                      // Location Card Template
+                      <>
+                        <Link to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
+                          <img
+                            src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
+                            alt={item.name}
+                            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          {/* Price Badge on Image */}
+                          <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                            <span className="text-lg font-black text-slate-900">₱{item.avg_price || 0}</span>
+                            <span className="text-xs font-semibold text-slate-500">/hr avg</span>
+                          </div>
+                        </Link>
 
-                    {/* Content */}
-                    <div className="p-4">
-                      {/* Rating Badge */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <svg
-                              key={star}
-                              className={`w-3.5 h-3.5 ${star <= Math.round(court.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
-                              fill="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                        <div className="p-4">
+                          {/* Rating Badge */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                  fill="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                </svg>
+                              ))}
+                            </div>
+                            <span className="text-xs font-bold text-slate-600">
+                              {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
+                              {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
+                            </span>
+                          </div>
+
+                          {/* Location Name/City */}
+                          <Link to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
+                            <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                              {item.name}
+                            </h5>
+                          </Link>
+                          
+                          {/* Location Details */}
+                          <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
+                            <MapPin size={14} className="text-slate-400" />
+                            <span className="line-clamp-1">{item.court_count || 0} {item.court_count === 1 ? 'court' : 'courts'} • {item.address}</span>
+                          </p>
+
+                          {/* Book Button */}
+                          <Link
+                            to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
+                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                          ))}
+                            Book Now
+                          </Link>
                         </div>
-                        <span className="text-xs font-bold text-slate-600">
-                          {court.rating && court.rating > 0 ? `${court.rating}` : 'New'}
-                          {court.reviewCount && court.reviewCount > 0 ? ` (${court.reviewCount})` : ''}
-                        </span>
-                      </div>
+                      </>
+                    ) : (
+                      // Court Card Template (Fallback)
+                      <>
+                        <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`} className="relative block overflow-hidden">
+                          <img
+                            src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
+                            alt={item.name}
+                            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                            <span className="text-lg font-black text-slate-900">₱{item.base_price ?? 0}</span>
+                            <span className="text-xs font-semibold text-slate-500">/hr</span>
+                          </div>
+                        </Link>
 
-                      {/* Court Name */}
-                      <Link to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}>
-                        <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
-                          {court.name}
-                        </h5>
-                      </Link>
-                      
-                      {/* Location */}
-                      <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
-                        <MapPin size={14} className="text-slate-400" />
-                        <span className="line-clamp-1">{court.city}, {court.region || 'PH'}</span>
-                      </p>
+                        <div className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                  fill="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                </svg>
+                              ))}
+                            </div>
+                            <span className="text-xs font-bold text-slate-600">
+                              {item.rating && item.rating > 0 ? `${item.rating}` : 'New'}
+                              {item.reviewCount && item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}
+                            </span>
+                          </div>
 
-                      {/* Book Button */}
-                      <Link
-                        to={`/booking?court=${encodeURIComponent(court.name)}&lat=${court.latitude}&lng=${court.longitude}&zoom=16`}
-                        className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Book Now
-                      </Link>
-                    </div>
+                          <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}>
+                            <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                              {item.name}
+                            </h5>
+                          </Link>
+                          
+                          <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
+                            <MapPin size={14} className="text-slate-400" />
+                            <span className="line-clamp-1">{item.city}, {item.region || 'PH'}</span>
+                          </p>
+
+                          <Link
+                            to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}
+                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Book Now
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </div>
-                ))}
+                  );
+                })} 
               </div>
 
               {/* Scroll Indicator Dots */}
@@ -912,9 +1100,9 @@ const Home: React.FC = () => {
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                 <MapPin size={32} className="text-slate-300" />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">No Featured Courts Found</h3>
+              <h3 className="text-xl font-black text-slate-900 mb-2">No Featured Locations Found</h3>
               <p className="text-slate-500 font-medium mb-8 max-w-md mx-auto">
-                We couldn't find any courts matching the criteria in your area yet.
+                We couldn't find any locations matching the criteria in your area yet.
               </p>
               <button
                 onClick={getUserLocation}
