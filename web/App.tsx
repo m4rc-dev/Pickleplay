@@ -855,22 +855,34 @@ const App: React.FC = () => {
             setShowUsernameModal(true);
           }
 
-          // Update profile with OAuth metadata if missing
-          if (isSocialLogin && (!profileRes.data.email || !profileRes.data.full_name || !profileRes.data.avatar_url)) {
-            console.log('🛠️ Profile incomplete, updating with OAuth metadata...');
+          // Update profile with auth metadata if missing
+          if (!profileRes.data.email || !profileRes.data.full_name || !profileRes.data.avatar_url || !profileRes.data.username) {
+            console.log('🛠️ Profile incomplete, updating with auth metadata...');
+            const resolvedName = profileRes.data.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
+            const resolvedEmail = profileRes.data.email || session.user.email;
+            const usernameSource = profileRes.data.username || resolvedName || session.user.email?.split('@')[0] || 'player';
+            const resolvedUsername = usernameSource
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, '_')
+              .replace(/[^a-z0-9_]/g, '')
+              .slice(0, 30) || 'player';
+
             const { error: updateError } = await supabase
               .from('profiles')
               .update({
-                email: profileRes.data.email || session.user.email,
-                full_name: profileRes.data.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+                email: resolvedEmail,
+                full_name: resolvedName,
+                username: resolvedUsername,
                 avatar_url: profileRes.data.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || ''
               })
               .eq('id', session.user.id);
 
             if (!updateError) {
-              console.log('✅ Profile updated with OAuth metadata');
-              setUserName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || '');
-              setUserAvatar(session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '');
+              console.log('✅ Profile updated with auth metadata');
+              const resolvedAvatar = profileRes.data.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
+              setUserName(resolvedName);
+              setUserAvatar(resolvedAvatar);
             } else {
               console.error('❌ Failed to update profile:', updateError);
             }
@@ -890,7 +902,14 @@ const App: React.FC = () => {
             .from('profiles')
             .insert({
               id: session.user.id,
+              email: session.user.email || null,
               full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+              username: ((session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'player') as string)
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, '_')
+                .replace(/[^a-z0-9_]/g, '')
+                .slice(0, 30) || 'player',
               avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '',
               active_role: 'PLAYER',
               roles: ['PLAYER']

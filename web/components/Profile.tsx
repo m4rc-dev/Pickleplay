@@ -579,9 +579,28 @@ Never share them with anyone.`;
             .single();
 
           if (!error && data) {
-            setProfileData(data);
+            let resolvedFullName = data.full_name || '';
+
+            if (!resolvedFullName && isCurrentUser) {
+              const { data: authUserData } = await supabase.auth.getUser();
+              resolvedFullName = authUserData.user?.user_metadata?.full_name || authUserData.user?.user_metadata?.name || '';
+
+              if (resolvedFullName) {
+                await supabase
+                  .from('profiles')
+                  .update({ full_name: resolvedFullName })
+                  .eq('id', targetId);
+              }
+            }
+
+            const normalizedProfileData = {
+              ...data,
+              full_name: resolvedFullName
+            };
+
+            setProfileData(normalizedProfileData);
             // Initialize editable fields
-            setEditedName(data.full_name || '');
+            setEditedName(resolvedFullName);
             setEditedLocation(data.location || '');
             setEditedBio(data.bio || '');
             setAvatarUrl(data.avatar_url || '');
