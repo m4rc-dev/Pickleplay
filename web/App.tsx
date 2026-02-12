@@ -652,7 +652,7 @@ const NavigationHandler: React.FC<{
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><News /></div>} />
+              <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
               <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />

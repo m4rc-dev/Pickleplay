@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, ArrowRight, ArrowLeft, ChevronRight, Share2, Bookmark, Loader2, AlertCircle, ExternalLink, Newspaper, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, Flame, Zap } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface ApiArticle {
@@ -36,6 +36,7 @@ interface NormalizedArticle {
   body: string;
   category: string;
   date: string;
+  rawDate: string;
   image: string;
   readTime: string;
   author: string;
@@ -73,6 +74,7 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
     body: raw.body || raw.content || '',
     category: raw.category || raw.category_name || 'General',
     date: date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+    rawDate: date,
     image,
     readTime,
     author: raw.author || raw.author_name || 'Staff',
@@ -80,6 +82,31 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
     tags: raw.tags || [],
     sourceUrl: raw.url || raw.external_url || '',
   };
+}
+
+function formatTimeShort(dateStr: string) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    const hours = d.getHours();
+    const mins = d.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h = hours % 12 || 12;
+    return `${h}:${String(mins).padStart(2, '0')} ${ampm}`;
+  } catch {
+    return '';
+  }
+}
+
+function formatFeaturedDate(dateStr: string) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  } catch {
+    return dateStr;
+  }
 }
 
 function formatDateLong(dateStr: string) {
@@ -94,8 +121,7 @@ function formatDateLong(dateStr: string) {
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
   return (
-    <div className="animate-fade-in pt-8 pb-20 max-w-4xl mx-auto">
-      {/* Back Button */}
+    <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
       <button
         onClick={onBack}
         className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors mb-8 group"
@@ -104,9 +130,8 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         Back to Newsfeed
       </button>
 
-      {/* Category & Meta */}
-      <div className="flex items-center gap-4 mb-6">
-        <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
+      <div className="flex items-center gap-3 mb-5">
+        <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
           {article.category}
         </span>
         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -114,35 +139,32 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         </span>
       </div>
 
-      {/* Title */}
-      <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter leading-[0.95] mb-8">
+      <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-slate-950 tracking-tight leading-[1.05] mb-6">
         {article.title}
       </h1>
 
-      {/* Author & Read Time */}
-      <div className="flex items-center gap-6 mb-10 pb-8 border-b border-slate-200">
+      <div className="flex items-center gap-6 mb-8 pb-6 border-b border-slate-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-black text-sm">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center text-white font-black text-xs">
             {article.author.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-black text-slate-900">{article.author}</p>
+            <p className="text-sm font-bold text-slate-900">{article.author}</p>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{article.readTime}</p>
           </div>
         </div>
-        <div className="ml-auto flex gap-2">
-          <button className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all"><Share2 size={18} /></button>
-          <button className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all"><Bookmark size={18} /></button>
+        <div className="ml-auto flex gap-1.5">
+          <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-all"><Share2 size={16} /></button>
+          <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-all"><Bookmark size={16} /></button>
           {article.sourceUrl && (
-            <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all">
-              <ExternalLink size={18} />
+            <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-all">
+              <ExternalLink size={16} />
             </a>
           )}
         </div>
       </div>
 
-      {/* Featured Image */}
-      <div className="aspect-[16/9] w-full rounded-[32px] overflow-hidden mb-12 shadow-xl">
+      <div className="aspect-[16/9] w-full rounded-xl overflow-hidden mb-10 shadow-lg">
         <img
           src={article.image}
           alt={article.title}
@@ -151,20 +173,19 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         />
       </div>
 
-      {/* Article Body */}
       {article.body ? (
         <div
           className="prose prose-lg prose-slate max-w-none
             prose-headings:font-black prose-headings:tracking-tight
             prose-p:text-slate-600 prose-p:leading-relaxed
             prose-a:text-blue-600 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
-            prose-img:rounded-2xl prose-img:shadow-lg
-            prose-blockquote:border-l-blue-600 prose-blockquote:bg-blue-50 prose-blockquote:rounded-r-2xl prose-blockquote:py-1
-            mb-16"
+            prose-img:rounded-xl prose-img:shadow-lg
+            prose-blockquote:border-l-blue-600 prose-blockquote:bg-blue-50 prose-blockquote:rounded-r-xl prose-blockquote:py-1
+            mb-12"
           dangerouslySetInnerHTML={{ __html: article.body }}
         />
       ) : (
-        <div className="text-slate-600 text-lg leading-relaxed mb-16 space-y-6">
+        <div className="text-slate-600 text-lg leading-relaxed mb-12 space-y-6">
           <p>{article.excerpt}</p>
           {article.sourceUrl && (
             <a
@@ -179,18 +200,16 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         </div>
       )}
 
-      {/* Tags */}
       {article.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 pb-10 border-b border-slate-200 mb-10">
+        <div className="flex flex-wrap gap-2 pb-8 border-b border-slate-200 mb-8">
           {article.tags.map((tag, i) => (
-            <span key={i} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest">
+            <span key={i} className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-widest">
               {tag}
             </span>
           ))}
         </div>
       )}
 
-      {/* Back to Newsfeed */}
       <button
         onClick={onBack}
         className="flex items-center gap-3 text-sm font-black text-blue-600 uppercase tracking-widest hover:gap-4 transition-all"
@@ -202,22 +221,37 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
   );
 };
 
-// ─── Skeleton Loader ───────────────────────────────────────────
-const ArticleSkeleton: React.FC = () => (
-  <div className="space-y-6 animate-pulse">
-    <div className="aspect-[4/3] rounded-[40px] bg-slate-200" />
-    <div className="space-y-3 px-2">
-      <div className="h-3 bg-slate-200 rounded w-1/3" />
-      <div className="h-6 bg-slate-200 rounded w-full" />
-      <div className="h-6 bg-slate-200 rounded w-2/3" />
-      <div className="h-4 bg-slate-200 rounded w-full" />
-      <div className="h-4 bg-slate-200 rounded w-4/5" />
+// ─── Section Header Component ──────────────────────────────────
+const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; accent?: string; extra?: React.ReactNode }> = ({ icon, title, accent, extra }) => (
+  <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center gap-2">
+      <span className="text-lime-500">{icon}</span>
+      <h2 className="text-sm font-black text-slate-900 uppercase tracking-tighter">{title}</h2>
+      {accent && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase">{accent}</span>}
     </div>
+    {extra}
   </div>
 );
 
-const FeaturedSkeleton: React.FC = () => (
-  <div className="aspect-[21/9] w-full rounded-[48px] bg-slate-200 animate-pulse" />
+// ─── Skeleton ───────────────────────────────────────────────────
+const NewsSkeleton: React.FC = () => (
+  <div className="animate-pulse space-y-6">
+    <div className="bg-white rounded-2xl p-5">
+      <div className="h-5 bg-slate-200 rounded w-32 mb-4" />
+      <div className="aspect-[16/9] bg-slate-200 rounded-xl mb-4" />
+      <div className="h-6 bg-slate-200 rounded w-3/4 mb-2" />
+      <div className="h-4 bg-slate-200 rounded w-full" />
+    </div>
+    <div className="grid grid-cols-2 gap-4">
+      {[1,2,3,4].map(i => (
+        <div key={i} className="bg-white rounded-2xl p-4">
+          <div className="aspect-[4/3] bg-slate-200 rounded-lg mb-3" />
+          <div className="h-4 bg-slate-200 rounded w-full mb-2" />
+          <div className="h-3 bg-slate-200 rounded w-2/3" />
+        </div>
+      ))}
+    </div>
+  </div>
 );
 
 // ─── Main News Component ────────────────────────────────────────
@@ -229,6 +263,7 @@ const News: React.FC = () => {
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<NormalizedArticle | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'trending'>('all');
 
   const fetchArticles = useCallback(async (pageNum: number) => {
     setLoading(true);
@@ -244,16 +279,12 @@ const News: React.FC = () => {
       const result = await response.json();
       console.log('📰 API Response:', result);
 
-      // Handle the nested response: result.data.data = articles array
       const rawArticles: ApiArticle[] = result?.data?.data || result?.data || result?.articles || [];
-
       console.log('📝 Extracted articles:', rawArticles.length, 'articles');
 
-      // Empty state is OK - set empty array
       const normalized = rawArticles.map((a: ApiArticle, i: number) => normalizeArticle(a, i));
       setArticles(normalized);
 
-      // Extract pagination meta
       if (result?.data) {
         setPagination({
           current_page: result.data.current_page || pageNum,
@@ -290,23 +321,16 @@ const News: React.FC = () => {
   // ── Error State ──
   if (error) {
     return (
-      <div className="space-y-12 animate-fade-in pb-20">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
-            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST UPDATES.</h1>
-          </div>
-        </div>
-
+      <div className="animate-fade-in pb-20">
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center mb-6">
-            <AlertCircle size={32} className="text-red-400" />
+          <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-5">
+            <AlertCircle size={28} className="text-red-400" />
           </div>
-          <h3 className="text-xl font-black text-slate-900 mb-2">Unable to Load Articles</h3>
-          <p className="text-slate-500 text-sm max-w-md mb-6">{error}</p>
+          <h3 className="text-lg font-black text-slate-900 mb-2">Unable to Load Articles</h3>
+          <p className="text-slate-500 text-sm max-w-md mb-5">{error}</p>
           <button
             onClick={() => fetchArticles(page)}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
           >
             <RefreshCw size={14} /> Try Again
           </button>
@@ -315,248 +339,382 @@ const News: React.FC = () => {
     );
   }
 
-  // ── Empty State (no articles yet) ──
+  // ── Empty State ──
   if (!loading && articles.length === 0) {
     return (
-      <div className="space-y-12 animate-fade-in pb-20">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED</p>
-            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST UPDATES.</h1>
-          </div>
-        </div>
-
+      <div className="animate-fade-in pb-20">
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-24 h-24 rounded-[32px] bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center mb-8 relative">
-            <Newspaper size={40} className="text-blue-400" />
-            <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-lime-400 flex items-center justify-center text-slate-900 font-black text-xs">0</div>
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center mb-6 relative">
+            <Newspaper size={36} className="text-blue-600" />
           </div>
-          <h3 className="text-2xl font-black text-slate-900 mb-3">No Articles Yet</h3>
-          <p className="text-slate-500 text-base max-w-md mb-8 leading-relaxed">
-            Your news feed is empty right now. Articles will appear here once they're published to your site.
+          <h3 className="text-xl font-black text-slate-900 mb-2">No Articles Yet</h3>
+          <p className="text-slate-500 text-sm max-w-md mb-6 leading-relaxed">
+            Your news feed is empty. Articles will appear here once they're published.
           </p>
           <button
             onClick={() => fetchArticles(page)}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
           >
             <RefreshCw size={14} /> Check Again
           </button>
         </div>
-
-        {/* Newsletter Signup - Still show even when empty */}
-        <section className="bg-blue-600 rounded-[48px] p-12 md:p-20 text-center relative overflow-hidden shadow-2xl shadow-blue-200">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[80px] -translate-y-1/2 translate-x-1/2" />
-          <div className="relative z-10 space-y-8 max-w-2xl mx-auto">
-            <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter">STAY IN THE <span className="italic text-blue-200">KITCHEN.</span></h2>
-            <p className="text-blue-100 text-lg font-medium">Get notified when new articles are published. We'll send updates straight to your inbox.</p>
-            <form className="flex flex-col sm:flex-row gap-4" onSubmit={(e) => e.preventDefault()}>
-              <input
-                type="email"
-                placeholder="Enter your email address..."
-                className="flex-1 h-16 rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-blue-200/50 px-8 font-medium outline-none focus:ring-4 focus:ring-white/20 transition-all"
-              />
-              <button className="h-16 px-10 rounded-2xl bg-white text-blue-600 font-black text-sm uppercase tracking-widest hover:bg-lime-400 hover:text-slate-900 transition-all">Subscribe</button>
-            </form>
-            <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest opacity-60">Zero spam. Pure pickleball.</p>
-          </div>
-        </section>
       </div>
     );
   }
 
+  // ── Distribute articles ──
   const featured = articles[0];
-  const gridArticles = articles.slice(1);
+  const latestNews = articles.slice(0, 6);
+  const secondaryFeatured = articles.slice(1, 4);
+  const mostPopular = articles.slice(0, 6);
+  const todaysPicks = articles.slice(0, 4);
 
   return (
-    <div>
-      <div className="space-y-12 animate-fade-in pb-20">
-        {/* Header Section - Desktop Only */}
-        <div className="hidden md:block space-y-6 mt-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">THE FEED / LIVE</p>
-              <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter">LATEST <br />UPDATES.</h1>
-            </div>
-            {pagination && (
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                {pagination.total} article{pagination.total !== 1 ? 's' : ''} — Page {pagination.current_page} of {pagination.last_page}
-              </p>
-            )}
-          </div>
-        </div>
-
+    <div className="animate-fade-in pb-8">
       {/* Loading */}
       {loading ? (
-        <>
-          <FeaturedSkeleton />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {[1, 2, 3].map(i => <ArticleSkeleton key={i} />)}
-          </div>
-        </>
+        <NewsSkeleton />
       ) : (
         <>
-          {/* Featured Article */}
-          {featured && (
-            <section className="relative group cursor-pointer" onClick={() => setSelectedArticle(featured)}>
-              <div className="aspect-[21/9] w-full rounded-[48px] overflow-hidden bg-slate-900 border border-slate-100 shadow-2xl relative">
-                <img
-                  src={getArticleImage(featured)}
-                  className="w-full h-full object-cover opacity-60 transition-transform duration-1000 group-hover:scale-105"
-                  alt={featured.title}
-                  onError={() => handleImageError(featured.id)}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 p-8 md:p-16 max-w-4xl space-y-6">
-                  <span className="bg-lime-400 text-slate-950 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                    {featured.category}
+          {/* ═══════ SPORTS-STYLE TICKER BAR ═══════ */}
+          <div className="bg-blue-600 rounded-xl px-4 py-2.5 mb-6 flex items-center gap-3 overflow-hidden shadow-lg shadow-blue-100">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">LIVE</span>
+            </div>
+            <div className="h-4 w-px bg-white/20 flex-shrink-0" />
+            <div className="flex-1 overflow-hidden">
+              <div className="flex gap-8 animate-marquee whitespace-nowrap">
+                {articles.slice(0, 5).map((a, i) => (
+                  <span key={i} className="text-xs text-white/90 font-medium cursor-pointer hover:text-lime-300 transition-colors" onClick={() => setSelectedArticle(a)}>
+                    <span className="text-lime-400 font-black mr-1">▸</span> {a.title}
                   </span>
-                  <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter leading-none group-hover:text-white transition-colors">
-                    {featured.title}
-                  </h2>
-                  <p className="text-slate-300 text-lg font-medium leading-relaxed line-clamp-2">
-                    {featured.excerpt}
-                  </p>
-                  <div className="flex items-center gap-6 text-white/60 text-xs font-bold uppercase tracking-widest">
-                    <span className="flex items-center gap-2"><Calendar size={14} /> {featured.date}</span>
-                    <span className="flex items-center gap-2"><Clock size={14} /> {featured.readTime}</span>
-                    <span className="flex items-center gap-2 font-black text-lime-400">READ FULL STORY <ArrowRight size={14} /></span>
-                  </div>
-                </div>
+                ))}
               </div>
-            </section>
-          )}
+            </div>
+          </div>
 
-          {/* Article Grid */}
-          {gridArticles.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {gridArticles.map((article) => (
-                <article
-                  key={article.id}
-                  className="group cursor-pointer space-y-6"
-                  onClick={() => setSelectedArticle(article)}
+          {/* ═══════ TAB NAVIGATION ═══════ */}
+          <div className="flex items-center gap-1 mb-6 bg-white rounded-xl p-1 shadow-sm border border-slate-100">
+            {([
+              { key: 'all', label: 'All News', icon: <Newspaper size={14} /> },
+              { key: 'featured', label: 'Featured', icon: <Flame size={14} /> },
+              { key: 'trending', label: 'Trending', icon: <TrendingUp size={14} /> },
+            ] as const).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  activeTab === tab.key
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ═══════ MAIN LAYOUT — RESPONSIVE 2-COLUMN ═══════ */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+            {/* ──── LEFT / MAIN CONTENT ──── */}
+            <div className="space-y-6 min-w-0">
+
+              {/* HERO FEATURED ARTICLE */}
+              {featured && (
+                <div
+                  className="relative bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer group"
+                  onClick={() => setSelectedArticle(featured)}
                 >
-                  <div className="aspect-[4/3] rounded-[40px] overflow-hidden border border-slate-100 shadow-sm relative">
+                  <div className="aspect-[16/9] w-full overflow-hidden relative">
                     <img
-                      src={getArticleImage(article)}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      alt={article.title}
-                      onError={() => handleImageError(article.id)}
+                      src={getArticleImage(featured)}
+                      alt={featured.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      onError={() => handleImageError(featured.id)}
                     />
-                    <div className="absolute top-6 left-6">
-                      <span className="glass-dark text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-white/10">
-                        {article.category}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    {/* Live badge */}
+                    <div className="absolute top-4 left-4 flex items-center gap-2">
+                      <span className="bg-red-600 text-white px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                        <Zap size={10} /> Featured
+                      </span>
+                      <span className="bg-white/20 backdrop-blur-sm text-white px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
+                        {featured.category}
                       </span>
                     </div>
-                  </div>
-                  <div className="space-y-4 px-2">
-                    <div className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      <span className="flex items-center gap-2"><Calendar size={12} /> {article.date}</span>
-                      <span>{article.readTime}</span>
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-950 leading-tight group-hover:text-blue-600 transition-colors">
-                      {article.title}
-                    </h3>
-                    <p className="text-slate-500 text-sm leading-relaxed line-clamp-3">
-                      {article.excerpt}
-                    </p>
-                    <div className="pt-4 flex items-center justify-between">
-                      <span className="text-[10px] font-black text-slate-900 border-b-2 border-lime-400 pb-1 group-hover:text-blue-600 group-hover:border-blue-600 transition-all">
-                        CONTINUE READING
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"
-                          onClick={(e) => { e.stopPropagation(); }}
-                        >
-                          <Share2 size={16} />
-                        </button>
-                        <button
-                          className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"
-                          onClick={(e) => { e.stopPropagation(); }}
-                        >
-                          <Bookmark size={16} />
-                        </button>
+                    {/* Title overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
+                      <p className="text-lime-400 text-[11px] font-black uppercase tracking-wider mb-2">
+                        {formatFeaturedDate(featured.rawDate)}
+                      </p>
+                      <h2 className="text-xl md:text-2xl lg:text-3xl font-black text-white leading-tight mb-2 group-hover:text-lime-300 transition-colors">
+                        {featured.title}
+                      </h2>
+                      <p className="text-white/70 text-sm leading-relaxed line-clamp-2 hidden sm:block">
+                        {featured.excerpt}
+                      </p>
+                      <div className="flex items-center gap-4 mt-3 text-white/50 text-[10px] font-bold uppercase tracking-widest">
+                        <span className="flex items-center gap-1"><Clock size={11} /> {featured.readTime}</span>
+                        <span className="flex items-center gap-1 text-lime-400 font-black">READ STORY <ArrowRight size={11} /></span>
                       </div>
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
+                </div>
+              )}
 
-          {/* Pagination */}
-          {pagination && pagination.last_page > 1 && (
-            <div className="flex items-center justify-center gap-4 pt-8">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ArrowLeft size={14} /> Previous
-              </button>
+              {/* SECONDARY FEATURED — 3 CARDS ROW */}
+              {secondaryFeatured.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {secondaryFeatured.map((article) => (
+                    <div
+                      key={article.id}
+                      className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer group hover:shadow-md transition-shadow"
+                      onClick={() => setSelectedArticle(article)}
+                    >
+                      <div className="aspect-[4/3] overflow-hidden relative">
+                        <img
+                          src={getArticleImage(article)}
+                          alt={article.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={() => handleImageError(article.id)}
+                        />
+                      </div>
+                      <div className="p-3.5">
+                        <h3 className="text-[13px] font-bold text-slate-900 leading-snug line-clamp-2 mb-1.5 group-hover:text-blue-600 transition-colors">
+                          {article.title}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-2">
+                          {article.excerpt.substring(0, 70)}...
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
-                  const pageNum = i + 1;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pageNum === page
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
+              {/* ═══════ TODAY'S TOP PICKS ═══════ */}
+              <div>
+                <SectionHeader icon={<Flame size={16} />} title="Today's Top Picks" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {todaysPicks.map((article) => (
+                    <div
+                      key={`pick-${article.id}`}
+                      className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer group hover:shadow-md transition-all flex"
+                      onClick={() => setSelectedArticle(article)}
                     >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                {pagination.last_page > 5 && (
-                  <>
-                    <span className="text-slate-400 px-1">...</span>
-                    <button
-                      onClick={() => setPage(pagination.last_page)}
-                      className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${pagination.last_page === page
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
-                    >
-                      {pagination.last_page}
-                    </button>
-                  </>
-                )}
+                      <div className="w-28 sm:w-32 flex-shrink-0 overflow-hidden">
+                        <img
+                          src={getArticleImage(article)}
+                          alt={article.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={() => handleImageError(article.id)}
+                        />
+                      </div>
+                      <div className="flex-1 p-3.5 min-w-0 flex flex-col justify-center">
+                        <h3 className="text-[13px] font-bold text-slate-900 leading-snug line-clamp-2 mb-1 group-hover:text-blue-600 transition-colors">
+                          {article.title}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 line-clamp-1">{article.excerpt.substring(0, 60)}...</p>
+                        <div className="flex items-center gap-2 mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <Clock size={10} /> {article.readTime}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <button
-                onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
-                disabled={page >= pagination.last_page}
-                className="flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next <ArrowRight size={14} />
-              </button>
+              {/* FULL ARTICLES LIST */}
+              {articles.length > 4 && (
+                <div>
+                  <SectionHeader icon={<Newspaper size={16} />} title="All Stories" accent={`${articles.length} articles`} />
+                  <div className="space-y-3">
+                    {articles.slice(4).map((article, idx) => (
+                      <div
+                        key={`all-${article.id}`}
+                        className="bg-white rounded-xl shadow-sm border border-slate-100 cursor-pointer group hover:shadow-md transition-all flex overflow-hidden"
+                        onClick={() => setSelectedArticle(article)}
+                      >
+                        <div className="w-24 sm:w-28 flex-shrink-0 overflow-hidden">
+                          <img
+                            src={getArticleImage(article)}
+                            alt={article.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            onError={() => handleImageError(article.id)}
+                          />
+                        </div>
+                        <div className="flex-1 p-3.5 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">{article.category}</span>
+                            <span className="text-[9px] text-slate-300">•</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{article.date}</span>
+                          </div>
+                          <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+                            {article.title}
+                          </h3>
+                          <p className="text-xs text-slate-400 leading-relaxed line-clamp-1 mt-1">{article.excerpt.substring(0, 80)}...</p>
+                        </div>
+                        <div className="hidden sm:flex items-center pr-4 flex-shrink-0">
+                          <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-600 transition-colors" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {pagination && pagination.last_page > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-4">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ← Prev
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
+                      const pageNum = i + 1;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${pageNum === page
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'text-slate-500 hover:bg-slate-100'
+                            }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    {pagination.last_page > 5 && (
+                      <>
+                        <span className="text-slate-400 px-0.5">...</span>
+                        <button
+                          onClick={() => setPage(pagination.last_page)}
+                          className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${pagination.last_page === page
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'text-slate-500 hover:bg-slate-100'
+                            }`}
+                        >
+                          {pagination.last_page}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
+                    disabled={page >= pagination.last_page}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* ──── RIGHT SIDEBAR ──── */}
+            <div className="space-y-5">
+
+              {/* LATEST NEWS SIDEBAR */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-blue-600 px-4 py-3 flex items-center gap-2">
+                  <Zap size={14} className="text-lime-400" />
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider">Latest News</h3>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {latestNews.map((article, idx) => (
+                    <div
+                      key={`side-${article.id}`}
+                      className="flex gap-3 p-3.5 cursor-pointer group hover:bg-slate-50 transition-colors"
+                      onClick={() => setSelectedArticle(article)}
+                    >
+                      <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                        <img
+                          src={getArticleImage(article)}
+                          alt={article.title}
+                          className="w-full h-full object-cover"
+                          onError={() => handleImageError(article.id)}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-[12px] font-bold text-slate-900 leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
+                          {article.title}
+                        </h4>
+                        <p className="text-[10px] font-bold text-blue-600 mt-1">
+                          {formatTimeShort(article.rawDate)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AD SPACE */}
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ADVERTISEMENT</p>
+                <p className="text-[11px] text-slate-400">Ad space reserved</p>
+              </div>
+
+              {/* MOST POPULAR */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3 flex items-center gap-2">
+                  <TrendingUp size={14} className="text-white" />
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider">Most Popular</h3>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {mostPopular.map((article, idx) => (
+                    <div
+                      key={`pop-${article.id}`}
+                      className="flex gap-3 p-3.5 cursor-pointer group hover:bg-slate-50 transition-colors"
+                      onClick={() => setSelectedArticle(article)}
+                    >
+                      <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                        <span className="text-xs font-black text-white">{idx + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-[12px] font-bold text-slate-900 leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
+                          {article.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 mt-1">{article.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* QUICK CATEGORIES */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-tighter mb-3">Categories</h3>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(new Set(articles.map(a => a.category))).slice(0, 8).map((cat, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-slate-50 border border-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer transition-all">
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </>
       )}
 
-      {/* Newsletter Signup */}
-      <section className="bg-blue-600 rounded-[48px] p-12 md:p-20 text-center relative overflow-hidden shadow-2xl shadow-blue-200">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[80px] -translate-y-1/2 translate-x-1/2" />
-        <div className="relative z-10 space-y-8 max-w-2xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter">STAY IN THE <span className="italic text-blue-200">KITCHEN.</span></h2>
-          <p className="text-blue-100 text-lg font-medium">Get the latest tournament invites, gear drops, and pro drills delivered directly to your inbox every Monday.</p>
-          <form className="flex flex-col sm:flex-row gap-4" onSubmit={(e) => e.preventDefault()}>
-            <input
-              type="email"
-              placeholder="Enter your email address..."
-              className="flex-1 h-16 rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-blue-200/50 px-8 font-medium outline-none focus:ring-4 focus:ring-white/20 transition-all"
-            />
-            <button className="h-16 px-10 rounded-2xl bg-white text-blue-600 font-black text-sm uppercase tracking-widest hover:bg-lime-400 hover:text-slate-900 transition-all">Subscribe</button>
-          </form>
-          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest opacity-60">Zero spam. Pure pickleball.</p>
-        </div>
-      </section>
-      </div>
+      {/* Marquee CSS */}
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee {
+          animation: marquee 30s linear infinite;
+        }
+        .animate-marquee:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
     </div>
   );
 };
