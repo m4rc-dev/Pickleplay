@@ -43,8 +43,11 @@ export const getCourtReviews = async (courtId: string): Promise<{ data: CourtRev
         }));
 
         return { data: reviews, error: null };
-    } catch (err) {
-        console.error('Error fetching court reviews:', err);
+    } catch (err: any) {
+        // Silently handle missing table errors
+        if (err?.code !== '42P01' && err?.message?.indexOf('does not exist') === -1) {
+            console.error('Error fetching court reviews:', err);
+        }
         return { data: null, error: err };
     }
 };
@@ -76,7 +79,10 @@ export const submitCourtReview = async (
 
         return { success: true };
     } catch (err: any) {
-        console.error('Error submitting review:', err);
+        // Silently handle missing table errors
+        if (err?.code !== '42P01' && err?.message?.indexOf('does not exist') === -1) {
+            console.error('Error submitting review:', err);
+        }
         return { success: false, error: err.message };
     }
 };
@@ -96,8 +102,11 @@ export const hasUserReviewedBooking = async (bookingId: string, userId: string):
         if (error) throw error;
 
         return !!data;
-    } catch (err) {
-        console.error('Error checking review status:', err);
+    } catch (err: any) {
+        // Silently handle missing table errors
+        if (err?.code !== '42P01' && err?.message?.indexOf('does not exist') === -1) {
+            console.error('Error checking review status:', err);
+        }
         return false;
     }
 };
@@ -120,8 +129,11 @@ export const getCourtAverageRating = async (courtId: string): Promise<{ average:
 
         const sum = data.reduce((acc, review) => acc + review.rating, 0);
         return { average: Math.round((sum / data.length) * 10) / 10, count: data.length };
-    } catch (err) {
-        console.error('Error getting average rating:', err);
+    } catch (err: any) {
+        // Silently handle missing table errors
+        if (err?.code !== '42P01' && err?.message?.indexOf('does not exist') === -1) {
+            console.error('Error getting average rating:', err);
+        }
         return { average: 0, count: 0 };
     }
 };

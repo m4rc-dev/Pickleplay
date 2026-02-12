@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Eye, Pencil, Trash2, Receipt as ReceiptIcon } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -71,16 +71,22 @@ interface LocationGroup {
   latitude: number;
   longitude: number;
   courts: Court[];
+  imageUrl?: string;
+  description?: string;
+  amenities?: string[];
 }
 
 const Booking: React.FC = () => {
-  const [selectedLocation, setSelectedLocation] = useState<LocationGroup | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isBooked, setIsBooked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [courts, setCourts] = useState<Court[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [locationCourts, setLocationCourts] = useState<Court[]>([]);
+  const [isLoadingLocationDetail, setIsLoadingLocationDetail] = useState(false);
   const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [userCity, setUserCity] = useState<string | null>(null);
@@ -104,6 +110,120 @@ const Booking: React.FC = () => {
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
+
+  // ── My Bookings Panel State ──
+  const [showMyBookings, setShowMyBookings] = useState(false);
+  const [myBookings, setMyBookings] = useState<any[]>([]);
+  const [isLoadingMyBookings, setIsLoadingMyBookings] = useState(false);
+  const [myBookingsSearch, setMyBookingsSearch] = useState('');
+  const [myBookingsFilter, setMyBookingsFilter] = useState<'all' | 'pending' | 'confirmed' | 'paid' | 'unpaid' | 'cancelled'>('all');
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [viewingBooking, setViewingBooking] = useState<any>(null);
+  const [editingBooking, setEditingBooking] = useState<any>(null);
+
+  const fetchMyBookings = async () => {
+    setIsLoadingMyBookings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // Fetch user profile name
+      let userName = 'User';
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (profile) userName = profile.full_name || profile.username || 'User';
+      } catch (e) { /* ignore */ }
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          court:courts(
+            id,
+            name,
+            location:locations(name, city)
+          )
+        `)
+        .eq('player_id', session.user.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      setMyBookings((data || []).map(b => ({ ...b, playerName: userName })));
+    } catch (err) {
+      console.error('Error fetching my bookings:', err);
+    } finally {
+      setIsLoadingMyBookings(false);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
+    setCancellingBookingId(bookingId);
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId);
+      if (error) throw error;
+      setMyBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b));
+    } catch (err) {
+      console.error('Error cancelling booking:', err);
+      alert('Failed to cancel booking. Please try again.');
+    } finally {
+      setCancellingBookingId(null);
+    }
+  };
+
+  const handleViewBookingReceipt = (booking: any) => {
+    setViewingBooking({
+      id: booking.id,
+      courtName: booking.court?.name || 'Pickleball Court',
+      courtLocation: booking.court?.location
+        ? `${booking.court.location.name}, ${booking.court.location.city}`
+        : 'PicklePlay Facility',
+      date: booking.date,
+      startTime: booking.start_time,
+      endTime: booking.end_time,
+      pricePerHour: booking.total_price,
+      totalPrice: booking.total_price,
+      playerName: booking.playerName || 'User',
+      status: booking.status,
+      confirmedAt: booking.status === 'confirmed' ? booking.updated_at : undefined,
+      paymentMethod: booking.payment_method,
+      paymentStatus: booking.payment_status,
+      amountTendered: booking.amount_tendered,
+      changeAmount: booking.change_amount
+    });
+  };
+
+  const handleRebookFromBooking = (booking: any) => {
+    if (booking.court_id) {
+      navigate(`/court/${booking.court_id}`);
+    }
+    setShowMyBookings(false);
+  };
+
+  const filteredMyBookings = myBookings.filter(b => {
+    // Search filter
+    if (myBookingsSearch.trim()) {
+      const q = myBookingsSearch.toLowerCase();
+      const courtName = (b.court?.name || '').toLowerCase();
+      const courtCity = (b.court?.location?.city || '').toLowerCase();
+      const refId = (b.id || '').toLowerCase();
+      if (!courtName.includes(q) && !courtCity.includes(q) && !refId.includes(q)) return false;
+    }
+    // Status filter
+    if (myBookingsFilter === 'all') return true;
+    if (myBookingsFilter === 'paid') return b.payment_status === 'paid';
+    if (myBookingsFilter === 'unpaid') return b.payment_status !== 'paid' && b.status !== 'cancelled';
+    return b.status === myBookingsFilter;
+  });
+
   const getUserLocation = () => {
     if (userLocation) return;
     setIsLoadingLocation(true);
@@ -201,11 +321,13 @@ const Booking: React.FC = () => {
   const urlZoom = searchParams.get('zoom');
   const urlCourt = searchParams.get('court');
   const urlSlot = searchParams.get('slot');
+  const urlLocationId = searchParams.get('locationId');
 
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
+  const userLocationMarkerRef = useRef<any>(null);
   const pulseCirclesRef = useRef<any[]>([]);
 
   const triggerPulse = (lat: number, lng: number) => {
@@ -257,19 +379,90 @@ const Booking: React.FC = () => {
     setSearchQuery(q); // Sync ONLY q, loc stays out of search bar
   }, [searchParams]);
 
+  // Fetch location detail + its courts when locationId is in URL
+  useEffect(() => {
+    if (!urlLocationId) {
+      setSelectedLocation(null);
+      setLocationCourts([]);
+      return;
+    }
+
+    const fetchLocationDetail = async () => {
+      setIsLoadingLocationDetail(true);
+      try {
+        // Fetch location info
+        const { data: locData, error: locError } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('id', urlLocationId)
+          .single();
+
+        if (locError) throw locError;
+        setSelectedLocation(locData);
+
+        // Fetch courts belonging to this location
+        const { data: courtsData, error: courtsError } = await supabase
+          .from('courts')
+          .select(`
+            *,
+            locations (
+              id,
+              address,
+              city,
+              latitude,
+              longitude
+            ),
+            court_reviews (
+              rating
+            )
+          `)
+          .eq('location_id', urlLocationId);
+
+        if (courtsError) throw courtsError;
+
+        const mappedCourts: Court[] = (courtsData || []).map((c: any) => {
+          const loc = c.locations;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+            location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+            pricePerHour: c.base_price,
+            availability: [],
+            latitude: loc?.latitude,
+            longitude: loc?.longitude,
+            numCourts: c.num_courts,
+            amenities: Array.isArray(c.amenities) ? c.amenities : [],
+            imageUrl: c.image_url,
+            courtType: c.court_type || 'Outdoor',
+            ownerId: c.owner_id,
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0
+          };
+        });
+        setLocationCourts(mappedCourts);
+      } catch (err) {
+        console.error('Error fetching location detail:', err);
+      } finally {
+        setIsLoadingLocationDetail(false);
+      }
+    };
+
+    fetchLocationDetail();
+  }, [urlLocationId]);
+
   const handleSearch = async (query: string) => {
     if (!query || !window.google) return;
 
     // First check if it matches a court/location name exactly
-    const matchingLoc = locationGroups.find(l =>
-      l.locationName.toLowerCase().includes(query.toLowerCase()) ||
-      l.city.toLowerCase().includes(query.toLowerCase())
+    const matchingCourt = courts.find(c =>
+      c.name.toLowerCase().includes(query.toLowerCase()) ||
+      c.location.toLowerCase().includes(query.toLowerCase())
     );
 
-    if (matchingLoc && googleMapRef.current) {
-      googleMapRef.current.panTo({ lat: matchingLoc.latitude, lng: matchingLoc.longitude });
+    if (matchingCourt && googleMapRef.current && matchingCourt.latitude && matchingCourt.longitude) {
+      googleMapRef.current.panTo({ lat: matchingCourt.latitude, lng: matchingCourt.longitude });
       googleMapRef.current.setZoom(15);
-      triggerPulse(matchingLoc.latitude, matchingLoc.longitude);
+      triggerPulse(matchingCourt.latitude, matchingCourt.longitude);
       return;
     }
 
@@ -301,101 +494,88 @@ const Booking: React.FC = () => {
     const fetchCourts = async () => {
       setIsLoading(true);
       try {
-        // Fetch locations with their courts
-        const { data: locationsData, error: locationsError } = await supabase
-          .from('locations')
+        const { data, error } = await supabase
+          .from('courts')
           .select(`
-            id,
-            name,
-            address,
-            city,
-            latitude,
-            longitude,
-            image_url,
-            court_type,
-            is_active,
-            courts (
+            *,
+            locations (
               id,
-              name,
-              surface_type,
-              base_price,
-              cleaning_time_minutes,
-              amenities,
-              owner_id,
-              court_type,
-              is_active
+              address,
+              city,
+              latitude,
+              longitude
             )
-          `)
-          .eq('is_active', true);
+          `);
 
-        if (locationsError) throw locationsError;
+        if (error) throw error;
 
-        console.log('Fetched locations from database:', locationsData);
+        const mappedCourts: Court[] = (data || []).map((c: any) => {
+          const loc = c.locations;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+            location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+            location_id: c.location_id,
+            pricePerHour: c.base_price,
+            availability: [],
+            latitude: loc?.latitude,
+            longitude: loc?.longitude,
+            numCourts: c.num_courts,
+            amenities: Array.isArray(c.amenities) ? c.amenities : [],
+            imageUrl: c.image_url,
+            courtType: c.court_type || 'Outdoor',
+            ownerId: c.owner_id,
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0
+          };
+        });
+        setCourts(mappedCourts);
 
-        // Map locations to LocationGroup format
-        const mappedLocationGroups: LocationGroup[] = (locationsData || [])
-          .map(loc => {
-            const activeCourts = (loc.courts || []).filter((c: any) => c.is_active);
-            console.log(`Location "${loc.name}": ${loc.courts?.length || 0} total courts, ${activeCourts.length} active courts`);
-
-            return {
-              loc,
-              activeCourts,
-              hasActiveCourts: activeCourts.length > 0
-            };
-          })
-          .filter(({ hasActiveCourts, loc }) => {
-            if (!hasActiveCourts) {
-              console.warn(`⚠️ Location "${loc.name}" excluded: No active courts`);
-              return false;
-            }
-            return true;
-          })
-          .map(({ loc, activeCourts }) => {
-            // Map courts for this location
-            const mappedCourts: Court[] = activeCourts.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
-              location: `${loc.address}, ${loc.city}`,
-              pricePerHour: parseFloat(c.base_price) || 0,
-              availability: [],
-              latitude: loc.latitude || 14.5995,
-              longitude: loc.longitude || 120.9842,
-              numCourts: 1,
-              amenities: Array.isArray(c.amenities) ? c.amenities : [],
-              ownerId: c.owner_id,
-              cleaningTimeMinutes: c.cleaning_time_minutes || 0,
-              locationId: loc.id,
-              locationCourtCount: activeCourts.length,
-              imageUrl: loc.image_url, // Use location image
-              courtType: c.court_type || loc.court_type || 'Outdoor'
-            }));
-
-            return {
-              locationId: loc.id,
-              locationName: loc.name,
+        // Also build locationGroups from fetched data for backward compatibility
+        const locGroupMap = new Map<string, LocationGroup>();
+        for (const c of data || []) {
+          const loc = (c as any).locations;
+          if (!loc || !c.location_id) continue;
+          if (!locGroupMap.has(c.location_id)) {
+            locGroupMap.set(c.location_id, {
+              locationId: c.location_id,
+              locationName: loc.name || '',
               address: `${loc.address}, ${loc.city}`,
-              city: loc.city,
+              city: loc.city || '',
               latitude: loc.latitude || 14.5995,
               longitude: loc.longitude || 120.9842,
-              courts: mappedCourts
-            };
-          });
-
-        console.log('Final location groups:', mappedLocationGroups);
-        setLocationGroups(mappedLocationGroups);
-
-        // Flatten courts for the courts array (for backward compatibility)
-        const allCourts = mappedLocationGroups.flatMap(loc => loc.courts);
-        setCourts(allCourts);
+              courts: [],
+              imageUrl: '',
+              description: '',
+              amenities: []
+            });
+          }
+          const group = locGroupMap.get(c.location_id)!;
+          group.courts.push(mappedCourts.find(mc => mc.id === c.id)!);
+        }
+        setLocationGroups(Array.from(locGroupMap.values()));
       } catch (err) {
-        console.error('Error fetching locations:', err);
+        console.error('Error fetching courts:', err);
       } finally {
         setIsLoading(false);
       }
     };
     fetchCourts();
+
+    // Fetch locations with court counts
+    const fetchLocations = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('*');
+
+        if (error) throw error;
+        setLocations(data || []);
+      } catch (err) {
+        console.error('Error fetching locations:', err);
+      }
+    };
+    fetchLocations();
   }, []);
 
   // Function to check court availability - extracted for reuse
@@ -539,30 +719,21 @@ const Booking: React.FC = () => {
     };
   }, [selectedCourt]);
 
+  // Initialize the Google Map once the container is available
   useEffect(() => {
-    if (!isLoading && courts.length > 0 && mapRef.current && window.google) {
-      initializeMap();
-      // Auto-center on user location if GPS is enabled
-      if (userLocation && gpsEnabled) {
-        setTimeout(() => {
-          if (googleMapRef.current) {
-            googleMapRef.current.panTo({ lat: userLocation.lat, lng: userLocation.lng });
-            googleMapRef.current.setZoom(14);
-          }
-        }, 500);
-      }
-    }
-  }, [isLoading, courts, userLocation, gpsEnabled]);
+    if (isLoading || !mapRef.current || !window.google) return;
 
-  const initializeMap = () => {
-    if (!mapRef.current || !window.google) return;
+    // If map already exists and is attached to this DOM element, skip
+    if (googleMapRef.current) return;
 
     // Use URL params for center/zoom, or default to Manila
     const center = urlLat && urlLng
       ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
-      : { lat: 14.5995, lng: 121.0437 };
+      : userLocation
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : { lat: 14.5995, lng: 121.0437 };
 
-    const zoom = urlZoom ? parseInt(urlZoom) : 12;
+    const zoom = urlZoom ? parseInt(urlZoom) : (userLocation ? 13 : 12);
 
     const map = new window.google.maps.Map(mapRef.current, {
       center,
@@ -580,110 +751,162 @@ const Booking: React.FC = () => {
     });
 
     googleMapRef.current = map;
+    setIsMapLoaded(true);
+
+    // Auto-center on user location if GPS is enabled
+    if (userLocation && gpsEnabled) {
+      setTimeout(() => {
+        map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+        map.setZoom(14);
+      }, 500);
+    }
+  }, [isLoading]);
+
+  // Auto-center when user location arrives after map is already loaded
+  useEffect(() => {
+    if (googleMapRef.current && userLocation && gpsEnabled && !urlLat) {
+      googleMapRef.current.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+      googleMapRef.current.setZoom(14);
+    }
+  }, [userLocation, gpsEnabled]);
+
+  // Zoom to location and trigger pulse when arriving from homepage with locationId
+  useEffect(() => {
+    if (urlLocationId && urlLat && urlLng && googleMapRef.current && !isLoading) {
+      const lat = parseFloat(urlLat);
+      const lng = parseFloat(urlLng);
+      const zoom = urlZoom ? parseInt(urlZoom) : 15;
+
+      // Pan to the location with smooth animation
+      googleMapRef.current.panTo({ lat, lng });
+      googleMapRef.current.setZoom(zoom);
+
+      // Trigger pulse animation after a short delay
+      setTimeout(() => {
+        triggerPulse(lat, lng);
+      }, 500);
+    }
+  }, [urlLocationId, urlLat, urlLng, urlZoom, isLoading]);
+
+  // Trigger map resize when viewMode changes (fixes blank map after toggling list/map on mobile)
+  useEffect(() => {
+    if (googleMapRef.current && window.google && viewMode === 'map') {
+      setTimeout(() => {
+        window.google.maps.event.trigger(googleMapRef.current, 'resize');
+      }, 100);
+    }
+  }, [viewMode]);
+
+  // Update markers whenever locations, courts, filters, or search change
+  const updateMarkers = () => {
+    const map = googleMapRef.current;
+    if (!map || !window.google) return;
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
-    // Apply the same filters as the list
-    const filteredLocations = locationGroups.filter(l => {
-      const q = searchQuery.toLowerCase();
-      const locParam = searchParams.get('loc')?.toLowerCase() || '';
-      const matchesSearch = !searchQuery || l.city.toLowerCase().includes(q) || l.locationName.toLowerCase().includes(q) || l.address.toLowerCase().includes(q);
-      const matchesLoc = !locParam || searchQuery || l.city.toLowerCase().includes(locParam) || l.address.toLowerCase().includes(locParam);
-      const matchesFilter = filterType === 'All' || l.courts.some(c => c.type === filterType);
-      return matchesSearch && matchesLoc && matchesFilter;
-    });
+    // Create markers for locations instead of individual courts (same as GuestBooking)
+    locations.forEach(location => {
+      if (location.latitude && location.longitude) {
+        // Count courts at this location that match the filter
+        const locCourts = courts.filter(c => {
+          const matchesLocation = c.location_id ? c.location_id === location.id :
+            c.location.toLowerCase().includes(location.name.toLowerCase());
+          return matchesLocation && (filterType === 'All' || c.type === filterType);
+        });
 
-    console.log(`📍 Displaying ${filteredLocations.length} location markers on map (filtered from ${locationGroups.length} total)`);
+        // Only show marker if location has courts matching the filter
+        if (locCourts.length === 0) return;
 
-    // Add markers for each filtered location
-    filteredLocations.forEach(location => {
-      const marker = new window.google.maps.Marker({
-        position: { lat: location.latitude, lng: location.longitude },
-        map,
-        title: location.locationName,
-        icon: {
-          url: '/images/PinMarker.png',
-          scaledSize: new window.google.maps.Size(42, 60),
-          anchor: new window.google.maps.Point(21, 60)
-        },
-        label: {
-          text: location.courts.length.toString(),
-          color: '#ffffff',
-          fontSize: '10px',
-          fontWeight: 'bold',
-          className: 'marker-label'
-        }
-      });
+        const marker = new window.google.maps.Marker({
+          position: { lat: location.latitude, lng: location.longitude },
+          map,
+          title: location.name,
+          icon: {
+            url: '/images/PinMarker.png',
+            scaledSize: new window.google.maps.Size(42, 60),
+            anchor: new window.google.maps.Point(21, 60)
+          },
+        });
 
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `
-          <div style="width: 240px; font-family: 'Inter', sans-serif; overflow: hidden; border-radius: 16px;">
-            ${location.courts[0]?.imageUrl ? `
-              <div style="height: 120px; width: 100%; border-radius: 12px 12px 0 0; overflow: hidden;">
-                <img src="${location.courts[0].imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${location.locationName}" />
+        const locationImage = location.hero_image || location.image_url || 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=260';
+
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `
+            <div style="width:220px;font-family:'Inter',system-ui,sans-serif;overflow:hidden;">
+              <div style="height:130px;width:100%;overflow:hidden;background:#e2e8f0;">
+                <img 
+                  src="${locationImage}" 
+                  style="width:100%;height:100%;object-fit:cover;display:block;" 
+                  alt="${location.name}" 
+                />
               </div>
-            ` : `
-              <div style="height: 120px; width: 100%; background: #f1f5f9; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: center; color: #94a3b8;">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              </div>
-            `}
-            <div style="padding: 12px;">
-              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
-                <h3 style="margin: 0; font-weight: 800; font-size: 15px; color: #0f172a; line-height: 1.2;">${location.locationName}</h3>
-                ${location.courts[0]?.courtType ? `
-                  <span style="background: ${location.courts[0].courtType === 'Indoor' ? '#eff6ff' : '#f7fee7'}; color: ${location.courts[0].courtType === 'Indoor' ? '#2563eb' : '#4d7c0f'}; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${location.courts[0].courtType.toUpperCase()}</span>
-                ` : ''}
-              </div>
-              <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                <span style="font-size: 11px; color: #64748b; font-weight: 500;">${location.city || location.address.split(',')[1] || ''}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: 800; font-size: 14px; color: #3b82f6;">${location.courts.length} ${location.courts.length === 1 ? 'Court' : 'Courts'}</span>
-                <span style="font-size: 10px; font-weight: 700; color: #2563eb; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">AVAILABLE</span>
+              <div style="padding:10px 12px 12px;">
+                <h3 style="margin:0 0 4px;font-weight:900;font-size:13px;color:#0f172a;text-transform:uppercase;letter-spacing:-0.01em;line-height:1.3;">${location.name}</h3>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <span style="font-size:11px;color:#94a3b8;font-weight:500;">${location.city}${location.address ? ', ' + location.address.split(',')[0] : ''}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:10px;font-weight:800;color:#2563eb;background:#eff6ff;padding:3px 8px;border-radius:6px;letter-spacing:0.3px;">${locCourts.length} ${locCourts.length === 1 ? 'COURT' : 'COURTS'}</span>
+                  ${location.amenities && location.amenities.length > 0 ? `<span style="font-size:10px;color:#94a3b8;font-weight:500;">${location.amenities.slice(0, 2).join(' · ')}</span>` : ''}
+                </div>
               </div>
             </div>
-          </div>
-        `,
-        disableAutoPan: true
-      });
+          `,
+          disableAutoPan: true,
+          maxWidth: 240
+        });
 
-      marker.addListener('click', () => {
-        // If there's only one court at this location, navigate directly to court detail
-        if (location.courts.length === 1) {
-          navigate(`/court/${location.courts[0].id}`);
-        } else {
-          // Multiple courts, show location selection
-          setSelectedLocation(location);
-          setSelectedCourt(null); // Reset court selection
-          setSelectedSlot(null); // Reset slot
-          map.panTo({ lat: location.latitude, lng: location.longitude });
-          map.setZoom(16);
-          triggerPulse(location.latitude, location.longitude);
-        }
-      });
+        // Hide close button when InfoWindow opens
+        infoWindow.addListener('domready', () => {
+          const closeBtn = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
+          if (closeBtn) closeBtn.style.display = 'none';
+          const iwOuter = document.querySelector('.gm-style-iw-c') as HTMLElement;
+          if (iwOuter) {
+            iwOuter.style.padding = '0';
+            iwOuter.style.borderRadius = '12px';
+            iwOuter.style.overflow = 'hidden';
+            iwOuter.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+          }
+          const iwInner = document.querySelector('.gm-style-iw-d') as HTMLElement;
+          if (iwInner) {
+            iwInner.style.overflow = 'hidden';
+            iwInner.style.padding = '0';
+          }
+        });
 
-      // Show info window on hover
-      marker.addListener('mouseover', () => {
-        infoWindow.open(map, marker);
-      });
+        marker.addListener('click', () => {
+          navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+          if (window.innerWidth < 768) {
+            setViewMode('list');
+          }
+        });
 
-      // Hide info window when mouse leaves
-      marker.addListener('mouseout', () => {
-        infoWindow.close();
-      });
+        // Show info window on hover
+        marker.addListener('mouseover', () => {
+          infoWindow.open(map, marker);
+        });
 
-      markersRef.current.push(marker);
+        // Hide info window when mouse leaves
+        marker.addListener('mouseout', () => {
+          infoWindow.close();
+        });
+
+        markersRef.current.push(marker);
+      }
     });
+
+    console.log(`📍 Displaying ${markersRef.current.length} location markers on map`);
   };
 
+  // Re-render markers when data or filters change
   useEffect(() => {
-    if (googleMapRef.current) {
-      initializeMap();
+    if (isMapLoaded && locations.length > 0) {
+      updateMarkers();
     }
-  }, [locationGroups]);
+  }, [locations, courts, filterType, searchQuery, isMapLoaded]);
 
   const handleBooking = async () => {
     if (selectedCourt && selectedSlot) {
@@ -871,60 +1094,104 @@ const Booking: React.FC = () => {
   };
 
   const handleNearMe = () => {
-    if (navigator.geolocation && googleMapRef.current) {
+    // Switch to map view first
+    setViewMode('map');
+
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const userLocation = {
+          if (!googleMapRef.current) return;
+
+          const userLoc = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
           };
 
-          // Remove existing user marker if it exists
-          if (userMarkerRef.current) {
-            userMarkerRef.current.setMap(null);
+          // Remove existing user location marker if any
+          if (userLocationMarkerRef.current) {
+            userLocationMarkerRef.current.setMap(null);
           }
 
-          // Add user location marker with custom icon
+          // Create a custom marker for user's location with a distinctive style
           const userMarker = new window.google.maps.Marker({
-            position: userLocation,
+            position: userLoc,
             map: googleMapRef.current,
             title: 'Your Location',
             icon: {
               path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 10,
+              scale: 14,
               fillColor: '#3b82f6',
               fillOpacity: 1,
               strokeColor: '#ffffff',
-              strokeWeight: 3,
+              strokeWeight: 4,
             },
-            zIndex: 1000 // Show on top of other markers
+            animation: window.google.maps.Animation.DROP,
+            zIndex: 999,
           });
 
-          // Add pulsing animation info window
+          // Add a pulsing outer circle effect
+          const pulseCircle = new window.google.maps.Marker({
+            position: userLoc,
+            map: googleMapRef.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 24,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.3,
+              strokeColor: '#3b82f6',
+              strokeWeight: 2,
+              strokeOpacity: 0.5,
+            },
+            zIndex: 998,
+          });
+
+          // Create info window for user location
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
               <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
-                <p style="margin: 0; font-weight: 800; font-size: 12px; color: #3b82f6;">📍 You are here</p>
+                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
+                <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
               </div>
             `,
+            disableAutoPan: false
           });
 
+          // Open info window immediately
           infoWindow.open(googleMapRef.current, userMarker);
 
-          // Store reference to user marker
-          userMarkerRef.current = userMarker;
+          // Store reference to remove later (store both markers)
+          userLocationMarkerRef.current = {
+            setMap: (map: any) => {
+              userMarker.setMap(map);
+              pulseCircle.setMap(map);
+            }
+          };
 
-          googleMapRef.current.panTo(userLocation);
-          googleMapRef.current.setZoom(14);
+          // Pan to user location and set appropriate zoom
+          googleMapRef.current.panTo(userLoc);
+          googleMapRef.current.setZoom(15);
         },
         (error) => {
           console.error('Error getting location:', error);
-          alert('Unable to get your location. Please enable location services.');
+
+          setTimeout(() => {
+            if (googleMapRef.current) {
+              const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+              googleMapRef.current.panTo(philippinesCenter);
+              googleMapRef.current.setZoom(6);
+            }
+          }, 100);
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
     } else {
-      alert('Geolocation is not supported by your browser.');
+      setTimeout(() => {
+        if (googleMapRef.current) {
+          const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+          googleMapRef.current.panTo(philippinesCenter);
+          googleMapRef.current.setZoom(6);
+        }
+      }, 100);
     }
   };
 
@@ -936,82 +1203,62 @@ const Booking: React.FC = () => {
     navigate('/my-bookings');
   };
 
+  // Add state for desktop suggestions dropdown
+  const [showDesktopSuggestions, setShowDesktopSuggestions] = useState(false);
+
+  // Filtered courts (same as GuestBooking)
+  const filteredCourts = courts
+    .filter(c => filterType === 'All' || c.type === filterType)
+    .filter(c =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.location.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+  // Get filtered locations (grouped by location) - this is what we'll display in the list
+  const filteredLocations = locations
+    .filter(loc => {
+      // Filter by search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return loc.name.toLowerCase().includes(q) ||
+          loc.city.toLowerCase().includes(q) ||
+          (loc.address && loc.address.toLowerCase().includes(q));
+      }
+      return true;
+    })
+    .filter(loc => {
+      // Only show locations that have courts matching the filter type
+      const locCourts = courts.filter(c => {
+        const matchesLocation = c.location_id ? c.location_id === loc.id :
+          c.location.toLowerCase().includes(loc.name.toLowerCase());
+        if (!matchesLocation) return false;
+        return filterType === 'All' || c.type === filterType;
+      });
+      return locCourts.length > 0;
+    })
+    .map(loc => {
+      // Add court count for each location
+      const locCourts = courts.filter(c => {
+        const matchesLocation = c.location_id ? c.location_id === loc.id :
+          c.location.toLowerCase().includes(loc.name.toLowerCase());
+        return matchesLocation && (filterType === 'All' || c.type === filterType);
+      });
+      return {
+        ...loc,
+        court_count: locCourts.length
+      };
+    });
+
   return (
-    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 max-w-[1800px] mx-auto h-screen md:min-h-screen relative overflow-hidden touch-none md:touch-auto">
-      {/* Enhanced Mobile Header with Search & Filter Controls */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-gradient-to-b from-white via-white/98 to-white/95 backdrop-blur-xl border-b border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
-        {/* Top Row - Search and Menu Toggle */}
+    <div className="md:space-y-10 animate-in fade-in duration-700">
+      {/* ──────────── MOBILE HEADER BAR ──────────── */}
+      <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+        {/* Search row */}
         <div className="px-4 pt-3 pb-2">
-          <div className="flex items-center gap-2">
-            {/* Search Button */}
-            <button
-              onClick={() => setIsSearchExpanded(!isSearchExpanded)}
-              className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-100/80 hover:bg-slate-100 rounded-2xl transition-all active:scale-95 group"
-            >
-              <Search size={18} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
-              <span className="text-sm font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
-                {searchQuery || 'Search courts or places...'}
-              </span>
-            </button>
-
-            {/* Near Me Button */}
-            <button
-              onClick={handleNearMe}
-              className="p-3 bg-lime-400 hover:bg-lime-500 rounded-2xl shadow-lg shadow-lime-200/50 transition-all active:scale-95"
-            >
-              <Navigation size={20} fill="currentColor" className="text-slate-900" />
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom Row - View Mode & Filter Tabs */}
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle (Map/List) */}
-            <button
-              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${viewMode === 'map'
-                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200/50'
-                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                }`}
-            >
-              {viewMode === 'map' ? <MapPin size={16} /> : <List size={16} />}
-              <span>{viewMode === 'map' ? 'Map' : 'List'}</span>
-            </button>
-
-            {/* Filter Type Buttons */}
-            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider border-2 transition-all active:scale-95 ${filterType === type
-                  ? 'bg-white border-blue-600 text-blue-600 shadow-sm'
-                  : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                  }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${type === 'All' ? 'bg-blue-500' :
-                  type === 'Indoor' ? 'bg-cyan-400' : 'bg-lime-400'
-                  }`}></span>
-                {type}
-              </button>
-            ))}
-
-            {/* More Filters Button */}
-            <button
-              onClick={() => setShowFilters(true)}
-              className="p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl transition-all active:scale-95"
-            >
-              <Funnel size={16} className="text-slate-600" />
-            </button>
-          </div>
-        </div>
-
-        {/* Expandable Search Panel */}
-        {isSearchExpanded && (
-          <div className="absolute top-full left-0 right-0 bg-white border-b border-slate-200 shadow-xl z-50 animate-in slide-in-from-top duration-200">
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2">
-                <Search size={18} className="text-slate-400" />
+          {isSearchExpanded ? (
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Search size={16} className="text-slate-400 shrink-0" />
                 <input
                   autoFocus
                   type="text"
@@ -1024,135 +1271,158 @@ const Booking: React.FC = () => {
                       setIsSearchExpanded(false);
                     }
                   }}
-                  className="flex-1 bg-transparent border-none outline-none py-2 text-sm font-semibold text-slate-900 placeholder:text-slate-400"
+                  className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                 />
-                <button
-                  onClick={() => {
-                    setIsSearchExpanded(false);
-                    setSearchQuery('');
-                  }}
-                  className="px-3 py-1 text-blue-600 font-bold text-xs uppercase tracking-wider hover:text-blue-700 transition-colors"
-                >
-                  Done
+                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-blue-600 font-bold text-xs shrink-0">
+                  Cancel
                 </button>
               </div>
 
-              {/* Search Results Dropdown */}
-              <div className="mt-3 bg-white border border-slate-200 rounded-2xl shadow-lg max-h-[60vh] overflow-y-auto">
-                {/* Places Section */}
+              {/* Mobile Search Dropdown */}
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/60 z-50 max-h-[65vh] overflow-y-auto">
                 {userCity && (
                   <>
-                    <p className="px-4 py-2 text-[10px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-100">Places</p>
+                    <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
                     <button
                       onClick={() => {
                         setSearchQuery(userCity.split(',')[0]);
                         handleSearch(userCity.split(',')[0]);
                         setIsSearchExpanded(false);
                       }}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center gap-3 transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
                     >
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                        <MapPin size={18} />
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                        <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                       </div>
-                      <span className="text-slate-900 font-bold text-sm">{userCity}</span>
+                      <span className="text-slate-800 font-semibold text-sm">{userCity}</span>
                     </button>
                   </>
                 )}
-
-                {/* Courts Section */}
-                <p className="px-4 py-2 text-[10px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-100">Courts</p>
+                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
                 <div className="pb-4">
-                  {locationGroups
-                    .filter(l => {
+                  {locations
+                    .filter(loc => {
                       if (!searchQuery.trim()) return true;
                       const q = searchQuery.toLowerCase();
-                      return l.locationName.toLowerCase().includes(q) ||
-                        l.city.toLowerCase().includes(q) ||
-                        l.address.toLowerCase().includes(q);
+                      return loc.name.toLowerCase().includes(q) ||
+                        loc.city.toLowerCase().includes(q) ||
+                        (loc.address && loc.address.toLowerCase().includes(q));
                     })
                     .slice(0, 8)
                     .map((location) => (
                       <button
-                        key={location.locationId}
+                        key={location.id}
                         onClick={() => {
-                          setSearchQuery(location.locationName);
-                          if (googleMapRef.current) {
+                          setSearchQuery(location.name);
+                          if (googleMapRef.current && location.latitude && location.longitude) {
                             googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                            googleMapRef.current.setZoom(16);
+                            googleMapRef.current.setZoom(19);
                             triggerPulse(location.latitude, location.longitude);
                           }
-                          setSelectedLocation(location);
+                          navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
                           setViewMode('map');
                           setIsSearchExpanded(false);
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center gap-3 transition-colors"
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
                       >
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                            <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            <circle cx="10" cy="8" r="1" fill="currentColor" />
-                            <circle cx="14" cy="8" r="1" fill="currentColor" />
-                            <circle cx="12" cy="11" r="1" fill="currentColor" />
-                          </svg>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                          <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-slate-900 font-bold text-sm truncate">{location.locationName}</p>
-                          <p className="text-xs text-slate-400 truncate">{location.city} · {location.courts.length} court{location.courts.length > 1 ? 's' : ''}</p>
+                          <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
                         </div>
                       </button>
                     ))}
-                  {locationGroups.length === 0 && (
-                    <div className="px-4 py-8 text-center">
-                      <p className="text-sm text-slate-400 font-medium">No courts found</p>
+                  {locations.length === 0 && (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-sm text-slate-400">No locations found</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSearchExpanded(true)}
+                className="flex-1 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-left hover:border-slate-300 transition-colors"
+              >
+                <Search size={16} className="text-slate-400 shrink-0" />
+                <span className="text-sm text-slate-400 font-medium truncate">{searchQuery || 'Search courts or places...'}</span>
+              </button>
+              <button
+                onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+                className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-xl shrink-0 hover:bg-blue-600 transition-colors"
+              >
+                <ClipboardList size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Filter pills row */}
+        {!isSearchExpanded && (
+          <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterType === type
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                  : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'
+                  }`}
+              >
+                {type}
+              </button>
+            ))}
+            <button
+              onClick={handleNearMe}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all"
+            >
+              <Navigation size={12} fill="currentColor" />
+              Near Me
+            </button>
           </div>
         )}
       </div>
 
-      <div className="">
-        {/* Desktop Header */}
-        <div className="hidden md:block space-y-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      {/* ──────────── MAIN CONTAINER ──────────── */}
+      <div className="pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
+
+        {/* ──────────── DESKTOP HEADER ──────────── */}
+        <div className="hidden md:block mb-6 lg:mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-5">
             <div>
-              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / LIVE</p>
-              <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">
-                Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
+              <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">
+                {urlLocationId && selectedLocation ? 'Location / Detail' : 'Courts / Live'}
+              </p>
+              <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
+                {urlLocationId && selectedLocation
+                  ? <>Book a <span className="text-blue-600">Court at {selectedLocation.name}.</span></>
+                  : <>Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
+                }
               </h1>
             </div>
-            <div className="flex items-center gap-4">
-              <p className="hidden md:block text-xs font-bold text-slate-400 uppercase tracking-widest">
-                {locationGroups.length} {locationGroups.length === 1 ? 'Location' : 'Locations'}
-              </p>
-              <button
-                onClick={handleViewBookings}
-                className="px-6 md:px-8 py-3 md:py-4 bg-white border-2 border-slate-950 text-slate-950 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.3em] rounded-2xl hover:bg-slate-950 hover:text-white transition-all shadow-2xl shadow-slate-200/50"
-              >
-                Booked Courts
-              </button>
-            </div>
+            {/* My Bookings Button */}
+            <button
+              onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+              className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-slate-200/50 shrink-0"
+            >
+              <ClipboardList size={18} />
+              My Bookings
+            </button>
           </div>
 
+          {/* Desktop Filter Pills */}
           <div className="flex gap-2">
             {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
               <button
                 key={type}
-                onClick={() => {
-                  setFilterType(type);
-                  // When clicking "All", clear the location filter to show all locations
-                  if (type === 'All') {
-                    const newParams = new URLSearchParams(searchParams);
-                    newParams.delete('loc');
-                    navigate(`?${newParams.toString()}`, { replace: true });
-                  }
-                }}
-                className={`px-10 py-3.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 active:scale-95 ${filterType === type
-                  ? 'bg-blue-600 text-white shadow-2xl shadow-blue-400/40 ring-4 ring-blue-600/10'
-                  : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-400 hover:text-blue-600 shadow-sm'
+                onClick={() => setFilterType(type)}
+                className={`px-6 lg:px-8 py-2.5 lg:py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all duration-200 ${filterType === type
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-blue-600'
                   }`}
               >
                 {type}
@@ -1161,601 +1431,669 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start md:mt-4 mt-0">
-          {/* Sidebar - List View */}
-          <div className={`lg:col-span-4 space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+        {/* ──────────── MAIN CONTENT GRID ──────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+
+          {/* ═══ LEFT COLUMN ═══ */}
+          <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+            {/* Desktop Search Bar */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSearch(searchQuery);
+                setShowDesktopSuggestions(false);
               }}
-              className="hidden md:flex gap-3"
+              className="hidden md:flex gap-3 mb-5 relative"
             >
               <div className="relative flex-1 group">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
                 <input
                   type="text"
                   placeholder="Search courts by name or location..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowDesktopSuggestions(true);
+                    const val = e.target.value.trim();
+                    if (val.length >= 3 && googleMapRef.current && window.google) {
+                      const matchLoc = locations.find(l =>
+                        l.name.toLowerCase().includes(val.toLowerCase()) ||
+                        l.city.toLowerCase().includes(val.toLowerCase())
+                      );
+                      if (matchLoc && matchLoc.latitude && matchLoc.longitude) {
+                        googleMapRef.current.panTo({ lat: matchLoc.latitude, lng: matchLoc.longitude });
+                        googleMapRef.current.setZoom(14);
+                      }
+                    }
+                  }}
+                  onFocus={() => setShowDesktopSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowDesktopSuggestions(false), 200)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleSearch(searchQuery);
+                      setShowDesktopSuggestions(false);
                     }
                   }}
-                  className="w-full bg-white border border-slate-200 rounded-[24px] py-4 pl-14 pr-4 text-sm font-semibold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm"
+                  className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all shadow-sm"
                 />
+
+                {/* Desktop Suggestions Dropdown */}
+                {showDesktopSuggestions && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/50 z-50 overflow-hidden">
+                    {isLoadingLocation && (
+                      <div className="px-5 py-4 flex items-center gap-3 text-slate-500">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm font-medium">Getting your location...</span>
+                      </div>
+                    )}
+
+                    {userCity && (
+                      <>
+                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cityName = userCity.split(',')[0];
+                            setSearchQuery(cityName);
+                            setShowDesktopSuggestions(false);
+                            handleSearch(cityName);
+                          }}
+                          className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                            <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                          </div>
+                          <span className="text-slate-800 font-medium text-sm">{userCity}</span>
+                        </button>
+                      </>
+                    )}
+
+                    {filteredLocations.length > 0 && (
+                      <>
+                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                        <div className="max-h-[320px] overflow-y-auto">
+                          {filteredLocations.slice(0, 10).map((location) => (
+                            <button
+                              key={location.id}
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery(location.name);
+                                setShowDesktopSuggestions(false);
+                                if (googleMapRef.current && location.latitude && location.longitude) {
+                                  googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                  googleMapRef.current.setZoom(19);
+                                  triggerPulse(location.latitude, location.longitude);
+                                }
+                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                              }}
+                              className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                            >
+                              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                                <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                                <p className="text-xs text-slate-400 truncate">
+                                  {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                                  {location.city && <span> · {location.city}</span>}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {!isLoadingLocation && !userCity && filteredLocations.length === 0 && (
+                      <div className="px-5 py-8 text-center">
+                        <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 onClick={handleNearMe}
-                className="flex items-center gap-3 px-8 py-4 bg-[#a3e635] text-slate-900 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-[#bef264] transition-all shadow-xl shadow-lime-200/50 shrink-0"
+                className="flex items-center gap-2 px-5 lg:px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200/50 shrink-0"
               >
-                <Navigation size={18} fill="currentColor" />
+                <Navigation size={16} fill="currentColor" />
                 <span>Near Me</span>
               </button>
             </form>
 
+            {/* ─── List Container ─── */}
+            <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
 
-            {selectedCourt ? (
-              /* Court Selected - Show availability and booking interface */
-              <div className="bg-white p-6 rounded-[48px] border border-slate-200 shadow-sm space-y-8 animate-in slide-in-from-right duration-500">
-                <div>
-                  {/* Back to location button */}
-                  <button
-                    onClick={() => setSelectedCourt(null)}
-                    className="group inline-flex items-center gap-2 text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] mb-8 px-6 py-3 bg-blue-50 rounded-full hover:bg-blue-100 transition-all active:scale-95"
-                  >
-                    <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Courts
-                  </button>
+              {selectedCourt ? (
+                /* ─── Court Selected — Booking Interface ─── */
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-4 md:p-5 space-y-5">
+                    {/* Back button */}
+                    <button
+                      onClick={() => setSelectedCourt(null)}
+                      className="flex items-center gap-1 text-slate-400 text-xs font-bold hover:text-blue-600 transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                      Back to Courts
+                    </button>
 
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className={`text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider ${selectedCourt.type === 'Indoor'
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'bg-lime-50 text-lime-600'
-                        }`}>
-                        {selectedCourt.type}
-                      </span>
-                      <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-amber-50 text-amber-700">
-                        {selectedCourt.numCourts} {selectedCourt.numCourts === 1 ? 'Unit' : 'Units'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mb-4">
-                    <MapPin size={12} className="shrink-0" />
-                    <span className="leading-snug">{selectedCourt.location}</span>
-                  </div>
-
-                  {selectedCourt.amenities && (selectedCourt.amenities as string[]).length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Amenities</p>
-                      <div className="flex flex-wrap gap-1">
-                        {(selectedCourt.amenities as string[]).map((amenity, idx) => (
-                          <span key={idx} className="text-[8px] font-bold px-1.5 py-0.5 bg-slate-50 text-slate-600 rounded-sm border border-slate-100 uppercase tracking-wider italic">
-                            {amenity}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between p-3 bg-slate-950 rounded-2xl text-white shadow-lg">
+                    {/* Court header */}
                     <div>
-                      <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Rate</p>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-black">₱{selectedCourt.pricePerHour}</span>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase">/hr</span>
-                      </div>
-                    </div>
-                    <Navigation size={18} className="text-lime-400" />
-                  </div>
-
-                  {/* Cleaning Time Info */}
-                  {selectedCourt.cleaningTimeMinutes > 0 && (
-                    <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100">
-                      <Clock size={12} className="text-blue-600 shrink-0" />
-                      <p className="text-[9px] text-blue-700 leading-relaxed">
-                        <span className="font-bold">{selectedCourt.cleaningTimeMinutes >= 60 ? `${Math.floor(selectedCourt.cleaningTimeMinutes / 60)}h ${selectedCourt.cleaningTimeMinutes % 60 > 0 ? `${selectedCourt.cleaningTimeMinutes % 60}m` : ''}` : `${selectedCourt.cleaningTimeMinutes} min`} cleaning buffer</span> after each booking
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Date Selection */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                      <CalendarIcon size={14} className="text-blue-600" />
-                      Choose Date
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg uppercase tracking-wider">
-                        {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-1 -mx-2 px-2">
-                    {Array.from({ length: 7 }).map((_, i) => {
-                      const date = new Date();
-                      date.setDate(date.getDate() + i);
-                      const isSelected = selectedDate.toDateString() === date.toDateString();
-                      const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
-                      const dayNum = date.getDate();
-
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            setSelectedDate(date);
-                            setSelectedSlot(null); // Reset slot when date changes
-                          }}
-                          className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                            : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
-                            }`}
-                        >
-                          <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                            {dayName.slice(0, 3)}
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${selectedCourt.type === 'Indoor'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'bg-emerald-50 text-emerald-600'
+                            }`}>
+                            {selectedCourt.type}
                           </span>
-                          <span className="text-sm font-black tracking-tighter">
-                            {dayNum}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Time Slots */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                      <Clock size={14} className="text-blue-600" />
-                      Available Times
-                    </h4>
-                    {isCheckingAvailability && (
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <Loader2 size={10} className="animate-spin" /> Checking...
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Legend */}
-                  <div className="flex flex-wrap gap-2 mb-3 text-[9px]">
-                    <span className="flex items-center gap-1 text-slate-500">
-                      <span className="w-2 h-2 rounded-full bg-white border border-slate-200"></span> Available
-                    </span>
-                    <span className="flex items-center gap-1 text-amber-600">
-                      <span className="w-2 h-2 rounded-full bg-amber-100 border border-amber-300"></span> Booked
-                    </span>
-                    <span className="flex items-center gap-1 text-red-600">
-                      <span className="w-2 h-2 rounded-full bg-red-100 border border-red-300"></span> Blocked
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {TIME_SLOTS.map(slot => {
-                      const isBlocked = blockedSlots.has(slot);
-                      const isBooked = bookedSlots.has(slot);
-                      const isUnavailable = isBlocked || isBooked;
-
-                      return (
-                        <button
-                          key={slot}
-                          onClick={() => !isUnavailable && setSelectedSlot(slot)}
-                          disabled={isUnavailable}
-                          title={isBlocked ? 'Court event scheduled' : isBooked ? 'Already booked' : 'Available'}
-                          className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isBlocked
-                            ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
-                            : isBooked
-                              ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
-                              : selectedSlot === slot
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                            }`}
-                        >
-                          <span className={isUnavailable ? 'line-through' : ''}>{slot}</span>
-                          {isBlocked && (
-                            <Ban size={10} className="absolute top-1 right-1 text-red-400" />
-                          )}
-                          {isBooked && !isBlocked && (
-                            <AlertCircle size={10} className="absolute top-1 right-1 text-amber-400" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Availability Summary */}
-                  {(blockedSlots.size > 0 || bookedSlots.size > 0) && (
-                    <div className="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                      <p className="text-[10px] text-slate-500">
-                        <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available on this date
-                        {blockedSlots.size > 0 && (
-                          <span className="text-red-500"> • {blockedSlots.size} blocked by owner</span>
-                        )}
-                        {bookedSlots.size > 0 && (
-                          <span className="text-amber-500"> • {bookedSlots.size} already booked</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Policy Reminder */}
-                <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
-                  <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-blue-700 leading-relaxed font-medium italic">
-                    Please arrive on time. Your booking is subject to cancellation if you are more than <span className="font-bold underline">10 minutes late</span>.
-                  </p>
-                </div>
-
-                {/* Booking Button */}
-                <button
-                  disabled={!selectedSlot || isBooked || isProcessing || (selectedSlot && (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)))}
-                  onClick={handleBooking}
-                  className={`w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isBooked
-                    ? 'bg-lime-400 text-slate-900 cursor-default'
-                    : 'bg-lime-400 hover:bg-lime-500 text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-lime-100'
-                    }`}
-                >
-                  {isProcessing ? <Loader2 className="animate-spin" /> : (
-                    isBooked ? (
-                      <>
-                        <CheckCircle2 size={20} />
-                        Booking Confirmed!
-                      </>
-                    ) : selectedSlot && blockedSlots.has(selectedSlot) ? (
-                      <>
-                        <Ban size={18} />
-                        Court Blocked
-                      </>
-                    ) : selectedSlot && bookedSlots.has(selectedSlot) ? (
-                      <>
-                        <AlertCircle size={18} />
-                        Already Booked
-                      </>
-                    ) : (
-                      'Confirm Booking'
-                    )
-                  )}
-                </button>
-              </div>
-            ) : selectedLocation ? (
-              /* Location Selected - Show courts at this location */
-              <div className="bg-white p-5 rounded-[32px] border border-slate-200 shadow-sm space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedLocation.locationName}</h3>
-                      <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-1">
-                        <MapPin size={12} className="shrink-0" />
-                        <span className="leading-snug">{selectedLocation.address}</span>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-[9px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider bg-amber-50 text-amber-700">
-                      {selectedLocation.courts.length} {selectedLocation.courts.length === 1 ? 'Court' : 'Courts'}
-                    </span>
-                  </div>
-                </div>
 
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 mb-3">Select a Court</h4>
-                  <div className="space-y-2 max-h-[450px] overflow-y-auto">
-                    {selectedLocation.courts.map(court => (
-                      <button
-                        key={court.id}
-                        onClick={() => navigate(`/court/${court.id}`)}
-                        className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <p className="font-bold text-sm text-slate-900">{court.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${court.type === 'Indoor'
-                                ? 'bg-blue-50 text-blue-600'
-                                : 'bg-lime-50 text-lime-600'
-                                }`}>
-                                {court.type}
-                              </span>
-                              <span className="text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-600">
-                                {court.numCourts} {court.numCourts === 1 ? 'Unit' : 'Units'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-black text-slate-900">₱{court.pricePerHour}</p>
-                            <p className="text-[8px] font-bold text-slate-400 uppercase">/hour</p>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mb-3">
+                        <MapPin size={12} className="text-blue-500 shrink-0" />
+                        <span className="leading-snug truncate">{selectedCourt.location}</span>
+                      </div>
+
+                      {selectedCourt.amenities && (selectedCourt.amenities as string[]).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {(selectedCourt.amenities as string[]).map((amenity, idx) => (
+                            <span key={idx} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              {amenity}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl text-white">
+                        <div>
+                          <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider leading-none mb-0.5">Rate</p>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-xl font-black">₱{selectedCourt.pricePerHour}</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">/hr</span>
                           </div>
                         </div>
-                        {court.amenities && (court.amenities as string[]).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {(court.amenities as string[]).slice(0, 3).map((amenity, idx) => (
-                              <span key={idx} className="text-[7px] font-bold px-1.5 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-100 uppercase italic">
-                                {amenity}
-                              </span>
-                            ))}
-                            {(court.amenities as string[]).length > 3 && (
-                              <span className="text-[7px] font-bold px-1.5 py-0.5 text-slate-400">
-                                +{(court.amenities as string[]).length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-screen md:min-h-[500px] pt-24 md:pt-0">
-                <div className="hidden md:block p-8 border-b border-slate-50">
-                  <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
-                    {searchParams.get('loc') || userCity ? `Courts in ${(searchParams.get('loc') || userCity || '').split(',')[0]}` : 'All Locations'} ({locationGroups.length})
-                  </h2>
-                </div>
-                <div className="space-y-4 md:space-y-2 h-full md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1 pb-14 md:pb-0">
-                  {isLoading ? (
-                    Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
-                  ) : (
-                    locationGroups
-                      .filter(l => {
-                        const q = searchQuery.toLowerCase();
-                        const locParam = searchParams.get('loc')?.toLowerCase() || '';
-                        const matchesSearch = !searchQuery || l.city.toLowerCase().includes(q) || l.locationName.toLowerCase().includes(q) || l.address.toLowerCase().includes(q);
-                        const matchesLoc = !locParam || searchQuery || l.city.toLowerCase().includes(locParam) || l.address.toLowerCase().includes(locParam);
-                        const matchesFilter = filterType === 'All' || l.courts.some(c => c.type === filterType);
+                        <Navigation size={16} className="text-emerald-400" />
+                      </div>
 
-                        // Debug logging
-                        if (l.locationName.toLowerCase().includes('cebu sports')) {
-                          console.log(`🔍 Filtering "${l.locationName}":`, {
-                            city: l.city,
-                            address: l.address,
-                            searchQuery,
-                            locParam,
-                            matchesSearch,
-                            matchesLoc,
-                            matchesFilter,
-                            finalResult: matchesSearch && matchesLoc && matchesFilter
-                          });
-                        }
-
-                        return matchesSearch && matchesLoc && matchesFilter;
-                      })
-                      .sort((a, b) => {
-                        // Sort by distance from user location (nearest first)
-                        if (userLocation) {
-                          const distanceA = calculateDistance(
-                            userLocation.lat,
-                            userLocation.lng,
-                            a.latitude,
-                            a.longitude
-                          );
-                          const distanceB = calculateDistance(
-                            userLocation.lat,
-                            userLocation.lng,
-                            b.latitude,
-                            b.longitude
-                          );
-                          return distanceA - distanceB;
-                        }
-                        return 0; // No sorting if user location is not available
-                      })
-                      .map(location => (
-                        <button
-                          key={location.locationId}
-                          onClick={() => {
-                            if (window.innerWidth < 768) {
-                              setSelectedLocation(location);
-                              setSelectedCourt(location.courts[0]); // Select first court for simplicity on mobile
-                            } else {
-                              setSelectedLocation(location);
-                              if (googleMapRef.current) {
-                                googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                                googleMapRef.current.setZoom(16);
-                                triggerPulse(location.latitude, location.longitude);
-                              }
-                            }
-                          }}
-                          className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
-                        >
-                          <div className="w-20 h-20 md:w-16 md:h-16 bg-slate-100 overflow-hidden shrink-0">
-                            <img
-                              src={`https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
-                              alt={location.locationName}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="flex-1 text-left min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <h3 className="font-black text-slate-950 text-sm md:text-base tracking-tight group-hover:text-blue-600 transition-colors uppercase italic line-clamp-1">{location.locationName}</h3>
-                            </div>
-                            <div className="flex flex-wrap gap-x-3 gap-y-1">
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                <span className="text-blue-500">🎾</span> {location.courts.length} Courts
-                              </div>
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                <span className="text-blue-500">₱</span> Fee
-                              </div>
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                <span className="text-blue-500">🥅</span> Perm. Nets
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Map View */}
-          <div className={`lg:col-span-8 md:sticky md:top-36 ${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-            <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-screen md:h-[850px] opacity-100'} overscroll-none`}>
-
-              {/* Mobile Map View Toggle removed - using bottom nav bar instead */}
-
-              {isLoading ? (
-                <div className="h-full bg-slate-100 flex items-center justify-center">
-                  <style>{`
-                    @keyframes paddleHit {
-                      0%, 100% { transform: rotate(0deg); }
-                      40%, 60% { transform: rotate(-25deg); }
-                    }
-                    @keyframes ballBounce {
-                      0%, 100% { transform: translateY(0); }
-                      50% { transform: translateY(90px); }
-                    }
-                    @keyframes pulse {
-                      0%, 100% { opacity: 1; }
-                      50% { opacity: 0.5; }
-                    }
-                    .animate-paddleHit {
-                      animation: paddleHit 1.4s ease-in-out infinite;
-                    }
-                    .animate-ballBounce {
-                      animation: ballBounce 1.4s ease-in-out infinite;
-                    }
-                    .animate-textPulse {
-                      animation: pulse 1.4s ease-in-out infinite;
-                    }
-                  `}</style>
-                  <div className="relative w-[200px] h-[200px]">
-                    <img
-                      src="/images/Ball.png"
-                      className="absolute w-10 h-10 left-[90px] top-5 animate-ballBounce"
-                      alt="Ball"
-                    />
-                    <img
-                      src="/images/Paddle.png"
-                      className="absolute w-[110px] bottom-2.5 left-11 animate-paddleHit"
-                      style={{ transformOrigin: 'bottom center' }}
-                      alt="Paddle"
-                    />
-                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-sm text-slate-700 animate-textPulse whitespace-nowrap">
-                      Loading...
+                      {/* Cleaning Time Info */}
+                      {selectedCourt.cleaningTimeMinutes > 0 && (
+                        <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100 mt-3">
+                          <Clock size={12} className="text-blue-600 shrink-0" />
+                          <p className="text-[10px] text-blue-700 leading-relaxed">
+                            <span className="font-bold">{selectedCourt.cleaningTimeMinutes >= 60 ? `${Math.floor(selectedCourt.cleaningTimeMinutes / 60)}h ${selectedCourt.cleaningTimeMinutes % 60 > 0 ? `${selectedCourt.cleaningTimeMinutes % 60}m` : ''}` : `${selectedCourt.cleaningTimeMinutes} min`} cleaning buffer</span> after each booking
+                          </p>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Date Selection */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                          <CalendarIcon size={14} className="text-blue-600" />
+                          Choose Date
+                        </h4>
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                          {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({ length: 7 }).map((_, i) => {
+                          const date = new Date();
+                          date.setDate(date.getDate() + i);
+                          const isSelected = selectedDate.toDateString() === date.toDateString();
+                          const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
+                          const dayNum = date.getDate();
+
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                setSelectedDate(date);
+                                setSelectedSlot(null);
+                              }}
+                              className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 ${isSelected
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                                : 'bg-slate-50 text-slate-400 hover:bg-white hover:shadow-sm'
+                                }`}
+                            >
+                              <span className={`text-[8px] font-bold uppercase mb-0.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                                {dayName.slice(0, 3)}
+                              </span>
+                              <span className="text-sm font-black tracking-tighter">{dayNum}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time Slots */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                          <Clock size={14} className="text-blue-600" />
+                          Available Times
+                        </h4>
+                        {isCheckingAvailability && (
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Loader2 size={10} className="animate-spin" /> Checking...
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-3 mb-2.5 text-[9px]">
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <span className="w-2 h-2 rounded-full bg-white border border-slate-200"></span> Available
+                        </span>
+                        <span className="flex items-center gap-1 text-amber-600">
+                          <span className="w-2 h-2 rounded-full bg-amber-100 border border-amber-300"></span> Booked
+                        </span>
+                        <span className="flex items-center gap-1 text-red-600">
+                          <span className="w-2 h-2 rounded-full bg-red-100 border border-red-300"></span> Blocked
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {TIME_SLOTS.map(slot => {
+                          const isBlocked = blockedSlots.has(slot);
+                          const isBookedSlot = bookedSlots.has(slot);
+                          const isUnavailable = isBlocked || isBookedSlot;
+
+                          return (
+                            <button
+                              key={slot}
+                              onClick={() => !isUnavailable && setSelectedSlot(slot)}
+                              disabled={isUnavailable}
+                              title={isBlocked ? 'Court event scheduled' : isBookedSlot ? 'Already booked' : 'Available'}
+                              className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isBlocked
+                                ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                : isBookedSlot
+                                  ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
+                                  : selectedSlot === slot
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                                }`}
+                            >
+                              <span className={isUnavailable ? 'line-through' : ''}>{slot}</span>
+                              {isBlocked && (
+                                <Ban size={10} className="absolute top-1 right-1 text-red-400" />
+                              )}
+                              {isBookedSlot && !isBlocked && (
+                                <AlertCircle size={10} className="absolute top-1 right-1 text-amber-400" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Availability Summary */}
+                      {(blockedSlots.size > 0 || bookedSlots.size > 0) && (
+                        <div className="mt-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                          <p className="text-[10px] text-slate-500">
+                            <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available
+                            {blockedSlots.size > 0 && (
+                              <span className="text-red-500"> · {blockedSlots.size} blocked</span>
+                            )}
+                            {bookedSlots.size > 0 && (
+                              <span className="text-amber-500"> · {bookedSlots.size} booked</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Policy Reminder */}
+                    <div className="flex items-start gap-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                      <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
+                        Please arrive on time. Booking subject to cancellation if more than <span className="font-bold">10 min late</span>.
+                      </p>
+                    </div>
+
+                    {/* Booking Button */}
+                    <button
+                      disabled={!selectedSlot || isBooked || isProcessing || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                      onClick={handleBooking}
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${isBooked
+                        ? 'bg-emerald-500 text-white cursor-default'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200/50'
+                        }`}
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin" size={18} /> : (
+                        isBooked ? (
+                          <>
+                            <CheckCircle2 size={18} />
+                            Booking Confirmed!
+                          </>
+                        ) : selectedSlot && blockedSlots.has(selectedSlot) ? (
+                          <>
+                            <Ban size={16} />
+                            Court Blocked
+                          </>
+                        ) : selectedSlot && bookedSlots.has(selectedSlot) ? (
+                          <>
+                            <AlertCircle size={16} />
+                            Already Booked
+                          </>
+                        ) : (
+                          'Confirm Booking'
+                        )
+                      )}
+                    </button>
                   </div>
                 </div>
               ) : (
-                <div ref={mapRef} className="h-full w-full touch-none" />
+                /* ─── Location List (matching GuestBooking) ─── */
+                <>
+                  {/* Location Detail Header */}
+                  {urlLocationId && selectedLocation && (
+                    <div className="border-b border-slate-100 shrink-0">
+                      {selectedLocation.image_url && (
+                        <div className="relative h-28 sm:h-36 md:h-44 w-full">
+                          <img
+                            src={selectedLocation.image_url}
+                            alt={selectedLocation.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                          <button
+                            onClick={() => navigate('/booking')}
+                            className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm text-slate-700 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg text-[11px] md:text-xs font-bold hover:bg-white transition-all shadow-md"
+                          >
+                            <ChevronLeft size={14} />
+                            Back
+                          </button>
+                          <div className="absolute bottom-2 left-3 right-3 md:bottom-3 md:left-4 md:right-4">
+                            <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white tracking-tight leading-tight drop-shadow-lg">{selectedLocation.name}</h2>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-3 md:p-4">
+                        {!selectedLocation.image_url && (
+                          <>
+                            <button
+                              onClick={() => navigate('/booking')}
+                              className="flex items-center gap-1 text-slate-400 text-xs font-bold hover:text-blue-600 transition-colors mb-2"
+                            >
+                              <ChevronLeft size={14} />
+                              Back
+                            </button>
+                            <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">{selectedLocation.name}</h2>
+                          </>
+                        )}
+                        <div className="flex items-center gap-1.5 text-xs md:text-sm text-slate-500 mb-2">
+                          <MapPin size={12} className="text-blue-500 shrink-0" />
+                          <span className="font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                            <Building2 size={10} />
+                            {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
+                          </span>
+                          {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
+                            selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
+                              <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                {amenity}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {selectedLocation.description && (
+                          <p className="text-xs md:text-sm text-slate-500 mt-1.5 leading-relaxed line-clamp-1 md:line-clamp-2">{selectedLocation.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {isLoadingLocationDetail && urlLocationId && (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="animate-spin text-blue-600" size={28} />
+                    </div>
+                  )}
+
+                  {/* Section title */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                    <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      {urlLocationId && selectedLocation
+                        ? `Courts at ${selectedLocation.name} (${locationCourts.length})`
+                        : `${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
+                      }
+                    </h2>
+                  </div>
+
+                  {/* Scrollable list */}
+                  <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                    {isLoading || isLoadingLocationDetail ? (
+                      Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
+                    ) : urlLocationId ? (
+                      locationCourts.length === 0 ? (
+                        <div className="px-4 py-12 text-center">
+                          <p className="text-sm text-slate-400">No courts found at this location</p>
+                        </div>
+                      ) : locationCourts.map(court => (
+                        <button
+                          key={court.id}
+                          onClick={() => navigate(`/court/${court.id}`)}
+                          className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                        >
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                            <img
+                              src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
+                              alt={court.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{court.name}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
+                              <span className="text-[11px] font-medium text-slate-400">₱ Fee</span>
+                              <span className="text-[11px] font-medium text-slate-400">🥅 Perm. Nets</span>
+                            </div>
+                          </div>
+                          <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                        </button>
+                      ))
+                    ) : (
+                      filteredLocations.length === 0 ? (
+                        <div className="px-4 py-12 text-center">
+                          <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                          <p className="text-sm text-slate-400">No locations found</p>
+                        </div>
+                      ) : filteredLocations.map(location => (
+                        <button
+                          key={location.id}
+                          onClick={() => {
+                            if (googleMapRef.current && location.latitude && location.longitude) {
+                              googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                              googleMapRef.current.setZoom(19);
+                              triggerPulse(location.latitude, location.longitude);
+                            }
+                            navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                          }}
+                          className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                        >
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                            <img
+                              src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
+                              alt={location.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                              <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                                <MapPin size={11} className="text-blue-400" /> {location.city}
+                              </span>
+                              <span className="text-[11px] font-medium text-slate-400">
+                                🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
               )}
-              {/* Desktop Zoom Control */}
-              <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
-                <button
-                  onClick={() => googleMapRef.current?.setZoom((googleMapRef.current?.getZoom() || 12) + 1)}
-                  className="w-12 h-12 bg-white rounded-2xl shadow-xl flex items-center justify-center text-slate-600 hover:text-blue-600 transition-all border border-slate-100"
-                >
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg>
-                </button>
-              </div>
+            </div>
+          </div>
+
+          {/* ═══ RIGHT COLUMN — MAP ═══ */}
+          <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+            <div className={`md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden relative md:sticky md:top-8 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
+              {isLoading ? (
+                <div className="h-full bg-slate-100 flex items-center justify-center">
+                  <Loader2 className="animate-spin text-blue-600" size={40} />
+                </div>
+              ) : (
+                <div ref={mapRef} className="h-full w-full" />
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Mobile Filters Drawer */}
+      {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
+      {isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
+          <div className="flex justify-center items-center gap-2 px-4 py-2.5">
+            <button
+              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-full shadow-lg active:scale-95 transition-all font-bold"
+            >
+              {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
+              <span className="text-xs uppercase tracking-wider">{viewMode === 'map' ? 'List' : 'Map'}</span>
+            </button>
+            <button
+              onClick={() => setShowFilters(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-full shadow-sm active:scale-95 transition-all font-bold"
+            >
+              <Funnel size={16} />
+              <span className="text-xs uppercase tracking-wider">Filters</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
       {showFilters && (
         <div className="fixed inset-0 z-[110] flex items-end md:hidden">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
-          <div className="relative w-full bg-white rounded-t-[32px] shadow-2xl p-6 h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-bold text-slate-900">More Filters</h2>
-              <button onClick={() => setShowFilters(false)} className="p-2 text-slate-400 hover:text-slate-600">
-                <CircleCheck className="rotate-45" size={24} />
-              </button>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
+          <div className="relative w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+            {/* Drawer handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-300" />
             </div>
 
-            <div className="space-y-8 pb-32">
-              <section>
-                <h3 className="text-sm font-bold text-slate-900 mb-4">Type</h3>
-                <div className="space-y-3">
-                  {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
-                    <label key={type} className="flex items-center gap-3 group cursor-pointer">
-                      <div className="w-5 h-5 border-2 border-slate-200 rounded-md group-hover:border-blue-500 transition-colors"></div>
-                      <span className="text-sm font-medium text-slate-600">{type}</span>
-                    </label>
-                  ))}
-                </div>
-              </section>
+            <div className="px-5 pb-3 pt-2">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-slate-900">Filters</h2>
+                <button onClick={() => setShowFilters(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
 
-              <section>
-                <h3 className="text-sm font-bold text-slate-900 mb-4">Access</h3>
-                <div className="space-y-3">
-                  {['Public Court', 'Private Court', 'Membership Required'].map(access => (
-                    <label key={access} className="flex items-center gap-3 group cursor-pointer">
-                      <div className="w-5 h-5 border-2 border-slate-200 rounded-md group-hover:border-blue-500 transition-colors"></div>
-                      <span className="text-sm font-medium text-slate-600">{access}</span>
-                    </label>
-                  ))}
-                </div>
-              </section>
-            </div>
+              <div className="space-y-6 pb-6">
+                <section>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Court Type</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
+                      <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                        <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                        <span className="text-sm font-medium text-slate-600">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
 
-            <div className="fixed bottom-0 left-0 right-0 p-6 bg-white border-t border-slate-100 flex items-center justify-between gap-4">
-              <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-orange-500 hover:text-orange-600">
-                Clear filters
-              </button>
-              <button
-                onClick={() => setShowFilters(false)}
-                className="flex-1 py-3.5 bg-cyan-600 text-white font-bold rounded-2xl text-sm hover:bg-cyan-700 transition-all"
-              >
-                View {locationGroups.length} Courts
-              </button>
+                <section>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Public Court', 'Private Court', 'Membership Required'].map(access => (
+                      <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                        <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                        <span className="text-sm font-medium text-slate-600">{access}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 px-3 py-2.5">
+                  Clear
+                </button>
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-200/50"
+                >
+                  View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Success Modal */}
+      {/* ──────────── SUCCESS MODAL ──────────── */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl p-12 text-center space-y-8 animate-in zoom-in-95 duration-300">
-            <div className="w-24 h-24 bg-lime-50 rounded-[32px] flex items-center justify-center mx-auto">
-              <CircleCheck size={48} className="text-lime-500" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Successfully Booked!</h2>
-              <p className="text-slate-500 font-medium">Your court time has been reserved. You can find your booking details in "My Bookings".</p>
-            </div>
-            <div className="space-y-4">
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  setShowReceipt(true);
-                }}
-                className="w-full py-5 bg-blue-600 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
-              >
-                View My Receipt
-              </button>
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  setIsBooked(false);
-                  setSelectedSlot(null);
-                }}
-                className="w-full py-5 bg-slate-900 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-              >
-                Book Another Slot
-              </button>
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full py-5 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all"
-              >
-                Close Window
-              </button>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSuccessModal(false)} />
+          <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 sm:p-10 text-center">
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <CircleCheck size={32} className="text-emerald-500" />
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Successfully Booked!</h2>
+              <p className="text-slate-500 font-medium mb-8 leading-relaxed text-sm sm:text-base">
+                Your court time has been reserved. You can find your booking details in "My Bookings".
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setShowReceipt(true);
+                  }}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200/50"
+                >
+                  View My Receipt
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setIsBooked(false);
+                    setSelectedSlot(null);
+                    setSelectedCourt(null);
+                    setSelectedLocation(null);
+                    navigate('/booking');
+                  }}
+                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg"
+                >
+                  Book Another Slot
+                </button>
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Receipt Modal */}
+      {/* ──────────── RECEIPT MODAL ──────────── */}
       {showReceipt && receiptData && (
         <Receipt
           bookingData={receiptData}
@@ -1763,6 +2101,189 @@ const Booking: React.FC = () => {
             setShowReceipt(false);
             setIsBooked(false);
           }}
+        />
+      )}
+
+      {/* ──────────── MY BOOKINGS SLIDE PANEL ──────────── */}
+      {showMyBookings && (
+        <div className="fixed inset-0 z-[110] flex justify-end">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowMyBookings(false); setViewingBooking(null); }} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col h-full">
+            {/* Panel Header */}
+            <div className="px-5 py-4 border-b border-slate-100 bg-white shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-1">Reservations</p>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">My Bookings</h2>
+                </div>
+                <button
+                  onClick={() => { setShowMyBookings(false); setViewingBooking(null); }}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by court, city, or ref ID..."
+                  value={myBookingsSearch}
+                  onChange={(e) => setMyBookingsSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                {([
+                  { key: 'all', label: 'All' },
+                  { key: 'pending', label: 'Pending' },
+                  { key: 'confirmed', label: 'Confirmed' },
+                  { key: 'paid', label: 'Paid' },
+                  { key: 'unpaid', label: 'Unpaid' },
+                  { key: 'cancelled', label: 'Cancelled' }
+                ] as const).map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setMyBookingsFilter(f.key)}
+                    className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
+                      myBookingsFilter === f.key
+                        ? f.key === 'cancelled' ? 'bg-red-600 text-white' : f.key === 'paid' ? 'bg-emerald-600 text-white' : f.key === 'unpaid' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bookings List */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              {isLoadingMyBookings ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <Loader2 className="animate-spin text-blue-600" size={32} />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading bookings...</p>
+                </div>
+              ) : filteredMyBookings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-200">
+                    <ClipboardList size={28} className="text-slate-300" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-black text-slate-900 mb-1">No Bookings Found</p>
+                    <p className="text-xs text-slate-400 font-medium">{myBookingsSearch ? 'Try a different search term' : 'Your court reservations will appear here'}</p>
+                  </div>
+                </div>
+              ) : (
+                filteredMyBookings.map((b) => {
+                  const statusColor = b.payment_status === 'paid' ? 'emerald' :
+                    b.status === 'confirmed' ? 'blue' :
+                    b.status === 'cancelled' ? 'red' :
+                    b.status === 'pending' ? 'amber' : 'slate';
+                  const statusLabel = b.payment_status === 'paid' ? 'Paid' : b.status;
+                  const isCancellable = b.status === 'pending' || b.status === 'confirmed';
+
+                  return (
+                    <div
+                      key={b.id}
+                      className={`p-4 bg-white border rounded-2xl transition-all duration-300 hover:shadow-md ${
+                        b.status === 'cancelled' ? 'border-red-100 bg-red-50/30 opacity-70' : 'border-slate-100 hover:border-blue-200'
+                      }`}
+                    >
+                      {/* Top row: Court name + status */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">#{b.id.slice(0, 8)}</p>
+                          <h4 className="text-sm font-black text-slate-900 tracking-tight truncate">{b.court?.name || 'Court'}</h4>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <MapPin size={10} className="text-slate-400" />
+                            <span className="text-[10px] text-slate-400 font-medium truncate">{b.court?.location?.city || 'PicklePlay'}</span>
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shrink-0 ${
+                          b.payment_status === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+                          b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                          b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-600' :
+                          b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                          'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {/* Info row */}
+                      <div className="flex items-center gap-4 mb-3 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <CalendarIcon size={12} className="text-blue-500" />
+                          <span className="font-bold text-slate-700">{new Date(b.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={12} className="text-blue-500" />
+                          <span className="font-bold text-slate-700">{b.start_time?.slice(0, 5)} - {b.end_time?.slice(0, 5)}</span>
+                        </div>
+                        <div className="ml-auto">
+                          <span className="text-base font-black text-slate-900">₱{b.total_price}</span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleViewBookingReceipt(b)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors"
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                        {b.status !== 'cancelled' && (
+                          <button
+                            onClick={() => handleRebookFromBooking(b)}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-100 transition-colors"
+                          >
+                            <Pencil size={12} /> Rebook
+                          </button>
+                        )}
+                        {isCancellable && (
+                          <button
+                            onClick={() => handleCancelBooking(b.id)}
+                            disabled={cancellingBookingId === b.id}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            {cancellingBookingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Panel Footer */}
+            <div className="px-5 py-4 border-t border-slate-100 bg-white shrink-0">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                <span>{filteredMyBookings.length} booking{filteredMyBookings.length !== 1 ? 's' : ''}</span>
+                <button
+                  onClick={() => { setShowMyBookings(false); navigate('/my-bookings'); }}
+                  className="text-blue-600 hover:underline uppercase tracking-wider text-[10px] font-black"
+                >
+                  View Full Page →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────── BOOKING RECEIPT VIEW (from My Bookings panel) ──────────── */}
+      {viewingBooking && (
+        <Receipt
+          bookingData={viewingBooking}
+          onClose={() => setViewingBooking(null)}
         />
       )}
     </div>

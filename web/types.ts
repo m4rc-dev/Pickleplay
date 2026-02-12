@@ -16,6 +16,7 @@ export interface Court {
   name: string;
   type: 'Indoor' | 'Outdoor';
   location: string;
+  location_id?: string; // Foreign key to locations table
   pricePerHour: number;
   availability: string[]; // ISO strings
   latitude?: number;

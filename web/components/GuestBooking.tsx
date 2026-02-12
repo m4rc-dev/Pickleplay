@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel, Star, ChevronLeft, Building2 } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -17,6 +17,7 @@ declare global {
 }
 const GuestBooking: React.FC = () => {
     const [courts, setCourts] = useState<Court[]>([]);
+    const [locations, setLocations] = useState<any[]>([]);
     const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [showAdvanceOptions, setShowAdvanceOptions] = useState(false);
@@ -32,6 +33,12 @@ const GuestBooking: React.FC = () => {
     const [showFilters, setShowFilters] = useState(false);
     const isMobile = window.innerWidth < 768;
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [showDesktopSuggestions, setShowDesktopSuggestions] = useState(false);
+
+    // Location detail state (when coming from homepage card)
+    const [selectedLocation, setSelectedLocation] = useState<any>(null);
+    const [locationCourts, setLocationCourts] = useState<Court[]>([]);
+    const [isLoadingLocationDetail, setIsLoadingLocationDetail] = useState(false);
 
     // Distance calculation helper (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -127,6 +134,77 @@ const GuestBooking: React.FC = () => {
     const urlLng = searchParams.get('lng');
     const urlZoom = searchParams.get('zoom');
     const urlCourt = searchParams.get('court');
+    const urlLocationId = searchParams.get('locationId');
+
+    // Fetch location detail + its courts when locationId is in URL
+    useEffect(() => {
+        if (!urlLocationId) {
+            setSelectedLocation(null);
+            setLocationCourts([]);
+            return;
+        }
+
+        const fetchLocationDetail = async () => {
+            setIsLoadingLocationDetail(true);
+            try {
+                // Fetch location info
+                const { data: locData, error: locError } = await supabase
+                    .from('locations')
+                    .select('*')
+                    .eq('id', urlLocationId)
+                    .single();
+
+                if (locError) throw locError;
+                setSelectedLocation(locData);
+
+                // Fetch courts belonging to this location
+                const { data: courtsData, error: courtsError } = await supabase
+                    .from('courts')
+                    .select(`
+                        *,
+                        locations (
+                            id,
+                            address,
+                            city,
+                            latitude,
+                            longitude
+                        ),
+                        court_reviews (
+                            rating
+                        )
+                    `)
+                    .eq('location_id', urlLocationId);
+
+                if (courtsError) throw courtsError;
+
+                const mappedCourts: Court[] = (courtsData || []).map((c: any) => {
+                    const loc = c.locations;
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+                        location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+                        pricePerHour: c.base_price,
+                        availability: [],
+                        latitude: loc?.latitude,
+                        longitude: loc?.longitude,
+                        numCourts: c.num_courts,
+                        amenities: Array.isArray(c.amenities) ? c.amenities : [],
+                        imageUrl: c.image_url,
+                        courtType: c.court_type || 'Outdoor',
+                        ownerId: c.owner_id
+                    };
+                });
+                setLocationCourts(mappedCourts);
+            } catch (err) {
+                console.error('Error fetching location detail:', err);
+            } finally {
+                setIsLoadingLocationDetail(false);
+            }
+        };
+
+        fetchLocationDetail();
+    }, [urlLocationId]);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const googleMapRef = useRef<any>(null);
@@ -247,6 +325,7 @@ const GuestBooking: React.FC = () => {
                         name: c.name,
                         type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
                         location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+                        location_id: c.location_id,
                         pricePerHour: c.base_price,
                         availability: [],
                         latitude: loc?.latitude,
@@ -266,6 +345,21 @@ const GuestBooking: React.FC = () => {
             }
         };
         fetchCourts();
+
+        // Fetch locations with court counts
+        const fetchLocations = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('locations')
+                    .select('*');
+
+                if (error) throw error;
+                setLocations(data || []);
+            } catch (err) {
+                console.error('Error fetching locations:', err);
+            }
+        };
+        fetchLocations();
     }, []);
 
     useEffect(() => {
@@ -281,6 +375,24 @@ const GuestBooking: React.FC = () => {
             googleMapRef.current.setZoom(13);
         }
     }, [userLocation]);
+
+    // Zoom to location and trigger pulse when arriving from homepage with locationId
+    useEffect(() => {
+        if (urlLocationId && urlLat && urlLng && googleMapRef.current && !isLoading) {
+            const lat = parseFloat(urlLat);
+            const lng = parseFloat(urlLng);
+            const zoom = urlZoom ? parseInt(urlZoom) : 15;
+
+            // Pan to the location with smooth animation
+            googleMapRef.current.panTo({ lat, lng });
+            googleMapRef.current.setZoom(zoom);
+
+            // Trigger pulse animation after a short delay
+            setTimeout(() => {
+                triggerPulse(lat, lng);
+            }, 500);
+        }
+    }, [urlLocationId, urlLat, urlLng, urlZoom, isLoading]);
 
     const initializeMap = () => {
         if (!mapRef.current || !window.google) return;
@@ -322,16 +434,23 @@ const GuestBooking: React.FC = () => {
         markersRef.current.forEach(marker => marker.setMap(null));
         markersRef.current = [];
 
-        const filteredCourts = filterType === 'All'
-            ? courts
-            : courts.filter(c => c.type === filterType);
+        // Create markers for locations instead of individual courts
+        locations.forEach(location => {
+            if (location.latitude && location.longitude) {
+                // Count courts at this location that match the filter
+                const locationCourts = courts.filter(c => {
+                    const matchesLocation = c.location_id ? c.location_id === location.id : 
+                        c.location.toLowerCase().includes(location.name.toLowerCase());
+                    return matchesLocation && (filterType === 'All' || c.type === filterType);
+                });
 
-        filteredCourts.forEach(court => {
-            if (court.latitude && court.longitude) {
+                // Only show marker if location has courts matching the filter
+                if (locationCourts.length === 0) return;
+
                 const marker = new window.google.maps.Marker({
-                    position: { lat: court.latitude, lng: court.longitude },
+                    position: { lat: location.latitude, lng: location.longitude },
                     map,
-                    title: court.name,
+                    title: location.name,
                     icon: {
                         url: '/images/PinMarker.png',
                         scaledSize: new window.google.maps.Size(42, 60),
@@ -341,39 +460,55 @@ const GuestBooking: React.FC = () => {
 
                 const infoWindow = new window.google.maps.InfoWindow({
                     content: `
-                        <div style="width: 240px; font-family: 'Inter', sans-serif; overflow: hidden; border-radius: 16px;">
-                            ${court.imageUrl ? `
-                                <div style="height: 120px; width: 100%; border-radius: 12px 12px 0 0; overflow: hidden;">
-                                    <img src="${court.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${court.name}" />
+                        <div style="width:220px;font-family:'Inter',system-ui,sans-serif;overflow:hidden;">
+                            <div style="height:130px;width:100%;overflow:hidden;background:#e2e8f0;">
+                                <img 
+                                    src="${location.hero_image || location.image_url || 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=260'}" 
+                                    style="width:100%;height:100%;object-fit:cover;display:block;" 
+                                    alt="${location.name}" 
+                                />
+                            </div>
+                            <div style="padding:10px 12px 12px;">
+                                <h3 style="margin:0 0 4px;font-weight:900;font-size:13px;color:#0f172a;text-transform:uppercase;letter-spacing:-0.01em;line-height:1.3;">${location.name}</h3>
+                                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span style="font-size:11px;color:#94a3b8;font-weight:500;">${location.city}${location.address ? ', ' + location.address.split(',')[0] : ''}</span>
                                 </div>
-                            ` : `
-                                <div style="height: 120px; width: 100%; background: #f1f5f9; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: center; color: #94a3b8;">
-                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                </div>
-                            `}
-                            <div style="padding: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
-                                    <h3 style="margin: 0; font-weight: 800; font-size: 15px; color: #0f172a; line-height: 1.2;">${court.name}</h3>
-                                    ${court.courtType ? `
-                                        <span style="background: ${court.courtType === 'Indoor' ? '#eff6ff' : '#f7fee7'}; color: ${court.courtType === 'Indoor' ? '#2563eb' : '#4d7c0f'}; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-left: 8px;">${court.courtType.toUpperCase()}</span>
-                                    ` : ''}
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                    <span style="font-size: 11px; color: #64748b; font-weight: 500;">${court.location.split(',')[0]}</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-weight: 800; font-size: 14px; color: #0f172a;">₱${court.pricePerHour}<span style="font-size: 10px; color: #64748b; font-weight: 500;"> /hr</span></span>
-                                    <span style="font-size: 10px; font-weight: 700; color: #2563eb; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">${court.numCourts} ${court.numCourts === 1 ? 'COURT' : 'COURTS'}</span>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span style="font-size:10px;font-weight:800;color:#2563eb;background:#eff6ff;padding:3px 8px;border-radius:6px;letter-spacing:0.3px;">${locationCourts.length} ${locationCourts.length === 1 ? 'COURT' : 'COURTS'}</span>
+                                    ${location.amenities && location.amenities.length > 0 ? `<span style="font-size:10px;color:#94a3b8;font-weight:500;">${location.amenities.slice(0, 2).join(' · ')}</span>` : ''}
                                 </div>
                             </div>
                         </div>
                     `,
-                    disableAutoPan: true
+                    disableAutoPan: true,
+                    maxWidth: 240
+                });
+
+                // Hide close button when InfoWindow opens
+                infoWindow.addListener('domready', () => {
+                    const closeBtn = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
+                    if (closeBtn) closeBtn.style.display = 'none';
+                    // Also remove default padding from the info window wrapper
+                    const iwOuter = document.querySelector('.gm-style-iw-c') as HTMLElement;
+                    if (iwOuter) {
+                        iwOuter.style.padding = '0';
+                        iwOuter.style.borderRadius = '12px';
+                        iwOuter.style.overflow = 'hidden';
+                        iwOuter.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+                    }
+                    const iwInner = document.querySelector('.gm-style-iw-d') as HTMLElement;
+                    if (iwInner) {
+                        iwInner.style.overflow = 'hidden';
+                        iwInner.style.padding = '0';
+                    }
                 });
 
                 marker.addListener('click', () => {
-                    navigate(`/court/${court.id}`);
+                    navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                    if (window.innerWidth < 768) {
+                        setViewMode('list');
+                    }
                 });
 
                 // Show info window on hover
@@ -387,12 +522,6 @@ const GuestBooking: React.FC = () => {
                 });
 
                 markersRef.current.push(marker);
-
-                // If this court matches the URL court param, select it and open info window
-                if (urlCourt && court.name.toLowerCase() === decodeURIComponent(urlCourt).toLowerCase()) {
-                    setSelectedCourt(court);
-                    infoWindow.open(map, marker);
-                }
             }
         });
     };
@@ -540,14 +669,53 @@ const GuestBooking: React.FC = () => {
             c.location.toLowerCase().includes(searchQuery.toLowerCase())
         );
 
+    // Get filtered locations (grouped by location) - this is what we'll display in the list
+    const filteredLocations = locations
+        .filter(loc => {
+            // Filter by search query
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                return loc.name.toLowerCase().includes(q) ||
+                    loc.city.toLowerCase().includes(q) ||
+                    (loc.address && loc.address.toLowerCase().includes(q));
+            }
+            return true;
+        })
+        .filter(loc => {
+            // Only show locations that have courts matching the filter type
+            const locationCourts = courts.filter(c => {
+                // Match by location_id if available, otherwise try to match by location string
+                const matchesLocation = c.location_id ? c.location_id === loc.id : 
+                    c.location.toLowerCase().includes(loc.name.toLowerCase());
+                
+                if (!matchesLocation) return false;
+                return filterType === 'All' || c.type === filterType;
+            });
+            return locationCourts.length > 0;
+        })
+        .map(loc => {
+            // Add court count for each location
+            const locationCourts = courts.filter(c => {
+                const matchesLocation = c.location_id ? c.location_id === loc.id : 
+                    c.location.toLowerCase().includes(loc.name.toLowerCase());
+                return matchesLocation && (filterType === 'All' || c.type === filterType);
+            });
+            return {
+                ...loc,
+                court_count: locationCourts.length
+            };
+        });
+
     return (
-        <div className="pt-16 md:pt-24 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto min-h-screen relative overflow-hidden">
-            <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3">
-                <div className="flex items-center gap-3">
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+            {/* ──────────── MOBILE HEADER BAR ──────────── */}
+            <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white border-b border-slate-200/60 shadow-sm">
+                {/* Search row */}
+                <div className="px-4 pt-3 pb-2">
                     {isSearchExpanded ? (
-                        <div className="flex-1 relative">
-                            <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-1">
-                                <Search size={18} className="text-slate-400" />
+                        <div className="relative">
+                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                                <Search size={16} className="text-slate-400 shrink-0" />
                                 <input
                                     autoFocus
                                     type="text"
@@ -560,135 +728,142 @@ const GuestBooking: React.FC = () => {
                                             setIsSearchExpanded(false);
                                         }
                                     }}
-                                    className="flex-1 bg-transparent border-none outline-none py-2 text-sm font-bold text-slate-900"
+                                    className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                                 />
-                                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="p-1 text-slate-400 font-bold text-xs uppercase tracking-tighter hover:text-slate-600">
+                                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-blue-600 font-bold text-xs shrink-0">
                                     Cancel
                                 </button>
                             </div>
 
-                            {/* Search Dropdown */}
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-[60vh] overflow-y-auto">
-                                {/* Places Section */}
+                            {/* Mobile Search Dropdown */}
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/60 z-50 max-h-[65vh] overflow-y-auto">
                                 {userCity && (
                                     <>
-                                        <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Places</p>
+                                        <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
                                         <button
                                             onClick={() => {
                                                 setSearchQuery(userCity.split(',')[0]);
                                                 handleSearch(userCity.split(',')[0]);
                                                 setIsSearchExpanded(false);
                                             }}
-                                            className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                            className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
                                         >
-                                            <div className="w-9 h-9 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
-                                                <MapPin size={16} />
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                                                <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                                             </div>
                                             <span className="text-slate-800 font-semibold text-sm">{userCity}</span>
                                         </button>
                                     </>
                                 )}
-
-                                {/* Courts Section */}
-                                <p className="px-4 py-2 text-[10px] font-black text-teal-600 uppercase tracking-widest border-b border-slate-50">Courts</p>
-                                <div className="space-y-4 md:space-y-1 custom-scrollbar pb-32">
-                                    {courts
-                                        .filter(c => {
+                                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                                <div className="pb-4">
+                                    {locations
+                                        .filter(loc => {
                                             if (!searchQuery.trim()) return true;
                                             const q = searchQuery.toLowerCase();
-                                            return c.name.toLowerCase().includes(q) ||
-                                                c.location.toLowerCase().includes(q);
+                                            return loc.name.toLowerCase().includes(q) ||
+                                                loc.city.toLowerCase().includes(q) ||
+                                                (loc.address && loc.address.toLowerCase().includes(q));
                                         })
                                         .slice(0, 8)
-                                        .map((court) => (
+                                        .map((location) => (
                                             <button
-                                                key={court.id}
+                                                key={location.id}
                                                 onClick={() => {
-                                                    setSearchQuery(court.name);
-                                                    if (googleMapRef.current && court.latitude && court.longitude) {
-                                                        googleMapRef.current.panTo({ lat: court.latitude, lng: court.longitude });
-                                                        googleMapRef.current.setZoom(16);
-                                                        triggerPulse(court.latitude, court.longitude);
+                                                    setSearchQuery(location.name);
+                                                    if (googleMapRef.current && location.latitude && location.longitude) {
+                                                        googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                                        googleMapRef.current.setZoom(19);
+                                                        triggerPulse(location.latitude, location.longitude);
                                                     }
+                                                    navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
                                                     setViewMode('map');
                                                     setIsSearchExpanded(false);
                                                 }}
-                                                className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                                                className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
                                             >
-                                                <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
-                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                        <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                                                        <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                                        <circle cx="10" cy="8" r="1" fill="currentColor" />
-                                                        <circle cx="14" cy="8" r="1" fill="currentColor" />
-                                                        <circle cx="12" cy="11" r="1" fill="currentColor" />
-                                                    </svg>
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                                                    <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-slate-900 font-bold text-sm truncate">{court.name}</p>
-                                                    <p className="text-xs text-slate-400 truncate">{court.location} · {court.numCourts} court{court.numCourts > 1 ? 's' : ''}</p>
+                                                    <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
+                                                    <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
                                                 </div>
                                             </button>
                                         ))}
-                                    {courts.length === 0 && (
+                                    {locations.length === 0 && (
                                         <div className="px-4 py-6 text-center">
-                                            <p className="text-sm text-slate-400">No courts found</p>
+                                            <p className="text-sm text-slate-400">No locations found</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <>
-                            <button
-                                className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-colors"
-                                onClick={() => setIsSearchExpanded(true)}
-                            >
-                                <Search size={18} />
-                            </button>
-                            <div className="flex-1 flex gap-2">
-                                {(['Courts', 'Games', 'Lessons'] as const).map((type) => (
-                                    <button
-                                        key={type}
-                                        onClick={() => setFilterType(type === 'Courts' ? 'All' : 'All' as any)}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl font-black text-[10px] uppercase tracking-wider whitespace-nowrap border-2 transition-all ${type === 'Courts'
-                                            ? 'border-blue-600 bg-white text-slate-900 shadow-sm'
-                                            : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
-                                            }`}
-                                    >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${type === 'Courts' ? 'bg-blue-500' :
-                                            type === 'Games' ? 'bg-cyan-400' : 'bg-yellow-400'
-                                            }`}></span>
-                                        {type}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
+                        <button
+                            onClick={() => setIsSearchExpanded(true)}
+                            className="w-full flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-left hover:border-slate-300 transition-colors"
+                        >
+                            <Search size={16} className="text-slate-400 shrink-0" />
+                            <span className="text-sm text-slate-400 font-medium truncate">Search courts or places...</span>
+                        </button>
                     )}
                 </div>
+
+                {/* Filter pills row */}
+                {!isSearchExpanded && (
+                    <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+                        {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterType === type
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                                    : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'
+                                    }`}
+                            >
+                                {type}
+                            </button>
+                        ))}
+                        <button
+                            onClick={handleNearMe}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all"
+                        >
+                            <Navigation size={12} fill="currentColor" />
+                            Near Me
+                        </button>
+                    </div>
+                )}
             </div>
 
-            <div className="">
-                {/* Header Section - Desktop Only */}
-                <div className="hidden md:block space-y-6 mt-6">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            {/* ──────────── MAIN CONTAINER ──────────── */}
+            <div className="pt-[176px] sm:pt-[180px] md:pt-28 pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
+
+                {/* ──────────── DESKTOP HEADER ──────────── */}
+                <div className="hidden md:block mb-6 lg:mb-8">
+                    <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
                         <div>
-                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / LIVE</p>
-                            <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">
-                                Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span>
+                            <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">
+                                {urlLocationId && selectedLocation ? 'Location / Detail' : 'Courts / Live'}
+                            </p>
+                            <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
+                                {urlLocationId && selectedLocation
+                                    ? <>Book a <span className="text-blue-600">Court at {selectedLocation.name}.</span></>
+                                    : <>Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
+                                }
                             </h1>
                         </div>
                     </div>
 
-                    {/* Filter Pills */}
+                    {/* Desktop Filter Pills */}
                     <div className="flex gap-2">
                         {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
                             <button
                                 key={type}
                                 onClick={() => setFilterType(type)}
-                                className={`px-10 py-3.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all duration-300 active:scale-95 ${filterType === type
-                                    ? 'bg-blue-600 text-white shadow-2xl shadow-blue-400/40 ring-4 ring-blue-600/10'
-                                    : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-400 hover:text-blue-600 shadow-sm'
+                                className={`px-6 lg:px-8 py-2.5 lg:py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all duration-200 ${filterType === type
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                                    : 'bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-blue-600'
                                     }`}
                             >
                                 {type}
@@ -697,82 +872,289 @@ const GuestBooking: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start md:mt-4 mt-0">
-                    {/* Left Column - Search and List View */}
-                    <div className={`space-y-6 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                {/* ──────────── MAIN CONTENT GRID ──────────── */}
+                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+
+                    {/* ═══ LEFT COLUMN ═══ */}
+                    <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                        {/* Desktop Search Bar */}
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 handleSearch(searchQuery);
+                                setShowDesktopSuggestions(false);
                             }}
-                            className="hidden md:flex gap-3"
+                            className="hidden md:flex gap-3 mb-5 relative"
                         >
                             <div className="relative flex-1 group">
-                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
                                 <input
                                     type="text"
                                     placeholder="Search courts by name or location..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        setShowDesktopSuggestions(true);
+                                        const val = e.target.value.trim();
+                                        if (val.length >= 3 && googleMapRef.current && window.google) {
+                                            const matchLoc = locations.find(l =>
+                                                l.name.toLowerCase().includes(val.toLowerCase()) ||
+                                                l.city.toLowerCase().includes(val.toLowerCase())
+                                            );
+                                            if (matchLoc && matchLoc.latitude && matchLoc.longitude) {
+                                                googleMapRef.current.panTo({ lat: matchLoc.latitude, lng: matchLoc.longitude });
+                                                googleMapRef.current.setZoom(14);
+                                            }
+                                        }
+                                    }}
+                                    onFocus={() => setShowDesktopSuggestions(true)}
+                                    onBlur={() => setTimeout(() => setShowDesktopSuggestions(false), 200)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             handleSearch(searchQuery);
+                                            setShowDesktopSuggestions(false);
                                         }
                                     }}
-                                    className="w-full bg-white border border-slate-200 rounded-[24px] py-4 pl-14 pr-4 text-sm font-semibold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm"
+                                    className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all shadow-sm"
                                 />
+
+                                {/* Desktop Suggestions Dropdown */}
+                                {showDesktopSuggestions && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/50 z-50 overflow-hidden">
+                                        {isLoadingLocation && (
+                                            <div className="px-5 py-4 flex items-center gap-3 text-slate-500">
+                                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                                <span className="text-sm font-medium">Getting your location...</span>
+                                            </div>
+                                        )}
+
+                                        {userCity && (
+                                            <>
+                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const cityName = userCity.split(',')[0];
+                                                        setSearchQuery(cityName);
+                                                        setShowDesktopSuggestions(false);
+                                                        handleSearch(cityName);
+                                                    }}
+                                                    className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                                                >
+                                                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                                                        <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                                                    </div>
+                                                    <span className="text-slate-800 font-medium text-sm">{userCity}</span>
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {filteredLocations.length > 0 && (
+                                            <>
+                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                                                <div className="max-h-[320px] overflow-y-auto">
+                                                    {filteredLocations.slice(0, 10).map((location) => (
+                                                        <button
+                                                            key={location.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSearchQuery(location.name);
+                                                                setShowDesktopSuggestions(false);
+                                                                if (googleMapRef.current && location.latitude && location.longitude) {
+                                                                    googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                                                    googleMapRef.current.setZoom(19);
+                                                                    triggerPulse(location.latitude, location.longitude);
+                                                                }
+                                                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                                            }}
+                                                            className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                                                        >
+                                                            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                                                                <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                                                                <p className="text-xs text-slate-400 truncate">
+                                                                    {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                                                                    {location.city && <span> · {location.city}</span>}
+                                                                </p>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {!isLoadingLocation && !userCity && filteredLocations.length === 0 && (
+                                            <div className="px-5 py-8 text-center">
+                                                <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                                                <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <button
                                 type="button"
                                 onClick={handleNearMe}
-                                className="flex items-center gap-3 px-8 py-4 bg-[#a3e635] text-slate-900 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-[#bef264] transition-all shadow-xl shadow-lime-200/50 shrink-0"
+                                className="flex items-center gap-2 px-5 lg:px-6 py-3.5 bg-emerald-500 text-white rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200/50 shrink-0"
                             >
-                                <Navigation size={18} fill="currentColor" />
+                                <Navigation size={16} fill="currentColor" />
                                 <span>Near Me</span>
                             </button>
                         </form>
 
+                        {/* ─── List Container ─── */}
+                        <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
 
-                        {/* Courts List Container */}
-                        <div className="bg-white md:bg-transparent md:rounded-none border-0 md:border-0 shadow-none overflow-hidden flex flex-col h-[calc(100vh-140px)] md:min-h-[500px] pt-12 md:pt-0">
-                            <div className="hidden md:block p-8 border-b border-slate-50">
-                                <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.2em]">
-                                    Courts in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]} ({filteredCourts.length})
+                            {/* Location Detail Header */}
+                            {urlLocationId && selectedLocation && (
+                                <div className="border-b border-slate-100 shrink-0">
+                                    {selectedLocation.image_url && (
+                                        <div className="relative h-28 sm:h-36 md:h-44 w-full">
+                                            <img
+                                                src={selectedLocation.image_url}
+                                                alt={selectedLocation.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                                            <button
+                                                onClick={() => navigate('/booking')}
+                                                className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm text-slate-700 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg text-[11px] md:text-xs font-bold hover:bg-white transition-all shadow-md"
+                                            >
+                                                <ChevronLeft size={14} />
+                                                Back
+                                            </button>
+                                            <div className="absolute bottom-2 left-3 right-3 md:bottom-3 md:left-4 md:right-4">
+                                                <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white tracking-tight leading-tight drop-shadow-lg">{selectedLocation.name}</h2>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="p-3 md:p-4">
+                                        {!selectedLocation.image_url && (
+                                            <>
+                                                <button
+                                                    onClick={() => navigate('/booking')}
+                                                    className="flex items-center gap-1 text-slate-400 text-xs font-bold hover:text-blue-600 transition-colors mb-2"
+                                                >
+                                                    <ChevronLeft size={14} />
+                                                    Back
+                                                </button>
+                                                <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">{selectedLocation.name}</h2>
+                                            </>
+                                        )}
+                                        <div className="flex items-center gap-1.5 text-xs md:text-sm text-slate-500 mb-2">
+                                            <MapPin size={12} className="text-blue-500 shrink-0" />
+                                            <span className="font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                                <Building2 size={10} />
+                                                {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
+                                            </span>
+                                            {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
+                                                selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
+                                                    <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                                        {amenity}
+                                                    </span>
+                                                ))
+                                            )}
+                                        </div>
+                                        {selectedLocation.description && (
+                                            <p className="text-xs md:text-sm text-slate-500 mt-1.5 leading-relaxed line-clamp-1 md:line-clamp-2">{selectedLocation.description}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {isLoadingLocationDetail && urlLocationId && (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="animate-spin text-blue-600" size={28} />
+                                </div>
+                            )}
+
+                            {/* Section title */}
+                            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                                <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                    {urlLocationId && selectedLocation
+                                        ? `Courts at ${selectedLocation.name} (${locationCourts.length})`
+                                        : `${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
+                                    }
                                 </h2>
                             </div>
 
-                            <div className="space-y-4 md:space-y-2 h-full md:max-h-[650px] overflow-y-auto custom-scrollbar flex-1 pb-14 md:pb-0">
-                                {isLoading ? (
+                            {/* Scrollable list */}
+                            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                                {isLoading || isLoadingLocationDetail ? (
                                     Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
-                                ) : (
-                                    filteredCourts.map(court => (
+                                ) : urlLocationId ? (
+                                    locationCourts.length === 0 ? (
+                                        <div className="px-4 py-12 text-center">
+                                            <p className="text-sm text-slate-400">No courts found at this location</p>
+                                        </div>
+                                    ) : locationCourts.map(court => (
                                         <button
                                             key={court.id}
                                             onClick={() => navigate(`/court/${court.id}`)}
-                                            className="w-full group flex flex-row items-center gap-4 p-4 md:p-5 bg-white md:bg-transparent border border-slate-100 md:border-0 hover:bg-slate-50 transition-all duration-300 shadow-sm md:shadow-none"
+                                            className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
                                         >
-                                            <div className="w-20 h-20 md:w-16 md:h-16 bg-slate-100 overflow-hidden shrink-0">
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
                                                 <img
                                                     src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
                                                     alt={court.name}
-                                                    className="w-full h-full object-cover"
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                                 />
                                             </div>
-                                            <div className="flex-1 text-left">
-                                                <p className="font-black text-slate-900 text-sm md:text-base tracking-tight mb-1 group-hover:text-blue-600 transition-colors uppercase italic line-clamp-1">{court.name}</p>
-                                                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                                        <span className="text-blue-500">🎾</span> {court.numCourts} Units
-                                                    </div>
-                                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                                        <span className="text-blue-500">₱</span> Fee
-                                                    </div>
-                                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                                        <span className="text-blue-500">🥅</span> Perm. Nets
-                                                    </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{court.name}</p>
+                                                <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                                    <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
+                                                    <span className="text-[11px] font-medium text-slate-400">₱ Fee</span>
+                                                    <span className="text-[11px] font-medium text-slate-400">🥅 Perm. Nets</span>
                                                 </div>
                                             </div>
+                                            <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                                        </button>
+                                    ))
+                                ) : (
+                                    filteredLocations.length === 0 ? (
+                                        <div className="px-4 py-12 text-center">
+                                            <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                                            <p className="text-sm text-slate-400">No locations found</p>
+                                        </div>
+                                    ) : filteredLocations.map(location => (
+                                        <button
+                                            key={location.id}
+                                            onClick={() => {
+                                                if (googleMapRef.current && location.latitude && location.longitude) {
+                                                    googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                                    googleMapRef.current.setZoom(19);
+                                                    triggerPulse(location.latitude, location.longitude);
+                                                }
+                                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                            }}
+                                            className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                                        >
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                                                <img
+                                                    src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
+                                                    alt={location.name}
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                />
+                                            </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                                    <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                                                        <MapPin size={11} className="text-blue-400" /> {location.city}
+                                                    </span>
+                                                    <span className="text-[11px] font-medium text-slate-400">
+                                                        🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
                                         </button>
                                     ))
                                 )}
@@ -780,179 +1162,169 @@ const GuestBooking: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Right Column - Map View Only */}
-                    <div className={`${viewMode === 'list' && !isMobile ? 'hidden md:block' : 'block'}`}>
-                        <div className={`-mx-4 md:mx-0 bg-white rounded-none md:rounded-[48px] border-0 md:border md:border-slate-200 shadow-none md:shadow-sm overflow-hidden relative md:sticky md:top-36 ${viewMode === 'list' ? 'h-0 md:h-[850px] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-120px)] md:h-[850px] opacity-100'}`}>
-
+                    {/* ═══ RIGHT COLUMN — MAP ═══ */}
+                    <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+                        <div className={`md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
                             {isLoading ? (
                                 <div className="h-full bg-slate-100 flex items-center justify-center">
-                                    <Loader2 className="animate-spin text-blue-600" size={48} />
+                                    <Loader2 className="animate-spin text-blue-600" size={40} />
                                 </div>
                             ) : (
                                 <div ref={mapRef} className="h-full w-full" />
                             )}
-
-                            {/* Map Floating Actions - Desktop Only */}
-                            <div className="hidden md:flex absolute top-6 right-6 flex-col gap-3">
-                                <button className="w-12 h-12 bg-white rounded-2xl shadow-xl flex items-center justify-center text-slate-600 hover:text-blue-600 transition-all border border-slate-100">
-                                    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Floating Navigation Bar - Always visible on mobile */}
+            {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
             {isMobile && (
-                <nav className="fixed bottom-14 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
-                    <div className="flex justify-center items-center gap-3 px-4 py-3">
+                <nav className="fixed bottom-14 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+                    <div className="flex justify-center items-center gap-2 px-4 py-2.5">
                         <button
                             onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-                            className="flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-full shadow-lg active:scale-95 transition-all font-bold"
                         >
-                            {viewMode === 'map' ? <List size={20} /> : <MapPin size={20} />}
-                            <span className="text-xs uppercase tracking-widest">{viewMode === 'map' ? 'List' : 'Map'}</span>
+                            {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
+                            <span className="text-xs uppercase tracking-wider">{viewMode === 'map' ? 'List' : 'Map'}</span>
                         </button>
                         <button
                             onClick={() => setShowFilters(true)}
-                            className="flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-slate-200/80 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-95 transition-all text-slate-900 font-black hover:bg-slate-50"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-full shadow-sm active:scale-95 transition-all font-bold"
                         >
-                            <Funnel size={20} />
-                            <span className="text-xs uppercase tracking-widest">Filters</span>
+                            <Funnel size={16} />
+                            <span className="text-xs uppercase tracking-wider">Filters</span>
                         </button>
                     </div>
                 </nav>
             )}
 
-            {/* Mobile Bottom Navigation Menu Removed */}
-
-            {/* Mobile Filters Drawer */}
+            {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
             {showFilters && (
                 <div className="fixed inset-0 z-[110] flex items-end md:hidden">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
-                    <div className="relative w-full bg-white rounded-t-[32px] shadow-2xl p-6 h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
-                        <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-xl font-bold text-slate-900">More Filters</h2>
-                            <button onClick={() => setShowFilters(false)} className="p-2 text-slate-400 hover:text-slate-600">
-                                <CircleCheck className="rotate-45" size={24} />
-                            </button>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
+                    <div className="relative w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+                        {/* Drawer handle */}
+                        <div className="flex justify-center pt-3 pb-1">
+                            <div className="w-10 h-1 rounded-full bg-slate-300" />
                         </div>
 
-                        <div className="space-y-8 pb-32">
-                            <section>
-                                <h3 className="text-sm font-bold text-slate-900 mb-4">Type</h3>
-                                <div className="space-y-3">
-                                    {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
-                                        <label key={type} className="flex items-center gap-3 group cursor-pointer">
-                                            <div className="w-5 h-5 border-2 border-slate-200 rounded-md group-hover:border-blue-500 transition-colors"></div>
-                                            <span className="text-sm font-medium text-slate-600">{type}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </section>
+                        <div className="px-5 pb-3 pt-2">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-lg font-bold text-slate-900">Filters</h2>
+                                <button onClick={() => setShowFilters(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+                                    <X size={20} />
+                                </button>
+                            </div>
 
-                            <section>
-                                <h3 className="text-sm font-bold text-slate-900 mb-4">Access</h3>
-                                <div className="space-y-3">
-                                    {['Public Court', 'Private Court', 'Membership Required'].map(access => (
-                                        <label key={access} className="flex items-center gap-3 group cursor-pointer">
-                                            <div className="w-5 h-5 border-2 border-slate-200 rounded-md group-hover:border-blue-500 transition-colors"></div>
-                                            <span className="text-sm font-medium text-slate-600">{access}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </section>
-                        </div>
+                            <div className="space-y-6 pb-6">
+                                <section>
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Court Type</h3>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
+                                            <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                                                <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                                                <span className="text-sm font-medium text-slate-600">{type}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </section>
 
-                        <div className="fixed bottom-0 left-0 right-0 p-6 bg-white border-t border-slate-100 flex items-center justify-between gap-4">
-                            <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-orange-500 hover:text-orange-600">
-                                Clear filters
-                            </button>
-                            <button
-                                onClick={() => setShowFilters(false)}
-                                className="flex-1 py-3.5 bg-cyan-600 text-white font-bold rounded-2xl text-sm hover:bg-cyan-700 transition-all"
-                            >
-                                View {filteredCourts.length} Courts
-                            </button>
+                                <section>
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access</h3>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['Public Court', 'Private Court', 'Membership Required'].map(access => (
+                                            <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                                                <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                                                <span className="text-sm font-medium text-slate-600">{access}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                                <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 px-3 py-2.5">
+                                    Clear
+                                </button>
+                                <button
+                                    onClick={() => setShowFilters(false)}
+                                    className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-200/50"
+                                >
+                                    View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Login Prompt Modal */}
-            {
-                showLoginModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
-                        <div
-                            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300"
+            {/* ──────────── LOGIN MODAL ──────────── */}
+            {showLoginModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={() => setShowLoginModal(false)}
+                    />
+                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+                        <button
                             onClick={() => setShowLoginModal(false)}
-                        />
-                        <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300">
-                            <button
-                                onClick={() => setShowLoginModal(false)}
-                                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-900 transition-colors"
-                            >
-                                <X size={24} />
-                            </button>
+                            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-900 transition-colors rounded-lg hover:bg-slate-100"
+                        >
+                            <X size={20} />
+                        </button>
 
-                            <div className="p-8 md:p-12 text-center">
-                                <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
-                                    <Lock className="text-blue-600" size={32} />
-                                </div>
-
-                                <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase mb-4">Hold On!</h2>
-                                <p className="text-slate-500 font-medium mb-10 leading-relaxed">
-                                    You need to have an account to secure this spot. Join the community to start booking courts.
-                                </p>
-
-                                <div className="space-y-4">
-                                    <button
-                                        onClick={() => {
-                                            let redirectUrl = '/booking';
-                                            const params = new URLSearchParams();
-                                            if (searchQuery) params.set('q', searchQuery);
-                                            if (selectedCourt) params.set('court', selectedCourt.name);
-                                            if (selectedSlot) params.set('slot', selectedSlot);
-                                            if (params.toString()) redirectUrl += '?' + params.toString();
-                                            navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
-                                        }}
-                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-slate-200"
-                                    >
-                                        <LogIn size={18} /> Sign In
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            let redirectUrl = '/booking';
-                                            const params = new URLSearchParams();
-                                            if (searchQuery) params.set('q', searchQuery);
-                                            if (selectedCourt) params.set('court', selectedCourt.name);
-                                            if (selectedSlot) params.set('slot', selectedSlot);
-                                            if (params.toString()) redirectUrl += '?' + params.toString();
-                                            navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
-                                        }}
-                                        className="w-full py-4 bg-lime-400 hover:bg-lime-500 text-slate-950 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-lime-100"
-                                    >
-                                        <UserPlus size={18} /> Create Account
-                                    </button>
-                                    <button
-                                        onClick={() => setShowLoginModal(false)}
-                                        className="w-full py-4 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors"
-                                    >
-                                        Maybe Later
-                                    </button>
-                                </div>
+                        <div className="p-6 sm:p-10 text-center">
+                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                <Lock className="text-blue-600" size={28} />
                             </div>
 
-                            <div className="bg-slate-50 p-6 text-center border-t border-slate-100">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PicklePlay 2026</p>
+                            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Hold On!</h2>
+                            <p className="text-slate-500 font-medium mb-8 leading-relaxed text-sm sm:text-base">
+                                You need an account to book this court. Join the community and start playing.
+                            </p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => {
+                                        let redirectUrl = '/booking';
+                                        const params = new URLSearchParams();
+                                        if (searchQuery) params.set('q', searchQuery);
+                                        if (selectedCourt) params.set('court', selectedCourt.name);
+                                        if (selectedSlot) params.set('slot', selectedSlot);
+                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+                                    }}
+                                    className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg"
+                                >
+                                    <LogIn size={16} /> Sign In
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        let redirectUrl = '/booking';
+                                        const params = new URLSearchParams();
+                                        if (searchQuery) params.set('q', searchQuery);
+                                        if (selectedCourt) params.set('court', selectedCourt.name);
+                                        if (selectedSlot) params.set('slot', selectedSlot);
+                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
+                                    }}
+                                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg shadow-blue-200/50"
+                                >
+                                    <UserPlus size={16} /> Create Account
+                                </button>
+                                <button
+                                    onClick={() => setShowLoginModal(false)}
+                                    className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
+                                >
+                                    Maybe Later
+                                </button>
                             </div>
                         </div>
                     </div>
-                )
-            }
-
-        </div >
+                </div>
+            )}
+        </div>
     );
 };
 
