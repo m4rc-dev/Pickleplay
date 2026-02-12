@@ -802,6 +802,52 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         )}
       </div>
 
+      {/* Free Trial Banner for Court Owners */}
+      {userRole === 'COURT_OWNER' && !isLoading && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-amber-100 relative overflow-hidden animate-fade-in">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={20} className="text-amber-200" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-100">Limited Time Offer</span>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
+                  🎉 Welcome to PicklePlay!
+                </h3>
+                <p className="text-amber-50 text-sm md:text-base leading-relaxed max-w-2xl">
+                  You're now enjoying a <span className="font-black text-white">1-month FREE trial</span> with full access to all premium features.
+                  Manage unlimited courts, track bookings, analyze revenue, and grow your business—completely free for 30 days!
+                </p>
+                <div className="flex flex-wrap items-center gap-4 mt-4">
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Unlimited Courts</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Revenue Analytics</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Priority Support</span>
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30">
+                  <p className="text-xs font-bold text-amber-100 uppercase tracking-widest mb-1">Trial Ends In</p>
+                  <p className="text-4xl font-black text-white">30</p>
+                  <p className="text-xs font-bold text-amber-100 uppercase">Days</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {renderRoleMetrics()}
       </div>
