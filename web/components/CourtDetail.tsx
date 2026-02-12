@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     MapPin,
@@ -60,7 +61,7 @@ const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
             });
         }
     }, [lat, lng]);
-    return <div ref={mapRef} className="w-full h-full rounded-[32px] overflow-hidden border border-slate-200 shadow-sm" />;
+    return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden border border-slate-200" />;
 };
 
 const CourtDetail: React.FC = () => {
@@ -326,6 +327,7 @@ const CourtDetail: React.FC = () => {
         setSelectedSlot(null);
         setIsBooked(false);
         setShowSuccessModal(false);
+        navigate('/booking');
     };
 
     const fetchMyBookings = async () => {
@@ -353,12 +355,20 @@ const CourtDetail: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="pt-0 md:pt-28 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto animate-pulse">
-                <div className="h-10 bg-slate-200 rounded-2xl w-48"></div>
-                <div className="aspect-[21/9] bg-slate-200 rounded-[48px]"></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="h-64 bg-slate-200 rounded-[40px]"></div>
-                    <div className="h-64 bg-slate-200 rounded-[40px]"></div>
+            <div className="space-y-10 animate-in fade-in duration-700 animate-pulse">
+                <div className="h-8 bg-slate-200 rounded-xl w-40 mb-6"></div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+                    <div className="lg:col-span-2 space-y-4">
+                        <div className="h-12 bg-slate-200 rounded-xl w-3/4"></div>
+                        <div className="aspect-[16/9] bg-slate-200 rounded-2xl"></div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="h-24 bg-slate-200 rounded-xl"></div>
+                            <div className="h-24 bg-slate-200 rounded-xl"></div>
+                            <div className="h-24 bg-slate-200 rounded-xl"></div>
+                            <div className="h-24 bg-slate-200 rounded-xl"></div>
+                        </div>
+                    </div>
+                    <div className="h-96 bg-slate-200 rounded-2xl"></div>
                 </div>
             </div>
         );
@@ -367,35 +377,35 @@ const CourtDetail: React.FC = () => {
     if (!court) return null;
 
     return (
-        <div className="pt-8 md:pt-12 pb-24 md:pb-12 px-4 md:px-12 lg:px-24 max-w-[1920px] mx-auto min-h-screen relative">
-            <div className="space-y-4 md:space-y-8">
+        <div className="pb-10 space-y-10 animate-in fade-in duration-700 relative">
+            <div className="space-y-5 md:space-y-6">
                 {/* Header Navigation */}
-                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 md:gap-4">
+                <div className="flex items-center justify-between gap-3">
                     <button
                         onClick={() => navigate(-1)}
-                        className="group inline-flex items-center justify-center md:justify-start gap-2 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all"
+                        className="group inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-all"
                     >
-                        <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-                        Back to discovery
+                        <ChevronLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+                        <span className="hidden sm:inline">Back</span>
                     </button>
-                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                    <div className="flex items-center gap-2">
                         {!user && (
                             <button
                                 onClick={() => navigate('/')}
-                                className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-lime-400 border border-lime-400 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-lime-500 hover:border-lime-500 transition-all shadow-sm active:scale-95"
+                                className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-all active:scale-95"
                             >
-                                Back to Home
+                                Home
                             </button>
                         )}
                         {user && (
                             <button
                                 onClick={fetchMyBookings}
-                                className="flex-1 md:flex-none px-4 md:px-6 py-2 bg-white border border-slate-200 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm active:scale-95"
+                                className="px-4 py-2 bg-white border border-slate-200 text-xs font-bold text-slate-600 rounded-lg hover:border-blue-400 hover:text-blue-600 transition-all active:scale-95"
                             >
-                                View Booked Courts
+                                My Bookings
                             </button>
                         )}
-                        <span className={`w-full md:w-auto text-center px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-lime-50 text-lime-600'
+                        <span className={`px-3 py-1.5 rounded-lg text-[11px] font-bold ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'
                             }`}>
                             {court.type}
                         </span>
@@ -403,80 +413,84 @@ const CourtDetail: React.FC = () => {
                 </div>
 
                 {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
 
                     {/* Left: Court Details & Map */}
-                    <div className="lg:col-span-2 space-y-8 md:space-y-12">
-                        <div className="bg-white p-6 md:p-16 rounded-3xl md:rounded-[48px] border border-slate-200 shadow-sm space-y-8 md:space-y-12">
+                    <div className="lg:col-span-2">
+                        <div className="bg-white p-5 sm:p-6 md:p-8 lg:p-10 rounded-2xl border border-slate-200/60 shadow-sm space-y-6 md:space-y-8">
                             <div>
-                                <p className="text-[10px] md:text-xs font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-4 md:mb-6">COURT DETAILS</p>
-                                <h1 className="text-2xl md:text-5xl font-black text-slate-950 tracking-tighter leading-tight mb-4 md:mb-6">{court.name}</h1>
-                                <div className="flex items-center gap-3 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
-                                    <MapPin size={16} className="text-blue-500" />
-                                    <span>{court.location}</span>
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mb-2">Court Details</p>
+                                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 tracking-tight leading-tight mb-3">{court.name}</h1>
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <MapPin size={14} className="text-blue-500 shrink-0" />
+                                    <span className="text-sm font-medium">{court.location}</span>
                                 </div>
                             </div>
 
                             {/* Map Section */}
-                            <div className="relative aspect-[16/9] md:aspect-[21/9] group">
+                            <div className="relative aspect-[16/9] md:aspect-[2/1] rounded-xl overflow-hidden">
                                 <MiniMap lat={court.latitude || 0} lng={court.longitude || 0} />
-                                <div className="absolute top-4 right-4 h-10 w-10 bg-white rounded-xl shadow-lg border border-slate-100 flex items-center justify-center text-slate-900 hover:scale-110 transition-transform cursor-pointer">
-                                    <Navigation size={18} />
+                                <div className="absolute top-3 right-3 h-9 w-9 bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-slate-100 flex items-center justify-center text-slate-700 hover:scale-105 transition-transform cursor-pointer">
+                                    <Navigation size={16} />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
-                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
-                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Price</p>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-lg md:text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
-                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-400 lowercase">/hr</span>
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+                                <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Price</p>
+                                    <div className="flex items-baseline gap-0.5">
+                                        <span className="text-lg sm:text-xl font-black text-slate-950">₱{court.pricePerHour}</span>
+                                        <span className="text-[9px] font-medium text-slate-400">/hr</span>
                                     </div>
                                 </div>
-                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
-                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Capacity</p>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-lg md:text-2xl font-black text-slate-950">{court.numCourts}</span>
-                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-400 lowercase">units</span>
+                                <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Capacity</p>
+                                    <div className="flex items-baseline gap-0.5">
+                                        <span className="text-lg sm:text-xl font-black text-slate-950">{court.numCourts}</span>
+                                        <span className="text-[9px] font-medium text-slate-400">units</span>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setShowReviewsModal(true)}
-                                    className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100 hover:border-amber-400 hover:bg-white transition-all text-left group"
+                                    className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100 hover:border-amber-300 hover:bg-amber-50/40 transition-all text-left group"
                                 >
-                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3 group-hover:text-amber-600">Rating</p>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-lg md:text-2xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
-                                        <Star size={16} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
-                                        {totalReviews > 0 && <span className="text-[9px] md:text-[10px] font-bold text-slate-400">({totalReviews})</span>}
+                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 group-hover:text-amber-600">Rating</p>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-lg sm:text-xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
+                                        <Star size={14} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
+                                        {totalReviews > 0 && <span className="text-[9px] font-medium text-slate-400">({totalReviews})</span>}
                                     </div>
                                 </button>
-                                <div className="p-6 md:p-8 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100">
-                                    <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-2 md:mb-3">Category</p>
-                                    <span className="text-xs md:text-sm font-black text-slate-950 uppercase">{court.type}</span>
+                                <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100">
+                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category</p>
+                                    <span className="text-sm font-bold text-slate-950 uppercase">{court.type}</span>
                                 </div>
                             </div>
 
                             {/* Amenities */}
-                            <div className="space-y-4 md:space-y-6">
-                                <p className="text-[10px] md:text-xs font-black text-slate-900 uppercase tracking-widest mb-2 md:mb-3">Available Amenities</p>
+                            <div>
+                                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Available Amenities</p>
                                 <div className="flex flex-wrap gap-2">
                                     {(court.amenities || []).map((amenity, idx) => (
-                                        <span key={idx} className="px-5 py-2.5 bg-slate-50 text-slate-700 text-[11px] font-black rounded-2xl border border-slate-200 uppercase tracking-wide hover:bg-white hover:border-blue-400 transition-all cursor-default">
+                                        <span key={idx} className="px-3 py-1.5 bg-slate-50 text-slate-600 text-[11px] font-semibold rounded-lg border border-slate-200 uppercase tracking-wide">
                                             {amenity}
                                         </span>
                                     ))}
+                                    {(!court.amenities || court.amenities.length === 0) && (
+                                        <span className="text-sm text-slate-400">No amenities listed</span>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Location Info */}
-                            <div className="p-6 md:p-10 bg-blue-50 rounded-2xl md:rounded-[32px] border border-blue-100 flex items-start gap-3 md:gap-4">
-                                <div className="p-2 md:p-3 bg-blue-600 text-white rounded-xl md:rounded-2xl">
-                                    <Info size={16} className="md:w-5 md:h-5" />
+                            {/* About Section */}
+                            <div className="p-4 sm:p-5 bg-blue-50/80 rounded-xl border border-blue-100 flex items-start gap-3">
+                                <div className="p-2 bg-blue-600 text-white rounded-lg shrink-0">
+                                    <Info size={14} />
                                 </div>
                                 <div>
-                                    <h4 className="text-xs md:text-sm font-black text-blue-900 uppercase tracking-wide mb-1">About this Court</h4>
-                                    <p className="text-[10px] md:text-xs text-blue-800/70 font-medium leading-relaxed">
+                                    <h4 className="text-xs font-bold text-blue-900 mb-1">About this Court</h4>
+                                    <p className="text-xs text-blue-800/70 font-medium leading-relaxed">
                                         This premium {court.type.toLowerCase()} facility is maintained daily to ensure professional playing standards.
                                         Located at {court.location}, it features state-of-the-art surfacing and amenities for all skill levels.
                                     </p>
@@ -486,20 +500,20 @@ const CourtDetail: React.FC = () => {
                     </div>
 
                     {/* Right: Booking Sidebar */}
-                    <div className="lg:sticky lg:top-32 space-y-6 md:space-y-8">
-                        <div className="bg-white p-6 md:p-10 rounded-3xl md:rounded-[40px] border border-slate-200 shadow-xl space-y-6 md:space-y-10">
+                    <div className="lg:sticky lg:top-36 space-y-4">
+                        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
                             <div>
-                                <h3 className="text-lg md:text-xl font-black text-slate-950 tracking-tight mb-2 md:mb-3">Select Schedule</h3>
-                                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-wider md:tracking-widest">When will you be playing?</p>
+                                <h3 className="text-lg font-bold text-slate-950 tracking-tight mb-1">Select Schedule</h3>
+                                <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">When will you be playing?</p>
                             </div>
 
                             {/* Date Picker */}
-                            <div className="space-y-6">
-                                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                     <span>Choose Date</span>
                                     <CalendarIcon size={14} className="text-blue-600" />
                                 </div>
-                                <div className="grid grid-cols-7 gap-2 -mx-2 px-2">
+                                <div className="grid grid-cols-7 gap-1.5">
                                     {Array.from({ length: 7 }).map((_, i) => {
                                         const date = new Date();
                                         date.setDate(date.getDate() + i);
@@ -511,15 +525,15 @@ const CourtDetail: React.FC = () => {
                                                     setSelectedDate(date);
                                                     setSelectedSlot(null);
                                                 }}
-                                                className={`flex flex-col items-center py-3 rounded-xl border transition-all duration-300 ${isSelected
-                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                    : 'bg-slate-50 border-transparent text-slate-400 hover:border-blue-200 hover:bg-white'
+                                                className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 ${isSelected
+                                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                                                    : 'bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600'
                                                     }`}
                                             >
-                                                <span className={`text-[8px] font-black uppercase mb-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                <span className={`text-[8px] font-bold uppercase mb-0.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
                                                     {date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
                                                 </span>
-                                                <span className="text-sm font-black tracking-tighter">{date.getDate()}</span>
+                                                <span className="text-sm font-bold">{date.getDate()}</span>
                                             </button>
                                         );
                                     })}
@@ -527,12 +541,12 @@ const CourtDetail: React.FC = () => {
                             </div>
 
                             {/* Slots */}
-                            <div className="space-y-6">
-                                <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                     <span>Choose Slot</span>
                                     <Clock size={14} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
+                                <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto">
                                     {TIME_SLOTS.map(slot => {
                                         const isBlocked = blockedSlots.has(slot);
                                         const isBookedSlot = bookedSlots.has(slot);
@@ -544,11 +558,11 @@ const CourtDetail: React.FC = () => {
                                                 key={slot}
                                                 disabled={isOccupied}
                                                 onClick={() => setSelectedSlot(slot)}
-                                                className={`py-3 px-2 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${isSelected
-                                                    ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
+                                                className={`py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all ${isSelected
+                                                    ? 'bg-slate-900 border-slate-900 text-white shadow-md'
                                                     : isOccupied
-                                                        ? 'bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed opacity-50'
-                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'
+                                                        ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
                                                     }`}
                                             >
                                                 {isBookedSlot ? 'N/A' : slot}
@@ -560,13 +574,13 @@ const CourtDetail: React.FC = () => {
 
                             {/* Price Summary */}
                             {selectedSlot && (
-                                <div className="p-6 bg-slate-950 rounded-[32px] text-white animate-in zoom-in-95 duration-300">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Total Price</span>
-                                        <span className="text-2xl font-black">₱{court.pricePerHour}</span>
+                                <div className="p-4 bg-slate-900 rounded-xl text-white">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Total Price</span>
+                                        <span className="text-xl font-black">₱{court.pricePerHour}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 italic">
-                                        <CheckCircle2 size={12} className="text-lime-400" />
+                                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                                        <CheckCircle2 size={11} className="text-emerald-400" />
                                         Includes gear storage & locker usage
                                     </div>
                                 </div>
@@ -575,107 +589,106 @@ const CourtDetail: React.FC = () => {
                             <button
                                 onClick={handleBooking}
                                 disabled={!selectedSlot || isProcessing || isBooked}
-                                className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${isBooked
-                                    ? 'bg-lime-400 text-slate-900 shadow-none'
-                                    : 'bg-lime-400 hover:bg-lime-500 text-slate-900 shadow-2xl shadow-lime-200 disabled:opacity-50 disabled:shadow-none'
+                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isBooked
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
                                     }`}
                             >
-                                {isProcessing ? <Loader2 className="animate-spin" /> : (
+                                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : (
                                     isBooked ? (
                                         <>
-                                            <CheckCircle2 size={20} />
-                                            Success!
+                                            <CheckCircle2 size={18} />
+                                            Booked!
                                         </>
                                     ) : (
                                         <>
                                             {user ? 'Proceed to Book' : 'Login to Book'}
-                                            <ArrowRight size={18} />
+                                            <ArrowRight size={16} />
                                         </>
                                     )
                                 )}
                             </button>
                         </div>
 
-                        <div className="bg-amber-50 rounded-[32px] p-6 border border-amber-100 flex gap-3">
-                            <Shield size={20} className="text-amber-600 shrink-0" />
+                        <div className="bg-amber-50 rounded-xl p-4 border border-amber-100/80 flex gap-3">
+                            <Shield size={16} className="text-amber-600 shrink-0 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest mb-1">PicklePlay verified</p>
-                                <p className="text-[10px] text-amber-800/70 font-medium">This venue undergoes monthly quality inspections.</p>
+                                <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wider mb-0.5">PicklePlay Verified</p>
+                                <p className="text-[10px] text-amber-800/60 font-medium">This venue undergoes monthly quality inspections.</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
             </div>
+
             {/* Confirmation Modal */}
-            {showConfirmModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowConfirmModal(false)} />
-                    <div className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl p-10 space-y-8 animate-in zoom-in-95 duration-300">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Booking Details</h2>
-                            <p className="text-slate-500 font-medium">Review your schedule before confirming.</p>
+            {showConfirmModal && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowConfirmModal(false)} />
+                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-slate-900">Booking Details</h2>
+                            <p className="text-sm text-slate-500">Review your schedule before confirming.</p>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="p-6 bg-slate-50 rounded-[32px] space-y-4">
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="font-black text-slate-400 uppercase tracking-widest">Court</span>
-                                    <span className="font-black text-slate-900 uppercase italic">{court.name}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="font-black text-slate-400 uppercase tracking-widest">Date</span>
-                                    <span className="font-black text-slate-900 uppercase">{selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="font-black text-slate-400 uppercase tracking-widest">Time Slot</span>
-                                    <span className="font-black text-slate-900 uppercase">{selectedSlot}</span>
-                                </div>
-                                <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
-                                    <span className="font-black text-blue-600 uppercase tracking-widest text-[10px]">Grand Total</span>
-                                    <span className="text-2xl font-black text-slate-950">₱{court.pricePerHour}</span>
-                                </div>
+                        <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="font-medium text-slate-400">Court</span>
+                                <span className="font-bold text-slate-900">{court.name}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="font-medium text-slate-400">Date</span>
+                                <span className="font-bold text-slate-900">{selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="font-medium text-slate-400">Time</span>
+                                <span className="font-bold text-slate-900">{selectedSlot}</span>
+                            </div>
+                            <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
+                                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total</span>
+                                <span className="text-xl font-black text-slate-950">₱{court.pricePerHour}</span>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setShowConfirmModal(false)}
-                                className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleConfirmDetails}
-                                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all"
+                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all"
                             >
-                                Confirm Details
+                                Confirm
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                </div>,
+            document.body)}
 
             {/* Payment Modal */}
-            {showPaymentModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
-                    <div className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl p-10 space-y-8 animate-in zoom-in-95 duration-300">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Mode of Payment</h2>
-                            <p className="text-slate-500 font-medium">Select how you want to pay for your booking.</p>
+            {showPaymentModal && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
+                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-slate-900">Payment Method</h2>
+                            <p className="text-sm text-slate-500">Select how you want to pay.</p>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-3">
                             {/* Online Payment (Disabled) */}
-                            <div className="relative opacity-50 cursor-not-allowed group">
-                                <div className="p-6 bg-slate-50 rounded-[32px] border-2 border-transparent flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-200 rounded-2xl flex items-center justify-center text-slate-400">
-                                        <CreditCard size={24} />
+                            <div className="opacity-40 cursor-not-allowed">
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400">
+                                        <CreditCard size={20} />
                                     </div>
                                     <div className="flex-1">
-                                        <p className="font-black text-slate-950 uppercase tracking-widest text-[10px]">Online Payment</p>
-                                        <p className="text-[10px] font-bold text-red-500 uppercase mt-0.5">This Feature is not yet available</p>
+                                        <p className="text-sm font-bold text-slate-900">Online Payment</p>
+                                        <p className="text-[11px] font-medium text-red-500">Coming soon</p>
                                     </div>
                                 </div>
                             </div>
@@ -683,84 +696,84 @@ const CourtDetail: React.FC = () => {
                             {/* Cash Payment */}
                             <button
                                 onClick={() => setPaymentMethod('cash')}
-                                className={`w-full p-6 rounded-[32px] border-2 transition-all flex items-center gap-4 text-left ${paymentMethod === 'cash'
-                                    ? 'bg-blue-50 border-blue-600'
-                                    : 'bg-white border-slate-100 hover:border-blue-200'
+                                className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${paymentMethod === 'cash'
+                                    ? 'bg-blue-50 border-blue-500'
+                                    : 'bg-white border-slate-200 hover:border-blue-300'
                                     }`}
                             >
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
                                     }`}>
-                                    <Banknote size={24} />
+                                    <Banknote size={20} />
                                 </div>
                                 <div className="flex-1">
-                                    <p className="font-black text-slate-950 uppercase tracking-widest text-[10px]">Cash Payment</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">Walk In Payment</p>
+                                    <p className="text-sm font-bold text-slate-900">Cash Payment</p>
+                                    <p className="text-[11px] font-medium text-slate-400">Walk-in payment</p>
                                 </div>
                                 {paymentMethod === 'cash' && (
-                                    <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                                    <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
                                         <CheckCircle2 size={14} />
                                     </div>
                                 )}
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setShowPaymentModal(false)}
-                                className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
                             >
                                 Back
                             </button>
                             <button
                                 onClick={confirmBooking}
                                 disabled={!paymentMethod || isProcessing}
-                                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                             >
                                 {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Confirm Booking'}
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                </div>,
+            document.body)}
 
             {/* Success Modal */}
-            {showSuccessModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" />
-                    <div className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl p-12 text-center space-y-8 animate-in zoom-in-95 duration-300">
-                        <div className="w-24 h-24 bg-lime-50 rounded-[32px] flex items-center justify-center mx-auto">
-                            <CircleCheck size={48} className="text-lime-500" />
+            {showSuccessModal && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-6">
+                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto">
+                            <CircleCheck size={36} className="text-emerald-500" />
                         </div>
-                        <div className="space-y-2">
-                            <h2 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Successfully Booked!</h2>
-                            <p className="text-slate-500 font-medium">Your court time has been reserved. You can find your booking details in "My Bookings".</p>
+                        <div className="space-y-1">
+                            <h2 className="text-2xl font-bold text-slate-900">Booked Successfully!</h2>
+                            <p className="text-sm text-slate-500">Your court time has been reserved. Check "My Bookings" for details.</p>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <button
                                 onClick={() => {
                                     setShowSuccessModal(false);
                                     setShowReceiptModal(true);
                                 }}
-                                className="w-full py-5 bg-blue-600 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                                className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-200/50"
                             >
-                                View My Receipt
+                                View Receipt
                             </button>
                             <button
                                 onClick={bookAnother}
-                                className="w-full py-5 bg-slate-900 text-white font-black rounded-[24px] text-sm uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                                className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition-all"
                             >
                                 Book Another Slot
                             </button>
                             <button
                                 onClick={() => setShowSuccessModal(false)}
-                                className="w-full py-5 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all"
+                                className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
                             >
-                                Close Window
+                                Close
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                </div>,
+            document.body)}
 
             {showReceiptModal && selectedBookingForReceipt && (
                 <Receipt
@@ -770,107 +783,103 @@ const CourtDetail: React.FC = () => {
             )}
 
             {/* My Bookings Modal */}
-            {showMyBookings && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowMyBookings(false)} />
-                    <div className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-                        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-                            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">My Booked Courts</h2>
-                            <button onClick={() => setShowMyBookings(false)} className="p-2 text-slate-400 hover:text-slate-950 transition-colors">
-                                <Ban size={24} />
+            {showMyBookings && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMyBookings(false)} />
+                    <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-slate-900">My Bookings</h2>
+                            <button onClick={() => setShowMyBookings(false)} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-all">
+                                <X size={18} />
                             </button>
                         </div>
-                        <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        <div className="p-5 sm:p-6 max-h-[60vh] overflow-y-auto">
                             {isLoadingMyBookings ? (
-                                <div className="flex flex-col items-center justify-center py-12 gap-4">
-                                    <Loader2 className="animate-spin text-blue-600" size={32} />
-                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Syncing your bookings...</p>
+                                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                                    <Loader2 className="animate-spin text-blue-600" size={28} />
+                                    <p className="text-xs font-medium text-slate-400">Loading bookings...</p>
                                 </div>
                             ) : myBookings.length > 0 ? (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {myBookings.map((b) => (
-                                        <div key={b.id} className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 group hover:border-blue-200 transition-all">
-                                            <div className="flex justify-between items-start mb-4">
+                                        <div key={b.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-all">
+                                            <div className="flex justify-between items-start mb-2">
                                                 <div>
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">REFERENCE: #{b.id.slice(0, 8)}</p>
-                                                    <h4 className="text-lg font-black text-slate-900 uppercase italic leading-none">{b.court?.name}</h4>
+                                                    <p className="text-[10px] font-medium text-blue-600 mb-0.5">#{b.id.slice(0, 8)}</p>
+                                                    <h4 className="text-sm font-bold text-slate-900">{b.court?.name}</h4>
                                                 </div>
-                                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${b.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
                                                     b.status === 'pending' ? 'bg-amber-100 text-amber-700' :
                                                         'bg-slate-200 text-slate-500'
                                                     }`}>
                                                     {b.status}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-6">
-                                                <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
-                                                    <CalendarIcon size={14} />
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                                                <span className="flex items-center gap-1">
+                                                    <CalendarIcon size={12} />
                                                     {b.date}
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase">
-                                                    <Clock size={14} />
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    <Clock size={12} />
                                                     {b.start_time.slice(0, 5)} - {b.end_time.slice(0, 5)}
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[10px] font-black text-slate-900 uppercase ml-auto">
-                                                    <DollarSign size={14} />
+                                                </span>
+                                                <span className="flex items-center gap-1 ml-auto font-bold text-slate-900">
                                                     ₱{b.total_price}
-                                                </div>
+                                                </span>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-12">
-                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-sm italic">You haven't booked any courts yet.</p>
+                                <div className="text-center py-10">
+                                    <p className="text-sm text-slate-400">No bookings yet</p>
                                 </div>
                             )}
                         </div>
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 text-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">PicklePlay 2026 • Premium Network</p>
-                        </div>
                     </div>
-                </div>
-            )}
+                </div>,
+            document.body)}
 
             {/* Reviews Modal */}
-            {showReviewsModal && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowReviewsModal(false)} />
-                    <div className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            {showReviewsModal && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowReviewsModal(false)} />
+                    <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Court Reviews</h2>
-                                <div className="flex items-center gap-2 mt-1">
+                                <h2 className="text-lg font-bold text-slate-900">Reviews</h2>
+                                <div className="flex items-center gap-2 mt-0.5">
                                     <div className="flex items-center">
                                         {[1, 2, 3, 4, 5].map((star) => (
                                             <Star
                                                 key={star}
-                                                size={14}
+                                                size={12}
                                                 className={star <= Math.round(averageRating) ? "text-amber-400 fill-amber-400" : "text-slate-200"}
                                             />
                                         ))}
                                     </div>
-                                    <span className="text-xs font-bold text-slate-500">{averageRating} out of 5 ({totalReviews} reviews)</span>
+                                    <span className="text-xs text-slate-500">{averageRating} ({totalReviews})</span>
                                 </div>
                             </div>
-                            <button onClick={() => setShowReviewsModal(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-400 hover:text-slate-950 hover:border-slate-400 transition-all shadow-sm">
-                                <X size={20} />
+                            <button onClick={() => setShowReviewsModal(false)} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-all">
+                                <X size={18} />
                             </button>
                         </div>
 
-                        <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        <div className="p-5 sm:p-6 max-h-[60vh] overflow-y-auto">
                             {isLoadingReviews ? (
-                                <div className="flex flex-col items-center justify-center py-12 gap-4">
-                                    <Loader2 className="animate-spin text-amber-500" size={32} />
-                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading feedback...</p>
+                                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                                    <Loader2 className="animate-spin text-amber-500" size={28} />
+                                    <p className="text-xs text-slate-400">Loading reviews...</p>
                                 </div>
                             ) : reviews.length > 0 ? (
-                                <div className="space-y-6">
+                                <div className="space-y-4">
                                     {reviews.map((review) => (
-                                        <div key={review.id} className="p-6 bg-slate-50 rounded-[32px] border border-slate-100">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                                        <div key={review.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-8 h-8 rounded-full overflow-hidden border border-white shadow-sm">
                                                         <img
                                                             src={review.user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(review.user?.full_name || 'User')}`}
                                                             alt={review.user?.full_name}
@@ -878,40 +887,36 @@ const CourtDetail: React.FC = () => {
                                                         />
                                                     </div>
                                                     <div>
-                                                        <p className="text-sm font-black text-slate-900">{review.user?.full_name || 'Anonymous Player'}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        <p className="text-sm font-bold text-slate-900">{review.user?.full_name || 'Anonymous'}</p>
+                                                        <p className="text-[10px] text-slate-400">
                                                             {new Date(review.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center px-3 py-1 bg-white rounded-full border border-slate-100 shadow-sm">
-                                                    <span className="text-xs font-black text-slate-900 mr-1">{review.rating}</span>
-                                                    <Star size={12} className="text-amber-400 fill-amber-400" />
+                                                <div className="flex items-center gap-0.5 px-2 py-0.5 bg-white rounded-md border border-slate-100">
+                                                    <span className="text-xs font-bold text-slate-900">{review.rating}</span>
+                                                    <Star size={10} className="text-amber-400 fill-amber-400" />
                                                 </div>
                                             </div>
-                                            <p className="text-sm text-slate-600 font-medium leading-relaxed italic">
+                                            <p className="text-sm text-slate-600 leading-relaxed">
                                                 "{review.comment}"
                                             </p>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-16 space-y-4">
-                                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto border-2 border-dashed border-slate-200">
-                                        <MessageSquare size={32} className="text-slate-300" />
+                                <div className="text-center py-12 space-y-3">
+                                    <div className="w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mx-auto border-2 border-dashed border-slate-200">
+                                        <MessageSquare size={24} className="text-slate-300" />
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">No Reviews Yet</h3>
-                                    <p className="text-slate-500 font-medium max-w-xs mx-auto text-sm">Be the first to share your experience after playing at this venue!</p>
+                                    <h3 className="text-lg font-bold text-slate-900">No Reviews Yet</h3>
+                                    <p className="text-sm text-slate-500 max-w-xs mx-auto">Be the first to share your experience!</p>
                                 </div>
                             )}
                         </div>
-
-                        <div className="p-8 bg-slate-50 border-t border-slate-100 text-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Verified Player Feedback • PicklePlay</p>
-                        </div>
                     </div>
-                </div>
-            )}
+                </div>,
+            document.body)}
         </div>
     );
 };

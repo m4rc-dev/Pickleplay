@@ -27,7 +27,8 @@ import {
   Mail,
   Phone,
   Calendar,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 import { Product } from '../types';
 import { supabase } from '../services/supabase';
@@ -572,6 +573,28 @@ const Home: React.FC = () => {
     return courtsToFilter;
   };
 
+  // Get filtered locations (grouping courts by their location) for search suggestions
+  const getFilteredLocations = () => {
+    let locationsToFilter = nearbyLocations.length > 0 ? nearbyLocations : locations;
+
+    // Filter by user's region (Luzon, Visayas, Mindanao)
+    if (userRegion && !searchQuery.trim()) {
+      locationsToFilter = locationsToFilter.filter(loc => loc.region === userRegion);
+    }
+
+    // If searching, filter by query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      locationsToFilter = locationsToFilter.filter(loc =>
+        loc.name.toLowerCase().includes(query) ||
+        loc.city.toLowerCase().includes(query) ||
+        loc.address.toLowerCase().includes(query)
+      );
+    }
+
+    return locationsToFilter;
+  };
+
   // Region center coordinates for map zooming
   const REGION_CENTERS: Record<string, { lat: number, lng: number, zoom: number }> = {
     'Visayas': { lat: 10.3157, lng: 123.8854, zoom: 10 },  // Cebu center
@@ -587,6 +610,17 @@ const Home: React.FC = () => {
       navigate(`/booking?court=${encodeURIComponent(suggestion.name)}&lat=${suggestion.latitude}&lng=${suggestion.longitude}&zoom=16`);
     } else {
       navigate(`/booking?q=${encodeURIComponent(suggestion.name)}`);
+    }
+  };
+
+  const handleLocationClick = (location: LocationWithDistance) => {
+    setSearchQuery(location.name);
+    setShowSuggestions(false);
+    // Navigate to booking page with locationId to show location detail
+    if (location.latitude && location.longitude) {
+      navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=14&loc=${encodeURIComponent(location.city)}`);
+    } else {
+      navigate(`/booking?q=${encodeURIComponent(location.name)}`);
     }
   };
 
@@ -617,7 +651,7 @@ const Home: React.FC = () => {
 
   // Derive Featured Locations and Title based on GPS status and user location
   const getFeaturedData = () => {
-    let title = <span>Featured Locations in the <span className="text-lime-500">Philippines.</span></span>;
+    let title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
     let featuredList = [];
 
     // Prioritize locations over courts
@@ -634,7 +668,7 @@ const Home: React.FC = () => {
             ? `${cityName}, ${userRegion}`
             : (cityName === 'Your Location' && userRegion ? userRegion : cityName);
 
-          title = <span>Featured Locations in <span className="text-lime-500">{displayLocation}.</span></span>;
+          title = <span>Featured Courts in <span className="text-lime-500">{displayLocation}.</span></span>;
         } else {
           // GPS enabled but city info still loading or unavailable
           title = <span>Featured Locations <span className="text-lime-500">Near You.</span></span>;
@@ -666,7 +700,7 @@ const Home: React.FC = () => {
         }
       } else {
         // Location OFF: Show top 4 rated locations across PH (5 to 1 stars)
-        title = <span>Featured Locations in the <span className="text-lime-500">Philippines.</span></span>;
+        title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
         featuredList = allLocationsSorted.slice(0, 4);
       }
     } else {
@@ -803,8 +837,8 @@ const Home: React.FC = () => {
                           onClick={handlePlaceClick}
                           className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
                         >
-                          <div className="w-10 h-10 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
-                            <MapPin size={20} />
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center">
+                            <img src="/images/PinMarker.png" alt="Pin" className="w-8 h-8 object-contain" />
                           </div>
                           <span className="text-slate-800 font-medium text-[15px]">{userCity}</span>
                         </button>
@@ -818,8 +852,8 @@ const Home: React.FC = () => {
                           onClick={() => handleSuggestedCityClick(city)}
                           className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
                         >
-                          <div className="w-10 h-10 rounded-full border-2 border-teal-400 flex items-center justify-center text-teal-500">
-                            <MapPin size={20} />
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center">
+                            <img src="/images/PinMarker.png" alt="Pin" className="w-8 h-8 object-contain" />
                           </div>
                           <span className="text-slate-800 font-medium text-[15px]">{city.name}</span>
                         </button>
@@ -827,36 +861,31 @@ const Home: React.FC = () => {
                     </>
                   )}
 
-                  {/* COURTS Section */}
-                  {getFilteredCourts().length > 0 && (
+                  {/* COURTS Section - Now showing Locations */}
+                  {getFilteredLocations().length > 0 && (
                     <>
                       <p className="px-6 py-2 text-xs font-bold text-teal-500 uppercase tracking-wider mt-1">Courts</p>
                       <div className="max-h-[350px] overflow-y-auto no-scrollbar">
-                        {getFilteredCourts().slice(0, 10).map((court, idx) => (
+                        {getFilteredLocations().slice(0, 10).map((location, idx) => (
                           <button
                             key={idx}
                             type="button"
-                            onClick={() => handleSuggestionClick(court)}
+                            onClick={() => handleLocationClick(location)}
                             className="w-full text-left px-6 py-3 hover:bg-slate-50 flex items-center gap-4 group transition-colors"
                           >
-                            <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
-                              {/* Pickleball paddle icon */}
-                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                                <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                <circle cx="10" cy="8" r="1" fill="currentColor" />
-                                <circle cx="14" cy="8" r="1" fill="currentColor" />
-                                <circle cx="12" cy="11" r="1" fill="currentColor" />
-                              </svg>
+                            <div className="w-10 h-10 rounded-full flex items-center justify-center">
+                              <img src="/images/PinMarker.png" alt="Pin" className="w-8 h-8 object-contain" />
                             </div>
                             <div className="flex-1">
-                              <p className="text-slate-800 font-semibold text-[15px]">{court.name}</p>
+                              <p className="text-slate-800 font-semibold text-[15px]">{location.name}</p>
                               <p className="text-[13px] text-slate-400">
-                                {court.distance !== undefined && (
-                                  <span>{court.distance.toFixed(1)} miles away</span>
+                                {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                                {location.distance !== undefined && (
+                                  <span> · {location.distance.toFixed(1)} miles away</span>
                                 )}
-                                {court.distance !== undefined && court.city && ' · '}
-                                <span>{court.city}{court.region ? `, ${court.region}` : ''}</span>
+                                {location.city && (
+                                  <span> · {location.city}{location.region ? `, ${location.region}` : ''}</span>
+                                )}
                               </p>
                             </div>
                           </button>
@@ -865,15 +894,15 @@ const Home: React.FC = () => {
                     </>
                   )}
 
-                  {/* No courts in region message */}
-                  {!isLoadingLocation && userCity && getFilteredCourts().length === 0 && (
+                  {/* No locations in region message */}
+                  {!isLoadingLocation && userCity && getFilteredLocations().length === 0 && (
                     <div className="px-6 py-6 text-center">
-                      <p className="text-sm text-slate-500">No courts found in {userRegion || 'your area'}</p>
+                      <p className="text-sm text-slate-500">No court locations found in {userRegion || 'your area'}</p>
                     </div>
                   )}
 
                   {/* No location message */}
-                  {!isLoadingLocation && !userCity && getFilteredCourts().length === 0 && (
+                  {!isLoadingLocation && !userCity && getFilteredLocations().length === 0 && (
                     <div className="px-6 py-8 text-center">
                       <MapPin size={32} className="mx-auto text-slate-300 mb-2" />
                       <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
@@ -957,7 +986,7 @@ const Home: React.FC = () => {
                     {isLocation ? (
                       // Location Card Template
                       <>
-                        <Link to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
+                        <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
                           <img
                             src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
                             alt={item.name}
@@ -992,7 +1021,7 @@ const Home: React.FC = () => {
                           </div>
 
                           {/* Location Name/City */}
-                          <Link to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
+                          <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
                             <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
                               {item.name}
                             </h5>
@@ -1006,7 +1035,7 @@ const Home: React.FC = () => {
 
                           {/* Book Button */}
                           <Link
-                            to={`/booking?lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
+                            to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
                             className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1118,86 +1147,142 @@ const Home: React.FC = () => {
 
       {/* Beginner Welcome Section - Interactive Guide */}
       <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden">
-        <div className="max-w-[1800px] mx-auto">
+        {/* Background decorations */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-[150px] -translate-y-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] translate-y-1/2"></div>
+        
+        <div className="max-w-[1800px] mx-auto relative">
           {/* Section Header */}
           <div className="mb-8 md:mb-16">
+            <div className="flex items-center gap-2 mb-4">
+              <GraduationCap className="text-lime-400" size={24} />
+              <span className="text-lime-400 font-black text-sm uppercase tracking-widest">Learning Hub</span>
+            </div>
             <h2 className="text-2xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
-              Learn to play pickleball with our <span className="text-lime-500 underline decoration-lime-400 decoration-2 md:decoration-4 underline-offset-4 md:underline-offset-8">how to play guides  →</span>
+              Learn to play pickleball with our{' '}
+              <Link to="/guides" className="text-lime-500 underline decoration-lime-400 decoration-2 md:decoration-4 underline-offset-4 md:underline-offset-8 hover:text-lime-400 transition-colors">
+                how to play guides →
+              </Link>
             </h2>
+            <p className="text-white/60 mt-4 max-w-2xl text-lg">
+              New to pickleball? No problem! Our beginner-friendly guides will have you playing like a pro in no time.
+            </p>
           </div>
 
           {/* Two Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-12">
             {/* Left Column - Guide Cards */}
-            <div className="space-y-4 md:space-y-8">
-              {/* Guide Card 1 */}
-              <Link to="/guides/rules" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
-                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+            <div className="space-y-4 md:space-y-6">
+              {/* Guide Card 1 - Rules */}
+              <Link to="/guides/rules" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb13.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Players on court"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs font-bold">
+                    <Clock size={12} />
+                    <span>10 min</span>
+                  </div>
                 </div>
                 <div className="flex-1 pt-1 md:pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
-                    Guides
-                  </span>
+                  <div className="flex items-center gap-2 mb-2 md:mb-4">
+                    <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      📖 Guide
+                    </span>
+                    <span className="inline-block bg-green-500/20 text-green-400 px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      Beginner
+                    </span>
+                  </div>
                   <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     How to play pickleball - 9 simple rules for beginners
                   </h3>
+                  <p className="text-white/50 text-xs md:text-sm mt-2 hidden md:block">
+                    Learn the essential rules of pickleball in under 10 minutes. Perfect for first-time players!
+                  </p>
                 </div>
+                <ArrowRight className="text-white/30 group-hover:text-lime-400 group-hover:translate-x-1 transition-all hidden md:block" size={24} />
               </Link>
 
-              {/* Guide Card 2 */}
-              <Link to="/guides/skill-rating" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
-                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              {/* Guide Card 2 - Quiz */}
+              <Link to="/guides/skill-rating" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb14.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Player serving"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs font-bold">
+                    <Trophy size={12} />
+                    <span>Quiz</span>
+                  </div>
                 </div>
                 <div className="flex-1 pt-1 md:pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
-                    Guides
-                  </span>
+                  <div className="flex items-center gap-2 mb-2 md:mb-4">
+                    <span className="inline-block bg-yellow-500 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      🏆 Quiz
+                    </span>
+                    <span className="inline-block bg-purple-500/20 text-purple-400 px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      5 min
+                    </span>
+                  </div>
                   <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     What is my pickleball skill rating? Take this quiz to get rated
                   </h3>
+                  <p className="text-white/50 text-xs md:text-sm mt-2 hidden md:block">
+                    Answer 10 quick questions to discover your DUPR-equivalent skill level!
+                  </p>
                 </div>
+                <ArrowRight className="text-white/30 group-hover:text-lime-400 group-hover:translate-x-1 transition-all hidden md:block" size={24} />
               </Link>
 
-              {/* Guide Card 3 */}
-              <Link to="/guides/equipment" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all">
-                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg">
+              {/* Guide Card 3 - Equipment */}
+              <Link to="/guides/equipment" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+                <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb16.jpg"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt="Pickleball equipment"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs font-bold">
+                    <ShoppingBag size={12} />
+                    <span>8 min</span>
+                  </div>
                 </div>
                 <div className="flex-1 pt-1 md:pt-2">
-                  <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider mb-2 md:mb-4">
-                    Guides
-                  </span>
+                  <div className="flex items-center gap-2 mb-2 md:mb-4">
+                    <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      🛒 Guide
+                    </span>
+                    <span className="inline-block bg-green-500/20 text-green-400 px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                      Beginner
+                    </span>
+                  </div>
                   <h3 className="text-sm md:text-2xl font-black text-white leading-tight group-hover:text-lime-400 transition-colors">
                     Essential gear guide - What you need to start playing
                   </h3>
+                  <p className="text-white/50 text-xs md:text-sm mt-2 hidden md:block">
+                    Everything about paddles, balls, shoes, and accessories without overspending!
+                  </p>
                 </div>
+                <ArrowRight className="text-white/30 group-hover:text-lime-400 group-hover:translate-x-1 transition-all hidden md:block" size={24} />
               </Link>
             </div>
 
-            {/* Right Column - Video Player */}
+            {/* Right Column - Video Player / Feature Card */}
             <div className="relative">
-              <div className="aspect-[4/3] rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
+              <Link to="/guides/rules" className="block aspect-[4/3] rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
                   src="/images/home-images/pb18.jpg"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   alt="Players on court"
                 />
                 {/* Video Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-slate-950/20 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent"></div>
 
                 {/* Play Button */}
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -1205,33 +1290,47 @@ const Home: React.FC = () => {
                     <Play className="text-white fill-white" size={32} />
                   </div>
                 </div>
-              </div>
+                
+                {/* Free Badge */}
+                <div className="absolute top-4 right-4 bg-lime-500 text-white px-4 py-2 rounded-full text-xs font-black uppercase tracking-wide flex items-center gap-1">
+                  <Star size={14} />
+                  Free Preview
+                </div>
+              </Link>
 
               {/* Video Description */}
               <div className="mt-4 md:mt-8 space-y-3 md:space-y-6">
                 {/* Tags */}
                 <div className="flex gap-2 md:gap-3">
-                  <span className="bg-blue-100 text-black px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
+                  <span className="bg-blue-100 text-blue-700 px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
                     Guides
                   </span>
-                  <span className="bg-blue-100 text-black px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
-                    Learn
+                  <span className="bg-lime-100 text-lime-700 px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-xs md:text-sm font-black uppercase tracking-wide">
+                    Free
                   </span>
                 </div>
 
                 {/* Title */}
                 <h3 className="text-xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
-                  How To Play Pickleball: Free Virtual Clinic for Beginners
+                  Start Your Pickleball Journey Today!
                 </h3>
+                
+                <p className="text-white/60 text-sm md:text-base">
+                  Our guides are designed for absolute beginners. Read the first few sections free, then sign up to unlock everything and track your progress!
+                </p>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                  <button className="bg-lime-500 hover:bg-lime-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-full font-black text-sm md:text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95">
-                    Watch Now
-                  </button>
-                  <Link to="/guides" className="flex items-center gap-2 text-white font-black text-sm md:text-base hover:text-lime-400 transition-colors group">
-                    Or read our guides
-                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                  <Link 
+                    to="/guides/rules" 
+                    className="bg-lime-500 hover:bg-lime-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-full font-black text-sm md:text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95 flex items-center gap-2"
+                  >
+                    Start Learning
+                    <ArrowRight size={18} />
+                  </Link>
+                  <Link to="/guides/skill-rating" className="flex items-center gap-2 text-white font-black text-sm md:text-base hover:text-lime-400 transition-colors group">
+                    Or take the skill quiz
+                    <Trophy size={18} className="text-yellow-400" />
                   </Link>
                 </div>
               </div>
@@ -1247,7 +1346,7 @@ const Home: React.FC = () => {
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
 
         <div className="max-w-[1800px] mx-auto px-4 md:px-24 lg:px-32">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 md:mb-16 gap-4 md:gap-8">
+          <div className="mb-8 md:mb-16">
             <div className="max-w-2xl">
               <p className="text-[9px] md:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-2 md:mb-4">COMPETITIVE CIRCUIT / 2026</p>
               <h2 className="text-3xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
@@ -1255,15 +1354,6 @@ const Home: React.FC = () => {
                 <span className="text-lime-500 italic">Tournaments.</span>
               </h2>
             </div>
-            <Link
-              to="/tournaments"
-              className="group flex items-center gap-3 md:gap-4 bg-white border border-slate-200 hover:border-blue-400 text-slate-900 px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl transition-all shadow-sm self-start md:self-auto"
-            >
-              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">View All Events</span>
-              <div className="w-7 md:w-8 h-7 md:h-8 rounded-full bg-blue-600 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                <ArrowRight size={14} className="md:w-4 md:h-4" />
-              </div>
-            </Link>
           </div>
 
           {/* Mobile: Horizontal Scroll Carousel */}
