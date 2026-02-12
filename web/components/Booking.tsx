@@ -937,7 +937,7 @@ const Booking: React.FC = () => {
   };
 
   return (
-    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 md:px-20 max-w-[1920px] mx-auto h-screen md:min-h-screen relative overflow-hidden touch-none md:touch-auto">
+    <div className="pt-0 md:pt-0 pb-0 md:pb-12 px-0 max-w-[1800px] mx-auto h-screen md:min-h-screen relative overflow-hidden touch-none md:touch-auto">
       {/* Enhanced Mobile Header with Search & Filter Controls */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-gradient-to-b from-white via-white/98 to-white/95 backdrop-blur-xl border-b border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
         {/* Top Row - Search and Menu Toggle */}
@@ -1116,7 +1116,7 @@ const Booking: React.FC = () => {
 
       <div className="">
         {/* Desktop Header */}
-        <div className="hidden md:block space-y-6 mt-6">
+        <div className="hidden md:block space-y-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
               <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / LIVE</p>
@@ -1626,16 +1626,16 @@ const Booking: React.FC = () => {
                     }
                   `}</style>
                   <div className="relative w-[200px] h-[200px]">
-                    <img 
-                      src="/images/Ball.png" 
-                      className="absolute w-10 h-10 left-[90px] top-5 animate-ballBounce" 
-                      alt="Ball" 
+                    <img
+                      src="/images/Ball.png"
+                      className="absolute w-10 h-10 left-[90px] top-5 animate-ballBounce"
+                      alt="Ball"
                     />
-                    <img 
-                      src="/images/Paddle.png" 
-                      className="absolute w-[110px] bottom-2.5 left-11 animate-paddleHit" 
+                    <img
+                      src="/images/Paddle.png"
+                      className="absolute w-[110px] bottom-2.5 left-11 animate-paddleHit"
                       style={{ transformOrigin: 'bottom center' }}
-                      alt="Paddle" 
+                      alt="Paddle"
                     />
                     <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-sm text-slate-700 animate-textPulse whitespace-nowrap">
                       Loading...

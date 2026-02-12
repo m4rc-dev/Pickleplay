@@ -32,14 +32,27 @@ const Signup: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
+            const referralCode = searchParams.get('ref');
+
+            // Store referral code in localStorage as fallback
+            if (referralCode) {
+                localStorage.setItem('referral_code', referralCode);
+            }
+
             // Store redirect URL in localStorage for after OAuth callback
             if (redirectUrl && redirectUrl !== '/dashboard') {
                 localStorage.setItem('auth_redirect', redirectUrl);
             }
+
+            // Build callback URL with referral code as query parameter
+            const callbackUrl = referralCode
+                ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
+                : `${window.location.origin}/#/auth/callback`;
+
             const { error: authError } = await supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: `${window.location.origin}/auth/callback`
+                    redirectTo: callbackUrl
                 }
             });
             if (authError) throw authError;
@@ -55,13 +68,16 @@ const Signup: React.FC = () => {
         setError(null);
 
         try {
+            const referralCode = searchParams.get('ref');
+
             const { data, error: authError } = await supabase.auth.signUp({
                 email,
                 password,
                 options: {
                     data: {
                         full_name: fullName,
-                        username: fullName.toLowerCase().replace(/\s+/g, '_')
+                        username: fullName.toLowerCase().replace(/\s+/g, '_'),
+                        referred_by_code: referralCode
                     }
                 }
             });

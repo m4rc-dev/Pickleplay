@@ -35,7 +35,8 @@ import {
   MoreHorizontal,
   Bell,
   UserCheck,
-  Building2
+  Building2,
+  Sparkles
 } from 'lucide-react';
 
 import Home from './components/Home';
@@ -219,6 +220,7 @@ const NavigationHandler: React.FC<{
   onRemoveFromCart: (productId: string) => void;
   userName: string | null;
   userAvatar: string | null;
+  userPoints: number;
   currentUserId: string | null;
   isSwitchingRole: boolean;
   roleSwitchTarget: UserRole;
@@ -235,7 +237,7 @@ const NavigationHandler: React.FC<{
     authorizedProRoles, setAuthorizedProRoles, followedUsers, handleFollow,
     notifications, setNotifications, handleMarkNotificationsRead, posts, setPosts,
     cartItems, onAddToCart, onUpdateCartQuantity, onRemoveFromCart,
-    userName, userAvatar, currentUserId,
+    userName, userAvatar, userPoints, currentUserId,
     isSwitchingRole, roleSwitchTarget, handleRoleSwitch,
     showUsernameModal, setShowUsernameModal, isUpdatingUsername,
     initialNameForModal, handleConfirmUsername
@@ -514,7 +516,15 @@ const NavigationHandler: React.FC<{
                 </div>
                 {!isSidebarCollapsed && (
                   <div className="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300 flex-1">
-                    <p className="text-sm font-black truncate leading-none capitalize text-white">{userName || role.replace('_', ' ').toLowerCase()}</p>
+                    <div className="flex items-center gap-2 justify-between">
+                      <p className="text-sm font-black truncate leading-none capitalize text-white">{userName || role.replace('_', ' ').toLowerCase()}</p>
+                      {role === 'PLAYER' && (
+                        <div className="flex items-center gap-1.5 bg-amber-500/30 px-3 py-1 rounded-full shrink-0 border border-amber-400/30">
+                          <Sparkles size={14} className="text-amber-300" fill="currentColor" />
+                          <span className="text-xs font-black text-amber-100">{userPoints}</span>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-[10px] text-white/60 uppercase font-black tracking-widest mt-1 leading-none">{role}</p>
                   </div>
                 )}
@@ -721,6 +731,7 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const [userPoints, setUserPoints] = useState<number>(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [roleSwitchTarget, setRoleSwitchTarget] = useState<UserRole>('PLAYER');
@@ -764,13 +775,68 @@ const App: React.FC = () => {
       try {
         // Parallel fetch for profile and professional applications
         const [profileRes, appsRes] = await Promise.all([
-          supabase.from('profiles').select('full_name, username, active_role, roles, avatar_url').eq('id', session.user.id).single(),
+          supabase.from('profiles').select('full_name, username, active_role, roles, avatar_url, referred_by_id, email, points').eq('id', session.user.id).single(),
           supabase.from('professional_applications')
             .select('requested_role')
             .eq('profile_id', session.user.id)
             .eq('status', 'APPROVED')
             .in('requested_role', ['COACH', 'COURT_OWNER'])
         ]);
+
+        // --- Referral Capture Logic ---
+        console.log('🔍 App.tsx: Checking for pending referral code...');
+        const pendingRefCode = localStorage.getItem('referral_code');
+        console.log('🔍 App.tsx: localStorage referral_code:', pendingRefCode);
+        console.log('🔍 App.tsx: Profile data:', profileRes.data);
+        console.log('🔍 App.tsx: Current referred_by_id:', profileRes.data?.referred_by_id);
+
+        if (pendingRefCode && profileRes.data && !profileRes.data.referred_by_id) {
+          console.log('🔄 Processing pending referral code:', pendingRefCode);
+
+          // 1. Resolve Referrer 
+          console.log('🔍 Looking up referrer with code:', pendingRefCode);
+          const { data: referrer, error: referrerError } = await supabase
+            .from('profiles')
+            .select('id, full_name, referral_code')
+            .eq('referral_code', pendingRefCode)
+            .single();
+
+          console.log('🔍 Referrer lookup result:', { referrer, error: referrerError });
+
+          if (referrer && referrer.id !== session.user.id) {
+            console.log('✅ Found referrer:', referrer.id, 'Name:', referrer.full_name);
+            // 2. Link User
+            console.log('🔄 Linking user', session.user.id, 'to referrer', referrer.id);
+            const { error: linkError } = await supabase
+              .from('profiles')
+              .update({ referred_by_id: referrer.id })
+              .eq('id', session.user.id);
+
+            if (!linkError) {
+              console.log('🎉 Successfully linked referral!');
+              console.log('🎉 Points should be awarded by database trigger');
+              localStorage.removeItem('referral_code');
+              console.log('✅ Removed referral_code from localStorage');
+            } else {
+              console.error('❌ Failed to link referral:', linkError);
+            }
+          } else if (referrer && referrer.id === session.user.id) {
+            console.warn('⚠️ Self-referral detected - user tried to refer themselves');
+            localStorage.removeItem('referral_code');
+          } else {
+            console.warn('⚠️ Invalid referral code - referrer not found:', pendingRefCode);
+            localStorage.removeItem('referral_code'); // Clean up invalid code
+          }
+        } else {
+          if (!pendingRefCode) {
+            console.log('ℹ️ No pending referral code in localStorage');
+          } else if (!profileRes.data) {
+            console.log('ℹ️ No profile data available yet');
+          } else if (profileRes.data.referred_by_id) {
+            console.log('ℹ️ User already has a referrer:', profileRes.data.referred_by_id);
+          }
+        }
+        // ------------------------------
 
         let consolidatedRoles: UserRole[] = [];
         let dbRoles: UserRole[] = [];
@@ -779,6 +845,7 @@ const App: React.FC = () => {
         if (profileRes.data) {
           setUserName(profileRes.data.full_name);
           setUserAvatar(profileRes.data.avatar_url);
+          setUserPoints(profileRes.data.points || 0);
 
           // Trigger onboarding modal if it's a social login and the username hasn't been set
           const isSocialLogin = session.user.app_metadata?.provider === 'google' || session.user.app_metadata?.provider === 'facebook';
@@ -788,12 +855,58 @@ const App: React.FC = () => {
             setShowUsernameModal(true);
           }
 
+          // Update profile with OAuth metadata if missing
+          if (isSocialLogin && (!profileRes.data.email || !profileRes.data.full_name || !profileRes.data.avatar_url)) {
+            console.log('🛠️ Profile incomplete, updating with OAuth metadata...');
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({
+                email: profileRes.data.email || session.user.email,
+                full_name: profileRes.data.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+                avatar_url: profileRes.data.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || ''
+              })
+              .eq('id', session.user.id);
+
+            if (!updateError) {
+              console.log('✅ Profile updated with OAuth metadata');
+              setUserName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || '');
+              setUserAvatar(session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '');
+            } else {
+              console.error('❌ Failed to update profile:', updateError);
+            }
+          }
+
           const activeFromDB = profileRes.data.active_role as UserRole;
           if (activeFromDB) {
             setRole(activeFromDB);
           }
           dbRoles = (profileRes.data.roles as UserRole[]) || ['PLAYER'];
           consolidatedRoles = [...dbRoles];
+        } else if (session.user) {
+          // Fallback: Create profile if missing
+          console.log('🛠️ Profile missing, creating fallback record...');
+
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+              avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '',
+              active_role: 'PLAYER',
+              roles: ['PLAYER']
+            })
+            .select()
+            .single();
+
+          if (!createError && newProfile) {
+            console.log('✅ Fallback profile created successfully');
+            setUserName(newProfile.full_name);
+            setUserAvatar(newProfile.avatar_url);
+            setRole('PLAYER');
+            consolidatedRoles = ['PLAYER'];
+          } else {
+            console.error('❌ Failed to create fallback profile:', createError);
+          }
         }
 
         // Add roles from approved applications
@@ -1419,6 +1532,7 @@ const App: React.FC = () => {
           onRemoveFromCart={handleRemoveFromCart}
           userName={userName}
           userAvatar={userAvatar}
+          userPoints={userPoints}
           currentUserId={currentUserId}
           isSwitchingRole={isSwitchingRole}
           roleSwitchTarget={roleSwitchTarget}

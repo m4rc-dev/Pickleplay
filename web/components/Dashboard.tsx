@@ -39,7 +39,8 @@ import {
   Key,
   Star,
   Radio,
-  MapPin
+  MapPin,
+  Sparkles
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
@@ -317,7 +318,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) {
           supabase.from('profiles')
-            .select('dupr_rating, win_rate, matches_played')
+            .select('dupr_rating, win_rate, matches_played, points')
             .eq('id', user.id)
             .single()
             .then(({ data }) => {
@@ -603,7 +604,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       // Refresh player stats
       const { data } = await supabase.from('profiles')
-        .select('dupr_rating, win_rate, matches_played')
+        .select('dupr_rating, win_rate, matches_played, points')
         .eq('id', currentUserId)
         .single();
       if (data) setPlayerStats(data);

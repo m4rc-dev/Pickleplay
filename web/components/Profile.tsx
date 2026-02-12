@@ -30,7 +30,10 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCw,
-  Download
+  Download,
+  Calendar,
+  ShoppingBag,
+  Star
 } from 'lucide-react';
 import { UserRole, SocialPost } from '../types';
 import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings, createSession } from '../services/supabase';
@@ -414,7 +417,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   const downloadBackupCodes = () => {
     if (backupCodes.length === 0) return;
-    
+
     const content = `PicklePlay 2FA Backup Codes
 Generated: ${new Date().toLocaleString()}
 
@@ -429,7 +432,7 @@ ${'─'.repeat(50)}
 
 These backup codes were generated for your PicklePlay account.
 Never share them with anyone.`;
-    
+
     const blob = new Blob([content], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1379,6 +1382,13 @@ Never share them with anyone.`;
                 <BarChart3 size={14} className="inline mr-2" />
                 Activity
               </button>
+              <button
+                onClick={() => setActiveTab('referral')}
+                className={`py-3 px-4 font-bold text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${activeTab === 'referral' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+              >
+                <Sparkles size={14} className="inline mr-2" />
+                Referral
+              </button>
             </div>
           </div>
         )}
@@ -1526,6 +1536,75 @@ Never share them with anyone.`;
 
         <div className="lg:col-span-2">
           {/* Dashboard Tab */}
+          {activeTab === 'referral' && (
+            <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm space-y-12 animate-in fade-in duration-500">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">AFFILIATION PROGRAM</p>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Share & <span className="text-blue-600">Earn.</span></h2>
+                  <p className="text-slate-500 font-medium max-w-md">Invite your pickleball community to PicklePlay and earn rewards for every signup and activity.</p>
+                </div>
+                <div className="bg-blue-50 p-8 rounded-[40px] text-center border border-blue-100 min-w-[200px]">
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Your Total Points</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <Sparkles size={24} className="text-blue-600" />
+                    <span className="text-4xl font-black text-slate-900">{profileData?.points || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Your Referral Link</h3>
+                    <div className="relative group">
+                      <div className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-6 pr-32 font-bold text-slate-600 text-sm truncate">
+                        {`${window.location.origin}/#/signup?ref=${profileData?.referral_code || '...'}`}
+                      </div>
+                      <button
+                        onClick={() => {
+                          const link = `${window.location.origin}/#/signup?ref=${profileData?.referral_code}`;
+                          navigator.clipboard.writeText(link);
+                          setProfileMessage({ type: 'success', text: 'Link copied to clipboard!' });
+                          setTimeout(() => setProfileMessage(null), 3000);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-slate-900 text-white h-12 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95"
+                      >
+                        Copy Link
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center font-black text-blue-600">
+                      {profileData?.referral_code || '...'}
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unique Referral Hash</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-8 rounded-[40px] border border-slate-200 space-y-6">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Points Package</h3>
+                  <div className="space-y-4">
+                    {[
+                      { label: 'Friend Signup', points: 10, icon: <UserPlus size={16} /> },
+                      { label: 'Friend Booking', points: 8, icon: <Calendar size={16} /> },
+                      { label: 'Friend Purchase', points: 5, icon: <ShoppingBag size={16} /> },
+                      { label: 'Friend Review', points: 3, icon: <Star size={16} /> }
+                    ].map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                        <div className="flex items-center gap-3 text-slate-600">
+                          {item.icon}
+                          <span className="text-xs font-bold uppercase tracking-widest">{item.label}</span>
+                        </div>
+                        <span className="font-black text-blue-600">+{item.points} pts</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'profile' && (
             <div className="space-y-10">
               <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-10">
@@ -1658,12 +1737,12 @@ Never share them with anyone.`;
                               type="button"
                               onClick={() => setAvailabilityStatus(status)}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${availabilityStatus === status
-                                  ? status === 'looking'
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                    : status === 'busy'
-                                      ? 'bg-amber-500 text-white border-amber-500'
-                                      : 'bg-slate-900 text-white border-slate-900'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                ? status === 'looking'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : status === 'busy'
+                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    : 'bg-slate-900 text-white border-slate-900'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                 }`}
                             >
                               {status === 'looking' ? 'Looking to Play' : status === 'busy' ? 'Busy' : 'Offline'}
@@ -1710,10 +1789,10 @@ Never share them with anyone.`;
                       <div className="w-full bg-slate-50/80 rounded-2xl py-4 px-6 font-bold text-slate-700 flex flex-col gap-2">
                         <div className="flex items-center gap-3">
                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${availabilityStatus === 'looking'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : availabilityStatus === 'busy'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-slate-200 text-slate-600'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : availabilityStatus === 'busy'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-slate-200 text-slate-600'
                             }`}>
                             {availabilityStatus === 'looking' ? 'Looking to Play' : availabilityStatus === 'busy' ? 'Busy' : 'Offline'}
                           </span>
@@ -1784,8 +1863,8 @@ Never share them with anyone.`;
                               type="button"
                               onClick={() => setPreferredCourtType(type)}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredCourtType === type
-                                  ? 'bg-slate-900 text-white border-slate-900'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                ? 'bg-slate-900 text-white border-slate-900'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                 }`}
                             >
                               {type}
@@ -1808,8 +1887,8 @@ Never share them with anyone.`;
                               type="button"
                               onClick={() => setPreferredLocationMode('auto')}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationMode === 'auto'
-                                  ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                 }`}
                             >
                               Auto (near me)
@@ -1818,8 +1897,8 @@ Never share them with anyone.`;
                               type="button"
                               onClick={() => setPreferredLocationMode('manual')}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationMode === 'manual'
-                                  ? 'bg-slate-900 text-white border-slate-900'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                ? 'bg-slate-900 text-white border-slate-900'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                 }`}
                             >
                               Manual select
@@ -1853,8 +1932,8 @@ Never share them with anyone.`;
                                     type="button"
                                     onClick={() => togglePreferredLocation(loc.id)}
                                     className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredLocationIds.includes(loc.id)
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                       }`}
                                   >
                                     {loc.name}
@@ -1904,8 +1983,8 @@ Never share them with anyone.`;
                                     type="button"
                                     onClick={() => togglePreferredCourt(court.id)}
                                     className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${preferredCourtIds.includes(court.id)
-                                        ? 'bg-slate-900 text-white border-slate-900'
-                                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                                      ? 'bg-slate-900 text-white border-slate-900'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                       }`}
                                   >
                                     {court.name}
@@ -1926,44 +2005,44 @@ Never share them with anyone.`;
                   </div>
                 )}
 
-                  {/* Save Changes Button */}
-                  {isCurrentUser && (
-                    <div className="pt-6 border-t border-slate-100 space-y-3">
-                      {isProfileDirty && (
-                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Unsaved changes</div>
-                      )}
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <button
-                          onClick={() => {
-                            setEditedName(savedName);
-                            setEditedLocation(savedLocation);
-                            setEditedBio(savedBio);
-                            setAvailabilityStatus(savedAvailabilityStatus);
-                            setAvailabilityStart(savedAvailabilityStart);
-                            setAvailabilityEnd(savedAvailabilityEnd);
-                            setAvailabilityNote(savedAvailabilityNote);
-                            setPreferredSkillMin(savedPreferredSkillMin);
-                            setPreferredSkillMax(savedPreferredSkillMax);
-                            setPreferredLocationIds(savedPreferredLocationIds);
-                            setPreferredCourtIds(savedPreferredCourtIds);
-                            setPreferredLocationMode(savedPreferredLocationMode);
-                            setPreferredCourtType(savedPreferredCourtType);
-                          }}
-                          disabled={!isProfileDirty || isSaving}
-                          className="h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          Reset
-                        </button>
-                        <button
-                          onClick={() => setShowSaveConfirm(true)}
-                          disabled={isSaving || !isProfileDirty || !isNameValid}
-                          className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                        >
-                          {isSaving ? 'Saving...' : 'Save Changes'} <Save size={16} />
-                        </button>
-                      </div>
+                {/* Save Changes Button */}
+                {isCurrentUser && (
+                  <div className="pt-6 border-t border-slate-100 space-y-3">
+                    {isProfileDirty && (
+                      <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Unsaved changes</div>
+                    )}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => {
+                          setEditedName(savedName);
+                          setEditedLocation(savedLocation);
+                          setEditedBio(savedBio);
+                          setAvailabilityStatus(savedAvailabilityStatus);
+                          setAvailabilityStart(savedAvailabilityStart);
+                          setAvailabilityEnd(savedAvailabilityEnd);
+                          setAvailabilityNote(savedAvailabilityNote);
+                          setPreferredSkillMin(savedPreferredSkillMin);
+                          setPreferredSkillMax(savedPreferredSkillMax);
+                          setPreferredLocationIds(savedPreferredLocationIds);
+                          setPreferredCourtIds(savedPreferredCourtIds);
+                          setPreferredLocationMode(savedPreferredLocationMode);
+                          setPreferredCourtType(savedPreferredCourtType);
+                        }}
+                        disabled={!isProfileDirty || isSaving}
+                        className="h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => setShowSaveConfirm(true)}
+                        disabled={isSaving || !isProfileDirty || !isNameValid}
+                        className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                      >
+                        {isSaving ? 'Saving...' : 'Save Changes'} <Save size={16} />
+                      </button>
                     </div>
-                  )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-8">
@@ -2594,9 +2673,8 @@ Never share them with anyone.`;
                       <button
                         key={bg.id}
                         onClick={() => setSelectedBg(bg.id)}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all relative overflow-hidden ${
-                          selectedBg === bg.id ? 'border-indigo-500 ring-2 ring-indigo-200 scale-105' : 'border-slate-200 hover:border-slate-300'
-                        }`}
+                        className={`w-full aspect-square rounded-xl border-2 transition-all relative overflow-hidden ${selectedBg === bg.id ? 'border-indigo-500 ring-2 ring-indigo-200 scale-105' : 'border-slate-200 hover:border-slate-300'
+                          }`}
                         style={{ background: bg.style }}
                         title={bg.label}
                       >
