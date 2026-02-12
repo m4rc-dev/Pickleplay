@@ -23,6 +23,51 @@ const Login: React.FC = () => {
     const [searchParams] = useSearchParams();
     const redirectUrl = searchParams.get('redirect') || '/dashboard';
 
+    const normalizeUsername = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .slice(0, 30);
+
+    const ensureProfileFields = async (user: any) => {
+        const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('email, full_name, username')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        const resolvedFullName = existingProfile?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '';
+        const resolvedEmail = existingProfile?.email || user?.email || null;
+        const baseUsername = normalizeUsername(
+            existingProfile?.username || resolvedFullName || user?.email?.split('@')[0] || 'player'
+        ) || 'player';
+
+        let candidateUsername = existingProfile?.username || baseUsername;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: resolvedEmail,
+                    full_name: resolvedFullName,
+                    username: candidateUsername
+                }, { onConflict: 'id' });
+
+            if (!error) return;
+
+            // 23505 = unique violation (likely username already taken)
+            if (error.code === '23505') {
+                candidateUsername = `${baseUsername.slice(0, 22)}_${Math.random().toString(36).slice(2, 7)}`;
+                continue;
+            }
+
+            console.error('Failed to upsert profile fields during login:', error);
+            return;
+        }
+    };
+
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         setLoading(true);
         setError(null);
@@ -71,6 +116,8 @@ const Login: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
+                await ensureProfileFields(data.user);
+
                 // Create session record with IP address
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
                 try {

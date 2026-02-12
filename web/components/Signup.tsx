@@ -28,6 +28,14 @@ const Signup: React.FC = () => {
     const redirectUrl = searchParams.get('redirect') || '/dashboard';
     const [showSocialButtons, setShowSocialButtons] = useState(true);
 
+    const normalizeUsername = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .slice(0, 30);
+
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         setLoading(true);
         setError(null);
@@ -85,6 +93,21 @@ const Signup: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
+                if (data.session) {
+                    const { error: profileError } = await supabase
+                        .from('profiles')
+                        .upsert({
+                            id: data.user.id,
+                            email: data.user.email || email,
+                            full_name: fullName,
+                            username: normalizeUsername(fullName || data.user.email?.split('@')[0] || 'player')
+                        }, { onConflict: 'id' });
+
+                    if (profileError) {
+                        console.error('Failed to upsert profile fields during signup:', profileError);
+                    }
+                }
+
                 setSuccess(true);
                 // Pass redirect URL to login page so user is redirected after logging in
                 const loginUrl = redirectUrl !== '/dashboard'

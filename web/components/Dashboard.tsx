@@ -120,14 +120,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
 
-    // Fetch Announcements (For Everyone)
+    // Fetch Announcements (For Everyone) - handle missing table
     supabase.from('announcements')
       .select('*')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(3)
-      .then(({ data }) => {
-        if (data) setAnnouncements(data);
+      .then(({ data, error }) => {
+        if (!error && data) setAnnouncements(data);
+      })
+      .catch(() => {
+        // Announcements table might not exist
       });
 
     if (userRole === 'PLAYER' && currentUserId) {
@@ -479,7 +482,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         .from('bookings')
         .select(`
           *,
-          court:courts(name, image_url, location)
+          court:courts(name, image_url, address, city)
         `)
         .eq('player_id', currentUserId)
         .eq('status', 'confirmed')
@@ -496,20 +499,30 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       });
 
       // For each completed booking, check if a review exists in court_reviews
+      // Handle case where court_reviews table might not exist
       const bookingsWithReviewStatus = await Promise.all(
         completedBookings.map(async (b) => {
-          const { data: review } = await supabase
-            .from('court_reviews')
-            .select('id')
-            .eq('booking_id', b.id)
-            .maybeSingle();
-          return { ...b, has_review: !!review };
+          try {
+            const { data: review } = await supabase
+              .from('court_reviews')
+              .select('id')
+              .eq('booking_id', b.id)
+              .maybeSingle();
+            return { ...b, has_review: !!review };
+          } catch {
+            // court_reviews table might not exist yet
+            return { ...b, has_review: false };
+          }
         })
       );
 
       setRecentCourts(bookingsWithReviewStatus);
-    } catch (err) {
-      console.error('Error fetching player court sessions:', err);
+    } catch (err: any) {
+      // Silently handle errors - table might not exist or user has no bookings
+      if (err?.code !== 'PGRST116' && err?.code !== '42P01') {
+        console.error('Error fetching player court sessions:', err);
+      }
+      setRecentCourts([]);
     }
   };
 
@@ -880,11 +893,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               ))}
             </div>
           </div>
-          <div className="h-[250px] md:h-[300px] w-full">
+          <div className="h-[250px] md:h-[300px] w-full min-h-[250px]">
             {isLoading ? (
               <Skeleton className="w-full h-full rounded-2xl" />
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={250} minHeight={250}>
                 <LineChart data={userRole === 'ADMIN' ? (userGrowthData.length > 0 ? userGrowthData : PERFORMANCE_DATA.map(d => ({ ...d, growth: d.rating * 10 }))) : (ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
