@@ -11,20 +11,27 @@
     ],
     "android": {
       "package": "com.pickleplay.ph",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A56A7"
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDpAWwwpxilvwrDvVeXZm9OImBEXKe0YJo"
+        }
       }
     },
     "ios": {
       "bundleIdentifier": "com.pickleplay.ph",
-      "buildNumber": "1.0.0"
+      "buildNumber": "1.0.0",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDpAWwwpxilvwrDvVeXZm9OImBEXKe0YJo"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "packagerOpts": {
       "config": "metro.config.js"
-    }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

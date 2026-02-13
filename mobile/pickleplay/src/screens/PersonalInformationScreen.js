@@ -1,81 +1,21 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Image,
   TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {MaterialIcons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
-
-// Move InputField outside component to prevent re-creation on each render
-const InputField = ({ label, value, onChangeText, icon, editable = true, keyboardType = 'default', isEditing }) => (
-  <View style={styles.inputContainer}>
-    <View style={styles.inputLabelRow}>
-      <MaterialIcons name={icon} size={20} color={thematicBlue} />
-      <Text style={styles.inputLabel}>{label}</Text>
-    </View>
-    {isEditing && editable ? (
-      <TextInput
-        style={styles.textInput}
-        value={value}
-        onChangeText={onChangeText}
-        placeholderTextColor="#999"
-        keyboardType={keyboardType}
-        autoCorrect={false}
-      />
-    ) : (
-      <Text style={[styles.staticValue, !editable && styles.disabledValue]}>{value || 'Not set'}</Text>
-    )}
-  </View>
-);
-
-// Move SelectField outside component to prevent re-creation on each render
-const SelectField = ({ label, value, options, onSelect, icon, isEditing }) => (
-  <View style={styles.inputContainer}>
-    <View style={styles.inputLabelRow}>
-      <MaterialIcons name={icon} size={20} color={thematicBlue} />
-      <Text style={styles.inputLabel}>{label}</Text>
-    </View>
-    {isEditing ? (
-      <View style={styles.selectContainer}>
-        {options.map((option) => (
-          <TouchableOpacity
-            key={option}
-            style={[
-              styles.selectOption,
-              value === option && styles.selectOptionActive,
-            ]}
-            onPress={() => onSelect(option)}
-          >
-            <Text
-              style={[
-                styles.selectOptionText,
-                value === option && styles.selectOptionTextActive,
-              ]}
-            >
-              {option}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    ) : (
-      <Text style={styles.staticValue}>{value || 'Not set'}</Text>
-    )}
-  </View>
-);
 
 const PersonalInformationScreen = ({ navigation }) => {
   const { user, updateProfile } = useAuth();
@@ -95,12 +35,9 @@ const PersonalInformationScreen = ({ navigation }) => {
   });
 
   const [isEditing, setIsEditing] = useState(false);
-
-  // Skill level options
   const skillLevels = ['Beginner', 'Intermediate', 'Advanced', 'Pro'];
   const playFrequencies = ['Rarely', 'Weekly', '2-3 times/week', 'Daily'];
 
-  // Fetch user data on mount
   useEffect(() => {
     fetchUserData();
   }, [user]);
@@ -112,10 +49,8 @@ const PersonalInformationScreen = ({ navigation }) => {
     }
 
     try {
-      // Get data from auth metadata first
       const metadata = user.user_metadata || {};
-      
-      // Try to fetch additional data from profiles table if it exists
+
       let profileData = {};
       try {
         const { data, error } = await supabase
@@ -123,7 +58,7 @@ const PersonalInformationScreen = ({ navigation }) => {
           .select('*')
           .eq('id', user.id)
           .single();
-        
+
         if (!error && data) {
           profileData = data;
         }
@@ -131,7 +66,6 @@ const PersonalInformationScreen = ({ navigation }) => {
         console.log('No users table data found, using auth metadata');
       }
 
-      // Merge auth metadata with profile data (profile data takes priority)
       setUserData({
         firstName: profileData.first_name || metadata.first_name || '',
         lastName: profileData.last_name || metadata.last_name || '',
@@ -142,7 +76,7 @@ const PersonalInformationScreen = ({ navigation }) => {
         bio: profileData.bio || metadata.bio || '',
         skillLevel: profileData.skill_level || metadata.skill_level || '',
         playFrequency: profileData.play_frequency || metadata.play_frequency || '',
-        avatarUrl: profileData.profile_picture_url || metadata.avatar_url || '',
+        avatarUrl: profileData.avatar_url || metadata.avatar_url || '',
       });
     } catch (err) {
       console.error('Error fetching user data:', err);
@@ -152,11 +86,14 @@ const PersonalInformationScreen = ({ navigation }) => {
     }
   };
 
+  const handleFieldChange = useCallback((field, value) => {
+    setUserData((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
   const handleSave = async () => {
     setIsSaving(true);
-    
+
     try {
-      // Update auth user metadata
       const { error: authError } = await supabase.auth.updateUser({
         data: {
           first_name: userData.firstName,
@@ -173,18 +110,15 @@ const PersonalInformationScreen = ({ navigation }) => {
 
       if (authError) throw authError;
 
-      // Try to update profiles table if it exists
       try {
-        await supabase
-          .from('profiles')
-          .upsert({
-            id: user.id,
-            email: user.email,
-            full_name: `${userData.firstName} ${userData.lastName}`.trim(),
-            location: userData.location,
-            bio: userData.bio,
-            updated_at: new Date().toISOString(),
-          });
+        await supabase.from('profiles').upsert({
+          id: user.id,
+          email: user.email,
+          full_name: `${userData.firstName} ${userData.lastName}`.trim(),
+          location: userData.location,
+          bio: userData.bio,
+          updated_at: new Date().toISOString(),
+        });
       } catch (err) {
         console.log('Users table update skipped:', err.message);
       }
@@ -200,158 +134,214 @@ const PersonalInformationScreen = ({ navigation }) => {
     }
   };
 
-  // Handler functions for updating userData
-  const handleFieldChange = useCallback((field, value) => {
-    setUserData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  const EditInput = ({ label, value, onChangeText, icon, keyboardType = 'default', editable = true, isSelect = false, options = [] }) => (
+    <View style={styles.inputCard}>
+      <View style={styles.inputHeader}>
+        <Ionicons name={icon} size={18} color={Colors.lime400} />
+        <Text style={styles.inputLabel}>{label}</Text>
+      </View>
+      {isEditing && editable && isSelect ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.selectChip,
+                value === option && styles.selectChipActive,
+              ]}
+              onPress={() => handleFieldChange(label.toLowerCase().replace(' ', ''), option)}
+            >
+              <Text
+                style={[
+                  styles.selectChipText,
+                  value === option && styles.selectChipTextActive,
+                ]}
+              >
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : isEditing && editable && label === 'Bio' ? (
+        <TextInput
+          style={styles.bioInput}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder="Tell us about yourself..."
+          placeholderTextColor={Colors.slate400}
+          multiline
+          numberOfLines={3}
+        />
+      ) : isEditing && editable ? (
+        <TextInput
+          style={styles.textInput}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          placeholderTextColor={Colors.slate400}
+        />
+      ) : (
+        <Text style={[styles.staticValue, !editable && styles.disabledValue]}>
+          {value || 'Not set'}
+        </Text>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color={Colors.white} />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Personal Information</Text>
+        <Text style={styles.headerTitle}>Personal Info</Text>
         <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
-          <MaterialIcons name={isEditing ? 'close' : 'edit'} size={28} color={Colors.white} />
+          <Ionicons
+            name={isEditing ? 'close' : 'pencil'}
+            size={24}
+            color={Colors.white}
+          />
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={thematicBlue} />
+            <ActivityIndicator size="large" color={Colors.lime400} />
             <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
         ) : (
           <>
-            {/* Profile Avatar */}
+            {/* Avatar Section */}
             <View style={styles.avatarSection}>
-              <Image
-                source={{
-                  uri: userData.avatarUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
-                }}
-                style={styles.avatar}
-              />
+              <View style={styles.avatarContainer}>
+                <Image
+                  source={{
+                    uri:
+                      userData.avatarUrl ||
+                      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.avatarBadge}>
+                  <Ionicons name="camera" size={16} color={Colors.white} />
+                </View>
+              </View>
+              <Text style={styles.avatarName}>
+                {userData.firstName || 'User'} {userData.lastName || ''}
+              </Text>
               {isEditing && (
                 <TouchableOpacity style={styles.changePhotoButton}>
-                  <MaterialIcons name="camera-alt" size={20} color={Colors.white} />
-                  <Text style={styles.changePhotoText}>Change Photo</Text>
+                  <Ionicons name="cloud-upload" size={16} color={Colors.white} />
+                  <Text style={styles.changePhotoText}>Choose Photo</Text>
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Form Fields */}
-            <View style={styles.formSection}>
-              <Text style={styles.sectionHeader}>Basic Information</Text>
-              
-              <InputField
-                icon="person"
+            {/* Basic Information Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="person" size={20} color={Colors.lime400} />
+                <Text style={styles.sectionTitle}>Basic Information</Text>
+              </View>
+
+              <EditInput
                 label="First Name"
                 value={userData.firstName}
                 onChangeText={(text) => handleFieldChange('firstName', text)}
-                isEditing={isEditing}
+                icon="person"
               />
-              <InputField
-                icon="person-outline"
+              <EditInput
                 label="Last Name"
                 value={userData.lastName}
                 onChangeText={(text) => handleFieldChange('lastName', text)}
-                isEditing={isEditing}
+                icon="person-add"
               />
-              <InputField
-                icon="email"
+              <EditInput
                 label="Email"
                 value={userData.email}
                 editable={false}
-                isEditing={isEditing}
+                icon="mail"
               />
-              <InputField
-                icon="phone"
-                label="Phone Number"
+              <EditInput
+                label="Phone"
                 value={userData.phoneNumber}
                 onChangeText={(text) => handleFieldChange('phoneNumber', text)}
                 keyboardType="phone-pad"
-                isEditing={isEditing}
+                icon="call"
               />
-              <InputField
-                icon="cake"
+              <EditInput
                 label="Date of Birth"
                 value={userData.dateOfBirth}
                 onChangeText={(text) => handleFieldChange('dateOfBirth', text)}
-                isEditing={isEditing}
+                icon="calendar"
               />
-              <InputField
-                icon="location-on"
+              <EditInput
                 label="Location"
                 value={userData.location}
                 onChangeText={(text) => handleFieldChange('location', text)}
-                isEditing={isEditing}
+                icon="location"
               />
-
-              <Text style={styles.sectionHeader}>Player Information</Text>
-              
-              <SelectField
-                icon="sports-tennis"
-                label="Skill Level"
-                value={userData.skillLevel}
-                options={skillLevels}
-                onSelect={(value) => handleFieldChange('skillLevel', value)}
-                isEditing={isEditing}
-              />
-              <SelectField
-                icon="schedule"
-                label="Play Frequency"
-                value={userData.playFrequency}
-                options={playFrequencies}
-                onSelect={(value) => handleFieldChange('playFrequency', value)}
-                isEditing={isEditing}
-              />
-              
-              <View style={styles.inputContainer}>
-                <View style={styles.inputLabelRow}>
-                  <MaterialIcons name="description" size={20} color={thematicBlue} />
-                  <Text style={styles.inputLabel}>Bio</Text>
-                </View>
-                {isEditing ? (
-                  <TextInput
-                    style={[styles.textInput, styles.bioInput]}
-                    value={userData.bio}
-                    onChangeText={(text) => handleFieldChange('bio', text)}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="Tell us about yourself..."
-                    placeholderTextColor="#999"
-                  />
-                ) : (
-                  <Text style={styles.staticValue}>{userData.bio || 'No bio yet'}</Text>
-                )}
-              </View>
             </View>
 
-        {/* Save Button */}
-        {isEditing && (
-          <TouchableOpacity 
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
-            onPress={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <>
-                <ActivityIndicator size="small" color={thematicBlue} />
-                <Text style={styles.saveButtonText}>Saving...</Text>
-              </>
-            ) : (
-              <>
-                <MaterialIcons name="check-circle" size={20} color={thematicBlue} />
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </>
+            {/* Player Information Section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="trophy" size={20} color={Colors.lime400} />
+                <Text style={styles.sectionTitle}>Player Information</Text>
+              </View>
+
+              <EditInput
+                label="Skill Level"
+                value={userData.skillLevel}
+                icon="bar-chart"
+                isSelect={true}
+                options={skillLevels}
+              />
+              <EditInput
+                label="Play Frequency"
+                value={userData.playFrequency}
+                icon="time"
+                isSelect={true}
+                options={playFrequencies}
+              />
+              <EditInput
+                label="Bio"
+                value={userData.bio}
+                onChangeText={(text) => handleFieldChange('bio', text)}
+                icon="information"
+              />
+            </View>
+
+            {/* Save Button */}
+            {isEditing && (
+              <View style={styles.actionSection}>
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <ActivityIndicator size="small" color={Colors.white} />
+                      <Text style={styles.saveButtonText}>Saving...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
-          </TouchableOpacity>
-        )}
           </>
         )}
       </ScrollView>
@@ -365,153 +355,200 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
   },
   headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Colors.white,
-    fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: activeColor,
-  },
-  changePhotoButton: {
-    marginTop: 15,
-    flexDirection: 'row',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  changePhotoText: {
-    color: Colors.white,
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  formSection: {
-    padding: 20,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  inputLabel: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: thematicBlue,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: Colors.text,
-    fontSize: 16,
-    backgroundColor: Colors.surface,
-  },
-  bioInput: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  staticValue: {
-    color: Colors.text,
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-  },
-  disabledValue: {
-    color: '#888',
-    backgroundColor: '#f0f0f0',
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
-    marginTop: 10,
-  },
-  selectContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  selectOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  selectOptionActive: {
-    backgroundColor: thematicBlue,
-    borderColor: thematicBlue,
-  },
-  selectOptionText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  selectOptionTextActive: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  saveButton: {
-    marginHorizontal: 20,
-    marginBottom: 30,
-    backgroundColor: activeColor,
-    flexDirection: 'row',
-    paddingVertical: 14,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 80,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: thematicBlue,
+    color: Colors.slate600,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.slate100,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.slate200,
+  },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  avatarName: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
+    marginBottom: 8,
+  },
+  changePhotoButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    gap: 6,
+  },
+  changePhotoText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  section: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 10,
+    letterSpacing: -0.5,
+  },
+  inputCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  inputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate600,
+    marginLeft: 8,
+    letterSpacing: -0.2,
+  },
+  textInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.slate950,
+    paddingVertical: 6,
+  },
+  bioInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.slate950,
+    paddingVertical: 6,
+    minHeight: 80,
+  },
+  staticValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.slate950,
+    paddingVertical: 6,
+  },
+  disabledValue: {
+    color: Colors.slate500,
+  },
+  selectScroll: {
+    marginLeft: -16,
+    marginRight: -16,
+    paddingHorizontal: 16,
+  },
+  selectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.slate100,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.slate200,
+  },
+  selectChipActive: {
+    backgroundColor: Colors.lime400,
+    borderColor: Colors.lime400,
+  },
+  selectChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.slate600,
+    letterSpacing: -0.2,
+  },
+  selectChipTextActive: {
+    color: Colors.white,
+  },
+  actionSection: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 32,
+  },
+  saveButton: {
+    backgroundColor: Colors.lime400,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: Colors.lime400,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
+  },
+  saveButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
 });
 

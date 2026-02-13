@@ -11,12 +11,12 @@ import {
   StatusBar,
   ScrollView,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-
-const thematicBlue = '#0E79B2';
+import Colors from '../constants/Colors';
 
 const PostScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -119,29 +119,34 @@ const PostScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+      <StatusBar barStyle="light-content" />
       
       {/* Header */}
-      <View style={styles.header}>
+      <LinearGradient 
+        colors={[Colors.slate950, Colors.slate900]} 
+        style={styles.header}
+      >
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <View style={styles.backIconContainer}>
+            <Ionicons name="arrow-back" size={24} color={Colors.white} />
+          </View>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Post</Text>
+        <Text style={styles.headerTitle}>CREATE POST</Text>
         <TouchableOpacity 
           style={[styles.postButton, posting && styles.postButtonDisabled]}
           onPress={handleCreatePost}
           disabled={posting}
         >
           {posting ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={Colors.slate950} size="small" />
           ) : (
-            <Text style={styles.postButtonText}>Post</Text>
+            <Text style={styles.postButtonText}>POST</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Main Content Area */}
       <ScrollView 
@@ -153,25 +158,12 @@ const PostScreen = ({ navigation }) => {
         <TextInput
           style={styles.textInput}
           placeholder="What's on your mind?"
-          placeholderTextColor="#999"
+          placeholderTextColor={Colors.slate400}
           multiline
           value={postContent}
           onChangeText={setPostContent}
           autoFocus
         />
-
-        {/* Action Bar - Under text field */}
-        <View style={styles.actionBar}>
-          <Text style={styles.actionBarTitle}>Add to your post</Text>
-          <View style={styles.iconButtonsContainer}>
-            <TouchableOpacity 
-              style={styles.iconButton}
-              onPress={pickImage}
-            >
-              <MaterialIcons name="image" size={26} color="#45bd62" />
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Image Preview */}
         {selectedImage && (
@@ -181,10 +173,25 @@ const PostScreen = ({ navigation }) => {
               style={styles.removeImageButton}
               onPress={removeImage}
             >
-              <MaterialIcons name="close" size={20} color="#fff" />
+              <Ionicons name="close" size={20} color={Colors.white} />
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Action Bar */}
+        <View style={styles.actionBar}>
+          <View>
+            <Text style={styles.actionBarTitle}>ADD TO YOUR POST</Text>
+          </View>
+          <View style={styles.iconButtonsContainer}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={pickImage}
+            >
+              <Ionicons name="image" size={24} color={Colors.lime400} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -193,112 +200,133 @@ const PostScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.slate50,
   },
   header: {
-    backgroundColor: thematicBlue,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   backButton: {
-    padding: 8,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.white,
     flex: 1,
     textAlign: 'center',
-    marginRight: 40,
+    letterSpacing: 1,
   },
   postButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
     borderRadius: 20,
-    minWidth: 70,
+    minWidth: 80,
     alignItems: 'center',
   },
   postButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   postButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  content: {
-    flex: 1,
+    color: Colors.slate950,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
   },
   scrollViewContent: {
     flexGrow: 1,
+    paddingBottom: 30,
   },
   textInput: {
     fontSize: 18,
-    color: '#333',
-    padding: 20,
+    fontWeight: '500',
+    color: Colors.slate950,
+    padding: 24,
     minHeight: 200,
     textAlignVertical: 'top',
+    letterSpacing: -0.3,
   },
   imagePreviewContainer: {
-    margin: 20,
+    marginHorizontal: 20,
+    marginBottom: 20,
     marginTop: 0,
     position: 'relative',
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   imagePreview: {
     width: '100%',
     height: 300,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    backgroundColor: Colors.slate100,
   },
   removeImageButton: {
     position: 'absolute',
     top: 12,
     right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionBar: {
     borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    paddingVertical: 12,
+    borderTopColor: Colors.slate200,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     marginHorizontal: 20,
-    marginTop: 10,
-    borderRadius: 12,
-    backgroundColor: '#f9f9f9',
+    borderRadius: 20,
+    backgroundColor: Colors.white,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   actionBarTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 12,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 1,
   },
   iconButtonsContainer: {
     flexDirection: 'row',
     gap: 12,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e7f3ff',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.slate100,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import { AppState } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { createUserProfile, upsertUserProfile, deactivateUserAccount, deleteUserAccount } from '../services/userService';
 
@@ -25,6 +26,15 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+  const inactivityTimeoutRef = React.useRef(null);
+  
+  const INACTIVITY_TIMEOUT = 60 * 60 * 1000; // 1 hour in milliseconds
+
+  // Handle user activity - just record the time
+  const recordActivity = React.useCallback(() => {
+    setLastActivityTime(Date.now());
+  }, []);
 
   useEffect(() => {
     // Get initial session
@@ -35,6 +45,9 @@ export const AuthProvider = ({ children }) => {
         
         setSession(session);
         setUser(session?.user ?? null);
+        if (session?.user) {
+          setLastActivityTime(Date.now());
+        }
       } catch (err) {
         console.error('Error getting session:', err);
         setError(err.message);
@@ -48,15 +61,44 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+        if (__DEV__) {
+          console.log('Auth state changed:', event);
+        }
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        if (session?.user) {
+          setLastActivityTime(Date.now());
+        } else {
+          // Clear timeout when logged out
+          if (inactivityTimeoutRef.current) {
+            clearTimeout(inactivityTimeoutRef.current);
+          }
+        }
       }
     );
 
+    // Monitor app state for inactivity check when resuming
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && session?.user) {
+        // App came to foreground - check inactivity
+        const timeSinceLastActivity = Date.now() - lastActivityTime;
+        if (timeSinceLastActivity > INACTIVITY_TIMEOUT) {
+          console.log('🔐 Session expired - app was inactive too long');
+          // Perform logout by signing out from Supabase
+          supabase.auth.signOut().catch(err => console.error('Auto-logout error:', err));
+        } else {
+          setLastActivityTime(Date.now());
+        }
+      }
+    });
+
     return () => {
       subscription?.unsubscribe();
+      appStateSubscription?.remove();
+      if (inactivityTimeoutRef.current) {
+        clearTimeout(inactivityTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -229,20 +271,29 @@ export const AuthProvider = ({ children }) => {
    */
   const signOut = async () => {
     try {
+      console.log('🔐 Signing out from auth...');
       setError(null);
       
       // Sign out from Google if signed in with Google
       await signOutFromGoogle();
       
+      console.log('🔐 Calling supabase.auth.signOut()...');
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error('🔐 Supabase signOut error:', error);
+        throw error;
+      }
       
+      console.log('🔐 Clearing user and session...');
       setUser(null);
       setSession(null);
+      console.log('🔐 Logout complete');
+      
       return { error: null };
     } catch (err) {
+      console.error('🔐 SignOut catch block error:', err);
       setError(err.message);
-      return { error: err };
+      throw err; // Re-throw the error so caller can handle it
     }
   };
 
@@ -329,6 +380,7 @@ export const AuthProvider = ({ children }) => {
     updateProfile,
     deactivateAccount,
     deleteAccount,
+    recordActivity,
     isAuthenticated: !!user,
   };
 

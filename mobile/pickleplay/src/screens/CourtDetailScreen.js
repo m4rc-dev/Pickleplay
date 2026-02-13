@@ -8,58 +8,44 @@ import {
   StatusBar,
   Image,
   Linking,
+  Dimensions,
+  Modal,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import {MaterialIcons} from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../constants/Colors';
+import commonStyles from '../styles/commonStyles';
 import StarRating from '../components/StarRating';
+import { getCourtById, addCourtReview, getUserCourtBookings } from '../services/courtService';
+import { useAuth } from '../contexts/AuthContext';
 
-// Define the new color constants for easy reuse
-const thematicBlue = '#0A56A7';
+const { width } = Dimensions.get('window');
 const FAVORITES_KEY = '@pickleplay_favorites';
-
-// Default values for court data
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1560743641-3914f2c45636?auto=format&fit=crop&w=1200&q=60';
 
 const CourtDetailScreen = ({ navigation, route }) => {
-  // Get court data from navigation params or use defaults
+  const { user } = useAuth();
   const courtData = route?.params?.court || {};
   const [isFavorite, setIsFavorite] = useState(false);
-  
-  // Mock reviews data - in production, this would come from an API
-  const [reviews] = useState([
-    {
-      id: 1,
-      userName: 'Juan Dela Cruz',
-      userAvatar: 'https://randomuser.me/api/portraits/men/1.jpg',
-      rating: 5,
-      date: '2026-01-28',
-      comment: 'Excellent court! Well-maintained surface and great lighting for evening games. The staff is very friendly.',
-    },
-    {
-      id: 2,
-      userName: 'Maria Santos',
-      userAvatar: 'https://randomuser.me/api/portraits/women/2.jpg',
-      rating: 4,
-      date: '2026-01-25',
-      comment: 'Good location and nice facilities. Parking can be a bit tricky during weekends but overall a great experience.',
-    },
-    {
-      id: 3,
-      userName: 'Carlos Reyes',
-      userAvatar: 'https://randomuser.me/api/portraits/men/3.jpg',
-      rating: 5,
-      date: '2026-01-20',
-      comment: 'Best pickleball court in the area! Love playing here with friends. Highly recommended!',
-    },
-  ]);
-  
-  const court = {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [userBookings, setUserBookings] = useState([]);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+
+
+  const [court, setCourt] = useState({
     id: courtData.id,
     name: courtData.name || 'Pickleball Court',
     location: courtData.location || courtData.city || 'Location not available',
     rating: courtData.rating || 0,
-    reviewCount: courtData.reviewCount || courtData.review_count,
+    reviewCount: courtData.reviewCount || courtData.review_count || 0,
     imageUrl: courtData.imageUrl || courtData.cover_image || DEFAULT_IMAGE,
     description: courtData.description || 'A great pickleball court with excellent facilities.',
     amenities: courtData.amenities || [],
@@ -78,11 +64,11 @@ const CourtDetailScreen = ({ navigation, route }) => {
     country: courtData.country,
     latitude: courtData.latitude,
     longitude: courtData.longitude,
-  };
+  });
 
-  // Check if court is in favorites on mount
   useEffect(() => {
     checkIfFavorite();
+    fetchCourtDetails();
   }, []);
 
   const checkIfFavorite = async () => {
@@ -97,22 +83,136 @@ const CourtDetailScreen = ({ navigation, route }) => {
     }
   };
 
+  const fetchCourtDetails = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await getCourtById(courtData.id);
+
+      if (error) {
+        console.error('Error fetching court details:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        // Update court with fresh data including calculated rating
+        setCourt(prev => ({
+          ...prev,
+          rating: data.rating || 0,
+          reviewCount: data.reviewCount || 0,
+        }));
+
+        // Transform and set reviews
+        const transformedReviews = (data.court_reviews || []).map(review => ({
+          id: review.id,
+          userName: review.user?.full_name || 'Anonymous',
+          userAvatar: review.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${review.user_id}`,
+          rating: review.rating,
+          date: review.created_at,
+          comment: review.comment,
+        }));
+
+        setReviews(transformedReviews);
+      }
+    } catch (err) {
+      console.error('Error fetching court details:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenReviewModal = async () => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to submit a review');
+      return;
+    }
+
+    try {
+      const { data: bookings, error } = await getUserCourtBookings(user.id, court.id);
+
+      if (error) {
+        console.error('Error fetching user bookings:', error);
+        Alert.alert('Error', 'Failed to check booking history');
+        return;
+      }
+
+      if (!bookings || bookings.length === 0) {
+        Alert.alert(
+          'Booking Required',
+          'You can only review courts where you have completed a booking. Book this court first to leave a review!'
+        );
+        return;
+      }
+
+      setUserBookings(bookings);
+      setSelectedBooking(bookings[0].id);
+      setShowReviewModal(true);
+    } catch (err) {
+      console.error('Error checking bookings:', err);
+      Alert.alert('Error', 'Failed to verify booking history');
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to submit a review');
+      return;
+    }
+
+    if (!newReview.comment.trim()) {
+      Alert.alert('Comment Required', 'Please write a comment for your review');
+      return;
+    }
+
+    if (!selectedBooking) {
+      Alert.alert('Booking Required', 'Please select a booking for this review');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const { error } = await addCourtReview(
+        court.id,
+        user.id,
+        newReview.rating,
+        newReview.comment,
+        selectedBooking
+      );
+
+      if (error) {
+        Alert.alert('Error', 'Failed to submit review. Please try again.');
+        return;
+      }
+
+      Alert.alert('Success', 'Your review has been submitted!');
+      setShowReviewModal(false);
+      setNewReview({ rating: 5, comment: '' });
+      setSelectedBooking(null);
+
+      // Refresh court details to show new review
+      fetchCourtDetails();
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      Alert.alert('Error', 'Failed to submit review. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const toggleFavorite = async () => {
     try {
       const storedFavorites = await AsyncStorage.getItem(FAVORITES_KEY);
       let favorites = storedFavorites ? JSON.parse(storedFavorites) : [];
-      
+
       if (isFavorite) {
-        // Remove from favorites
         favorites = favorites.filter((fav) => fav.id !== court.id);
       } else {
-        // Add to favorites
         favorites.push({
           ...court,
           addedAt: new Date().toISOString(),
         });
       }
-      
+
       await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
       setIsFavorite(!isFavorite);
     } catch (error) {
@@ -120,15 +220,14 @@ const CourtDetailScreen = ({ navigation, route }) => {
     }
   };
 
-  // Format hours of operation
   const formatHours = () => {
     if (!court.hoursOfOperation) return 'Hours not available';
     if (typeof court.hoursOfOperation === 'string') return court.hoursOfOperation;
-    
+
     try {
       const days = Object.keys(court.hoursOfOperation);
       if (days.length === 0) return 'Hours not available';
-      
+
       const firstDay = court.hoursOfOperation[days[0]];
       if (firstDay && firstDay.open && firstDay.close) {
         return `${firstDay.open} - ${firstDay.close}`;
@@ -139,28 +238,24 @@ const CourtDetailScreen = ({ navigation, route }) => {
     }
   };
 
-  // Handle phone call
   const handleCall = () => {
     if (court.phoneNumber) {
       Linking.openURL(`tel:${court.phoneNumber}`);
     }
   };
 
-  // Handle email
   const handleEmail = () => {
     if (court.email) {
       Linking.openURL(`mailto:${court.email}`);
     }
   };
 
-  // Handle website
   const handleWebsite = () => {
     if (court.website) {
       Linking.openURL(court.website);
     }
   };
 
-  // Handle directions - navigate to MapScreen with directions
   const handleDirections = () => {
     if (court.latitude && court.longitude) {
       navigation.navigate('Map', {
@@ -175,25 +270,21 @@ const CourtDetailScreen = ({ navigation, route }) => {
         },
       });
     } else if (court.address) {
-      // Fallback to external maps if no coordinates
       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(court.address)}`;
       Linking.openURL(url);
     }
   };
 
-  // Handle booking
   const handleBook = () => {
     navigation.navigate('Booking', { court });
   };
 
-  // Format price
   const formatPrice = () => {
     if (court.isFree) return 'Free';
     if (court.pricePerHour) return `₱${court.pricePerHour}/hour`;
     return 'Contact for pricing';
   };
 
-  // Get amenity icon
   const getAmenityIcon = (amenity) => {
     const amenityLower = amenity?.toLowerCase() || '';
     if (amenityLower.includes('parking')) return 'local-parking';
@@ -207,7 +298,6 @@ const CourtDetailScreen = ({ navigation, route }) => {
     return 'check-circle';
   };
 
-  // Handle back navigation
   const handleBack = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -218,153 +308,220 @@ const CourtDetailScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      {/* Updated StatusBar color */}
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
       {/* Back Button */}
-      <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-        <MaterialIcons name="arrow-back" size={24} color="#fff" />
+      <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.8}>
+        <MaterialIcons name="arrow-back" size={24} color={Colors.white} />
       </TouchableOpacity>
 
       {/* Favorite Button */}
-      <TouchableOpacity style={styles.favoriteButton} onPress={toggleFavorite}>
-        <MaterialIcons 
-          name={isFavorite ? "favorite" : "favorite-border"} 
-          size={24} 
-          color={isFavorite ? "#FF4444" : "#fff"} 
+      <TouchableOpacity style={styles.favoriteButton} onPress={toggleFavorite} activeOpacity={0.8}>
+        <MaterialIcons
+          name={isFavorite ? "favorite" : "favorite-border"}
+          size={24}
+          color={isFavorite ? Colors.error : Colors.white}
         />
       </TouchableOpacity>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Court Image */}
-        <Image
-          source={{uri: court.imageUrl}}
-          style={styles.courtHeroImage}
-          resizeMode="cover"
-        />
-        
+        {/* Hero Image with Gradient Overlay */}
+        <View style={styles.heroContainer}>
+          <Image
+            source={{ uri: court.imageUrl }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['rgba(2, 6, 23, 0)', 'rgba(2, 6, 23, 0.9)']}
+            style={styles.heroGradient}
+          />
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>{court.name}</Text>
+            <TouchableOpacity style={styles.heroLocation} onPress={handleDirections} activeOpacity={0.8}>
+              <View style={styles.locationIconBg}>
+                <MaterialIcons name="location-on" size={16} color={Colors.lime400} />
+              </View>
+              <Text style={styles.heroLocationText}>{court.location}</Text>
+              <MaterialIcons name="arrow-forward" size={16} color={Colors.lime400} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Court Details */}
-        <View style={styles.courtDetails}>
-          <Text style={styles.courtName}>{court.name}</Text>
-          
-          <TouchableOpacity style={styles.courtLocation} onPress={handleDirections}>
-            <MaterialIcons name="location-on" size={20} color={thematicBlue} />
-            <Text style={styles.courtLocationText}>{court.location}</Text>
-            <MaterialIcons name="directions" size={18} color={thematicBlue} style={styles.directionsIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <StarRating rating={court.rating} reviewCount={court.reviewCount} size={16} />
+        <View style={styles.detailsContainer}>
+          {/* Quick Stats */}
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <View style={styles.statIconBg}>
+                <MaterialIcons name="star" size={20} color="#FBBC04" />
+              </View>
+              <Text style={styles.statValue}>{court.rating?.toFixed(1) || '0.0'}</Text>
+              <Text style={styles.statLabel}>Rating</Text>
             </View>
-            <View style={styles.statItem}>
-              <MaterialIcons name="sports-tennis" size={20} color={thematicBlue} />
-              <Text style={styles.statText}>{court.numberOfCourts} {court.numberOfCourts === 1 ? 'Court' : 'Courts'}</Text>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconBg}>
+                <MaterialIcons name="sports-tennis" size={20} color={Colors.blue600} />
+              </View>
+              <Text style={styles.statValue}>{court.numberOfCourts}</Text>
+              <Text style={styles.statLabel}>Courts</Text>
             </View>
-            <View style={styles.statItem}>
-              <MaterialIcons name="attach-money" size={20} color={thematicBlue} />
-              <Text style={styles.statText}>{formatPrice()}</Text>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconBg}>
+                <MaterialIcons name="attach-money" size={20} color={Colors.lime400} />
+              </View>
+              <Text style={styles.statValue}>{court.isFree ? 'FREE' : `₱${court.pricePerHour}`}</Text>
+              <Text style={styles.statLabel}>{court.isFree ? 'Access' : 'Per Hour'}</Text>
             </View>
           </View>
-          
-          {/* Court Type & Surface */}
+
+          {/* Tags Row */}
           <View style={styles.tagsRow}>
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{court.type?.charAt(0).toUpperCase() + court.type?.slice(1) || 'Outdoor'}</Text>
+            <View style={[styles.tag, styles.tagPrimary]}>
+              <Text style={styles.tagText}>{court.type?.toUpperCase() || 'OUTDOOR'}</Text>
             </View>
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{court.surface?.replace('_', ' ').charAt(0).toUpperCase() + court.surface?.replace('_', ' ').slice(1) || 'Concrete'}</Text>
+            <View style={[styles.tag, styles.tagSecondary]}>
+              <Text style={styles.tagTextSecondary}>
+                {court.surface?.replace('_', ' ').toUpperCase() || 'CONCRETE'}
+              </Text>
             </View>
             {court.requiresBooking && (
-              <View style={[styles.tag, styles.bookingTag]}>
-                <Text style={styles.tagText}>Booking Required</Text>
+              <View style={[styles.tag, styles.tagAccent]}>
+                <Text style={styles.tagTextAccent}>BOOKING REQUIRED</Text>
               </View>
             )}
           </View>
-          
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.bookButton}
+              onPress={handleBook}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bookButtonText}>BOOK THIS COURT</Text>
+              <MaterialIcons name="arrow-forward" size={20} color={Colors.slate950} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.directionsButton}
+              onPress={handleDirections}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="directions" size={20} color={Colors.lime400} />
+            </TouchableOpacity>
+          </View>
+
           {/* About Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About This Court</Text>
-            <Text style={styles.sectionText}>{court.description}</Text>
-          </View>
-          
-          {/* Hours Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Hours of Operation</Text>
-            <View style={styles.infoRow}>
-              <MaterialIcons name="access-time" size={18} color={thematicBlue} />
-              <Text style={styles.infoText}>{formatHours()}</Text>
+            <Text style={styles.sectionTitle}>ABOUT</Text>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionText}>{court.description}</Text>
             </View>
           </View>
-          
+
+          {/* Hours Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>HOURS</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIconBg}>
+                  <MaterialIcons name="access-time" size={18} color={Colors.blue600} />
+                </View>
+                <Text style={styles.infoText}>{formatHours()}</Text>
+              </View>
+            </View>
+          </View>
+
           {/* Amenities Section */}
           {court.amenities && court.amenities.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Amenities</Text>
-              <View style={styles.amenitiesList}>
-                {court.amenities.map((amenity, index) => (
-                  <View key={index} style={styles.amenityItem}>
-                    <MaterialIcons name={getAmenityIcon(amenity)} size={16} color={thematicBlue} />
-                    <Text style={styles.amenityText}>{amenity}</Text>
-                  </View>
-                ))}
+              <Text style={styles.sectionTitle}>AMENITIES</Text>
+              <View style={styles.sectionCard}>
+                <View style={styles.amenitiesGrid}>
+                  {court.amenities.map((amenity, index) => (
+                    <View key={index} style={styles.amenityItem}>
+                      <View style={styles.amenityIconBg}>
+                        <MaterialIcons name={getAmenityIcon(amenity)} size={16} color={Colors.lime400} />
+                      </View>
+                      <Text style={styles.amenityText}>{amenity}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
           )}
-          
+
           {/* Contact Section */}
           {(court.phoneNumber || court.email || court.website) && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Contact</Text>
-              {court.phoneNumber && (
-                <TouchableOpacity style={styles.contactRow} onPress={handleCall}>
-                  <MaterialIcons name="phone" size={18} color={thematicBlue} />
-                  <Text style={styles.contactText}>{court.phoneNumber}</Text>
-                </TouchableOpacity>
-              )}
-              {court.email && (
-                <TouchableOpacity style={styles.contactRow} onPress={handleEmail}>
-                  <MaterialIcons name="email" size={18} color={thematicBlue} />
-                  <Text style={styles.contactText}>{court.email}</Text>
-                </TouchableOpacity>
-              )}
-              {court.website && (
-                <TouchableOpacity style={styles.contactRow} onPress={handleWebsite}>
-                  <MaterialIcons name="language" size={18} color={thematicBlue} />
-                  <Text style={styles.contactText}>Visit Website</Text>
-                </TouchableOpacity>
-              )}
+              <Text style={styles.sectionTitle}>CONTACT</Text>
+              <View style={styles.sectionCard}>
+                {court.phoneNumber && (
+                  <TouchableOpacity style={styles.contactRow} onPress={handleCall} activeOpacity={0.8}>
+                    <View style={[styles.contactIconBg, { backgroundColor: '#dbeafe' }]}>
+                      <MaterialIcons name="phone" size={18} color={Colors.blue600} />
+                    </View>
+                    <Text style={styles.contactText}>{court.phoneNumber}</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color={Colors.slate400} />
+                  </TouchableOpacity>
+                )}
+                {court.email && (
+                  <TouchableOpacity
+                    style={[styles.contactRow, court.phoneNumber && { marginTop: 12 }]}
+                    onPress={handleEmail}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.contactIconBg, { backgroundColor: '#fef3c7' }]}>
+                      <MaterialIcons name="email" size={18} color="#ca8a04" />
+                    </View>
+                    <Text style={styles.contactText}>{court.email}</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color={Colors.slate400} />
+                  </TouchableOpacity>
+                )}
+                {court.website && (
+                  <TouchableOpacity
+                    style={[styles.contactRow, (court.phoneNumber || court.email) && { marginTop: 12 }]}
+                    onPress={handleWebsite}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.contactIconBg, { backgroundColor: '#dcfce7' }]}>
+                      <MaterialIcons name="language" size={18} color={Colors.lime400} />
+                    </View>
+                    <Text style={styles.contactText}>Visit Website</Text>
+                    <MaterialIcons name="arrow-forward" size={18} color={Colors.slate400} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
-          
-          {/* Action Buttons */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.bookButton} onPress={handleBook}>
-              <Text style={styles.bookButtonText}>Book This Court</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.directionsButton} onPress={handleDirections}>
-              <MaterialIcons name="directions" size={20} color={thematicBlue} />
-              <Text style={styles.directionsButtonText}>Directions</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Ratings & Reviews Section */}
+
+          {/* Reviews Section */}
           <View style={styles.section}>
             <View style={styles.reviewsHeader}>
-              <Text style={styles.sectionTitle}>Ratings & Reviews</Text>
-              <TouchableOpacity style={styles.writeReviewButton}>
-                <MaterialIcons name="rate-review" size={16} color={thematicBlue} />
-                <Text style={styles.writeReviewText}>Write Review</Text>
+              <Text style={styles.sectionTitle}>REVIEWS</Text>
+              <TouchableOpacity
+                style={styles.writeReviewButton}
+                onPress={handleOpenReviewModal}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="rate-review" size={16} color={Colors.slate950} />
+                <Text style={styles.writeReviewText}>WRITE</Text>
               </TouchableOpacity>
             </View>
-            
+
             {/* Rating Summary */}
             <View style={styles.ratingSummary}>
               <View style={styles.ratingBig}>
                 <Text style={styles.ratingBigNumber}>{court.rating?.toFixed(1) || '0.0'}</Text>
-                <StarRating rating={court.rating} size={20} showRatingNumber={false} />
+                <View style={styles.ratingStars}>
+                  <StarRating rating={court.rating} size={18} showRatingNumber={false} />
+                </View>
                 <Text style={styles.ratingCount}>{court.reviewCount || reviews.length} reviews</Text>
               </View>
+
               <View style={styles.ratingBars}>
                 {[5, 4, 3, 2, 1].map((star) => {
                   const count = reviews.filter(r => r.rating === star).length;
@@ -376,30 +533,31 @@ const CourtDetailScreen = ({ navigation, route }) => {
                       <View style={styles.ratingBarTrack}>
                         <View style={[styles.ratingBarFill, { width: `${percentage}%` }]} />
                       </View>
+                      <Text style={styles.ratingBarCount}>{count}</Text>
                     </View>
                   );
                 })}
               </View>
             </View>
-            
+
             {/* Reviews List */}
             <View style={styles.reviewsList}>
               {reviews.map((review) => (
                 <View key={review.id} style={styles.reviewCard}>
                   <View style={styles.reviewHeader}>
-                    <Image 
-                      source={{ uri: review.userAvatar }} 
-                      style={styles.reviewerAvatar} 
+                    <Image
+                      source={{ uri: review.userAvatar }}
+                      style={styles.reviewerAvatar}
                     />
                     <View style={styles.reviewerInfo}>
                       <Text style={styles.reviewerName}>{review.userName}</Text>
                       <View style={styles.reviewMeta}>
                         <StarRating rating={review.rating} size={12} showRatingNumber={false} />
                         <Text style={styles.reviewDate}>
-                          {new Date(review.date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric' 
+                          {new Date(review.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
                           })}
                         </Text>
                       </View>
@@ -409,14 +567,87 @@ const CourtDetailScreen = ({ navigation, route }) => {
                 </View>
               ))}
             </View>
-            
-            <TouchableOpacity style={styles.seeAllReviewsButton}>
-              <Text style={styles.seeAllReviewsText}>See All Reviews</Text>
-              <MaterialIcons name="chevron-right" size={20} color={thematicBlue} />
+
+            <TouchableOpacity style={styles.seeAllButton} activeOpacity={0.8}>
+              <Text style={styles.seeAllText}>SEE ALL REVIEWS</Text>
+              <MaterialIcons name="arrow-forward" size={20} color={Colors.lime400} />
             </TouchableOpacity>
           </View>
         </View>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Review Modal */}
+      <Modal
+        visible={showReviewModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowReviewModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Write a Review</Text>
+              <TouchableOpacity onPress={() => setShowReviewModal(false)}>
+                <MaterialIcons name="close" size={24} color={Colors.slate700} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Rating Selector */}
+            <View style={styles.ratingSelector}>
+              <Text style={styles.ratingLabel}>Your Rating</Text>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => setNewReview(prev => ({ ...prev, rating: star }))}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={star <= newReview.rating ? 'star' : 'star-outline'}
+                      size={40}
+                      color={star <= newReview.rating ? '#FBBC04' : Colors.slate300}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Comment Input */}
+            <View style={styles.commentSection}>
+              <Text style={styles.commentLabel}>Your Review</Text>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Share your experience at this court..."
+                placeholderTextColor={Colors.slate400}
+                multiline
+                numberOfLines={6}
+                value={newReview.comment}
+                onChangeText={(text) => setNewReview(prev => ({ ...prev, comment: text }))}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+              onPress={handleSubmitReview}
+              disabled={submitting}
+              activeOpacity={0.8}
+            >
+              {submitting ? (
+                <ActivityIndicator color={Colors.slate950} />
+              ) : (
+                <>
+                  <Text style={styles.submitButtonText}>SUBMIT REVIEW</Text>
+                  <MaterialIcons name="send" size={20} color={Colors.slate950} />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -424,290 +655,438 @@ const CourtDetailScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
   },
   backButton: {
     position: 'absolute',
     top: 40,
-    left: 15,
+    left: 20,
     zIndex: 10,
-    backgroundColor: thematicBlue,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: Colors.slate950 + 'CC',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: Colors.slate950,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 8,
   },
   favoriteButton: {
     position: 'absolute',
     top: 40,
-    right: 15,
+    right: 20,
     zIndex: 10,
-    backgroundColor: thematicBlue,
+    backgroundColor: Colors.slate950 + 'CC',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.slate950,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  content: {
+    flex: 1,
+  },
+
+  // Hero Section
+  heroContainer: {
+    position: 'relative',
+    height: 400,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 24,
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -1.5,
+    marginBottom: 12,
+    textShadowColor: Colors.slate950,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  heroLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  locationIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.slate950 + 'CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroLocationText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.white,
+    textShadowColor: Colors.slate950,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  // Details Container
+  detailsContainer: {
+    padding: 20,
+  },
+
+  // Stats Grid
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.slate50,
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.slate100,
+  },
+  statIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -0.5,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.slate600,
+    letterSpacing: 0.5,
+  },
+
+  // Tags
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  tag: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  tagPrimary: {
+    backgroundColor: Colors.slate950,
+  },
+  tagSecondary: {
+    backgroundColor: Colors.slate100,
+  },
+  tagAccent: {
+    backgroundColor: Colors.lime400 + '20',
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: 1,
+  },
+  tagTextSecondary: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.slate700,
+    letterSpacing: 1,
+  },
+  tagTextAccent: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.lime400,
+    letterSpacing: 1,
+  },
+
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+  },
+  bookButton: {
+    flex: 1,
+    backgroundColor: Colors.lime400,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 18,
+    borderRadius: 20,
+    shadowColor: Colors.lime400,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bookButtonText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 0.5,
+  },
+  directionsButton: {
+    width: 60,
+    height: 60,
+    backgroundColor: Colors.slate950,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    shadowColor: Colors.slate950,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+
+  // Sections
+  section: {
+    marginBottom: 28,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: Colors.slate500,
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  sectionCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Colors.slate100,
+  },
+  sectionText: {
+    fontSize: 15,
+    color: Colors.slate700,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+
+  // Info Row
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.slate950,
+  },
+
+  // Amenities
+  amenitiesGrid: {
+    gap: 16,
+  },
+  amenityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  amenityIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.slate950,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  amenityText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate700,
+  },
+
+  // Contact
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  contactIconBg: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  content: {
-    flex: 1,
-    paddingBottom: 10,
-  },
-  courtHeroImage: {
-    width: '100%',
-    height: 200,
-  },
-  courtDetails: {
-    padding: 20,
-  },
-  courtName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 10,
-  },
-  courtLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  courtLocationText: {
-    fontSize: 16,
-    color: thematicBlue,
-    marginLeft: 5,
-    flex: 1,
-  },
-  directionsIcon: {
-    marginLeft: 5,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 5,
-    fontWeight: '500',
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 20,
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: 'rgba(10, 86, 167, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  bookingTag: {
-    backgroundColor: 'rgba(163, 255, 1, 0.2)',
-  },
-  tagText: {
-    fontSize: 12,
-    color: thematicBlue,
-    fontWeight: '500',
-  },
-  section: {
-    marginBottom: 25,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 10,
-  },
-  sectionText: {
-    fontSize: 14,
-    color: thematicBlue,
-    lineHeight: 22,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 8,
-  },
-  amenitiesList: {
-    gap: 10,
-  },
-  amenityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  amenityText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 10,
-  },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
   },
   contactText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 10,
-    textDecorationLine: 'underline',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-    marginBottom: 25,
-  },
-  directionsButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(10, 86, 167, 0.1)',
-    paddingVertical: 15,
-    borderRadius: 25,
-    gap: 8,
-  },
-  directionsButtonText: {
-    color: thematicBlue,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: Colors.slate950,
   },
-  bookButton: {
-    flex: 2,
-    backgroundColor: thematicBlue,
-    paddingVertical: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-  },
-  bookButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Reviews Section Styles
+
+  // Reviews
   reviewsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   writeReviewButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 86, 167, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    gap: 4,
+    gap: 6,
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
   writeReviewText: {
-    fontSize: 12,
-    color: thematicBlue,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 1,
   },
   ratingSummary: {
     flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.slate100,
+    gap: 20,
   },
   ratingBig: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingRight: 20,
     borderRightWidth: 1,
-    borderRightColor: '#E0E0E0',
+    borderRightColor: Colors.slate200,
   },
   ratingBigNumber: {
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: thematicBlue,
+    fontSize: 48,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -2,
+    marginBottom: 4,
+  },
+  ratingStars: {
+    marginBottom: 4,
   },
   ratingCount: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    fontWeight: '700',
+    color: Colors.slate500,
   },
   ratingBars: {
     flex: 1,
-    paddingLeft: 15,
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
   },
   ratingBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   ratingBarLabel: {
-    fontSize: 11,
-    color: '#666',
-    width: 10,
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.slate600,
+    width: 12,
   },
   ratingBarTrack: {
     flex: 1,
-    height: 6,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: Colors.slate100,
+    borderRadius: 4,
     overflow: 'hidden',
   },
   ratingBarFill: {
     height: '100%',
     backgroundColor: '#FBBC04',
-    borderRadius: 3,
+    borderRadius: 4,
   },
+  ratingBarCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.slate500,
+    width: 16,
+    textAlign: 'right',
+  },
+
+  // Review Cards
   reviewsList: {
-    gap: 15,
+    gap: 16,
+    marginBottom: 16,
   },
   reviewCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Colors.slate100,
   },
   reviewHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   reviewerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: '#E0E0E0',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    backgroundColor: Colors.slate200,
   },
   reviewerInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   reviewerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.slate950,
+    marginBottom: 4,
   },
   reviewMeta: {
     flexDirection: 'row',
@@ -715,25 +1094,112 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   reviewDate: {
-    fontSize: 11,
-    color: '#999',
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.slate500,
   },
   reviewComment: {
-    fontSize: 13,
-    color: '#444',
-    lineHeight: 20,
+    fontSize: 14,
+    color: Colors.slate700,
+    lineHeight: 22,
+    fontWeight: '500',
   },
-  seeAllReviewsButton: {
+  seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 15,
-    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: Colors.slate950,
+    paddingVertical: 16,
+    borderRadius: 16,
   },
-  seeAllReviewsText: {
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: 0.5,
+  },
+
+  // Review Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -0.5,
+  },
+  ratingSelector: {
+    marginBottom: 24,
+  },
+  ratingLabel: {
     fontSize: 14,
-    color: thematicBlue,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: Colors.slate700,
+    marginBottom: 12,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  commentSection: {
+    marginBottom: 24,
+  },
+  commentLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate700,
+    marginBottom: 12,
+  },
+  commentInput: {
+    backgroundColor: Colors.slate50,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 15,
+    color: Colors.slate950,
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: Colors.slate200,
+  },
+  submitButton: {
+    backgroundColor: Colors.lime400,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: Colors.lime400,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 0.5,
   },
 });
 

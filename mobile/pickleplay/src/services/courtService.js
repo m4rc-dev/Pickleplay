@@ -12,12 +12,29 @@ export const getCourts = async (filters = {}) => {
   try {
     let query = supabase
       .from('courts')
-      .select('*')
+      .select(`
+        *,
+        location:location_id (
+          id,
+          name,
+          address,
+          city,
+          state,
+          postal_code,
+          latitude,
+          longitude,
+          amenities,
+          phone
+        ),
+        court_reviews (
+          rating
+        )
+      `)
       .eq('is_active', true);
 
     // Apply filters
     if (filters.city) {
-      query = query.ilike('city', `%${filters.city}%`);
+      query = query.ilike('location.city', `%${filters.city}%`);
     }
     if (filters.courtType) {
       query = query.eq('court_type', filters.courtType);
@@ -32,7 +49,22 @@ export const getCourts = async (filters = {}) => {
     const { data, error } = await query;
 
     if (error) throw error;
-    return { data, error: null };
+
+    // Calculate average rating for each court
+    const courtsWithRatings = data?.map(court => {
+      const reviews = court.court_reviews || [];
+      const avgRating = reviews.length > 0
+        ? (reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1)
+        : 0;
+
+      return {
+        ...court,
+        rating: parseFloat(avgRating),
+        reviewCount: reviews.length,
+      };
+    });
+
+    return { data: courtsWithRatings, error: null };
   } catch (err) {
     console.error('Error fetching courts:', err);
     return { data: null, error: err };
@@ -48,18 +80,46 @@ export const getCourtById = async (courtId) => {
       .from('courts')
       .select(`
         *,
-        court_images (*),
-        court_amenities (*),
-        reviews:court_reviews (
+        location:location_id (
+          id,
+          name,
+          address,
+          city,
+          state,
+          postal_code,
+          latitude,
+          longitude,
+          amenities,
+          phone
+        ),
+        court_reviews (
           *,
-          user:users (first_name, last_name, profile_photo_url)
+          user:user_id (
+            id,
+            full_name,
+            avatar_url
+          )
         )
       `)
       .eq('id', courtId)
       .single();
 
     if (error) throw error;
-    return { data, error: null };
+
+    // Calculate average rating
+    const reviews = data.court_reviews || [];
+    const avgRating = reviews.length > 0
+      ? (reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1)
+      : 0;
+
+    return {
+      data: {
+        ...data,
+        rating: parseFloat(avgRating),
+        reviewCount: reviews.length,
+      },
+      error: null
+    };
   } catch (err) {
     console.error('Error fetching court:', err);
     return { data: null, error: err };
@@ -71,21 +131,31 @@ export const getCourtById = async (courtId) => {
  */
 export const getNearbyCourts = async (latitude, longitude, radiusKm = 10) => {
   try {
-    // Using PostGIS function if available, otherwise filter in memory
+    // Query courts with location data
     const { data, error } = await supabase
       .from('courts')
-      .select('*')
-      .eq('is_active', true)
-      .not('latitude', 'is', null)
-      .not('longitude', 'is', null);
+      .select(`
+        *,
+        location:location_id (
+          id,
+          name,
+          address,
+          city,
+          state,
+          latitude,
+          longitude
+        )
+      `)
+      .eq('is_active', true);
 
     if (error) throw error;
 
     // Calculate distance and filter
     const courtsWithDistance = data
+      .filter(court => court.location?.latitude && court.location?.longitude)
       .map(court => ({
         ...court,
-        distance: calculateDistance(latitude, longitude, court.latitude, court.longitude),
+        distance: calculateDistance(latitude, longitude, court.location.latitude, court.location.longitude),
       }))
       .filter(court => court.distance <= radiusKm)
       .sort((a, b) => a.distance - b.distance);
@@ -104,9 +174,18 @@ export const searchCourts = async (searchTerm) => {
   try {
     const { data, error } = await supabase
       .from('courts')
-      .select('*')
+      .select(`
+        *,
+        location:location_id (
+          id,
+          name,
+          address,
+          city,
+          state
+        )
+      `)
       .eq('is_active', true)
-      .or(`name.ilike.%${searchTerm}%,city.ilike.%${searchTerm}%,address.ilike.%${searchTerm}%`)
+      .or(`name.ilike.%${searchTerm}%`)
       .order('name');
 
     if (error) throw error;
@@ -138,6 +217,58 @@ export const getCourtAvailability = async (courtId, date) => {
 };
 
 /**
+ * Get user's completed bookings for a specific court
+ */
+export const getUserCourtBookings = async (userId, courtId) => {
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('court_id', courtId)
+      .eq('status', 'completed')
+      .order('booking_date', { ascending: false });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error fetching user court bookings:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
+ * Add a review for a court
+ */
+export const addCourtReview = async (courtId, userId, rating, comment, bookingId = null) => {
+  try {
+    const reviewData = {
+      court_id: courtId,
+      user_id: userId,
+      rating: rating,
+      comment: comment,
+      created_at: new Date().toISOString(),
+    };
+
+    // Only add booking_id if provided
+    if (bookingId) {
+      reviewData.booking_id = bookingId;
+    }
+
+    const { data, error } = await supabase
+      .from('court_reviews')
+      .insert([reviewData])
+      .select();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error adding court review:', err);
+    return { data: null, error: err };
+  }
+};
+
+/**
  * Calculate distance between two coordinates (Haversine formula)
  */
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -160,4 +291,6 @@ export default {
   getNearbyCourts,
   searchCourts,
   getCourtAvailability,
+  getUserCourtBookings,
+  addCourtReview,
 };

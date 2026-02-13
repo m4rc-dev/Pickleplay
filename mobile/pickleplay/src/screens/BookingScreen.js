@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     View,
@@ -8,109 +8,192 @@ import {
     StatusBar,
     Image,
     Alert,
+    ActivityIndicator,
+    Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import Colors from '../constants/Colors';
+import commonStyles from '../styles/commonStyles';
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
+const {width} = Dimensions.get('window');
 
 const BookingScreen = ({ navigation, route }) => {
-    // Static court data - will be replaced with backend data later
-    const staticCourt = {
-        id: 1,
-        name: 'Banawa Community Court',
-        location: 'Banawa, Cebu City',
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=400',
-        pricePerHour: 20,
-        amenities: ['Parking', 'Restrooms', 'Water Station'],
-    };
-    
-    const court = route.params?.court || staticCourt;
+    const { user } = useAuth();
+    const court = route.params?.court;
 
     const [selectedDate, setSelectedDate] = useState(0);
     const [selectedTime, setSelectedTime] = useState(null);
     const [guests, setGuests] = useState(2);
+    const [loading, setLoading] = useState(false);
+    const [bookingLoading, setBookingLoading] = useState(false);
+    const [timeSlots, setTimeSlots] = useState([]);
+    const [dates, setDates] = useState([]);
 
-    // Static dates - will be dynamically generated when connected to backend
-    const dates = [
-        { day: 'Mon', date: '03', full: 'February 3, 2026' },
-        { day: 'Tue', date: '04', full: 'February 4, 2026' },
-        { day: 'Wed', date: '05', full: 'February 5, 2026' },
-        { day: 'Thu', date: '06', full: 'February 6, 2026' },
-        { day: 'Fri', date: '07', full: 'February 7, 2026' },
-        { day: 'Sat', date: '08', full: 'February 8, 2026' },
-        { day: 'Sun', date: '09', full: 'February 9, 2026' },
-    ];
+    useEffect(() => {
+        generateDates();
+    }, []);
 
-    // Static time slots - will be fetched from backend based on availability
-    const timeSlots = [
-        { time: '06:00 AM', available: true },
-        { time: '07:00 AM', available: true },
-        { time: '08:00 AM', available: true },
-        { time: '09:00 AM', available: false }, // Simulating booked slot
-        { time: '10:00 AM', available: true },
-        { time: '11:00 AM', available: true },
-        { time: '02:00 PM', available: true },
-        { time: '03:00 PM', available: false }, // Simulating booked slot
-        { time: '04:00 PM', available: true },
-        { time: '05:00 PM', available: true },
-        { time: '06:00 PM', available: true },
-    ];
+    useEffect(() => {
+        if (dates.length > 0) {
+            fetchAvailability();
+        }
+    }, [selectedDate, dates]);
 
-    // Static pricing - will be calculated from backend
-    const courtFee = 20.00;
-    const serviceFee = 2.00;
+    const generateDates = () => {
+        const dateArray = [];
+        const today = new Date();
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() + i);
+            dateArray.push({
+                day: days[date.getDay()],
+                date: date.getDate().toString().padStart(2, '0'),
+                full: `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`,
+                isoDate: date.toISOString().split('T')[0]
+            });
+        }
+        setDates(dateArray);
+    };
+
+    const fetchAvailability = async () => {
+        if (!court?.id || !dates[selectedDate]) return;
+
+        try {
+            setLoading(true);
+            const selectedDateISO = dates[selectedDate].isoDate;
+
+            const { data: existingBookings, error } = await supabase
+                .from('bookings')
+                .select('start_time, end_time')
+                .eq('court_id', court.id)
+                .eq('date', selectedDateISO)
+                .in('status', ['confirmed', 'pending']);
+
+            if (error) throw error;
+
+            const slots = [];
+            for (let hour = 6; hour <= 22; hour++) {
+                const timeString = `${hour.toString().padStart(2, '0')}:00:00`;
+                const displayTime = hour < 12 
+                    ? `${hour}:00 AM` 
+                    : hour === 12 
+                        ? '12:00 PM'
+                        : `${hour - 12}:00 PM`;
+
+                const isBooked = existingBookings?.some(booking => {
+                    return booking.start_time === timeString;
+                });
+
+                slots.push({
+                    time: displayTime,
+                    timeValue: timeString,
+                    available: !isBooked
+                });
+            }
+
+            setTimeSlots(slots);
+        } catch (error) {
+            console.error('Error fetching availability:', error);
+            Alert.alert('Error', 'Failed to load availability');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const calculateEndTime = (startTime) => {
+        const [hours] = startTime.split(':');
+        const endHour = parseInt(hours) + 1;
+        return `${endHour.toString().padStart(2, '0')}:00:00`;
+    };
+
+    const courtFee = parseFloat(court?.base_price) || 0;
+    const serviceFee = courtFee * 0.1;
     const totalPrice = courtFee + serviceFee;
 
-    const handleBook = () => {
+    const handleBook = async () => {
         if (selectedTime === null) {
             Alert.alert('Incomplete Selection', 'Please select a time slot.');
             return;
         }
 
-        // Static booking details - will be sent to backend API later
-        const bookingDetails = {
-            bookingId: 'BK-' + Date.now().toString(36).toUpperCase(),
-            court: court,
-            date: dates[selectedDate].full,
-            time: timeSlots[selectedTime].time,
-            guests: guests,
-            courtFee: `$${courtFee.toFixed(2)}`,
-            serviceFee: `$${serviceFee.toFixed(2)}`,
-            totalPrice: `$${totalPrice.toFixed(2)}`,
-            paymentMethod: 'Credit Card ****1234',
-            paymentStatus: 'Paid',
-            bookingStatus: 'Confirmed',
-        };
+        if (!user?.id) {
+            Alert.alert('Authentication Required', 'Please log in to book a court.');
+            return;
+        }
 
-        navigation.navigate('BookingReceipt', { bookingDetails });
+        try {
+            setBookingLoading(true);
+
+            const selectedSlot = timeSlots[selectedTime];
+            const selectedDateISO = dates[selectedDate].isoDate;
+            const endTime = calculateEndTime(selectedSlot.timeValue);
+
+            const { data: booking, error } = await supabase
+                .from('bookings')
+                .insert([
+                    {
+                        court_id: court.id,
+                        player_id: user.id,
+                        date: selectedDateISO,
+                        start_time: selectedSlot.timeValue,
+                        end_time: endTime,
+                        total_price: totalPrice,
+                        status: 'confirmed',
+                        payment_status: 'paid'
+                    }
+                ])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            navigation.navigate('BookingReceipt', { 
+                bookingId: booking.id
+            });
+
+        } catch (error) {
+            console.error('Error creating booking:', error);
+            Alert.alert('Booking Failed', error.message || 'Failed to create booking. Please try again.');
+        } finally {
+            setBookingLoading(false);
+        }
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+            <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <LinearGradient
+                colors={[Colors.slate950, Colors.slate900]}
+                style={styles.header}
+            >
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.8}>
                     <MaterialIcons name="arrow-back" size={24} color={Colors.white} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Book Court</Text>
+                <Text style={styles.headerTitle}>BOOK COURT</Text>
                 <View style={{ width: 24 }} />
-            </View>
+            </LinearGradient>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Court Summary */}
-                <View style={styles.courtSummary}>
+                {/* Court Summary Card */}
+                <View style={styles.courtCard}>
                     <Image source={{ uri: court?.imageUrl }} style={styles.courtImage} />
-                    <View style={styles.courtInfo}>
+                    <View style={styles.courtOverlay}>
                         <Text style={styles.courtName}>{court?.name || 'Court Name'}</Text>
-                        <Text style={styles.courtLocation}>{court?.location || 'Location'}</Text>
-                        <View style={styles.ratingContainer}>
-                            <MaterialIcons name="star" size={16} color="#FFD700" />
+                        <View style={styles.courtLocation}>
+                            <MaterialIcons name="location-on" size={14} color={Colors.lime400} />
+                            <Text style={styles.courtLocationText}>{court?.location || 'Location'}</Text>
+                        </View>
+                        <View style={styles.courtRating}>
+                            <MaterialIcons name="star" size={14} color="#FBBC04" />
                             <Text style={styles.ratingText}>{court?.rating || '0.0'}</Text>
                         </View>
                     </View>
@@ -118,8 +201,12 @@ const BookingScreen = ({ navigation, route }) => {
 
                 {/* Date Selection */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Select Date</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll}>
+                    <Text style={styles.sectionTitle}>SELECT DATE</Text>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={styles.dateScroll}
+                    >
                         {dates.map((item, index) => (
                             <TouchableOpacity
                                 key={index}
@@ -128,9 +215,20 @@ const BookingScreen = ({ navigation, route }) => {
                                     selectedDate === index && styles.selectedDateCard,
                                 ]}
                                 onPress={() => setSelectedDate(index)}
+                                activeOpacity={0.8}
                             >
-                                <Text style={[styles.dayText, selectedDate === index && styles.selectedText]}>{item.day}</Text>
-                                <Text style={[styles.dateText, selectedDate === index && styles.selectedText]}>{item.date}</Text>
+                                <Text style={[
+                                    styles.dayText, 
+                                    selectedDate === index && styles.selectedDayText
+                                ]}>
+                                    {item.day}
+                                </Text>
+                                <Text style={[
+                                    styles.dateText, 
+                                    selectedDate === index && styles.selectedDateText
+                                ]}>
+                                    {item.date}
+                                </Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -138,90 +236,139 @@ const BookingScreen = ({ navigation, route }) => {
 
                 {/* Time Selection */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Select Time</Text>
-                    <View style={styles.timeGrid}>
-                        {timeSlots.map((slot, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                style={[
-                                    styles.timeSlot,
-                                    selectedTime === index && styles.selectedTimeSlot,
-                                    !slot.available && styles.unavailableTimeSlot,
-                                ]}
-                                onPress={() => slot.available && setSelectedTime(index)}
-                                disabled={!slot.available}
-                            >
-                                <Text style={[
-                                    styles.timeText, 
-                                    selectedTime === index && styles.selectedText,
-                                    !slot.available && styles.unavailableText,
-                                ]}>{slot.time}</Text>
-                                {!slot.available && <Text style={styles.bookedLabel}>Booked</Text>}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    <Text style={styles.sectionTitle}>SELECT TIME</Text>
+                    {loading ? (
+                        <View style={commonStyles.loadingContainer}>
+                            <ActivityIndicator size="large" color={Colors.lime400} />
+                            <Text style={commonStyles.loadingText}>Loading times...</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.timeGrid}>
+                            {timeSlots.map((slot, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={[
+                                        styles.timeSlot,
+                                        selectedTime === index && styles.selectedTimeSlot,
+                                        !slot.available && styles.unavailableTimeSlot,
+                                    ]}
+                                    onPress={() => slot.available && setSelectedTime(index)}
+                                    disabled={!slot.available}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={[
+                                        styles.timeText, 
+                                        selectedTime === index && styles.selectedTimeText,
+                                        !slot.available && styles.unavailableTimeText,
+                                    ]}>
+                                        {slot.time}
+                                    </Text>
+                                    {!slot.available && (
+                                        <View style={styles.bookedBadge}>
+                                            <MaterialIcons name="block" size={10} color={Colors.error} />
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
                 </View>
 
-                {/* Guests */}
+                {/* Players */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Number of Players</Text>
-                    <View style={styles.guestControl}>
+                    <Text style={styles.sectionTitle}>NUMBER OF PLAYERS</Text>
+                    <View style={styles.guestCard}>
                         <TouchableOpacity
                             style={styles.guestButton}
                             onPress={() => setGuests(Math.max(1, guests - 1))}
+                            activeOpacity={0.8}
                         >
-                            <MaterialIcons name="remove" size={24} color={thematicBlue} />
+                            <LinearGradient
+                                colors={[Colors.slate900, Colors.slate800]}
+                                style={styles.guestButtonGradient}
+                            >
+                                <MaterialIcons name="remove" size={24} color={Colors.white} />
+                            </LinearGradient>
                         </TouchableOpacity>
-                        <Text style={styles.guestCount}>{guests}</Text>
+                        
+                        <View style={styles.guestDisplay}>
+                            <Text style={styles.guestCount}>{guests}</Text>
+                            <Text style={styles.guestLabel}>PLAYERS</Text>
+                        </View>
+                        
                         <TouchableOpacity
                             style={styles.guestButton}
                             onPress={() => setGuests(Math.min(8, guests + 1))}
+                            activeOpacity={0.8}
                         >
-                            <MaterialIcons name="add" size={24} color={thematicBlue} />
+                            <LinearGradient
+                                colors={[Colors.slate900, Colors.slate800]}
+                                style={styles.guestButtonGradient}
+                            >
+                                <MaterialIcons name="add" size={24} color={Colors.white} />
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 </View>
 
                 {/* Price Summary */}
-                <View style={styles.priceSection}>
-                    <Text style={styles.priceSectionTitle}>Price Summary</Text>
-                    <View style={styles.priceRow}>
-                        <Text style={styles.priceLabel}>Court Fee (1 hr)</Text>
-                        <Text style={styles.priceValue}>${courtFee.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.priceRow}>
-                        <Text style={styles.priceLabel}>Service Fee</Text>
-                        <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.divider} />
-                    <View style={[styles.priceRow, styles.totalRow]}>
-                        <Text style={styles.totalLabel}>Total</Text>
-                        <Text style={styles.totalValue}>${totalPrice.toFixed(2)}</Text>
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>PRICE SUMMARY</Text>
+                    <View style={styles.priceCard}>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.priceLabel}>Court Fee (1 hr)</Text>
+                            <Text style={styles.priceValue}>₱{courtFee.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.priceLabel}>Service Fee</Text>
+                            <Text style={styles.priceValue}>₱{serviceFee.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.priceDivider} />
+                        <View style={styles.priceRow}>
+                            <Text style={styles.totalLabel}>TOTAL</Text>
+                            <Text style={styles.totalValue}>₱{totalPrice.toFixed(2)}</Text>
+                        </View>
                     </View>
                 </View>
 
-                {/* Static Payment Method */}
+                {/* Payment Method */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Payment Method</Text>
+                    <Text style={styles.sectionTitle}>PAYMENT METHOD</Text>
                     <View style={styles.paymentCard}>
-                        <MaterialIcons name="credit-card" size={24} color={thematicBlue} />
+                        <View style={styles.paymentIconBg}>
+                            <MaterialIcons name="credit-card" size={24} color={Colors.blue600} />
+                        </View>
                         <View style={styles.paymentInfo}>
                             <Text style={styles.paymentType}>Credit Card</Text>
-                            <Text style={styles.paymentNumber}>**** **** **** 1234</Text>
+                            <Text style={styles.paymentNumber}>•••• •••• •••• 1234</Text>
                         </View>
-                        <MaterialIcons name="check-circle" size={24} color={activeColor} />
+                        <View style={styles.checkIconBg}>
+                            <MaterialIcons name="check" size={16} color={Colors.lime400} />
+                        </View>
                     </View>
                 </View>
 
+                <View style={{height: 20}} />
             </ScrollView>
 
             {/* Booking Button */}
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.bookButton} onPress={handleBook}>
-                    <Text style={styles.bookButtonText}>Confirm Booking</Text>
+                <TouchableOpacity 
+                    style={[styles.bookButton, bookingLoading && styles.bookButtonDisabled]} 
+                    onPress={handleBook}
+                    disabled={bookingLoading}
+                    activeOpacity={0.8}
+                >
+                    {bookingLoading ? (
+                        <ActivityIndicator color={Colors.slate950} size="small" />
+                    ) : (
+                        <>
+                            <Text style={styles.bookButtonText}>CONFIRM BOOKING</Text>
+                            <MaterialIcons name="arrow-forward" size={20} color={Colors.slate950} />
+                        </>
+                    )}
                 </TouchableOpacity>
             </View>
-
         </SafeAreaView>
     );
 };
@@ -229,254 +376,336 @@ const BookingScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: Colors.white,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 20,
-        backgroundColor: thematicBlue,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '900',
         color: Colors.white,
+        letterSpacing: 1,
     },
     backButton: {
-        padding: 5,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     content: {
         flex: 1,
     },
-    courtSummary: {
-        flexDirection: 'row',
-        padding: 20,
-        backgroundColor: Colors.surface,
-        marginBottom: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+    
+    // Court Card
+    courtCard: {
+        margin: 20,
+        height: 180,
+        borderRadius: 24,
+        overflow: 'hidden',
+        backgroundColor: Colors.slate950,
+        shadowColor: Colors.slate950,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 6,
     },
     courtImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 10,
-        marginRight: 15,
+        width: '100%',
+        height: '100%',
+        opacity: 0.6,
     },
-    courtInfo: {
-        justifyContent: 'center',
-        flex: 1,
+    courtOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 20,
+        backgroundColor: 'rgba(2, 6, 23, 0.6)',
     },
     courtName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
-        marginBottom: 5,
+        fontSize: 24,
+        fontWeight: '900',
+        color: Colors.white,
+        letterSpacing: -1,
+        marginBottom: 8,
     },
     courtLocation: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 5,
-    },
-    ratingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 4,
+        marginBottom: 4,
+    },
+    courtLocationText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.white,
+    },
+    courtRating: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
     ratingText: {
-        marginLeft: 5,
-        fontWeight: 'bold',
-        color: thematicBlue,
+        fontSize: 13,
+        fontWeight: '800',
+        color: Colors.white,
     },
+    
+    // Section
     section: {
-        padding: 20,
-        paddingBottom: 0,
+        paddingHorizontal: 20,
+        marginBottom: 24,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
-        marginBottom: 15,
+        fontSize: 13,
+        fontWeight: '900',
+        color: Colors.slate500,
+        letterSpacing: 2,
+        marginBottom: 16,
     },
+    
+    // Date Selection
     dateScroll: {
-        paddingBottom: 10,
+        gap: 12,
     },
     dateCard: {
         width: 70,
-        height: 90,
-        backgroundColor: Colors.surface,
-        borderRadius: 15,
-        justifyContent: 'center',
+        paddingVertical: 16,
+        backgroundColor: Colors.white,
+        borderRadius: 16,
         alignItems: 'center',
-        marginRight: 15,
-        borderWidth: 1,
-        borderColor: '#eee',
-        elevation: 2,
+        borderWidth: 2,
+        borderColor: Colors.slate200,
     },
     selectedDateCard: {
-        backgroundColor: thematicBlue,
-        borderColor: thematicBlue,
+        backgroundColor: Colors.slate950,
+        borderColor: Colors.slate950,
     },
     dayText: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 5,
+        fontSize: 12,
+        fontWeight: '700',
+        color: Colors.slate600,
+        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    selectedDayText: {
+        color: Colors.lime400,
     },
     dateText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: thematicBlue,
+        fontSize: 24,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: -1,
     },
-    selectedText: {
+    selectedDateText: {
         color: Colors.white,
     },
+    
+    // Time Grid
     timeGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 10,
     },
     timeSlot: {
-        width: '30%',
-        paddingVertical: 12,
-        backgroundColor: Colors.surface,
-        borderRadius: 10,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#eee',
-        marginBottom: 10,
-    },
-    selectedTimeSlot: {
-        backgroundColor: thematicBlue,
-        borderColor: thematicBlue,
-    },
-    unavailableTimeSlot: {
-        backgroundColor: '#f0f0f0',
-        borderColor: '#ddd',
-        opacity: 0.7,
-    },
-    timeText: {
-        color: thematicBlue,
-        fontWeight: '600',
-    },
-    unavailableText: {
-        color: '#999',
-    },
-    bookedLabel: {
-        fontSize: 10,
-        color: '#999',
-        marginTop: 2,
-    },
-    guestControl: {
-        flexDirection: 'row',
+        width: '31%',
+        paddingVertical: 14,
+        backgroundColor: Colors.white,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: Colors.surface,
-        borderRadius: 15,
-        padding: 10,
-        width: 150,
-        alignSelf: 'center',
-        elevation: 2,
+        borderWidth: 2,
+        borderColor: Colors.slate200,
+        position: 'relative',
+    },
+    selectedTimeSlot: {
+        backgroundColor: Colors.lime400,
+        borderColor: Colors.lime400,
+    },
+    unavailableTimeSlot: {
+        backgroundColor: Colors.slate50,
+        borderColor: Colors.slate100,
+        opacity: 0.5,
+    },
+    timeText: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: Colors.slate950,
+        letterSpacing: -0.3,
+    },
+    selectedTimeText: {
+        color: Colors.slate950,
+    },
+    unavailableTimeText: {
+        color: Colors.slate400,
+    },
+    bookedBadge: {
+        position: 'absolute',
+        top: 4,
+        right: 4,
+    },
+    
+    // Guest Control
+    guestCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: Colors.white,
+        borderRadius: 20,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: Colors.slate100,
     },
     guestButton: {
-        padding: 10,
-    },
-    guestCount: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginHorizontal: 20,
-        color: thematicBlue,
-    },
-    priceSection: {
-        padding: 20,
-        backgroundColor: '#f9f9f9',
-        marginTop: 20,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
-    },
-    priceSectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
-        marginBottom: 15,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#ddd',
-        marginVertical: 10,
-    },
-    paymentCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.surface,
-        padding: 15,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#eee',
-    },
-    paymentInfo: {
-        flex: 1,
-        marginLeft: 15,
-    },
-    paymentType: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    paymentNumber: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 2,
-    },
-    priceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 10,
-    },
-    priceLabel: {
-        fontSize: 16,
-        color: '#666',
-    },
-    priceValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    totalRow: {
-        marginTop: 10,
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: '#ddd',
-    },
-    totalLabel: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
-    },
-    totalValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
-    },
-    footer: {
-        padding: 20,
-        backgroundColor: Colors.background,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
-    },
-    bookButton: {
-        backgroundColor: activeColor,
-        paddingVertical: 18,
-        borderRadius: 30,
-        alignItems: 'center',
-        shadowColor: '#000',
+        shadowColor: Colors.slate950,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
     },
+    guestButtonGradient: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    guestDisplay: {
+        alignItems: 'center',
+    },
+    guestCount: {
+        fontSize: 36,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: -2,
+    },
+    guestLabel: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: Colors.slate500,
+        letterSpacing: 1,
+        marginTop: 2,
+    },
+    
+    // Price Card
+    priceCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 20,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: Colors.slate100,
+    },
+    priceRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    priceLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.slate600,
+    },
+    priceValue: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: Colors.slate950,
+    },
+    priceDivider: {
+        height: 1,
+        backgroundColor: Colors.slate200,
+        marginVertical: 12,
+    },
+    totalLabel: {
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: 1,
+    },
+    totalValue: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: Colors.lime400,
+        letterSpacing: -0.5,
+    },
+    
+    // Payment Card
+    paymentCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.white,
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: Colors.slate100,
+        gap: 12,
+    },
+    paymentIconBg: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#dbeafe',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    paymentInfo: {
+        flex: 1,
+    },
+    paymentType: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: Colors.slate950,
+        marginBottom: 2,
+    },
+    paymentNumber: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.slate500,
+    },
+    checkIconBg: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: Colors.slate950,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    
+    // Footer
+    footer: {
+        padding: 20,
+        backgroundColor: Colors.white,
+        borderTopWidth: 1,
+        borderTopColor: Colors.slate100,
+    },
+    bookButton: {
+        flexDirection: 'row',
+        backgroundColor: Colors.lime400,
+        paddingVertical: 18,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        shadowColor: Colors.lime400,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    bookButtonDisabled: {
+        opacity: 0.6,
+    },
     bookButtonText: {
-        color: thematicBlue,
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 15,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: 0.5,
     },
 });
 

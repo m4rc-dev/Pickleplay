@@ -5,16 +5,14 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
-  Image,
   RefreshControl,
+  Image,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '../constants/Colors';
-import StarRating from '../components/StarRating';
 
-const thematicBlue = '#0A56A7';
 const FAVORITES_KEY = '@pickleplay_favorites';
 
 const FavoritesScreen = ({ navigation }) => {
@@ -69,16 +67,19 @@ const FavoritesScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Favorites</Text>
         <View style={styles.headerRight} />
-      </View>
+      </LinearGradient>
 
       <ScrollView
         style={styles.content}
@@ -87,57 +88,95 @@ const FavoritesScreen = ({ navigation }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[thematicBlue]}
-            tintColor={thematicBlue}
+            colors={[Colors.lime400]}
+            tintColor={Colors.lime400}
           />
         }
       >
         {favorites.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="favorite-border" size={64} color={thematicBlue} />
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="heart-outline" size={64} color={Colors.lime400} />
+            </View>
             <Text style={styles.emptyTitle}>No Favorites Yet</Text>
             <Text style={styles.emptySubtitle}>
-              Start adding courts to your favorites by tapping the heart icon on court details
+              Start adding courts to your favorites by tapping the heart icon
             </Text>
             <TouchableOpacity
-              style={styles.findCourtsButton}
+              style={[styles.button, { marginTop: 32 }]}
               onPress={() => navigation.navigate('FindCourts')}
             >
-              <Text style={styles.findCourtsButtonText}>Find Courts</Text>
+              <Ionicons name="search" size={20} color={Colors.white} style={{ marginRight: 8 }} />
+              <Text style={styles.buttonText}>Find Courts</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.favoritesSection}>
-            <Text style={styles.sectionTitle}>
-              {favorites.length} Favorite{favorites.length !== 1 ? 's' : ''}
-            </Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>
+                {favorites.length} {favorites.length === 1 ? 'Favorite' : 'Favorites'}
+              </Text>
+            </View>
+
             {favorites.map((court, index) => (
               <TouchableOpacity
                 key={court.id || index}
                 style={styles.courtCard}
                 onPress={() => navigation.navigate('CourtDetail', { court })}
+                activeOpacity={0.8}
               >
                 <Image
                   source={{ uri: court.imageUrl || court.cover_image }}
                   style={styles.courtImage}
                   resizeMode="cover"
                 />
-                <View style={styles.courtInfo}>
-                  <Text style={styles.courtName}>{court.name}</Text>
-                  <View style={styles.courtLocation}>
-                    <MaterialIcons name="location-on" size={14} color={thematicBlue} />
-                    <Text style={styles.courtLocationText} numberOfLines={1}>
-                      {court.location || court.city}
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.4)']}
+                  style={styles.imageOverlay}
+                />
+
+                <View style={styles.courtContent}>
+                  <View style={styles.courtHeader}>
+                    <Text style={styles.courtName} numberOfLines={1}>
+                      {court.name}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.favoriteButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        removeFavorite(court.id);
+                      }}
+                    >
+                      <Ionicons name="heart" size={24} color={Colors.lime400} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.courtMeta}>
+                    <Ionicons name="location-sharp" size={14} color={Colors.slate500} style={{ marginRight: 6 }} />
+                    <Text style={styles.courtLocation} numberOfLines={1}>
+                      {court.location?.city || court.location?.address || 'Location not set'}
                     </Text>
                   </View>
-                  <StarRating rating={court.rating} reviewCount={court.reviewCount} size={12} />
+
+                  {court.rating && (
+                    <View style={styles.ratingContainer}>
+                      <View style={styles.starsRow}>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Ionicons
+                            key={i}
+                            name={i <= Math.round(court.rating) ? 'star' : 'star-outline'}
+                            size={14}
+                            color={Colors.lime400}
+                            style={{ marginRight: 2 }}
+                          />
+                        ))}
+                      </View>
+                      {court.reviewCount && (
+                        <Text style={styles.reviewCount}>({court.reviewCount} reviews)</Text>
+                      )}
+                    </View>
+                  )}
                 </View>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => removeFavorite(court.id)}
-                >
-                  <MaterialIcons name="favorite" size={24} color="#FF4444" />
-                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
@@ -150,13 +189,12 @@ const FavoritesScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: thematicBlue,
     paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -168,9 +206,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -0.5,
   },
   headerRight: {
     width: 40,
@@ -183,49 +222,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 100,
-    paddingHorizontal: 40,
+    paddingHorizontal: 24,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.lime400 + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginTop: 20,
-    marginBottom: 10,
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: Colors.slate600,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 21,
   },
-  findCourtsButton: {
-    marginTop: 30,
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 30,
+  button: {
+    flexDirection: 'row',
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 25,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  findCourtsButtonText: {
-    color: '#fff',
+  buttonText: {
+    color: Colors.white,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   favoritesSection: {
-    padding: 15,
+    padding: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
+  countBadge: {
+    marginBottom: 16,
+  },
+  countText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate600,
+    letterSpacing: -0.2,
   },
   courtCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    padding: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    overflow: 'hidden',
     marginBottom: 12,
-    borderRadius: 12,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -233,34 +285,63 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   courtImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 10,
-    marginRight: 12,
-    backgroundColor: '#E0E0E0',
+    width: '100%',
+    height: 160,
+    backgroundColor: Colors.slate200,
   },
-  courtInfo: {
-    flex: 1,
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 160,
   },
-  courtName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: thematicBlue,
-    marginBottom: 4,
+  courtContent: {
+    padding: 16,
+    backgroundColor: Colors.white,
   },
-  courtLocation: {
+  courtHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  courtLocationText: {
-    fontSize: 13,
-    color: '#666',
-    marginLeft: 4,
+  courtName: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    flex: 1,
+    letterSpacing: -0.5,
+  },
+  favoriteButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  courtMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  courtLocation: {
+    fontSize: 14,
+    color: Colors.slate600,
     flex: 1,
   },
-  removeButton: {
-    padding: 8,
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewCount: {
+    fontSize: 12,
+    color: Colors.slate600,
+    marginLeft: 6,
   },
 });
 
