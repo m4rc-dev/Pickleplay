@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { supabase } from '../services/supabase';
+import { submitCourtReview } from '../services/reviews';
 import {
   TrendingUp,
   Target,
@@ -37,7 +38,9 @@ import {
   Building2,
   Key,
   Star,
-  Radio
+  Radio,
+  MapPin,
+  Sparkles
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
@@ -101,27 +104,38 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [uploadError, setUploadError] = useState<string>('');
   const [accessCodeValue, setAccessCodeValue] = useState<string>('');
   const [recentLessons, setRecentLessons] = useState<any[]>([]);
+  const [recentCourts, setRecentCourts] = useState<any[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isCourtReviewModalOpen, setIsCourtReviewModalOpen] = useState(false);
   const [selectedLessonForReview, setSelectedLessonForReview] = useState<any>(null);
+  const [selectedCourtForReview, setSelectedCourtForReview] = useState<any>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [userGrowthData, setUserGrowthData] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState<'7D' | '1M' | '6M' | '1Y'>('6M');
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [activeLogs, setActiveLogs] = useState<any[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
 
-    // Fetch Announcements (For Everyone)
+    // Fetch Announcements (For Everyone) - handle missing table
     supabase.from('announcements')
       .select('*')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(3)
-      .then(({ data }) => {
-        if (data) setAnnouncements(data);
+      .then(({ data, error }) => {
+        if (!error && data) setAnnouncements(data);
+      })
+      .catch(() => {
+        // Announcements table might not exist
       });
 
     if (userRole === 'PLAYER' && currentUserId) {
       fetchPlayerLessons();
+      fetchPlayerCourts();
     }
 
     const fetchCourtOwnerMetrics = async () => {
@@ -208,14 +222,106 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           if (count !== null) setActiveSessions(count);
         });
 
-      // 3. Fetch Court Metrics for Admin's own courts
+      // 3. User Growth Data
+      const fetchUserGrowth = async () => {
+        try {
+          const now = new Date();
+          let startDate = new Date();
+          let granularity: 'day' | 'week' | 'month' = 'month';
+
+          if (timeRange === '7D') {
+            startDate.setDate(now.getDate() - 7);
+            granularity = 'day';
+          } else if (timeRange === '1M') {
+            startDate.setMonth(now.getMonth() - 1);
+            granularity = 'week';
+          } else if (timeRange === '6M') {
+            startDate.setMonth(now.getMonth() - 6);
+            granularity = 'month';
+          } else if (timeRange === '1Y') {
+            startDate.setFullYear(now.getFullYear() - 1);
+            granularity = 'month';
+          }
+
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('created_at')
+            .gte('created_at', startDate.toISOString())
+            .order('created_at', { ascending: true });
+
+          if (profiles) {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const labels: string[] = [];
+            const tempDate = new Date(startDate);
+
+            // Generate labels based on granularity
+            while (tempDate <= now) {
+              if (granularity === 'day') {
+                labels.push(tempDate.toLocaleDateString([], { weekday: 'short' }));
+                tempDate.setDate(tempDate.getDate() + 1);
+              } else if (granularity === 'week') {
+                labels.push(`W${Math.ceil(tempDate.getDate() / 7)}`);
+                tempDate.setDate(tempDate.getDate() + 7);
+              } else {
+                labels.push(months[tempDate.getMonth()]);
+                tempDate.setMonth(tempDate.getMonth() + 1);
+              }
+            }
+
+            // Get total count before startDate for cumulative baseline
+            const { count: baselineCount } = await supabase
+              .from('profiles')
+              .select('*', { count: 'exact', head: true })
+              .lt('created_at', startDate.toISOString());
+
+            let cumulative = baselineCount || 0;
+            const counts: Record<string, number> = {};
+
+            profiles.forEach(p => {
+              const d = new Date(p.created_at);
+              let label = '';
+              if (granularity === 'day') label = d.toLocaleDateString([], { weekday: 'short' });
+              else if (granularity === 'week') label = `W${Math.ceil(d.getDate() / 7)}`;
+              else label = months[d.getMonth()];
+              counts[label] = (counts[label] || 0) + 1;
+            });
+
+            const aggregatedData = labels.map(label => {
+              cumulative += (counts[label] || 0);
+              return { name: label, growth: cumulative };
+            });
+
+            setUserGrowthData(aggregatedData);
+          }
+        } catch (err) {
+          console.error('Error fetching user growth:', err);
+        }
+      };
+      fetchUserGrowth();
+
+      // 4. Fetch System Logs
+      const fetchSystemLogs = async () => {
+        try {
+          const { data } = await supabase
+            .from('system_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(20);
+          if (data) setActiveLogs(data);
+        } catch (err) {
+          console.error('Error fetching logs:', err);
+        }
+      };
+      fetchSystemLogs();
+
+      // 5. Fetch Court Metrics for Admin's own courts
       fetchCourtOwnerMetrics();
     } else if (userRole === 'PLAYER') {
       // Fetch Player Stats
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) {
           supabase.from('profiles')
-            .select('dupr_rating, win_rate, matches_played')
+            .select('dupr_rating, win_rate, matches_played, points')
             .eq('id', user.id)
             .single()
             .then(({ data }) => {
@@ -224,8 +330,43 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         }
       });
 
+      const fetchRatingHistory = async () => {
+        if (!currentUserId) return;
+        try {
+          const now = new Date();
+          let startDate = new Date();
+          if (timeRange === '7D') startDate.setDate(now.getDate() - 7);
+          else if (timeRange === '1M') startDate.setMonth(now.getMonth() - 1);
+          else if (timeRange === '6M') startDate.setMonth(now.getMonth() - 6);
+          else if (timeRange === '1Y') startDate.setFullYear(now.getFullYear() - 1);
+
+          const { data } = await supabase
+            .from('dupr_logs')
+            .select('*')
+            .eq('player_id', currentUserId)
+            .gte('recorded_at', startDate.toISOString())
+            .order('recorded_at', { ascending: true });
+
+          if (data && data.length > 0) {
+            const mappedHistory = data.map(log => ({
+              name: new Date(log.recorded_at).toLocaleDateString([], {
+                month: (timeRange === '6M' || timeRange === '1Y') ? 'short' : undefined,
+                day: (timeRange === '7D' || timeRange === '1M') ? 'numeric' : undefined,
+                weekday: timeRange === '7D' ? 'short' : undefined
+              }),
+              rating: Number(log.rating)
+            }));
+            setRatingHistory(mappedHistory);
+          } else {
+            setRatingHistory([{ name: 'No Data', rating: 3.5 }]);
+          }
+        } catch (err) {
+          console.error('Error fetching rating history:', err);
+        }
+      };
       fetchRatingHistory();
-    } else if (userRole === 'COACH' && currentUserId) {
+    }
+    else if (userRole === 'COACH' && currentUserId) {
       // Fetch Coach Metrics
       const fetchCoachMetrics = async () => {
         try {
@@ -279,7 +420,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     }
 
     return () => clearTimeout(timer);
-  }, [userRole, currentUserId]);
+  }, [userRole, currentUserId, timeRange]);
 
   console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
@@ -330,6 +471,86 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       setRecentLessons(data || []);
     } catch (err) {
       console.error('Error fetching player sessions:', err);
+    }
+  };
+
+  const fetchPlayerCourts = async () => {
+    if (!currentUserId) return;
+    try {
+      // Find completed court bookings that haven't been reviewed
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          court:courts(name, image_url, address, city)
+        `)
+        .eq('player_id', currentUserId)
+        .eq('status', 'confirmed')
+        .order('booking_date', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      // Filter by time locally and check for reviews
+      const now = new Date();
+      const completedBookings = (bookings || []).filter(b => {
+        const bookingEnd = new Date(`${b.booking_date}T${b.end_time}`);
+        return bookingEnd < now;
+      });
+
+      // For each completed booking, check if a review exists in court_reviews
+      // Handle case where court_reviews table might not exist
+      const bookingsWithReviewStatus = await Promise.all(
+        completedBookings.map(async (b) => {
+          try {
+            const { data: review } = await supabase
+              .from('court_reviews')
+              .select('id')
+              .eq('booking_id', b.id)
+              .maybeSingle();
+            return { ...b, has_review: !!review };
+          } catch {
+            // court_reviews table might not exist yet
+            return { ...b, has_review: false };
+          }
+        })
+      );
+
+      setRecentCourts(bookingsWithReviewStatus);
+    } catch (err: any) {
+      // Silently handle errors - table might not exist or user has no bookings
+      if (err?.code !== 'PGRST116' && err?.code !== '42P01') {
+        console.error('Error fetching player court sessions:', err);
+      }
+      setRecentCourts([]);
+    }
+  };
+
+  const handleSubmitCourtReview = async () => {
+    if (!currentUserId || !selectedCourtForReview) return;
+    setIsSubmittingReview(true);
+    try {
+      const result = await submitCourtReview(
+        selectedCourtForReview.court_id,
+        currentUserId,
+        reviewRating,
+        reviewComment,
+        undefined, // title
+        selectedCourtForReview.id
+      );
+
+      if (!result.success) throw new Error(result.error);
+
+      alert('Court review submitted! Thank you!');
+      setIsCourtReviewModalOpen(false);
+      setReviewComment('');
+      setReviewRating(5);
+      fetchPlayerCourts();
+    } catch (err: any) {
+      console.error('Court review error:', err);
+      alert('Failed: ' + err.message);
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -396,7 +617,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       // Refresh player stats
       const { data } = await supabase.from('profiles')
-        .select('dupr_rating, win_rate, matches_played')
+        .select('dupr_rating, win_rate, matches_played, points')
         .eq('id', currentUserId)
         .single();
       if (data) setPlayerStats(data);
@@ -559,9 +780,19 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
         {!isLoading && (
           <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-            <button className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm">
-              <History size={16} /> Logs
-            </button>
+            {userRole === 'ADMIN' && (
+              <button
+                onClick={() => setShowLogsModal(true)}
+                className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm"
+              >
+                <History size={16} /> Logs
+              </button>
+            )}
+            {userRole !== 'ADMIN' && (
+              <button className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm">
+                <History size={16} /> Logs
+              </button>
+            )}
             <button
               onClick={() => {
                 console.log('Action Button Clicked - Role:', userRole);
@@ -584,6 +815,52 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         )}
       </div>
 
+      {/* Free Trial Banner for Court Owners */}
+      {userRole === 'COURT_OWNER' && !isLoading && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-amber-100 relative overflow-hidden animate-fade-in">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={20} className="text-amber-200" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-100">Limited Time Offer</span>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
+                  🎉 Welcome to PicklePlay!
+                </h3>
+                <p className="text-amber-50 text-sm md:text-base leading-relaxed max-w-2xl">
+                  You're now enjoying a <span className="font-black text-white">1-month FREE trial</span> with full access to all premium features.
+                  Manage unlimited courts, track bookings, analyze revenue, and grow your business—completely free for 30 days!
+                </p>
+                <div className="flex flex-wrap items-center gap-4 mt-4">
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Unlimited Courts</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Revenue Analytics</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <Check size={16} className="text-amber-100" />
+                    <span className="text-xs font-bold text-white">Priority Support</span>
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30">
+                  <p className="text-xs font-bold text-amber-100 uppercase tracking-widest mb-1">Trial Ends In</p>
+                  <p className="text-4xl font-black text-white">30</p>
+                  <p className="text-xs font-bold text-amber-100 uppercase">Days</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {renderRoleMetrics()}
       </div>
@@ -592,30 +869,46 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
-              <Activity className={`text-${themeColor}-600`} />
-              Rating Velocity
+              {userRole === 'ADMIN' ? (
+                <>
+                  <Users className="text-indigo-600" />
+                  User Growth Velocity
+                </>
+              ) : (
+                <>
+                  <Activity className={`text-${themeColor}-600`} />
+                  Rating Velocity
+                </>
+              )}
             </h2>
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-              {['7D', '1M', '6M', '1Y'].map(t => (
-                <button key={t} className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === '6M' ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}>{t}</button>
+              {(['7D', '1M', '6M', '1Y'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTimeRange(t)}
+                  className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === timeRange ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                  {t}
+                </button>
               ))}
             </div>
           </div>
-          <div className="h-[250px] md:h-[300px] w-full">
+          <div className="h-[250px] md:h-[300px] w-full min-h-[250px]">
             {isLoading ? (
               <Skeleton className="w-full h-full rounded-2xl" />
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+              <ResponsiveContainer width="100%" height={250} minHeight={250}>
+                <LineChart data={userRole === 'ADMIN' ? (userGrowthData.length > 0 ? userGrowthData : PERFORMANCE_DATA.map(d => ({ ...d, growth: d.rating * 10 }))) : (ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                  <YAxis hide domain={['dataMin - 0.2', 'dataMax + 0.2']} />
+                  <YAxis hide domain={userRole === 'ADMIN' ? ['auto', 'auto'] : ['dataMin - 0.2', 'dataMax + 0.2']} />
                   <Tooltip
                     contentStyle={{ borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', padding: '12px' }}
                     itemStyle={{ fontWeight: 'bold' }}
                     labelStyle={{ color: '#64748b' }}
+                    formatter={(value: any) => [value, userRole === 'ADMIN' ? 'Total Users' : 'Rating']}
                   />
-                  <Line type="monotone" dataKey="rating" stroke={`#3b82f6`} strokeWidth={4} dot={{ r: 5, fill: '#3b82f6' }} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey={userRole === 'ADMIN' ? "growth" : "rating"} stroke={userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6"} strokeWidth={4} dot={{ r: 5, fill: userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6" }} activeDot={{ r: 8 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -688,52 +981,112 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
       </div>
 
-      {userRole === 'PLAYER' && !isLoading && recentLessons.length > 0 && (
-        <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-              <History className="text-blue-600" /> Recent Sessions
-            </h2>
-            <Link to="/schedule" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
-              View All <ArrowRight size={14} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recentLessons.map((lesson) => (
-              <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center gap-4 mb-4">
-                  <img
-                    src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
-                    className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
-                    alt="Coach"
-                  />
-                  <div>
-                    <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
-                    lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                      'bg-slate-200 text-slate-600'
-                    }`}>
-                    {lesson.status}
-                  </span>
-                  {lesson.status === 'completed' && (
-                    <button
-                      onClick={() => {
-                        setSelectedLessonForReview(lesson);
-                        setIsReviewModalOpen(true);
-                      }}
-                      className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
-                    >
-                      <Star size={12} fill="currentColor" /> Rate Coach
-                    </button>
-                  )}
-                </div>
+      {userRole === 'PLAYER' && !isLoading && (recentLessons.length > 0 || recentCourts.length > 0) && (
+        <div className="space-y-8">
+          {recentLessons.length > 0 && (
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                  <History className="text-rose-600" /> Recent Coaching
+                </h2>
+                <Link to="/schedule" className="text-xs font-bold text-rose-600 hover:gap-3 transition-all flex items-center gap-2">
+                  View All <ArrowRight size={14} />
+                </Link>
               </div>
-            ))}
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recentLessons.map((lesson) => (
+                  <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+                    <div className="flex items-center gap-4 mb-4">
+                      <img
+                        src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
+                        className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
+                        alt="Coach"
+                      />
+                      <div>
+                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
+                        lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-200 text-slate-600'
+                        }`}>
+                        {lesson.status}
+                      </span>
+                      {lesson.status === 'completed' && (
+                        <button
+                          onClick={() => {
+                            setSelectedLessonForReview(lesson);
+                            setIsReviewModalOpen(true);
+                          }}
+                          className="text-[10px] font-black text-white bg-rose-600 px-4 py-2 rounded-xl hover:bg-rose-700 transition-all flex items-center gap-2"
+                        >
+                          <Star size={12} fill="currentColor" /> Rate Coach
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentCourts.length > 0 && (
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
+                  <Building2 className="text-blue-600" /> Recent Court Sessions
+                </h2>
+                <Link to="/bookings" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
+                  All Bookings <ArrowRight size={14} />
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recentCourts.map((booking) => (
+                  <div key={booking.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+                    <div className="flex items-center gap-4 mb-4">
+                      {booking.court?.image_url ? (
+                        <img
+                          src={booking.court.image_url}
+                          className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
+                          alt="Court"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shadow-sm">
+                          <MapPin size={24} className="text-blue-600" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{booking.court?.name || 'Pickleball Court'}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{booking.booking_date} • {booking.start_time}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-[9px] font-black uppercase tracking-widest">
+                        Finished
+                      </span>
+                      {!booking.has_review ? (
+                        <button
+                          onClick={() => {
+                            setSelectedCourtForReview(booking);
+                            setIsCourtReviewModalOpen(true);
+                          }}
+                          className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                        >
+                          <Star size={12} fill="currentColor" /> Rate Court
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
+                          <Check size={12} /> Reviewed
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -785,6 +1138,66 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Court Review Modal */}
+      {isCourtReviewModalOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Building2 size={32} className="text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Rate {selectedCourtForReview?.court?.name}</h3>
+              <p className="text-slate-500 font-medium text-sm mt-2">How was your game on {selectedCourtForReview?.booking_date}?</p>
+            </div>
+
+            <div className="space-y-8">
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setReviewRating(star)}
+                    className={`transition-all ${reviewRating >= star ? 'text-blue-500 scale-110' : 'text-slate-200 hover:text-slate-300'}`}
+                  >
+                    <Star size={36} fill={reviewRating >= star ? "currentColor" : "none"} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Feedback</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Tell us about the court surface, lighting, and overall experience..."
+                  className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-medium text-sm min-h-[120px] resize-none"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setIsCourtReviewModalOpen(false);
+                    setReviewComment('');
+                    setReviewRating(5);
+                  }}
+                  className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isSubmittingReview}
+                  onClick={handleSubmitCourtReview}
+                  className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingReview ? 'Submitting...' : 'Submit Feedback'}
                 </button>
               </div>
             </div>
@@ -1240,6 +1653,80 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           document.body
         )
       }
+      {/* Admin Logs Modal */}
+      {showLogsModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh] z-[100]">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter flex items-center gap-3">
+                  <History className="text-indigo-600" /> System Activity.
+                </h3>
+                <p className="text-slate-500 font-medium text-sm mt-1">Real-time administrative and security events.</p>
+              </div>
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-4 no-scrollbar">
+              {activeLogs.length > 0 ? (
+                activeLogs.map((log, i) => (
+                  <div key={i} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-100 hover:bg-white transition-all">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.event_type === 'SECURITY' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                          {log.event_type}
+                        </span>
+                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">{log.action}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        {new Date(log.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">
+                        {log.agent_name?.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-black text-slate-900 leading-tight mb-1">{log.details}</p>
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">
+                          Target: <span className="font-bold text-slate-700">{log.target_name}</span> • Agent: <span className="font-bold text-slate-700">{log.agent_name}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-20 opacity-30 uppercase font-black text-xs">No recent activity found</div>
+              )}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-slate-100 flex gap-4">
+              <button
+                onClick={() => setShowLogsModal(false)}
+                className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogsModal(false);
+                  navigate('/admin?tab=audit');
+                }}
+                className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"
+              >
+                Go to Audit Console <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 };

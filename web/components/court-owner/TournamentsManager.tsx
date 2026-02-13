@@ -19,6 +19,10 @@ const TournamentsManager: React.FC = () => {
     const [skillLevel, setSkillLevel] = useState('All Levels');
     const [maxPlayers, setMaxPlayers] = useState(32);
 
+    // Image upload state
+    const [posterFile, setPosterFile] = useState<File | null>(null);
+    const [posterPreview, setPosterPreview] = useState<string | null>(null);
+
     useEffect(() => {
         fetchTournaments();
     }, []);
@@ -68,6 +72,45 @@ const TournamentsManager: React.FC = () => {
         }
     };
 
+    const handlePosterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setPosterFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPosterPreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const uploadPoster = async (file: File): Promise<string> => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        const filePath = `posters/${fileName}`;
+
+        // Ensure we handle potential bucket issues
+        try {
+            const { error: uploadError } = await supabase.storage
+                .from('tournaments')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('tournaments')
+                .getPublicUrl(filePath);
+
+            return publicUrl;
+        } catch (error: any) {
+            console.error('Storage upload error:', error);
+            throw new Error(`Failed to upload poster: ${error.message}`);
+        }
+    };
+
     const handleAddTournament = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -75,6 +118,11 @@ const TournamentsManager: React.FC = () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
+
+            let finalImageUrl = '';
+            if (posterFile) {
+                finalImageUrl = await uploadPoster(posterFile);
+            }
 
             const { error } = await supabase
                 .from('tournaments')
@@ -86,6 +134,7 @@ const TournamentsManager: React.FC = () => {
                     prize_pool: prizePool,
                     skill_level: skillLevel,
                     max_players: maxPlayers,
+                    image_url: finalImageUrl,
                     status: 'UPCOMING'
                 });
 
@@ -101,6 +150,7 @@ const TournamentsManager: React.FC = () => {
             setIsSubmitting(false);
         }
     };
+
 
     const handleDeleteTournament = async (id: string) => {
         if (!confirm('Are you sure you want to delete this tournament?')) return;
@@ -126,6 +176,8 @@ const TournamentsManager: React.FC = () => {
         setPrizePool('');
         setSkillLevel('All Levels');
         setMaxPlayers(32);
+        setPosterFile(null);
+        setPosterPreview(null);
     };
 
     return (
@@ -267,6 +319,34 @@ const TournamentsManager: React.FC = () => {
                                 </select>
                             </div>
 
+                            <div className="space-y-4">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Tournament Poster</label>
+                                <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-3xl p-8 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer group relative overflow-hidden h-64">
+                                    {posterPreview ? (
+                                        <>
+                                            <img src={posterPreview} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <p className="text-white font-black text-[10px] uppercase tracking-widest">Change Image</p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 mx-auto mb-4 group-hover:scale-110 transition-transform">
+                                                <Plus size={32} />
+                                            </div>
+                                            <p className="text-slate-500 font-bold text-sm">Drop your poster here or click to browse</p>
+                                            <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black mt-2">Recommended: 1200x630 (PNG, JPG)</p>
+                                        </div>
+                                    )}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePosterChange}
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
@@ -297,6 +377,12 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
                     {tournament.status}
                 </div>
             </div>
+
+            {tournament.image && (
+                <div className="w-full h-48 rounded-3xl overflow-hidden mb-6 border border-slate-100 shadow-inner">
+                    <img src={tournament.image} alt={tournament.name} className="w-full h-full object-cover" />
+                </div>
+            )}
 
             <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-4 group-hover:text-indigo-600 transition-colors">{tournament.name}</h3>
 
@@ -336,8 +422,12 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
 const TournamentListRow: React.FC<{ tournament: Tournament, onDelete: () => void }> = ({ tournament, onDelete }) => (
     <div className="bg-white rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:shadow-lg transition-all">
         <div className="flex items-center gap-6">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                <Trophy size={20} />
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 overflow-hidden">
+                {tournament.image ? (
+                    <img src={tournament.image} alt={tournament.name} className="w-full h-full object-cover" />
+                ) : (
+                    <Trophy size={20} />
+                )}
             </div>
             <div>
                 <h4 className="font-black text-slate-900 uppercase tracking-tight">{tournament.name}</h4>

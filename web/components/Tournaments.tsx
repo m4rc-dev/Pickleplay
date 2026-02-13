@@ -163,10 +163,10 @@ const Tournaments: React.FC = () => {
             </div>
 
             {/* Tournaments Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {isLoading ? (
                     Array(6).fill(0).map((_, i) => (
-                        <div key={i} className="bg-white rounded-[48px] border border-slate-100 h-[500px] animate-pulse"></div>
+                        <div key={i} className="bg-white rounded-3xl border border-slate-100 h-[420px] animate-pulse"></div>
                     ))
                 ) : filteredTournaments.length > 0 ? (
                     filteredTournaments.map((tournament) => (
@@ -197,51 +197,51 @@ const TournamentJoinCard: React.FC<{
     const isFull = (tournament.registeredCount || 0) >= (tournament.maxPlayers || 0);
 
     return (
-        <div className="group bg-white rounded-[48px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-700 overflow-hidden flex flex-col">
+        <div className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden flex flex-col">
             {/* Image Section */}
-            <div className="h-56 relative overflow-hidden bg-slate-100">
+            <div className="h-44 relative overflow-hidden bg-slate-100">
                 <img
-                    src={tournament.image || "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800"}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    src={tournament.image || "https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800"}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     alt={tournament.name}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <div className="absolute bottom-6 left-6 flex gap-2">
-                    <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{tournament.status}</span>
-                    <span className="bg-white text-slate-900 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{tournament.skillLevel}</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+                <div className="absolute bottom-3 left-3 flex gap-1.5">
+                    <span className="bg-indigo-600 text-white px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.status}</span>
+                    <span className="bg-white text-slate-900 px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.skillLevel}</span>
                 </div>
             </div>
 
             {/* Content Section */}
-            <div className="p-8 flex-1 flex flex-col">
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4 group-hover:text-indigo-600 transition-colors">{tournament.name}</h3>
+            <div className="p-4 flex-1 flex flex-col">
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-3 group-hover:text-indigo-600 transition-colors line-clamp-1">{tournament.name}</h3>
 
-                <div className="space-y-4 mb-8">
-                    <div className="flex items-center gap-4 text-slate-500 bg-slate-50 p-3 rounded-2xl">
-                        <Calendar size={18} className="text-indigo-600" />
-                        <span className="text-xs font-bold uppercase">{new Date(tournament.date).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-2 rounded-xl">
+                        <Calendar size={14} className="text-indigo-600 flex-shrink-0" />
+                        <span className="text-[10px] font-bold uppercase truncate">{new Date(tournament.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-slate-500 bg-slate-50 p-3 rounded-2xl">
-                        <MapPin size={18} className="text-indigo-600" />
-                        <span className="text-xs font-bold uppercase truncate">{tournament.location}</span>
+                    <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-2 rounded-xl">
+                        <MapPin size={14} className="text-indigo-600 flex-shrink-0" />
+                        <span className="text-[10px] font-bold uppercase truncate">{tournament.location}</span>
                     </div>
                     {tournament.prizePool && (
-                        <div className="flex items-center gap-4 text-emerald-600 bg-emerald-50 p-3 rounded-2xl border border-emerald-100/50">
-                            <Award size={18} />
-                            <span className="text-xs font-black uppercase tracking-tight">Prize: {tournament.prizePool}</span>
+                        <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 p-2 rounded-xl border border-emerald-100/50">
+                            <Award size={14} className="flex-shrink-0" />
+                            <span className="text-[10px] font-black uppercase tracking-tight truncate">Prize: {tournament.prizePool}</span>
                         </div>
                     )}
                 </div>
 
                 {/* Progress Bar */}
-                <div className="mb-8">
-                    <div className="flex justify-between items-end mb-2">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entry Capacity</p>
-                        <p className="text-xs font-black text-slate-900">{tournament.registeredCount} / {tournament.maxPlayers}</p>
+                <div className="mb-4">
+                    <div className="flex justify-between items-end mb-1.5">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Capacity</p>
+                        <p className="text-[10px] font-black text-slate-900">{tournament.registeredCount} / {tournament.maxPlayers}</p>
                     </div>
-                    <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden p-0.5">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full rounded-full transition-all duration-1000 ${isFull ? 'bg-rose-500' : 'bg-indigo-600'}`}
+                            className={`h-full rounded-full transition-all duration-700 ${isFull ? 'bg-rose-500' : 'bg-indigo-600'}`}
                             style={{ width: `${Math.min(100, ((tournament.registeredCount || 0) / (tournament.maxPlayers || 32)) * 100)}%` }}
                         ></div>
                     </div>
@@ -249,13 +249,13 @@ const TournamentJoinCard: React.FC<{
 
                 {/* Action Button */}
                 {tournament.isJoined ? (
-                    <div className="flex gap-2">
-                        <div className="flex-[3] flex items-center justify-center gap-3 bg-emerald-50 text-emerald-600 h-16 rounded-2xl border border-emerald-100 font-black text-sm uppercase tracking-widest">
-                            <CheckCircle2 size={20} /> Registered
+                    <div className="flex gap-2 mt-auto">
+                        <div className="flex-[3] flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 h-11 rounded-xl border border-emerald-100 font-black text-xs uppercase tracking-wide">
+                            <CheckCircle2 size={16} /> Registered
                         </div>
                         <button
                             onClick={onLeave}
-                            className="flex-1 bg-rose-50 text-rose-500 hover:bg-rose-100 h-16 rounded-2xl transition-all flex items-center justify-center font-black text-[10px] uppercase tracking-widest"
+                            className="flex-1 bg-rose-50 text-rose-500 hover:bg-rose-100 h-11 rounded-xl transition-all flex items-center justify-center font-black text-[9px] uppercase tracking-wide"
                         >
                             Leave
                         </button>
@@ -264,9 +264,9 @@ const TournamentJoinCard: React.FC<{
                     <button
                         onClick={onJoin}
                         disabled={isFull || tournament.status !== 'UPCOMING'}
-                        className={`w-full h-16 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${isFull || tournament.status !== 'UPCOMING'
+                        className={`w-full h-11 rounded-xl font-black text-xs uppercase tracking-wide transition-all mt-auto ${isFull || tournament.status !== 'UPCOMING'
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-xl shadow-slate-200'
+                            : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg'
                             }`}
                     >
                         {isFull ? 'Sold Out' : tournament.status !== 'UPCOMING' ? 'Closed' : 'Join Tournament'}

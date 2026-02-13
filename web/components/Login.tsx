@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../services/supabase';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { supabase, createSession, getSecuritySettings } from '../services/supabase';
 import {
     Trophy,
     Mail,
@@ -9,7 +9,8 @@ import {
     EyeOff,
     ArrowRight,
     AlertCircle,
-    Loader2
+    Loader2,
+    ArrowLeft
 } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -19,15 +20,79 @@ const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const redirectUrl = searchParams.get('redirect') || '/dashboard';
+
+    const normalizeUsername = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .slice(0, 30);
+
+    const ensureProfileFields = async (user: any) => {
+        const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('email, full_name, username')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        const resolvedFullName = existingProfile?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '';
+        const resolvedEmail = existingProfile?.email || user?.email || null;
+        const baseUsername = normalizeUsername(
+            existingProfile?.username || resolvedFullName || user?.email?.split('@')[0] || 'player'
+        ) || 'player';
+
+        let candidateUsername = existingProfile?.username || baseUsername;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    email: resolvedEmail,
+                    full_name: resolvedFullName,
+                    username: candidateUsername
+                }, { onConflict: 'id' });
+
+            if (!error) return;
+
+            // 23505 = unique violation (likely username already taken)
+            if (error.code === '23505') {
+                candidateUsername = `${baseUsername.slice(0, 22)}_${Math.random().toString(36).slice(2, 7)}`;
+                continue;
+            }
+
+            console.error('Failed to upsert profile fields during login:', error);
+            return;
+        }
+    };
 
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         setLoading(true);
         setError(null);
         try {
+            const referralCode = searchParams.get('ref');
+
+            // Store referral code in localStorage as fallback
+            if (referralCode) {
+                localStorage.setItem('referral_code', referralCode);
+            }
+
+            // Store redirect URL in localStorage for after OAuth callback
+            if (redirectUrl && redirectUrl !== '/dashboard') {
+                localStorage.setItem('auth_redirect', redirectUrl);
+            }
+
+            // Build callback URL with referral code as query parameter
+            const callbackUrl = referralCode
+                ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
+                : `${window.location.origin}/#/auth/callback`;
+
             const { error: authError } = await supabase.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: `${window.location.origin}/dashboard`
+                    redirectTo: callbackUrl
                 }
             });
             if (authError) throw authError;
@@ -51,7 +116,37 @@ const Login: React.FC = () => {
             if (authError) throw authError;
 
             if (data.user) {
-                navigate('/dashboard');
+                await ensureProfileFields(data.user);
+
+                // Create session record with IP address
+                const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
+                try {
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipResponse.json();
+                    await createSession(data.user.id, deviceName, ipData.ip);
+                } catch {
+                    await createSession(data.user.id, deviceName);
+                }
+
+                // Check if user has 2FA enabled
+                const settings = await getSecuritySettings(data.user.id);
+                if (settings.data?.two_factor_enabled) {
+                    localStorage.setItem('two_factor_pending', 'true');
+                    // Store redirect for after 2FA verification
+                    const storedRedirect = localStorage.getItem('auth_redirect');
+                    const finalRedirect = storedRedirect || redirectUrl;
+                    if (finalRedirect && finalRedirect !== '/dashboard') {
+                        localStorage.setItem('auth_redirect', finalRedirect);
+                    }
+                    navigate('/verify-2fa');
+                } else {
+                    localStorage.removeItem('two_factor_pending');
+                    // No 2FA, go directly to dashboard
+                    const storedRedirect = localStorage.getItem('auth_redirect');
+                    localStorage.removeItem('auth_redirect');
+                    const finalRedirect = storedRedirect || redirectUrl;
+                    navigate(finalRedirect);
+                }
             }
         } catch (err: any) {
             setError(err.message || 'Failed to sign in. Please check your credentials.');
@@ -59,6 +154,90 @@ const Login: React.FC = () => {
             setLoading(false);
         }
     };
+
+    /*
+    QR login (disabled for now)
+    const [qrVisible, setQrVisible] = useState(false);
+    const [qrStatus, setQrStatus] = useState<'idle' | 'loading' | 'pending' | 'approved' | 'expired' | 'error'>('idle');
+    const [qrDataUrl, setQrDataUrl] = useState('');
+    const [qrChallengeId, setQrChallengeId] = useState<string | null>(null);
+    const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
+    const [qrMessage, setQrMessage] = useState<string | null>(null);
+
+    const resetQrLogin = () => {
+        setQrVisible(false);
+        setQrStatus('idle');
+        setQrDataUrl('');
+        setQrChallengeId(null);
+        setQrExpiresAt(null);
+        setQrMessage(null);
+    };
+
+    const startQrLogin = async () => {
+        setQrVisible(true);
+        setQrStatus('loading');
+        setQrMessage(null);
+
+        try {
+            const response = await fetch('/api/auth/qr/start', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Failed to start QR login');
+            }
+
+            const data = await response.json();
+            const challengeId = data.challengeId as string;
+            const expiresAt = data.expiresAt as string;
+
+            const payload = JSON.stringify({ type: 'qr_login', challengeId });
+            const dataUrl = await QRCodeLib.toDataURL(payload, {
+                width: 220,
+                margin: 2,
+                color: {
+                    dark: '#a3ff01',
+                    light: '#0f172a'
+                }
+            });
+
+            setQrChallengeId(challengeId);
+            setQrExpiresAt(expiresAt);
+            setQrDataUrl(dataUrl);
+            setQrStatus('pending');
+        } catch (err: any) {
+            setQrStatus('error');
+            setQrMessage(err.message || 'Unable to start QR login');
+        }
+    };
+
+    useEffect(() => {
+        if (!qrChallengeId || !qrVisible || qrStatus === 'error' || qrStatus === 'expired') return;
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/auth/qr/status/${qrChallengeId}`);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const status = data.status as string;
+
+                if (status === 'approved' && data.actionLink) {
+                    setQrStatus('approved');
+                    window.location.href = data.actionLink;
+                    return;
+                }
+
+                if (status === 'expired') {
+                    setQrStatus('expired');
+                    setQrMessage('QR login expired. Generate a new code.');
+                }
+            } catch {
+                setQrStatus('error');
+                setQrMessage('Failed to check QR status');
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [qrChallengeId, qrVisible, qrStatus]);
+    */
 
     return (
         <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-950">
@@ -75,14 +254,20 @@ const Login: React.FC = () => {
 
             {/* Login Card */}
             <div className="relative z-20 w-full max-w-md px-6">
+                {/* Back to Home Button */}
+                <Link
+                    to="/"
+                    className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-4 text-sm font-bold uppercase tracking-widest"
+                >
+                    <ArrowLeft size={16} />
+                    Back to Home
+                </Link>
+
                 <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[48px] p-8 md:p-12 shadow-2xl overflow-hidden relative group">
                     {/* Animated border effect */}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
                     <div className="text-center mb-10">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-lime-400 rounded-3xl mb-6 shadow-2xl shadow-lime-400/20 transform hover:rotate-12 transition-transform duration-300">
-                            <Trophy size={32} className="text-slate-950" />
-                        </div>
                         <h1 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase mb-2">Welcome Back.</h1>
                         <p className="text-slate-400 font-medium tracking-tight">Access the Pickleball PH network.</p>
                     </div>
@@ -163,7 +348,7 @@ const Login: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <button
                             type="button"
                             onClick={() => handleSocialLogin('google')}
@@ -177,17 +362,48 @@ const Login: React.FC = () => {
                             </svg>
                             <span className="text-white text-xs font-black uppercase tracking-widest">Google</span>
                         </button>
+                    </div>
+
+                    {/*
+                    QR login (disabled for now)
+                    <div className="mt-6">
                         <button
                             type="button"
-                            onClick={() => handleSocialLogin('facebook')}
-                            className="flex items-center justify-center gap-3 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl py-4 transition-all active:scale-[0.95] group"
+                            onClick={startQrLogin}
+                            className="w-full flex items-center justify-center gap-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl py-4 transition-all active:scale-[0.95]"
                         >
-                            <svg className="w-5 h-5 text-[#1877F2] transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                            </svg>
-                            <span className="text-white text-xs font-black uppercase tracking-widest">Facebook</span>
+                            <QrCode size={18} className="text-lime-400" />
+                            <span className="text-white text-xs font-black uppercase tracking-widest">Login with QR</span>
                         </button>
+
+                        {qrVisible && (
+                            <div className="mt-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-center">
+                                <div className="flex items-center justify-between text-xs uppercase tracking-widest font-black text-slate-400">
+                                    <span>Scan with mobile app</span>
+                                    <button
+                                        type="button"
+                                        onClick={resetQrLogin}
+                                        className="text-slate-500 hover:text-white transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-center">
+                                    {qrStatus === 'loading' ? (
+                                        <Loader2 size={28} className="animate-spin text-lime-400" />
+                                    ) : (
+                                        qrDataUrl && <img src={qrDataUrl} alt="QR login" className="w-56 h-56" />
+                                    )}
+                                </div>
+
+                                <div className="mt-3 text-xs text-slate-400">
+                                    {qrMessage || (qrStatus === 'pending' ? 'Waiting for approval...' : null)}
+                                </div>
+                            </div>
+                        )}
                     </div>
+                    */}
 
                     <p className="mt-8 text-center text-slate-400 text-sm font-medium">
                         Don't have an account?{' '}

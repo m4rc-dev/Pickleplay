@@ -16,6 +16,7 @@ export interface Court {
   name: string;
   type: 'Indoor' | 'Outdoor';
   location: string;
+  location_id?: string; // Foreign key to locations table
   pricePerHour: number;
   availability: string[]; // ISO strings
   latitude?: number;
@@ -23,6 +24,33 @@ export interface Court {
   numCourts?: number;
   amenities?: string[];
   ownerId?: string;
+  cleaningTimeMinutes?: number; // Buffer time between bookings for cleaning
+  locationId?: string; // References parent location venue
+  locationCourtCount?: number; // Total number of courts at this location
+  imageUrl?: string;
+  courtType?: 'Indoor' | 'Outdoor' | 'Both';
+}
+
+export interface Location {
+  id: string;
+  owner_id: string;
+  name: string;
+  description?: string;
+  address: string;
+  city: string;
+  state?: string;
+  postal_code?: string;
+  latitude: number;
+  longitude: number;
+  amenities: string[];
+  phone?: string;
+  base_cleaning_time: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  court_count?: number; // Virtual field for UI
+  image_url?: string;
+  court_type?: 'Indoor' | 'Outdoor' | 'Both';
 }
 
 export interface Match {
@@ -91,12 +119,23 @@ export interface SocialPost {
   authorAvatar: string;
   // Fix: Use the centralized UserRole type for better type safety.
   authorRole: UserRole;
+  authorAvailabilityStatus?: 'looking' | 'busy' | 'offline';
+  authorAvailabilityStart?: string | null;
+  authorAvailabilityEnd?: string | null;
+  authorAvailabilityNote?: string | null;
+  authorPreferredSkillMin?: number | null;
+  authorPreferredSkillMax?: number | null;
+  authorPreferredLocationIds?: string[] | null;
+  authorPreferredCourtIds?: string[] | null;
+  authorPreferredCourtType?: 'Indoor' | 'Outdoor' | 'Both' | null;
+  authorPreferredLocationMode?: 'auto' | 'manual' | null;
   content: string;
   image?: string;
   likes: string[]; // Array of user IDs
   comments: SocialComment[];
   timestamp: string;
   tags?: string[];
+  isEdited?: boolean;
 }
 
 export interface Tournament {
@@ -125,4 +164,36 @@ export interface Notification {
   isRead: boolean;
   userId?: string;
   bookingId?: string; // Optional reference to booking for navigation
+}
+
+export type CourtEventType = 'maintenance' | 'private_event' | 'cleaning' | 'closure' | 'other';
+
+export interface CourtEvent {
+  id: string;
+  court_id: string;
+  owner_id: string;
+  title: string;
+  description?: string;
+  start_datetime: string; // ISO 8601 timestamp
+  end_datetime: string; // ISO 8601 timestamp
+  event_type: CourtEventType;
+  blocks_bookings: boolean; // If true, prevents player bookings during this time
+  color?: string; // Hex color for calendar display
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CourtReview {
+  id: string;
+  court_id: string;
+  user_id: string;
+  booking_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    full_name: string;
+    avatar_url: string;
+  };
 }

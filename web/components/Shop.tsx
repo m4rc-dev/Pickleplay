@@ -10,7 +10,7 @@ const PRODUCTS: Product[] = [
     name: 'ELITE X-1 CARBON PADDLE',
     category: 'Paddles',
     price: 219,
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb9.jpg',
     isLimited: true
   },
   {
@@ -18,7 +18,7 @@ const PRODUCTS: Product[] = [
     name: 'KITCHEN COMMANDER TEE',
     category: 'Apparel',
     price: 45,
-    image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb10.jpg',
     isNew: true
   },
   {
@@ -26,14 +26,14 @@ const PRODUCTS: Product[] = [
     name: 'PRO-FLIGHT PERFORMANCE BALLS',
     category: 'Accessories',
     price: 15,
-    image: 'https://images.unsplash.com/photo-1611080352520-2804b4d6a992?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb11.jpg',
   },
   {
     id: 'p4',
     name: 'STEALTH GRIP COURT SHOES',
     category: 'Accessories',
     price: 135,
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb12.jpg',
     isNew: true
   },
   {
@@ -41,28 +41,28 @@ const PRODUCTS: Product[] = [
     name: 'TITAN PRO V2 PADDLE',
     category: 'Paddles',
     price: 189,
-    image: 'https://images.unsplash.com/photo-1610631882985-0950f1993108?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb13.jpg',
   },
   {
     id: 'p6',
     name: 'PERFORMANCE COMPRESSION SHORTS',
     category: 'Apparel',
     price: 55,
-    image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb14.jpg',
   },
   {
     id: 'p7',
     name: 'ELITE TOUR BACKPACK',
     category: 'Accessories',
     price: 120,
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb2.jpg',
   },
   {
     id: 'p8',
     name: 'CARBON LITE OVERGRIP (3-PACK)',
     category: 'Accessories',
     price: 12,
-    image: 'https://images.unsplash.com/photo-1587302912306-cf1ed9c33146?auto=format&fit=crop&q=80&w=400',
+    image: '/images/home-images/pb16.jpg',
   }
 ];
 
@@ -103,22 +103,25 @@ const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantit
 
   return (
     <>
-      <div className="min-h-screen">
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-12 space-y-12 animate-fade-in">
-          <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY PRO SHOP</p>
-              <h1 className="text-6xl md:text-8xl font-black text-slate-950 tracking-tighter">EQUIP FOR VICTORY.</h1>
-            </div>
-            <button key={cartCount} onClick={() => setIsCartOpen(true)} className="bg-slate-900 text-white w-16 h-16 rounded-2xl flex items-center justify-center relative transition-transform hover:scale-110 active:scale-95 shrink-0 shadow-xl">
-              <ShoppingBag size={24} />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-lime-400 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black border-2 border-white animate-in zoom-in-50 duration-300">
-                  {cartCount}
-                </span>
-              )}
-            </button>
-          </header>
+      <div className="min-h-screen pt-20 md:pt-24">
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pb-12 space-y-12 animate-fade-in">
+          {/* Header Section - Desktop Only */}
+          <div className="hidden md:block space-y-6 mt-6">
+            <header className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+              <div>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY PRO SHOP</p>
+                <h1 className="text-6xl md:text-8xl font-black text-slate-950 tracking-tighter">EQUIP FOR VICTORY.</h1>
+              </div>
+              <button key={cartCount} onClick={() => setIsCartOpen(true)} className="bg-slate-900 text-white w-16 h-16 rounded-2xl flex items-center justify-center relative transition-transform hover:scale-110 active:scale-95 shrink-0 shadow-xl">
+                <ShoppingBag size={24} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-lime-400 text-slate-950 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black border-2 border-white animate-in zoom-in-50 duration-300">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+            </header>
+          </div>
 
           <section className="relative h-[450px] rounded-[40px] overflow-hidden bg-slate-900 shadow-2xl">
             <img

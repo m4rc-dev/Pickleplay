@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode, Play } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { isTimeSlotBlocked } from '../../services/courtEvents';
+import { autoCancelLateBookings } from '../../services/bookings';
+import BookingScanner from './BookingScanner';
 
 interface BookingRecord {
     id: string;
@@ -23,11 +27,13 @@ interface BookingRecord {
 
 const BookingsAdmin: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
+    const navigate = useNavigate();
     const [bookings, setBookings] = useState<BookingRecord[]>([]);
     const [myCourts, setMyCourts] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showScanner, setShowScanner] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -49,6 +55,9 @@ const BookingsAdmin: React.FC = () => {
             const { data: { session } } = await supabase.auth.getSession();
             const user = session?.user;
             if (!user) return;
+
+            // 1.5 Auto-cancel late bookings to keep owner dashboard updated
+            await autoCancelLateBookings();
 
             // 2. Parallelize fetching courts (for dropdown) and bookings (for list)
             const [courtsResponse, bookingsResponse] = await Promise.all([
@@ -99,6 +108,22 @@ const BookingsAdmin: React.FC = () => {
         setIsSubmitting(true);
 
         try {
+            // 0. Check for blocking court events
+            const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`);
+            const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`);
+
+            const isBlocked = await isTimeSlotBlocked(
+                formData.court_id,
+                startDateTime.toISOString(),
+                endDateTime.toISOString()
+            );
+
+            if (isBlocked) {
+                alert('🚫 Cannot create booking. You have a court event scheduled during this time. Please modify or remove the event first.');
+                setIsSubmitting(false);
+                return;
+            }
+
             // 1. Find player profile by email (if provided)
             let player_id = null;
             if (formData.player_email) {
@@ -186,6 +211,18 @@ const BookingsAdmin: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/booking')}
+                        className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
+                    >
+                        <Play size={18} fill="currentColor" /> Book A Court
+                    </button>
+                    <button
+                        onClick={() => setShowScanner(true)}
+                        className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                    >
+                        <QrCode size={18} /> Scan QR Code
+                    </button>
                     <button
                         onClick={handleExportCSV}
                         className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
@@ -406,6 +443,16 @@ const BookingsAdmin: React.FC = () => {
                         </div>
                     </div>,
                     document.body
+                )}
+
+                {/* QR Scanner Modal */}
+                {showScanner && (
+                    <BookingScanner
+                        onClose={() => {
+                            setShowScanner(false);
+                            fetchBookings(); // Refresh bookings after scanning
+                        }}
+                    />
                 )}
             </div>
         </div>

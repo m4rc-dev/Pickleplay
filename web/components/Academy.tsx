@@ -21,37 +21,41 @@ const Academy: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'basics' | 'rules' | 'tactics'>('basics');
 
   return (
-    <div className="space-y-12 animate-fade-in pb-20 pt-32">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY ACADEMY / MASTERCLASS</p>
-          <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Learn the <br />System.</h1>
-        </div>
+    <div className="pt-20 md:pt-24">
+      <div className="space-y-12 animate-fade-in pb-20">
+        {/* Header Section - Desktop Only */}
+        <div className="hidden md:block space-y-6 mt-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">PICKLEPLAY ACADEMY / MASTERCLASS</p>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Learn the System.</h1>
+            </div>
 
-        <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm">
-          <button
-            onClick={() => setActiveTab('basics')}
-            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'basics' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
-              }`}
-          >
-            THE BASICS
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'rules' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
-              }`}
-          >
-            RULES GUIDE
-          </button>
-          <button
-            onClick={() => setActiveTab('tactics')}
-            className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tactics' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
-              }`}
-          >
-            PRO TACTICS
-          </button>
+            <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm">
+              <button
+                onClick={() => setActiveTab('basics')}
+                className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'basics' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
+                  }`}
+              >
+                THE BASICS
+              </button>
+              <button
+                onClick={() => setActiveTab('rules')}
+                className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'rules' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
+                  }`}
+              >
+                RULES GUIDE
+              </button>
+              <button
+                onClick={() => setActiveTab('tactics')}
+                className={`px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tactics' ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'
+                  }`}
+              >
+                PRO TACTICS
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {activeTab === 'basics' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
@@ -145,6 +149,7 @@ const Academy: React.FC = () => {
           </Link>
         </div>
       </section>
+      </div>
     </div>
   );
 };

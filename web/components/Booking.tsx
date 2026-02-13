@@ -1,14 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Eye, Pencil, Trash2, Receipt as ReceiptIcon } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
+import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
+import { autoCancelLateBookings } from '../services/bookings';
+import Receipt from './Receipt';
 
+// Always use hourly slots for simplicity
 const TIME_SLOTS = [
   '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
 ];
+
+// Helper to convert time slot string to Date
+const getSlotDateTime = (slot: string, baseDate: Date = new Date()): { start: Date; end: Date } => {
+  const [time, period] = slot.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+
+  if (period === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  const startDateTime = new Date(baseDate);
+  startDateTime.setHours(hours, minutes, 0, 0);
+
+  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour slot
+
+  return { start: startDateTime, end: endDateTime };
+};
+
+// Distance calculation helper (Haversine formula)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 3958.8; // Radius of the earth in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Philippine regions mapping
+const VISAYAS_CITIES = ['cebu', 'mandaue', 'lapu-lapu', 'talisay', 'danao', 'bogo', 'carcar', 'naga', 'toledo', 'tacloban', 'ormoc', 'bacolod', 'iloilo', 'roxas', 'dumaguete', 'tagbilaran', 'bohol', 'leyte', 'samar', 'negros', 'panay', 'siquijor', 'biliran'];
+const MINDANAO_CITIES = ['davao', 'cagayan de oro', 'zamboanga', 'general santos', 'butuan', 'iligan', 'cotabato', 'koronadal', 'tagum', 'panabo', 'digos', 'mati', 'surigao', 'tandag', 'bislig', 'ozamiz', 'dipolog', 'pagadian', 'marawi', 'kidapawan', 'tacurong', 'malaybalay', 'valencia'];
+
+const getRegion = (city: string): string => {
+  const cityLower = city.toLowerCase();
+  if (VISAYAS_CITIES.some(c => cityLower.includes(c))) return 'Visayas';
+  if (MINDANAO_CITIES.some(c => cityLower.includes(c))) return 'Mindanao';
+  return 'Luzon'; // Default to Luzon
+};
 
 declare global {
   interface Window {
@@ -16,23 +63,432 @@ declare global {
   }
 }
 
+interface LocationGroup {
+  locationId: string;
+  locationName: string;
+  address: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  courts: Court[];
+  imageUrl?: string;
+  description?: string;
+  amenities?: string[];
+}
+
 const Booking: React.FC = () => {
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isBooked, setIsBooked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [courts, setCourts] = useState<Court[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [locationCourts, setLocationCourts] = useState<Court[]>([]);
+  const [isLoadingLocationDetail, setIsLoadingLocationDetail] = useState(false);
+  const [locationGroups, setLocationGroups] = useState<LocationGroup[]>([]);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userCity, setUserCity] = useState<string | null>(null);
+  const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
+  const isMobile = window.innerWidth < 768;
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
+  const [user, setUser] = useState<any>(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [blockedSlots, setBlockedSlots] = useState<Set<string>>(new Set());
+  const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+
+  // ── My Bookings Panel State ──
+  const [showMyBookings, setShowMyBookings] = useState(false);
+  const [myBookings, setMyBookings] = useState<any[]>([]);
+  const [isLoadingMyBookings, setIsLoadingMyBookings] = useState(false);
+  const [myBookingsSearch, setMyBookingsSearch] = useState('');
+  const [myBookingsFilter, setMyBookingsFilter] = useState<'all' | 'pending' | 'confirmed' | 'paid' | 'unpaid' | 'cancelled'>('all');
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [viewingBooking, setViewingBooking] = useState<any>(null);
+  const [editingBooking, setEditingBooking] = useState<any>(null);
+
+  const fetchMyBookings = async () => {
+    setIsLoadingMyBookings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // Fetch user profile name
+      let userName = 'User';
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, username')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (profile) userName = profile.full_name || profile.username || 'User';
+      } catch (e) { /* ignore */ }
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          *,
+          court:courts(
+            id,
+            name,
+            location:locations(name, city)
+          )
+        `)
+        .eq('player_id', session.user.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      setMyBookings((data || []).map(b => ({ ...b, playerName: userName })));
+    } catch (err) {
+      console.error('Error fetching my bookings:', err);
+    } finally {
+      setIsLoadingMyBookings(false);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
+    setCancellingBookingId(bookingId);
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId);
+      if (error) throw error;
+      setMyBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b));
+    } catch (err) {
+      console.error('Error cancelling booking:', err);
+      alert('Failed to cancel booking. Please try again.');
+    } finally {
+      setCancellingBookingId(null);
+    }
+  };
+
+  const handleViewBookingReceipt = (booking: any) => {
+    setViewingBooking({
+      id: booking.id,
+      courtName: booking.court?.name || 'Pickleball Court',
+      courtLocation: booking.court?.location
+        ? `${booking.court.location.name}, ${booking.court.location.city}`
+        : 'PicklePlay Facility',
+      date: booking.date,
+      startTime: booking.start_time,
+      endTime: booking.end_time,
+      pricePerHour: booking.total_price,
+      totalPrice: booking.total_price,
+      playerName: booking.playerName || 'User',
+      status: booking.status,
+      confirmedAt: booking.status === 'confirmed' ? booking.updated_at : undefined,
+      paymentMethod: booking.payment_method,
+      paymentStatus: booking.payment_status,
+      amountTendered: booking.amount_tendered,
+      changeAmount: booking.change_amount
+    });
+  };
+
+  const handleRebookFromBooking = (booking: any) => {
+    if (booking.court_id) {
+      navigate(`/court/${booking.court_id}`);
+    }
+    setShowMyBookings(false);
+  };
+
+  const filteredMyBookings = myBookings.filter(b => {
+    // Search filter
+    if (myBookingsSearch.trim()) {
+      const q = myBookingsSearch.toLowerCase();
+      const courtName = (b.court?.name || '').toLowerCase();
+      const courtCity = (b.court?.location?.city || '').toLowerCase();
+      const refId = (b.id || '').toLowerCase();
+      if (!courtName.includes(q) && !courtCity.includes(q) && !refId.includes(q)) return false;
+    }
+    // Status filter
+    if (myBookingsFilter === 'all') return true;
+    if (myBookingsFilter === 'paid') return b.payment_status === 'paid';
+    if (myBookingsFilter === 'unpaid') return b.payment_status !== 'paid' && b.status !== 'cancelled';
+    return b.status === myBookingsFilter;
+  });
+
+  const getUserLocation = () => {
+    if (userLocation) return;
+    setIsLoadingLocation(true);
+
+    const successCallback = async (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      setUserLocation({ lat: latitude, lng: longitude });
+      setGpsEnabled(true);
+
+      // Try reverse geocoding
+      try {
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+        if (apiKey) {
+          const response = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`
+          );
+          const data = await response.json();
+          if (data.results && data.results.length > 0) {
+            const addressComponents = data.results[0].address_components;
+            let city = '';
+            let adminArea = '';
+
+            for (const component of addressComponents) {
+              if (component.types.includes('locality')) {
+                city = component.long_name;
+              }
+              if (component.types.includes('administrative_area_level_1')) {
+                adminArea = component.long_name;
+              }
+            }
+
+            const detectedCity = city || adminArea || 'Your Location';
+            setUserCity(detectedCity);
+            setUserRegion(getRegion(detectedCity));
+          }
+        }
+      } catch (err) {
+        console.error('Error getting city name:', err);
+      } finally {
+        setIsLoadingLocation(false);
+      }
+    };
+
+    const errorCallback = (err: GeolocationPositionError) => {
+      console.warn(`Geolocation error (${err.code}): ${err.message}`);
+      setGpsEnabled(false);
+      setIsLoadingLocation(false);
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(successCallback, errorCallback, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    } else {
+      setGpsEnabled(false);
+      setIsLoadingLocation(false);
+    }
+  };
+
+  useEffect(() => {
+    getUserLocation();
+  }, []);
+
   const [mapCenter, setMapCenter] = useState({ lat: 14.5995, lng: 120.9842 });
   const [mapZoom, setMapZoom] = useState(11);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [lastBookingTime, setLastBookingTime] = useState<number | null>(null);
-  const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
-  const [searchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || '');
+
+  useEffect(() => {
+    setIsUserLoading(true);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      console.log('User state in Booking component:', user);
+      setUser(user);
+      setIsUserLoading(false);
+    });
+
+    // Also listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user);
+      setUser(session?.user || null);
+      setIsUserLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Receipt state
+  // No-op
+
+  // Get map position from URL params
+  const urlLat = searchParams.get('lat');
+  const urlLng = searchParams.get('lng');
+  const urlZoom = searchParams.get('zoom');
+  const urlCourt = searchParams.get('court');
+  const urlSlot = searchParams.get('slot');
+  const urlLocationId = searchParams.get('locationId');
+
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
+  const userLocationMarkerRef = useRef<any>(null);
+  const pulseCirclesRef = useRef<any[]>([]);
+
+  const triggerPulse = (lat: number, lng: number) => {
+    if (!googleMapRef.current || !window.google) return;
+
+    // Clear existing pulse circles if any
+    pulseCirclesRef.current.forEach(c => c.setMap(null));
+    pulseCirclesRef.current = [];
+
+    const pulseCircle = new window.google.maps.Circle({
+      strokeColor: '#a3e635', // lime-400
+      strokeOpacity: 0.8,
+      strokeWeight: 2,
+      fillColor: '#a3e635',
+      fillOpacity: 0.35,
+      map: googleMapRef.current,
+      center: { lat, lng },
+      radius: 10,
+      zIndex: 1000,
+    });
+
+    pulseCirclesRef.current.push(pulseCircle);
+
+    let radius = 10;
+    const maxRadius = 300;
+    const step = 20;
+
+    const interval = setInterval(() => {
+      radius += step;
+      if (pulseCircle.getMap()) {
+        pulseCircle.setRadius(radius);
+        pulseCircle.setOptions({
+          fillOpacity: 0.35 * (1 - radius / maxRadius),
+          strokeOpacity: 0.8 * (1 - radius / maxRadius)
+        });
+      }
+
+      if (radius >= maxRadius) {
+        clearInterval(interval);
+        pulseCircle.setMap(null);
+        pulseCirclesRef.current = pulseCirclesRef.current.filter(c => c !== pulseCircle);
+      }
+    }, 25);
+  };
+
+  // Sync search query state with URL search params
+  useEffect(() => {
+    const q = searchParams.get('q') || searchParams.get('court') || '';
+    setSearchQuery(q); // Sync ONLY q, loc stays out of search bar
+  }, [searchParams]);
+
+  // Fetch location detail + its courts when locationId is in URL
+  useEffect(() => {
+    if (!urlLocationId) {
+      setSelectedLocation(null);
+      setLocationCourts([]);
+      return;
+    }
+
+    const fetchLocationDetail = async () => {
+      setIsLoadingLocationDetail(true);
+      try {
+        // Fetch location info
+        const { data: locData, error: locError } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('id', urlLocationId)
+          .single();
+
+        if (locError) throw locError;
+        setSelectedLocation(locData);
+
+        // Fetch courts belonging to this location
+        const { data: courtsData, error: courtsError } = await supabase
+          .from('courts')
+          .select(`
+            *,
+            locations (
+              id,
+              address,
+              city,
+              latitude,
+              longitude
+            ),
+            court_reviews (
+              rating
+            )
+          `)
+          .eq('location_id', urlLocationId);
+
+        if (courtsError) throw courtsError;
+
+        const mappedCourts: Court[] = (courtsData || []).map((c: any) => {
+          const loc = c.locations;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+            location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+            pricePerHour: c.base_price,
+            availability: [],
+            latitude: loc?.latitude,
+            longitude: loc?.longitude,
+            numCourts: c.num_courts,
+            amenities: Array.isArray(c.amenities) ? c.amenities : [],
+            imageUrl: c.image_url,
+            courtType: c.court_type || 'Outdoor',
+            ownerId: c.owner_id,
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0
+          };
+        });
+        setLocationCourts(mappedCourts);
+      } catch (err) {
+        console.error('Error fetching location detail:', err);
+      } finally {
+        setIsLoadingLocationDetail(false);
+      }
+    };
+
+    fetchLocationDetail();
+  }, [urlLocationId]);
+
+  const handleSearch = async (query: string) => {
+    if (!query || !window.google) return;
+
+    // First check if it matches a court/location name exactly
+    const matchingCourt = courts.find(c =>
+      c.name.toLowerCase().includes(query.toLowerCase()) ||
+      c.location.toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (matchingCourt && googleMapRef.current && matchingCourt.latitude && matchingCourt.longitude) {
+      googleMapRef.current.panTo({ lat: matchingCourt.latitude, lng: matchingCourt.longitude });
+      googleMapRef.current.setZoom(15);
+      triggerPulse(matchingCourt.latitude, matchingCourt.longitude);
+      return;
+    }
+
+    // Otherwise, use Geocoding API to find the place
+    try {
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+      if (!apiKey) return;
+
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
+      );
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const { lat, lng } = data.results[0].geometry.location;
+        if (googleMapRef.current) {
+          googleMapRef.current.panTo({ lat, lng });
+          googleMapRef.current.setZoom(14);
+        }
+      }
+    } catch (err) {
+      console.error('Search geocoding error:', err);
+    }
+  };
+
+
 
   useEffect(() => {
     const fetchCourts = async () => {
@@ -40,26 +496,64 @@ const Booking: React.FC = () => {
       try {
         const { data, error } = await supabase
           .from('courts')
-          .select('*')
-          .eq('is_active', true);
+          .select(`
+            *,
+            locations (
+              id,
+              address,
+              city,
+              latitude,
+              longitude
+            )
+          `);
 
         if (error) throw error;
 
-        const mappedCourts: Court[] = (data || []).map(c => ({
-          id: c.id,
-          name: c.name,
-          type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
-          location: `${c.address}, ${c.city}`,
-          pricePerHour: parseFloat(c.base_price) || 0,
-          availability: [],
-          latitude: c.latitude,
-          longitude: c.longitude,
-          numCourts: c.num_courts || 1,
-          amenities: Array.isArray(c.amenities) ? c.amenities : [],
-          ownerId: c.owner_id
-        }));
-
+        const mappedCourts: Court[] = (data || []).map((c: any) => {
+          const loc = c.locations;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
+            location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
+            location_id: c.location_id,
+            pricePerHour: c.base_price,
+            availability: [],
+            latitude: loc?.latitude,
+            longitude: loc?.longitude,
+            numCourts: c.num_courts,
+            amenities: Array.isArray(c.amenities) ? c.amenities : [],
+            imageUrl: c.image_url,
+            courtType: c.court_type || 'Outdoor',
+            ownerId: c.owner_id,
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0
+          };
+        });
         setCourts(mappedCourts);
+
+        // Also build locationGroups from fetched data for backward compatibility
+        const locGroupMap = new Map<string, LocationGroup>();
+        for (const c of data || []) {
+          const loc = (c as any).locations;
+          if (!loc || !c.location_id) continue;
+          if (!locGroupMap.has(c.location_id)) {
+            locGroupMap.set(c.location_id, {
+              locationId: c.location_id,
+              locationName: loc.name || '',
+              address: `${loc.address}, ${loc.city}`,
+              city: loc.city || '',
+              latitude: loc.latitude || 14.5995,
+              longitude: loc.longitude || 120.9842,
+              courts: [],
+              imageUrl: '',
+              description: '',
+              amenities: []
+            });
+          }
+          const group = locGroupMap.get(c.location_id)!;
+          group.courts.push(mappedCourts.find(mc => mc.id === c.id)!);
+        }
+        setLocationGroups(Array.from(locGroupMap.values()));
       } catch (err) {
         console.error('Error fetching courts:', err);
       } finally {
@@ -67,23 +561,183 @@ const Booking: React.FC = () => {
       }
     };
     fetchCourts();
+
+    // Fetch locations with court counts
+    const fetchLocations = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('*');
+
+        if (error) throw error;
+        setLocations(data || []);
+      } catch (err) {
+        console.error('Error fetching locations:', err);
+      }
+    };
+    fetchLocations();
   }, []);
 
-  useEffect(() => {
-    if (!isLoading && courts.length > 0 && mapRef.current && window.google) {
-      initializeMap();
+  // Function to check court availability - extracted for reuse
+  const checkCourtAvailability = async (court: Court | null, date: Date) => {
+    if (!court) {
+      setBlockedSlots(new Set());
+      setBookedSlots(new Set());
+      return;
     }
-  }, [isLoading, courts]);
 
-  const initializeMap = () => {
-    if (!mapRef.current || !window.google) return;
+    setIsCheckingAvailability(true);
+    const newBlockedSlots = new Set<string>();
+    const newBookedSlots = new Set<string>();
+    const targetDateStr = date.toISOString().split('T')[0];
 
-    // Center on Manila
-    const center = { lat: 14.5995, lng: 121.0437 };
+    try {
+      // 0. Auto-cancel late bookings first to free up slots immediately
+      await autoCancelLateBookings();
+
+      // 1. Fetch court events (blocking events from owner)
+      const { data: events } = await getCourtBlockingEvents(court.id);
+
+      // 2. Fetch existing bookings for selected date
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('start_time, end_time, status')
+        .eq('court_id', court.id)
+        .eq('date', targetDateStr)
+        .not('status', 'eq', 'cancelled');
+
+      if (bookingsError) {
+        console.error('Error fetching bookings:', bookingsError);
+      }
+
+      const bookings = bookingsData || [];
+
+      const cleaningTimeMinutes = court.cleaningTimeMinutes || 0;
+      console.log('Court cleaning time:', cleaningTimeMinutes, 'minutes');
+
+      // Check each time slot
+      for (const slot of TIME_SLOTS) {
+        const { start, end } = getSlotDateTime(slot, date);
+
+        // Check against court events
+        if (events) {
+          for (const event of events) {
+            const eventStart = new Date(event.start_datetime);
+            const eventEnd = new Date(event.end_datetime);
+
+            // Check if slot overlaps with event
+            if (start < eventEnd && end > eventStart) {
+              newBlockedSlots.add(slot);
+              break;
+            }
+          }
+        }
+
+        // Check against existing bookings (including cleaning time buffer)
+        if (bookings && bookings.length > 0) {
+          const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
+
+          for (const booking of bookings) {
+            // Parse booking start time
+            const [bHours, bMinutes] = booking.start_time.split(':').map(Number);
+            const bookingStart = new Date(date);
+            bookingStart.setHours(bHours, bMinutes, 0, 0);
+
+            // Parse booking end time (use actual end_time from booking)
+            const [eHours, eMinutes] = booking.end_time.split(':').map(Number);
+            const bookingEnd = new Date(date);
+            bookingEnd.setHours(eHours, eMinutes, 0, 0);
+
+            // Add cleaning buffer AFTER the booking ends
+            const bookingEndWithCleaning = new Date(bookingEnd.getTime() + cleaningTimeMinutes * 60 * 1000);
+
+            // Check if this slot overlaps with the booking OR the cleaning period
+            if (start < bookingEndWithCleaning && end > bookingStart) {
+              console.log('MATCH FOUND - slot overlaps with booking + cleaning:', slot, 'booking:', booking.start_time, '-', booking.end_time, 'cleaning buffer:', cleaningTimeMinutes, 'min');
+              newBookedSlots.add(slot);
+              break;
+            }
+          }
+        }
+      }
+
+      setBlockedSlots(newBlockedSlots);
+      setBookedSlots(newBookedSlots);
+    } catch (err) {
+      console.error('Error checking availability:', err);
+    } finally {
+      setIsCheckingAvailability(false);
+    }
+  };
+
+  // Check availability when a court or date is selected
+  useEffect(() => {
+    checkCourtAvailability(selectedCourt, selectedDate);
+  }, [selectedCourt, selectedDate]);
+
+  // Polling: Auto-refresh availability every 5 seconds for real-time updates across all players
+  useEffect(() => {
+    if (!selectedCourt) return;
+
+    // Poll every 5 seconds to check for new bookings
+    const pollInterval = setInterval(() => {
+      checkCourtAvailability(selectedCourt, selectedDate);
+    }, 5000); // 5 seconds
+
+    // Cleanup interval when court changes or component unmounts
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [selectedCourt]);
+
+  // Real-time subscription to bookings - updates for ALL players when anyone books
+  useEffect(() => {
+    if (!selectedCourt) return;
+
+    // Subscribe to booking changes for the selected court
+    const subscription = supabase
+      .channel(`bookings-${selectedCourt.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'bookings',
+          filter: `court_id=eq.${selectedCourt.id}`
+        },
+        (payload) => {
+          console.log('Booking change detected:', payload);
+          // Refresh availability for all players viewing this court
+          checkCourtAvailability(selectedCourt, selectedDate);
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription when court changes or component unmounts
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [selectedCourt]);
+
+  // Initialize the Google Map once the container is available
+  useEffect(() => {
+    if (isLoading || !mapRef.current || !window.google) return;
+
+    // If map already exists and is attached to this DOM element, skip
+    if (googleMapRef.current) return;
+
+    // Use URL params for center/zoom, or default to Manila
+    const center = urlLat && urlLng
+      ? { lat: parseFloat(urlLat), lng: parseFloat(urlLng) }
+      : userLocation
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : { lat: 14.5995, lng: 121.0437 };
+
+    const zoom = urlZoom ? parseInt(urlZoom) : (userLocation ? 13 : 12);
 
     const map = new window.google.maps.Map(mapRef.current, {
       center,
-      zoom: 12,
+      zoom,
       styles: [
         {
           featureType: 'poi',
@@ -97,60 +751,162 @@ const Booking: React.FC = () => {
     });
 
     googleMapRef.current = map;
+    setIsMapLoaded(true);
+
+    // Auto-center on user location if GPS is enabled
+    if (userLocation && gpsEnabled) {
+      setTimeout(() => {
+        map.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+        map.setZoom(14);
+      }, 500);
+    }
+  }, [isLoading]);
+
+  // Auto-center when user location arrives after map is already loaded
+  useEffect(() => {
+    if (googleMapRef.current && userLocation && gpsEnabled && !urlLat) {
+      googleMapRef.current.panTo({ lat: userLocation.lat, lng: userLocation.lng });
+      googleMapRef.current.setZoom(14);
+    }
+  }, [userLocation, gpsEnabled]);
+
+  // Zoom to location and trigger pulse when arriving from homepage with locationId
+  useEffect(() => {
+    if (urlLocationId && urlLat && urlLng && googleMapRef.current && !isLoading) {
+      const lat = parseFloat(urlLat);
+      const lng = parseFloat(urlLng);
+      const zoom = urlZoom ? parseInt(urlZoom) : 15;
+
+      // Pan to the location with smooth animation
+      googleMapRef.current.panTo({ lat, lng });
+      googleMapRef.current.setZoom(zoom);
+
+      // Trigger pulse animation after a short delay
+      setTimeout(() => {
+        triggerPulse(lat, lng);
+      }, 500);
+    }
+  }, [urlLocationId, urlLat, urlLng, urlZoom, isLoading]);
+
+  // Trigger map resize when viewMode changes (fixes blank map after toggling list/map on mobile)
+  useEffect(() => {
+    if (googleMapRef.current && window.google && viewMode === 'map') {
+      setTimeout(() => {
+        window.google.maps.event.trigger(googleMapRef.current, 'resize');
+      }, 100);
+    }
+  }, [viewMode]);
+
+  // Update markers whenever locations, courts, filters, or search change
+  const updateMarkers = () => {
+    const map = googleMapRef.current;
+    if (!map || !window.google) return;
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
 
-    // Add markers for each court
-    const filteredCourts = filterType === 'All'
-      ? courts
-      : courts.filter(c => c.type === filterType);
+    // Create markers for locations instead of individual courts (same as GuestBooking)
+    locations.forEach(location => {
+      if (location.latitude && location.longitude) {
+        // Count courts at this location that match the filter
+        const locCourts = courts.filter(c => {
+          const matchesLocation = c.location_id ? c.location_id === location.id :
+            c.location.toLowerCase().includes(location.name.toLowerCase());
+          return matchesLocation && (filterType === 'All' || c.type === filterType);
+        });
 
-    filteredCourts.forEach(court => {
-      if (court.latitude && court.longitude) {
+        // Only show marker if location has courts matching the filter
+        if (locCourts.length === 0) return;
+
         const marker = new window.google.maps.Marker({
-          position: { lat: court.latitude, lng: court.longitude },
+          position: { lat: location.latitude, lng: location.longitude },
           map,
-          title: court.name,
+          title: location.name,
           icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: court.type === 'Indoor' ? '#2563eb' : '#a3e635',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 3,
+            url: '/images/PinMarker.png',
+            scaledSize: new window.google.maps.Size(42, 60),
+            anchor: new window.google.maps.Point(21, 60)
           },
         });
 
+        const locationImage = location.hero_image || location.image_url || 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=260';
+
         const infoWindow = new window.google.maps.InfoWindow({
           content: `
-            <div style="padding: 8px; font-family: Inter, sans-serif;">
-              <p style="margin: 0; font-weight: 800; font-size: 14px; color: #0f172a;">${court.name}</p>
-              <p style="margin: 4px 0 0; font-weight: 600; font-size: 12px; color: #3b82f6;">₱${court.pricePerHour}/hour</p>
+            <div style="width:220px;font-family:'Inter',system-ui,sans-serif;overflow:hidden;">
+              <div style="height:130px;width:100%;overflow:hidden;background:#e2e8f0;">
+                <img 
+                  src="${locationImage}" 
+                  style="width:100%;height:100%;object-fit:cover;display:block;" 
+                  alt="${location.name}" 
+                />
+              </div>
+              <div style="padding:10px 12px 12px;">
+                <h3 style="margin:0 0 4px;font-weight:900;font-size:13px;color:#0f172a;text-transform:uppercase;letter-spacing:-0.01em;line-height:1.3;">${location.name}</h3>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <span style="font-size:11px;color:#94a3b8;font-weight:500;">${location.city}${location.address ? ', ' + location.address.split(',')[0] : ''}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:10px;font-weight:800;color:#2563eb;background:#eff6ff;padding:3px 8px;border-radius:6px;letter-spacing:0.3px;">${locCourts.length} ${locCourts.length === 1 ? 'COURT' : 'COURTS'}</span>
+                  ${location.amenities && location.amenities.length > 0 ? `<span style="font-size:10px;color:#94a3b8;font-weight:500;">${location.amenities.slice(0, 2).join(' · ')}</span>` : ''}
+                </div>
+              </div>
             </div>
           `,
-          disableAutoPan: true
+          disableAutoPan: true,
+          maxWidth: 240
+        });
+
+        // Hide close button when InfoWindow opens
+        infoWindow.addListener('domready', () => {
+          const closeBtn = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
+          if (closeBtn) closeBtn.style.display = 'none';
+          const iwOuter = document.querySelector('.gm-style-iw-c') as HTMLElement;
+          if (iwOuter) {
+            iwOuter.style.padding = '0';
+            iwOuter.style.borderRadius = '12px';
+            iwOuter.style.overflow = 'hidden';
+            iwOuter.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+          }
+          const iwInner = document.querySelector('.gm-style-iw-d') as HTMLElement;
+          if (iwInner) {
+            iwInner.style.overflow = 'hidden';
+            iwInner.style.padding = '0';
+          }
         });
 
         marker.addListener('click', () => {
-          setSelectedCourt(court);
-          setSelectedSlot(null); // Reset slot when switching courts
-          map.panTo({ lat: court.latitude!, lng: court.longitude! });
-          map.setZoom(14);
+          navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+          if (window.innerWidth < 768) {
+            setViewMode('list');
+          }
+        });
+
+        // Show info window on hover
+        marker.addListener('mouseover', () => {
           infoWindow.open(map, marker);
+        });
+
+        // Hide info window when mouse leaves
+        marker.addListener('mouseout', () => {
+          infoWindow.close();
         });
 
         markersRef.current.push(marker);
       }
     });
+
+    console.log(`📍 Displaying ${markersRef.current.length} location markers on map`);
   };
 
+  // Re-render markers when data or filters change
   useEffect(() => {
-    if (googleMapRef.current) {
-      initializeMap();
+    if (isMapLoaded && locations.length > 0) {
+      updateMarkers();
     }
-  }, [filterType]);
+  }, [locations, courts, filterType, searchQuery, isMapLoaded]);
 
   const handleBooking = async () => {
     if (selectedCourt && selectedSlot) {
@@ -194,7 +950,7 @@ const Booking: React.FC = () => {
           hours = 0; // Midnight
         }
 
-        const startDateTime = new Date();
+        const startDateTime = new Date(selectedDate);
         startDateTime.setHours(hours, minutes, 0, 0);
 
         const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Add 1 hour
@@ -208,14 +964,14 @@ const Booking: React.FC = () => {
 
         const startTimeFormatted = formatTime(startDateTime);
         const endTimeFormatted = formatTime(endDateTime);
+        const targetDateStr = selectedDate.toISOString().split('T')[0];
 
         // 3. DUPLICATE SLOT CHECK - Prevent double-booking
         const { data: existingBooking, error: checkError } = await supabase
           .from('bookings')
           .select('id')
           .eq('court_id', selectedCourt.id)
-          .eq('date', new Date().toISOString().split('T')[0])
-          .eq('start_time', startTimeFormatted)
+          .eq('date', targetDateStr)
           .neq('status', 'cancelled')
           .maybeSingle();
 
@@ -227,18 +983,32 @@ const Booking: React.FC = () => {
           return;
         }
 
+        // 3.5. COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
+        const isBlocked = await isTimeSlotBlocked(
+          selectedCourt.id,
+          startDateTime.toISOString(),
+          endDateTime.toISOString()
+        );
+
+        if (isBlocked) {
+          alert('🚫 This time slot is unavailable. The court owner has scheduled an event during this time.');
+          setIsProcessing(false);
+          return;
+        }
+
         // 4. Create Booking
         const { data: bookingData, error: bookingError } = await supabase
           .from('bookings')
           .insert({
             court_id: selectedCourt.id,
             player_id: user.id,
-            date: new Date().toISOString().split('T')[0],
+            date: targetDateStr,
             start_time: startTimeFormatted,
             end_time: endTimeFormatted,
             total_price: selectedCourt.pricePerHour,
             status: 'pending',
-            payment_status: 'unpaid'
+            payment_status: 'unpaid',
+            is_checked_in: false
           })
           .select()
           .single();
@@ -271,11 +1041,52 @@ const Booking: React.FC = () => {
         // Update cooldown timestamp
         setLastBookingTime(Date.now());
 
+        // Update booked slots to reflect the new booking
+        if (selectedSlot) {
+          setBookedSlots(prev => new Set([...prev, selectedSlot]));
+        }
+
+        // Fetch player name for receipt
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('username, full_name')
+          .eq('id', user.id)
+          .single();
+
+        // Prepare receipt data
+        setReceiptData({
+          id: bookingData.id,
+          courtName: selectedCourt.name,
+          courtLocation: selectedCourt.location,
+          date: targetDateStr,
+          startTime: startTimeFormatted,
+          endTime: endTimeFormatted,
+          pricePerHour: selectedCourt.pricePerHour,
+          totalPrice: selectedCourt.pricePerHour,
+          playerName: profileData?.full_name || profileData?.username || 'Guest',
+          status: 'pending'
+        });
+
+        // Show success modal first
+        setShowSuccessModal(true);
         setIsBooked(true);
-        setTimeout(() => setIsBooked(false), 3000);
+
+        // Clear selection after a delay
+        setTimeout(() => {
+          setSelectedSlot(null);
+        }, 1000);
       } catch (err: any) {
         console.error('Booking error:', err);
-        alert(`Booking failed: ${err.message}`);
+
+        // Handle duplicate booking constraint violation
+        if (err.message?.includes('unique_court_booking') || err.code === '23505') {
+          alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
+          // Refresh availability to show updated slots
+          setSelectedSlot(null);
+          checkCourtAvailability(selectedCourt, selectedDate);
+        } else {
+          alert(`Booking failed: ${err.message}`);
+        }
       } finally {
         setIsProcessing(false);
       }
@@ -283,24 +1094,119 @@ const Booking: React.FC = () => {
   };
 
   const handleNearMe = () => {
-    if (navigator.geolocation && googleMapRef.current) {
+    // Switch to map view first
+    setViewMode('map');
+
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const userLocation = {
+          if (!googleMapRef.current) return;
+
+          const userLoc = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
           };
-          googleMapRef.current.panTo(userLocation);
-          googleMapRef.current.setZoom(13);
+
+          // Remove existing user location marker if any
+          if (userLocationMarkerRef.current) {
+            userLocationMarkerRef.current.setMap(null);
+          }
+
+          // Create a custom marker for user's location with a distinctive style
+          const userMarker = new window.google.maps.Marker({
+            position: userLoc,
+            map: googleMapRef.current,
+            title: 'Your Location',
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: '#3b82f6',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 4,
+            },
+            animation: window.google.maps.Animation.DROP,
+            zIndex: 999,
+          });
+
+          // Add a pulsing outer circle effect
+          const pulseCircle = new window.google.maps.Marker({
+            position: userLoc,
+            map: googleMapRef.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 24,
+              fillColor: '#3b82f6',
+              fillOpacity: 0.3,
+              strokeColor: '#3b82f6',
+              strokeWeight: 2,
+              strokeOpacity: 0.5,
+            },
+            zIndex: 998,
+          });
+
+          // Create info window for user location
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
+                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
+                <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
+              </div>
+            `,
+            disableAutoPan: false
+          });
+
+          // Open info window immediately
+          infoWindow.open(googleMapRef.current, userMarker);
+
+          // Store reference to remove later (store both markers)
+          userLocationMarkerRef.current = {
+            setMap: (map: any) => {
+              userMarker.setMap(map);
+              pulseCircle.setMap(map);
+            }
+          };
+
+          // Pan to user location and set appropriate zoom
+          googleMapRef.current.panTo(userLoc);
+          googleMapRef.current.setZoom(15);
         },
         (error) => {
           console.error('Error getting location:', error);
-          alert('Unable to get your location. Please enable location services.');
-        }
+
+          setTimeout(() => {
+            if (googleMapRef.current) {
+              const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+              googleMapRef.current.panTo(philippinesCenter);
+              googleMapRef.current.setZoom(6);
+            }
+          }, 100);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
       );
+    } else {
+      setTimeout(() => {
+        if (googleMapRef.current) {
+          const philippinesCenter = { lat: 12.8797, lng: 121.774 };
+          googleMapRef.current.panTo(philippinesCenter);
+          googleMapRef.current.setZoom(6);
+        }
+      }, 100);
     }
   };
 
+  const handleViewBookings = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    navigate('/my-bookings');
+  };
+
+  // Add state for desktop suggestions dropdown
+  const [showDesktopSuggestions, setShowDesktopSuggestions] = useState(false);
+
+  // Filtered courts (same as GuestBooking)
   const filteredCourts = courts
     .filter(c => filterType === 'All' || c.type === filterType)
     .filter(c =>
@@ -308,207 +1214,1079 @@ const Booking: React.FC = () => {
       c.location.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+  // Get filtered locations (grouped by location) - this is what we'll display in the list
+  const filteredLocations = locations
+    .filter(loc => {
+      // Filter by search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return loc.name.toLowerCase().includes(q) ||
+          loc.city.toLowerCase().includes(q) ||
+          (loc.address && loc.address.toLowerCase().includes(q));
+      }
+      return true;
+    })
+    .filter(loc => {
+      // Only show locations that have courts matching the filter type
+      const locCourts = courts.filter(c => {
+        const matchesLocation = c.location_id ? c.location_id === loc.id :
+          c.location.toLowerCase().includes(loc.name.toLowerCase());
+        if (!matchesLocation) return false;
+        return filterType === 'All' || c.type === filterType;
+      });
+      return locCourts.length > 0;
+    })
+    .map(loc => {
+      // Add court count for each location
+      const locCourts = courts.filter(c => {
+        const matchesLocation = c.location_id ? c.location_id === loc.id :
+          c.location.toLowerCase().includes(loc.name.toLowerCase());
+        return matchesLocation && (filterType === 'All' || c.type === filterType);
+      });
+      return {
+        ...loc,
+        court_count: locCourts.length
+      };
+    });
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-6">
-        <div>
-          <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURTS / 2025</p>
-          <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Book a Court.</h1>
+    <div className="md:space-y-10 animate-in fade-in duration-700">
+      {/* ──────────── MOBILE HEADER BAR ──────────── */}
+      <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+        {/* Search row */}
+        <div className="px-4 pt-3 pb-2">
+          {isSearchExpanded ? (
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Search size={16} className="text-slate-400 shrink-0" />
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search courts or places..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch(searchQuery);
+                      setIsSearchExpanded(false);
+                    }
+                  }}
+                  className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400"
+                />
+                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-blue-600 font-bold text-xs shrink-0">
+                  Cancel
+                </button>
+              </div>
+
+              {/* Mobile Search Dropdown */}
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/60 z-50 max-h-[65vh] overflow-y-auto">
+                {userCity && (
+                  <>
+                    <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                    <button
+                      onClick={() => {
+                        setSearchQuery(userCity.split(',')[0]);
+                        handleSearch(userCity.split(',')[0]);
+                        setIsSearchExpanded(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                        <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
+                      </div>
+                      <span className="text-slate-800 font-semibold text-sm">{userCity}</span>
+                    </button>
+                  </>
+                )}
+                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                <div className="pb-4">
+                  {locations
+                    .filter(loc => {
+                      if (!searchQuery.trim()) return true;
+                      const q = searchQuery.toLowerCase();
+                      return loc.name.toLowerCase().includes(q) ||
+                        loc.city.toLowerCase().includes(q) ||
+                        (loc.address && loc.address.toLowerCase().includes(q));
+                    })
+                    .slice(0, 8)
+                    .map((location) => (
+                      <button
+                        key={location.id}
+                        onClick={() => {
+                          setSearchQuery(location.name);
+                          if (googleMapRef.current && location.latitude && location.longitude) {
+                            googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                            googleMapRef.current.setZoom(19);
+                            triggerPulse(location.latitude, location.longitude);
+                          }
+                          navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                          setViewMode('map');
+                          setIsSearchExpanded(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                          <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
+                        </div>
+                      </button>
+                    ))}
+                  {locations.length === 0 && (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-sm text-slate-400">No locations found</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSearchExpanded(true)}
+                className="flex-1 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-left hover:border-slate-300 transition-colors"
+              >
+                <Search size={16} className="text-slate-400 shrink-0" />
+                <span className="text-sm text-slate-400 font-medium truncate">{searchQuery || 'Search courts or places...'}</span>
+              </button>
+              <button
+                onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+                className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-xl shrink-0 hover:bg-blue-600 transition-colors"
+              >
+                <ClipboardList size={18} />
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Filter Chips */}
+        {/* Filter pills row */}
+        {!isSearchExpanded && (
+          <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
+            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterType === type
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                  : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'
+                  }`}
+              >
+                {type}
+              </button>
+            ))}
+            <button
+              onClick={handleNearMe}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all"
+            >
+              <Navigation size={12} fill="currentColor" />
+              Near Me
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ──────────── MAIN CONTAINER ──────────── */}
+      <div className="pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
+
+        {/* ──────────── DESKTOP HEADER ──────────── */}
+        <div className="hidden md:block mb-6 lg:mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-5">
+            <div>
+              <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">
+                {urlLocationId && selectedLocation ? 'Location / Detail' : 'Courts / Live'}
+              </p>
+              <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
+                {urlLocationId && selectedLocation
+                  ? <>Book a <span className="text-blue-600">Court at {selectedLocation.name}.</span></>
+                  : <>Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
+                }
+              </h1>
+            </div>
+            {/* My Bookings Button */}
+            <button
+              onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+              className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-slate-200/50 shrink-0"
+            >
+              <ClipboardList size={18} />
+              My Bookings
+            </button>
+          </div>
+
+          {/* Desktop Filter Pills */}
           <div className="flex gap-2">
             {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
-                className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${filterType === type
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-100'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-400'
+                className={`px-6 lg:px-8 py-2.5 lg:py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all duration-200 ${filterType === type
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-blue-600'
                   }`}
               >
                 {type}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Search Bar and Near Me Button */}
-          <div className="flex gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search courts by name or location..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-              />
-            </div>
-            <button
-              onClick={handleNearMe}
-              className="flex items-center gap-2 px-6 py-3 bg-lime-400 text-slate-900 rounded-2xl font-bold text-sm hover:bg-lime-500 transition-all shadow-lg shadow-lime-100"
+        {/* ──────────── MAIN CONTENT GRID ──────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+
+          {/* ═══ LEFT COLUMN ═══ */}
+          <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+            {/* Desktop Search Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSearch(searchQuery);
+                setShowDesktopSuggestions(false);
+              }}
+              className="hidden md:flex gap-3 mb-5 relative"
             >
-              <Navigation size={18} />
-              Near Me
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Map View */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="h-[600px] bg-slate-100 flex items-center justify-center">
-                <Loader2 className="animate-spin text-blue-600" size={48} />
-              </div>
-            ) : (
-              <div ref={mapRef} className="h-[600px] w-full" />
-            )}
-          </div>
-        </div>
-
-        {/* Court Details Sidebar */}
-        <div className="lg:col-span-1 space-y-6">
-          {selectedCourt ? (
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-              <div>
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider ${selectedCourt.type === 'Indoor'
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'bg-lime-50 text-lime-600'
-                      }`}>
-                      {selectedCourt.type}
-                    </span>
-                    <span className="text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-600">
-                      {selectedCourt.numCourts} {selectedCourt.numCourts === 1 ? 'Court' : 'Courts'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-slate-500 font-medium mb-6">
-                  <MapPin size={14} className="shrink-0" />
-                  <span className="leading-snug">{selectedCourt.location}</span>
-                </div>
-
-                {selectedCourt.amenities && (selectedCourt.amenities as string[]).length > 0 && (
-                  <div className="mb-6">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Amenities</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(selectedCourt.amenities as string[]).map((amenity, idx) => (
-                        <span key={idx} className="text-[9px] font-bold px-2 py-1 bg-slate-50 text-slate-600 rounded-md border border-slate-100 uppercase tracking-wider italic">
-                          {amenity}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between p-4 bg-slate-950 rounded-2xl text-white shadow-xl">
-                  <div>
-                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1.5">Rate</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-black">₱{selectedCourt.pricePerHour}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">/hr</span>
-                    </div>
-                  </div>
-                  <Navigation size={20} className="text-lime-400" />
-                </div>
-              </div>
-
-              {/* Time Slots */}
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                  <Clock size={16} className="text-blue-600" />
-                  Available Times
-                </h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {TIME_SLOTS.map(slot => (
-                    <button
-                      key={slot}
-                      onClick={() => setSelectedSlot(slot)}
-                      className={`py-2.5 px-3 rounded-xl font-semibold text-sm transition-all border ${selectedSlot === slot
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                        }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Booking Button */}
-              <button
-                disabled={!selectedSlot || isBooked || isProcessing}
-                onClick={handleBooking}
-                className={`w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isBooked
-                  ? 'bg-lime-400 text-slate-900 cursor-default'
-                  : 'bg-lime-400 hover:bg-lime-500 text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-lime-100'
-                  }`}
-              >
-                {isProcessing ? <Loader2 className="animate-spin" /> : (
-                  isBooked ? (
-                    <>
-                      <CheckCircle2 size={20} />
-                      Booking Confirmed!
-                    </>
-                  ) : (
-                    'Confirm Booking'
-                  )
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center">
-              <MapPin size={48} className="mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-bold text-slate-900 mb-2">Select a Court</h3>
-              <p className="text-sm text-slate-500">Click on a marker on the map to view court details and book.</p>
-            </div>
-          )}
-
-          {/* Court List */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h4 className="text-sm font-bold text-slate-900 mb-4">All Courts ({filteredCourts.length})</h4>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-hide">
-              {isLoading ? (
-                Array(3).fill(0).map((_, i) => <CourtSkeleton key={i} />)
-              ) : (
-                filteredCourts.map(court => (
-                  <button
-                    key={court.id}
-                    onClick={() => {
-                      setSelectedCourt(court);
-                      setSelectedSlot(null); // Reset slot when switching courts
-                      if (court.latitude && court.longitude && googleMapRef.current) {
-                        googleMapRef.current.panTo({ lat: court.latitude, lng: court.longitude });
+              <div className="relative flex-1 group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search courts by name or location..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowDesktopSuggestions(true);
+                    const val = e.target.value.trim();
+                    if (val.length >= 3 && googleMapRef.current && window.google) {
+                      const matchLoc = locations.find(l =>
+                        l.name.toLowerCase().includes(val.toLowerCase()) ||
+                        l.city.toLowerCase().includes(val.toLowerCase())
+                      );
+                      if (matchLoc && matchLoc.latitude && matchLoc.longitude) {
+                        googleMapRef.current.panTo({ lat: matchLoc.latitude, lng: matchLoc.longitude });
                         googleMapRef.current.setZoom(14);
                       }
-                    }}
-                    className={`w-full text-left p-3 rounded-xl transition-all border ${selectedCourt?.id === court.id
-                      ? 'bg-blue-50 border-blue-200'
-                      : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="font-bold text-sm text-slate-900">{court.name}</p>
-                        <p className="text-xs text-slate-500">{court.location}</p>
+                    }
+                  }}
+                  onFocus={() => setShowDesktopSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowDesktopSuggestions(false), 200)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch(searchQuery);
+                      setShowDesktopSuggestions(false);
+                    }
+                  }}
+                  className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all shadow-sm"
+                />
+
+                {/* Desktop Suggestions Dropdown */}
+                {showDesktopSuggestions && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/50 z-50 overflow-hidden">
+                    {isLoadingLocation && (
+                      <div className="px-5 py-4 flex items-center gap-3 text-slate-500">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm font-medium">Getting your location...</span>
                       </div>
-                      <span className="text-sm font-bold text-slate-900">₱{court.pricePerHour}/hr</span>
+                    )}
+
+                    {userCity && (
+                      <>
+                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cityName = userCity.split(',')[0];
+                            setSearchQuery(cityName);
+                            setShowDesktopSuggestions(false);
+                            handleSearch(cityName);
+                          }}
+                          className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                        >
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                            <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                          </div>
+                          <span className="text-slate-800 font-medium text-sm">{userCity}</span>
+                        </button>
+                      </>
+                    )}
+
+                    {filteredLocations.length > 0 && (
+                      <>
+                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                        <div className="max-h-[320px] overflow-y-auto">
+                          {filteredLocations.slice(0, 10).map((location) => (
+                            <button
+                              key={location.id}
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery(location.name);
+                                setShowDesktopSuggestions(false);
+                                if (googleMapRef.current && location.latitude && location.longitude) {
+                                  googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                  googleMapRef.current.setZoom(19);
+                                  triggerPulse(location.latitude, location.longitude);
+                                }
+                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                              }}
+                              className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                            >
+                              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
+                                <img src="/images/PinMarker.png" alt="Pin" className="w-7 h-7 object-contain" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                                <p className="text-xs text-slate-400 truncate">
+                                  {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                                  {location.city && <span> · {location.city}</span>}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {!isLoadingLocation && !userCity && filteredLocations.length === 0 && (
+                      <div className="px-5 py-8 text-center">
+                        <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleNearMe}
+                className="flex items-center gap-2 px-5 lg:px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200/50 shrink-0"
+              >
+                <Navigation size={16} fill="currentColor" />
+                <span>Near Me</span>
+              </button>
+            </form>
+
+            {/* ─── List Container ─── */}
+            <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
+
+              {selectedCourt ? (
+                /* ─── Court Selected — Booking Interface ─── */
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-4 md:p-5 space-y-5">
+                    {/* Back button */}
+                    <button
+                      onClick={() => setSelectedCourt(null)}
+                      className="flex items-center gap-1 text-slate-400 text-xs font-bold hover:text-blue-600 transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                      Back to Courts
+                    </button>
+
+                    {/* Court header */}
+                    <div>
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${selectedCourt.type === 'Indoor'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'bg-emerald-50 text-emerald-600'
+                            }`}>
+                            {selectedCourt.type}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mb-3">
+                        <MapPin size={12} className="text-blue-500 shrink-0" />
+                        <span className="leading-snug truncate">{selectedCourt.location}</span>
+                      </div>
+
+                      {selectedCourt.amenities && (selectedCourt.amenities as string[]).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {(selectedCourt.amenities as string[]).map((amenity, idx) => (
+                            <span key={idx} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              {amenity}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl text-white">
+                        <div>
+                          <p className="text-[9px] font-bold text-blue-400 uppercase tracking-wider leading-none mb-0.5">Rate</p>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-xl font-black">₱{selectedCourt.pricePerHour}</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">/hr</span>
+                          </div>
+                        </div>
+                        <Navigation size={16} className="text-emerald-400" />
+                      </div>
+
+                      {/* Cleaning Time Info */}
+                      {selectedCourt.cleaningTimeMinutes > 0 && (
+                        <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-100 mt-3">
+                          <Clock size={12} className="text-blue-600 shrink-0" />
+                          <p className="text-[10px] text-blue-700 leading-relaxed">
+                            <span className="font-bold">{selectedCourt.cleaningTimeMinutes >= 60 ? `${Math.floor(selectedCourt.cleaningTimeMinutes / 60)}h ${selectedCourt.cleaningTimeMinutes % 60 > 0 ? `${selectedCourt.cleaningTimeMinutes % 60}m` : ''}` : `${selectedCourt.cleaningTimeMinutes} min`} cleaning buffer</span> after each booking
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))
+
+                    {/* Date Selection */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                          <CalendarIcon size={14} className="text-blue-600" />
+                          Choose Date
+                        </h4>
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                          {selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {Array.from({ length: 7 }).map((_, i) => {
+                          const date = new Date();
+                          date.setDate(date.getDate() + i);
+                          const isSelected = selectedDate.toDateString() === date.toDateString();
+                          const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
+                          const dayNum = date.getDate();
+
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                setSelectedDate(date);
+                                setSelectedSlot(null);
+                              }}
+                              className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 ${isSelected
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                                : 'bg-slate-50 text-slate-400 hover:bg-white hover:shadow-sm'
+                                }`}
+                            >
+                              <span className={`text-[8px] font-bold uppercase mb-0.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                                {dayName.slice(0, 3)}
+                              </span>
+                              <span className="text-sm font-black tracking-tighter">{dayNum}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time Slots */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                          <Clock size={14} className="text-blue-600" />
+                          Available Times
+                        </h4>
+                        {isCheckingAvailability && (
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Loader2 size={10} className="animate-spin" /> Checking...
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-3 mb-2.5 text-[9px]">
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <span className="w-2 h-2 rounded-full bg-white border border-slate-200"></span> Available
+                        </span>
+                        <span className="flex items-center gap-1 text-amber-600">
+                          <span className="w-2 h-2 rounded-full bg-amber-100 border border-amber-300"></span> Booked
+                        </span>
+                        <span className="flex items-center gap-1 text-red-600">
+                          <span className="w-2 h-2 rounded-full bg-red-100 border border-red-300"></span> Blocked
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {TIME_SLOTS.map(slot => {
+                          const isBlocked = blockedSlots.has(slot);
+                          const isBookedSlot = bookedSlots.has(slot);
+                          const isUnavailable = isBlocked || isBookedSlot;
+
+                          return (
+                            <button
+                              key={slot}
+                              onClick={() => !isUnavailable && setSelectedSlot(slot)}
+                              disabled={isUnavailable}
+                              title={isBlocked ? 'Court event scheduled' : isBookedSlot ? 'Already booked' : 'Available'}
+                              className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isBlocked
+                                ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                : isBookedSlot
+                                  ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
+                                  : selectedSlot === slot
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                                }`}
+                            >
+                              <span className={isUnavailable ? 'line-through' : ''}>{slot}</span>
+                              {isBlocked && (
+                                <Ban size={10} className="absolute top-1 right-1 text-red-400" />
+                              )}
+                              {isBookedSlot && !isBlocked && (
+                                <AlertCircle size={10} className="absolute top-1 right-1 text-amber-400" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Availability Summary */}
+                      {(blockedSlots.size > 0 || bookedSlots.size > 0) && (
+                        <div className="mt-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                          <p className="text-[10px] text-slate-500">
+                            <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available
+                            {blockedSlots.size > 0 && (
+                              <span className="text-red-500"> · {blockedSlots.size} blocked</span>
+                            )}
+                            {bookedSlots.size > 0 && (
+                              <span className="text-amber-500"> · {bookedSlots.size} booked</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Policy Reminder */}
+                    <div className="flex items-start gap-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                      <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
+                        Please arrive on time. Booking subject to cancellation if more than <span className="font-bold">10 min late</span>.
+                      </p>
+                    </div>
+
+                    {/* Booking Button */}
+                    <button
+                      disabled={!selectedSlot || isBooked || isProcessing || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                      onClick={handleBooking}
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${isBooked
+                        ? 'bg-emerald-500 text-white cursor-default'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200/50'
+                        }`}
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin" size={18} /> : (
+                        isBooked ? (
+                          <>
+                            <CheckCircle2 size={18} />
+                            Booking Confirmed!
+                          </>
+                        ) : selectedSlot && blockedSlots.has(selectedSlot) ? (
+                          <>
+                            <Ban size={16} />
+                            Court Blocked
+                          </>
+                        ) : selectedSlot && bookedSlots.has(selectedSlot) ? (
+                          <>
+                            <AlertCircle size={16} />
+                            Already Booked
+                          </>
+                        ) : (
+                          'Confirm Booking'
+                        )
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ─── Location List (matching GuestBooking) ─── */
+                <>
+                  {/* Location Detail Header */}
+                  {urlLocationId && selectedLocation && (
+                    <div className="border-b border-slate-100 shrink-0">
+                      {selectedLocation.image_url && (
+                        <div className="relative h-28 sm:h-36 md:h-44 w-full">
+                          <img
+                            src={selectedLocation.image_url}
+                            alt={selectedLocation.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                          <button
+                            onClick={() => navigate('/booking')}
+                            className="absolute top-2 left-2 md:top-3 md:left-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm text-slate-700 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg text-[11px] md:text-xs font-bold hover:bg-white transition-all shadow-md"
+                          >
+                            <ChevronLeft size={14} />
+                            Back
+                          </button>
+                          <div className="absolute bottom-2 left-3 right-3 md:bottom-3 md:left-4 md:right-4">
+                            <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white tracking-tight leading-tight drop-shadow-lg">{selectedLocation.name}</h2>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-3 md:p-4">
+                        {!selectedLocation.image_url && (
+                          <>
+                            <button
+                              onClick={() => navigate('/booking')}
+                              className="flex items-center gap-1 text-slate-400 text-xs font-bold hover:text-blue-600 transition-colors mb-2"
+                            >
+                              <ChevronLeft size={14} />
+                              Back
+                            </button>
+                            <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">{selectedLocation.name}</h2>
+                          </>
+                        )}
+                        <div className="flex items-center gap-1.5 text-xs md:text-sm text-slate-500 mb-2">
+                          <MapPin size={12} className="text-blue-500 shrink-0" />
+                          <span className="font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                            <Building2 size={10} />
+                            {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
+                          </span>
+                          {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
+                            selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
+                              <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                {amenity}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {selectedLocation.description && (
+                          <p className="text-xs md:text-sm text-slate-500 mt-1.5 leading-relaxed line-clamp-1 md:line-clamp-2">{selectedLocation.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {isLoadingLocationDetail && urlLocationId && (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="animate-spin text-blue-600" size={28} />
+                    </div>
+                  )}
+
+                  {/* Section title */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                    <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      {urlLocationId && selectedLocation
+                        ? `Courts at ${selectedLocation.name} (${locationCourts.length})`
+                        : `${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
+                      }
+                    </h2>
+                  </div>
+
+                  {/* Scrollable list */}
+                  <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                    {isLoading || isLoadingLocationDetail ? (
+                      Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
+                    ) : urlLocationId ? (
+                      locationCourts.length === 0 ? (
+                        <div className="px-4 py-12 text-center">
+                          <p className="text-sm text-slate-400">No courts found at this location</p>
+                        </div>
+                      ) : locationCourts.map(court => (
+                        <button
+                          key={court.id}
+                          onClick={() => navigate(`/court/${court.id}`)}
+                          className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                        >
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                            <img
+                              src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
+                              alt={court.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{court.name}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                              <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
+                              <span className="text-[11px] font-medium text-slate-400">₱ Fee</span>
+                              <span className="text-[11px] font-medium text-slate-400">🥅 Perm. Nets</span>
+                            </div>
+                          </div>
+                          <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                        </button>
+                      ))
+                    ) : (
+                      filteredLocations.length === 0 ? (
+                        <div className="px-4 py-12 text-center">
+                          <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
+                          <p className="text-sm text-slate-400">No locations found</p>
+                        </div>
+                      ) : filteredLocations.map(location => (
+                        <button
+                          key={location.id}
+                          onClick={() => {
+                            if (googleMapRef.current && location.latitude && location.longitude) {
+                              googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                              googleMapRef.current.setZoom(19);
+                              triggerPulse(location.latitude, location.longitude);
+                            }
+                            navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                          }}
+                          className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                        >
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                            <img
+                              src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
+                              alt={location.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                              <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                                <MapPin size={11} className="text-blue-400" /> {location.city}
+                              </span>
+                              <span className="text-[11px] font-medium text-slate-400">
+                                🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ RIGHT COLUMN — MAP ═══ */}
+          <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+            <div className={`md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden relative md:sticky md:top-8 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
+              {isLoading ? (
+                <div className="h-full bg-slate-100 flex items-center justify-center">
+                  <Loader2 className="animate-spin text-blue-600" size={40} />
+                </div>
+              ) : (
+                <div ref={mapRef} className="h-full w-full" />
               )}
             </div>
           </div>
         </div>
       </div>
-    </div >
+
+      {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
+      {isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
+          <div className="flex justify-center items-center gap-2 px-4 py-2.5">
+            <button
+              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-full shadow-lg active:scale-95 transition-all font-bold"
+            >
+              {viewMode === 'map' ? <List size={16} /> : <MapPin size={16} />}
+              <span className="text-xs uppercase tracking-wider">{viewMode === 'map' ? 'List' : 'Map'}</span>
+            </button>
+            <button
+              onClick={() => setShowFilters(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-full shadow-sm active:scale-95 transition-all font-bold"
+            >
+              <Funnel size={16} />
+              <span className="text-xs uppercase tracking-wider">Filters</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
+      {showFilters && (
+        <div className="fixed inset-0 z-[110] flex items-end md:hidden">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
+          <div className="relative w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
+            {/* Drawer handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-300" />
+            </div>
+
+            <div className="px-5 pb-3 pt-2">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-slate-900">Filters</h2>
+                <button onClick={() => setShowFilters(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6 pb-6">
+                <section>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Court Type</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
+                      <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                        <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                        <span className="text-sm font-medium text-slate-600">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Public Court', 'Private Court', 'Membership Required'].map(access => (
+                      <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
+                        <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
+                        <span className="text-sm font-medium text-slate-600">{access}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 px-3 py-2.5">
+                  Clear
+                </button>
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-200/50"
+                >
+                  View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────── SUCCESS MODAL ──────────── */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSuccessModal(false)} />
+          <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 sm:p-10 text-center">
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <CircleCheck size={32} className="text-emerald-500" />
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Successfully Booked!</h2>
+              <p className="text-slate-500 font-medium mb-8 leading-relaxed text-sm sm:text-base">
+                Your court time has been reserved. You can find your booking details in "My Bookings".
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setShowReceipt(true);
+                  }}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200/50"
+                >
+                  View My Receipt
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setIsBooked(false);
+                    setSelectedSlot(null);
+                    setSelectedCourt(null);
+                    setSelectedLocation(null);
+                    navigate('/booking');
+                  }}
+                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg"
+                >
+                  Book Another Slot
+                </button>
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────── RECEIPT MODAL ──────────── */}
+      {showReceipt && receiptData && (
+        <Receipt
+          bookingData={receiptData}
+          onClose={() => {
+            setShowReceipt(false);
+            setIsBooked(false);
+          }}
+        />
+      )}
+
+      {/* ──────────── MY BOOKINGS SLIDE PANEL ──────────── */}
+      {showMyBookings && (
+        <div className="fixed inset-0 z-[110] flex justify-end">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowMyBookings(false); setViewingBooking(null); }} />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col h-full">
+            {/* Panel Header */}
+            <div className="px-5 py-4 border-b border-slate-100 bg-white shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-1">Reservations</p>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">My Bookings</h2>
+                </div>
+                <button
+                  onClick={() => { setShowMyBookings(false); setViewingBooking(null); }}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by court, city, or ref ID..."
+                  value={myBookingsSearch}
+                  onChange={(e) => setMyBookingsSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                {([
+                  { key: 'all', label: 'All' },
+                  { key: 'pending', label: 'Pending' },
+                  { key: 'confirmed', label: 'Confirmed' },
+                  { key: 'paid', label: 'Paid' },
+                  { key: 'unpaid', label: 'Unpaid' },
+                  { key: 'cancelled', label: 'Cancelled' }
+                ] as const).map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setMyBookingsFilter(f.key)}
+                    className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
+                      myBookingsFilter === f.key
+                        ? f.key === 'cancelled' ? 'bg-red-600 text-white' : f.key === 'paid' ? 'bg-emerald-600 text-white' : f.key === 'unpaid' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bookings List */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              {isLoadingMyBookings ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <Loader2 className="animate-spin text-blue-600" size={32} />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading bookings...</p>
+                </div>
+              ) : filteredMyBookings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-200">
+                    <ClipboardList size={28} className="text-slate-300" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-black text-slate-900 mb-1">No Bookings Found</p>
+                    <p className="text-xs text-slate-400 font-medium">{myBookingsSearch ? 'Try a different search term' : 'Your court reservations will appear here'}</p>
+                  </div>
+                </div>
+              ) : (
+                filteredMyBookings.map((b) => {
+                  const statusColor = b.payment_status === 'paid' ? 'emerald' :
+                    b.status === 'confirmed' ? 'blue' :
+                    b.status === 'cancelled' ? 'red' :
+                    b.status === 'pending' ? 'amber' : 'slate';
+                  const statusLabel = b.payment_status === 'paid' ? 'Paid' : b.status;
+                  const isCancellable = b.status === 'pending' || b.status === 'confirmed';
+
+                  return (
+                    <div
+                      key={b.id}
+                      className={`p-4 bg-white border rounded-2xl transition-all duration-300 hover:shadow-md ${
+                        b.status === 'cancelled' ? 'border-red-100 bg-red-50/30 opacity-70' : 'border-slate-100 hover:border-blue-200'
+                      }`}
+                    >
+                      {/* Top row: Court name + status */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">#{b.id.slice(0, 8)}</p>
+                          <h4 className="text-sm font-black text-slate-900 tracking-tight truncate">{b.court?.name || 'Court'}</h4>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <MapPin size={10} className="text-slate-400" />
+                            <span className="text-[10px] text-slate-400 font-medium truncate">{b.court?.location?.city || 'PicklePlay'}</span>
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shrink-0 ${
+                          b.payment_status === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+                          b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                          b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-600' :
+                          b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                          'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {/* Info row */}
+                      <div className="flex items-center gap-4 mb-3 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <CalendarIcon size={12} className="text-blue-500" />
+                          <span className="font-bold text-slate-700">{new Date(b.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={12} className="text-blue-500" />
+                          <span className="font-bold text-slate-700">{b.start_time?.slice(0, 5)} - {b.end_time?.slice(0, 5)}</span>
+                        </div>
+                        <div className="ml-auto">
+                          <span className="text-base font-black text-slate-900">₱{b.total_price}</span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleViewBookingReceipt(b)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors"
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                        {b.status !== 'cancelled' && (
+                          <button
+                            onClick={() => handleRebookFromBooking(b)}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-100 transition-colors"
+                          >
+                            <Pencil size={12} /> Rebook
+                          </button>
+                        )}
+                        {isCancellable && (
+                          <button
+                            onClick={() => handleCancelBooking(b.id)}
+                            disabled={cancellingBookingId === b.id}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            {cancellingBookingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Panel Footer */}
+            <div className="px-5 py-4 border-t border-slate-100 bg-white shrink-0">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                <span>{filteredMyBookings.length} booking{filteredMyBookings.length !== 1 ? 's' : ''}</span>
+                <button
+                  onClick={() => { setShowMyBookings(false); navigate('/my-bookings'); }}
+                  className="text-blue-600 hover:underline uppercase tracking-wider text-[10px] font-black"
+                >
+                  View Full Page →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────── BOOKING RECEIPT VIEW (from My Bookings panel) ──────────── */}
+      {viewingBooking && (
+        <Receipt
+          bookingData={viewingBooking}
+          onClose={() => setViewingBooking(null)}
+        />
+      )}
+    </div>
   );
 };
 
