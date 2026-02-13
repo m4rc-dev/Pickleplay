@@ -27,6 +27,34 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
   const [showDropdown, setShowDropdown] = useState(false);
   const [accessCodeFocused, setAccessCodeFocused] = useState(false);
   const [experienceFocused, setExperienceFocused] = useState(false);
+  const [userRoles, setUserRoles] = useState([]);
+
+  // Fetch user's current roles
+  useEffect(() => {
+    const fetchUserRoles = async () => {
+      if (!userId || !visible) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('roles')
+          .eq('id', userId)
+          .single();
+
+        if (error) throw error;
+        
+        if (data && data.roles) {
+          setUserRoles(data.roles);
+        }
+      } catch (error) {
+        console.error('Error fetching user roles:', error);
+      }
+    };
+
+    if (visible) {
+      fetchUserRoles();
+    }
+  }, [visible, userId]);
 
   // Reset form when modal opens/closes or applicationType changes
   useEffect(() => {
@@ -87,27 +115,37 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
         const fileName = `${userId}_${Date.now()}.${fileExt}`;
         const filePath = `applications/${selectedType}/${fileName}`;
 
-        // Read file as blob
+        // Read file as ArrayBuffer for React Native
         const response = await fetch(doc.uri);
-        const blob = await response.blob();
+        const arrayBuffer = await response.arrayBuffer();
+        const fileData = new Uint8Array(arrayBuffer);
+
+        console.log('Uploading file:', fileName, 'Size:', fileData.length);
 
         // Upload to Supabase Storage
         const { data, error } = await supabase.storage
-          .from('professional-documents')
-          .upload(filePath, blob, {
+          .from('application-documents')
+          .upload(filePath, fileData, {
             contentType: doc.mimeType || 'application/octet-stream',
+            upsert: false,
           });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase storage error:', error);
+          throw new Error(`Upload failed: ${error.message}`);
+        }
+
+        console.log('Upload successful:', data);
 
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('professional-documents')
+          .from('application-documents')
           .getPublicUrl(filePath);
 
         uploadedUrls.push(urlData.publicUrl);
       } catch (error) {
         console.error('Error uploading document:', error);
+        Alert.alert('Upload Error', `Failed to upload ${doc.name}: ${error.message}`);
         throw error;
       }
     }
@@ -146,7 +184,32 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
 
     try {
       // Upload documents if not already uploaded
-      const uploadedUrls = documentUrls || (documents.length > 0 ? await uploadDocuments() : []);
+      let uploadedUrls = documentUrls;
+      
+      if (uploadedUrls === null && documents.length > 0) {
+        try {
+          uploadedUrls = await uploadDocuments();
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+          Alert.alert(
+            'Upload Failed',
+            'Could not upload documents. This might be because:\n\n' +
+            '• The storage bucket is not set up in Supabase\n' +
+            '• You don\'t have permission to upload\n' +
+            '• Network connection issue\n\n' +
+            'Would you like to submit without documents?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => setIsSubmitting(false) },
+              { text: 'Submit Without Documents', onPress: () => submitApplication([]) },
+            ]
+          );
+          return;
+        }
+      }
+
+      if (uploadedUrls === null) {
+        uploadedUrls = [];
+      }
 
       // Submit application to database
       const { error } = await supabase
@@ -160,7 +223,10 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
           submitted_at: new Date().toISOString(),
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw new Error(`Database error: ${error.message}`);
+      }
 
       Alert.alert(
         'Application Submitted! ✅',
@@ -249,35 +315,51 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
 
                 {showDropdown && !applicationType && (
                   <View style={styles.dropdownMenu}>
-                    {applicationTypes.map((type, index) => (
-                      <TouchableOpacity
-                        key={type.value}
-                        style={[
-                          styles.dropdownItem,
-                          index === applicationTypes.length - 1 && styles.dropdownItemLast,
-                        ]}
-                        onPress={() => {
-                          setSelectedType(type.value);
-                          setShowDropdown(false);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.dropdownItemContent}>
-                          <MaterialIcons 
-                            name={type.value === 'COACH' ? 'school' : 'domain'} 
-                            size={22} 
-                            color={thematicBlue} 
-                          />
-                          <View style={styles.dropdownItemTextWrapper}>
-                            <Text style={styles.dropdownItemText}>{type.label}</Text>
-                            <Text style={styles.dropdownItemSubtext}>
-                              {type.value === 'COACH' ? 'Share your expertise and earn money' : 'List your facility and manage bookings'}
-                            </Text>
+                    {applicationTypes.map((type, index) => {
+                      const isDisabled = userRoles.includes(type.value);
+                      
+                      return (
+                        <TouchableOpacity
+                          key={type.value}
+                          style={[
+                            styles.dropdownItem,
+                            index === applicationTypes.length - 1 && styles.dropdownItemLast,
+                            isDisabled && styles.dropdownItemDisabled,
+                          ]}
+                          onPress={() => {
+                            if (!isDisabled) {
+                              setSelectedType(type.value);
+                              setShowDropdown(false);
+                            }
+                          }}
+                          activeOpacity={isDisabled ? 1 : 0.7}
+                          disabled={isDisabled}
+                        >
+                          <View style={styles.dropdownItemContent}>
+                            <MaterialIcons 
+                              name={type.value === 'COACH' ? 'school' : 'domain'} 
+                              size={22} 
+                              color={isDisabled ? '#ccc' : thematicBlue} 
+                              style={{ marginRight: 14 }}
+                            />
+                            <View style={styles.dropdownItemTextWrapper}>
+                              <Text style={[styles.dropdownItemText, isDisabled && styles.dropdownItemTextDisabled]}>
+                                {type.label}
+                                {isDisabled && ' (Already Approved)'}
+                              </Text>
+                              <Text style={[styles.dropdownItemSubtext, isDisabled && styles.dropdownItemSubtextDisabled]}>
+                                {type.value === 'COACH' ? 'Share your expertise and earn money' : 'List your facility and manage bookings'}
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                        <MaterialIcons name="arrow-forward" size={20} color="#999" />
-                      </TouchableOpacity>
-                    ))}
+                          <MaterialIcons 
+                            name={isDisabled ? 'check-circle' : 'arrow-forward'} 
+                            size={20} 
+                            color={isDisabled ? '#10b981' : '#999'} 
+                          />
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -347,11 +429,11 @@ const ProfessionalApplicationModal = ({ visible, onClose, applicationType, userI
                 <View style={styles.documentsContainer}>
                   {documents.map((doc, index) => (
                     <View key={index} style={styles.documentItem}>
-                      <MaterialIcons name="insert-drive-file" size={20} color={thematicBlue} />
+                      <MaterialIcons name="insert-drive-file" size={20} color={thematicBlue} style={{ marginRight: 8 }} />
                       <Text style={styles.documentName} numberOfLines={1}>
                         {doc.name}
                       </Text>
-                      <TouchableOpacity onPress={() => removeDocument(index)}>
+                      <TouchableOpacity onPress={() => removeDocument(index)} style={{ marginLeft: 8 }}>
                         <MaterialIcons name="close" size={20} color="#999" />
                       </TouchableOpacity>
                     </View>
@@ -543,11 +625,14 @@ const styles = StyleSheet.create({
   dropdownItemLast: {
     borderBottomWidth: 0,
   },
+  dropdownItemDisabled: {
+    backgroundColor: '#F9FAFB',
+    opacity: 0.7,
+  },
   dropdownItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 14,
   },
   dropdownItemTextWrapper: {
     flex: 1,
@@ -558,10 +643,16 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 3,
   },
+  dropdownItemTextDisabled: {
+    color: '#9CA3AF',
+  },
   dropdownItemSubtext: {
     fontSize: 12,
     color: '#6B7280',
     lineHeight: 16,
+  },
+  dropdownItemSubtextDisabled: {
+    color: '#D1D5DB',
   },
   input: {
     borderWidth: 1.5,
@@ -614,7 +705,6 @@ const styles = StyleSheet.create({
   },
   documentsContainer: {
     marginTop: 12,
-    gap: 8,
   },
   documentItem: {
     flexDirection: 'row',
@@ -622,7 +712,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 10,
     borderRadius: 8,
-    gap: 8,
+    marginBottom: 8,
   },
   documentName: {
     flex: 1,
@@ -631,7 +721,6 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
     marginTop: 8,
   },
   cancelButton: {
@@ -641,6 +730,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f0f0f0',
+    marginRight: 12,
   },
   cancelButtonText: {
     fontSize: 13,

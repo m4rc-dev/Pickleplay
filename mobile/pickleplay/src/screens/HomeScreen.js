@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,346 +7,306 @@ import {
   ScrollView,
   StatusBar,
   Image,
-  BackHandler,
   ActivityIndicator,
-  Alert,
+  Dimensions,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
-import {MaterialIcons} from '@expo/vector-icons';
-import {BlurView} from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getCourts } from '../services/courtService';
 import { supabase } from '../lib/supabase';
-import StarRating from '../components/StarRating';
-import ProfessionalApplicationModal from '../components/ProfessionalApplicationModal';
 
-// Define the new color constants for easy reuse
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
+const { width } = Dimensions.get('window');
 
-const HomeScreen = ({navigation}) => {
-  const [currentScreenIndex, setCurrentScreenIndex] = useState(0);
+const HERO_IMAGES = [
+  'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=1920',
+  'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1920',
+  'https://images.unsplash.com/photo-1511067007398-7e4b90cfa4bc?auto=format&fit=crop&q=80&w=1920',
+];
+
+const HomeScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [courts, setCourts] = useState([]);
   const [courtsLoading, setCourtsLoading] = useState(true);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [upcomingBookings, setUpcomingBookings] = useState([]);
   const [isVerifiedCoach, setIsVerifiedCoach] = useState(false);
   const [isVerifiedCourtOwner, setIsVerifiedCourtOwner] = useState(false);
-  const [coachApplicationPending, setCoachApplicationPending] = useState(false);
-  const [courtOwnerApplicationPending, setCourtOwnerApplicationPending] = useState(false);
-  const [userRoles, setUserRoles] = useState([]);
-  const [showApplicationModal, setShowApplicationModal] = useState(false);
-  const [applicationType, setApplicationType] = useState(null);
-  const screens = ['Home', 'FindCourts', 'Map', 'Shop', 'Profile'];
-  const { user } = useAuth();
 
-  // Fetch user role for coach application
+  useEffect(() => {
+    fetchCourtsData();
+    const imageInterval = setInterval(() => {
+      setActiveImageIndex((prev) => (prev + 1) % HERO_IMAGES.length);
+    }, 5000);
+    return () => clearInterval(imageInterval);
+  }, []);
+
   useEffect(() => {
     if (user) {
-      fetchUserRole();
+      fetchUserRoles();
     }
   }, [user]);
 
-  const fetchUserRole = async () => {
-    if (!user) return;
-
+  const fetchCourtsData = async () => {
     try {
-      // Fetch user's roles from profiles
-      const { data: profileData, error: profileError } = await supabase
+      setCourtsLoading(true);
+      const { data, error } = await getCourts();
+      if (!error && data) {
+        setCourts(data.slice(0, 6));
+      }
+    } catch (err) {
+      console.error('Error fetching courts:', err);
+    } finally {
+      setCourtsLoading(false);
+    }
+  };
+
+  const fetchUserRoles = async () => {
+    if (!user) return;
+    try {
+      const { data: profileData, error } = await supabase
         .from('profiles')
         .select('roles')
         .eq('id', user.id)
         .single();
 
-      if (profileData) {
-        setUserRoles(profileData.roles || ['PLAYER']);
-        setIsVerifiedCoach(profileData.roles?.includes('COACH'));
-        setIsVerifiedCourtOwner(profileData.roles?.includes('COURT_OWNER'));
-      }
-
-      // Check for pending applications
-      const { data: applications, error: appError } = await supabase
-        .from('professional_applications')
-        .select('requested_role, status')
-        .eq('profile_id', user.id)
-        .eq('status', 'PENDING');
-
-      if (applications) {
-        setCoachApplicationPending(applications.some(app => app.requested_role === 'COACH'));
-        setCourtOwnerApplicationPending(applications.some(app => app.requested_role === 'COURT_OWNER'));
+      if (profileData && profileData.roles) {
+        setIsVerifiedCoach(profileData.roles.includes('COACH'));
+        setIsVerifiedCourtOwner(profileData.roles.includes('COURT_OWNER'));
       }
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      console.error('Error fetching user roles:', error);
     }
   };
 
-  const handleApplyAsProfessional = async () => {
-    if (!user?.id) {
-      Alert.alert('Error', 'Please login to apply as a professional');
-      return;
-    }
-
-    setApplicationType(null); // Let user choose in the modal
-    setShowApplicationModal(true);
+  const navigateToScreen = (screenName) => {
+    navigation.navigate(screenName);
   };
-
-  const handleApplicationSuccess = () => {
-    fetchUserRole(); // Refresh user role data
-  };
-
-  // Fetch courts from database
-  useEffect(() => {
-    const fetchCourts = async () => {
-      try {
-        setCourtsLoading(true);
-        const { data, error } = await getCourts();
-        if (error) {
-          console.error('Error fetching courts:', error);
-          return;
-        }
-        // Transform data and take first 5 for popular courts
-        const transformedCourts = (data || []).slice(0, 5).map(court => ({
-          id: court.id,
-          name: court.name,
-          location: court.city || court.address || 'Philippines',
-          rating: court.rating || 0,
-          imageUrl: court.cover_image || (court.images && court.images[0]) || 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=800&q=60',
-          // Keep all data for navigation
-          description: court.description,
-          latitude: court.latitude,
-          longitude: court.longitude,
-          type: court.type,
-          surface: court.surface,
-          numberOfCourts: court.number_of_courts,
-          amenities: court.amenities,
-          hoursOfOperation: court.hours_of_operation,
-          isFree: court.is_free,
-          pricePerHour: court.price_per_hour,
-          phoneNumber: court.phone_number,
-          email: court.email,
-          website: court.website,
-          requiresBooking: court.requires_booking,
-          address: court.address,
-          city: court.city,
-          country: court.country,
-        }));
-        setCourts(transformedCourts);
-      } catch (err) {
-        console.error('Error fetching courts:', err);
-      } finally {
-        setCourtsLoading(false);
-      }
-    };
-    fetchCourts();
-  }, []);
-
-  // Get user's first name for greeting
-  const getUserFirstName = () => {
-    if (user?.user_metadata?.first_name) {
-      return user.user_metadata.first_name;
-    }
-    if (user?.user_metadata?.full_name) {
-      return user.user_metadata.full_name.split(' ')[0];
-    }
-    if (user?.email) {
-      return user.email.split('@')[0];
-    }
-    return 'Player';
-  };
-
-  const navigateWithDirection = (targetIndex) => {
-    if (targetIndex === currentScreenIndex) return;
-    
-    // Determine transition direction
-    const isMovingForward = targetIndex > currentScreenIndex;
-    
-    // Set the target screen index first
-    setCurrentScreenIndex(targetIndex);
-    
-    // Navigate with appropriate direction parameter and screen index
-    const direction = isMovingForward ? 'right' : 'left';
-    navigation.navigate(screens[targetIndex], { direction, screenIndex: targetIndex });
-  };
-
-  const features = [
-    {
-      icon: 'location-on',
-      title: 'Quick Matching',
-      description: 'Find available courts and players instantly',
-    },
-    {
-      icon: 'people',
-      title: 'Community',
-      description: 'Connect with local pickleball enthusiasts',
-    },
-    {
-      icon: 'emoji-events',
-      title: 'Tournaments',
-      description: 'Participate in organized competitions',
-    },
-    {
-      icon: 'update',
-      title: 'Real-time Updates',
-      description: 'Get live court availability and scores',
-    },
-  ];
 
   return (
     <View style={styles.container}>
-      {/* Updated StatusBar color */}
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Hero Section with Blurred Background */}
-        <View style={styles.heroSection}>
-          <Image
-            source={{uri: 'https://images.unsplash.com/photo-1559826263-a639d6fb4f0?auto=format&fit=crop&w=1200&q=80'}}
-            style={styles.heroImage}
-            resizeMode="cover"
-            blurRadius={10}
-          />
-          <BlurView intensity={80} style={styles.Overlay} />
-          <View style={styles.heroOverlay}>
-            <Text style={styles.welcomeText}>Welcome back, {getUserFirstName()}! 👋</Text>
-            <Text style={styles.heroTitle}>FIND A LOCAL COURT NEAR YOU</Text>
-            <Text style={styles.heroSubtitle}>
-              Connect with pickleball courts in your area and start playing today
+        <LinearGradient
+          colors={[Colors.slate950, Colors.slate900]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroSection}
+        >
+          <View style={styles.greetingContainer}>
+            <Text style={styles.greeting}>Welcome back!</Text>
+            <Text style={styles.greetingSubtext}>
+              {user?.email?.split('@')[0] || 'Player'}
             </Text>
-            <TouchableOpacity
-              style={styles.findCourtsButton}
-              onPress={() => navigation.navigate('FindCourts')}>
-              <MaterialIcons name="search" size={20} color={thematicBlue} />
-              <Text style={styles.findCourtsText}>Find Courts</Text>
-            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Features Section */}
-        <View style={styles.featuresSection}>
-          <Text style={styles.sectionTitle}>Why Choose PicklePlay?</Text>
-          {features.map((feature, index) => (
-            <View key={index} style={styles.featureCard}>
-              <View style={styles.featureIcon}>
-                <MaterialIcons
-                  name={feature.icon}
-                  size={30}
-                  color={thematicBlue}
-                />
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>4.8</Text>
+              <Text style={styles.statLabel}>Rating</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>24</Text>
+              <Text style={styles.statLabel}>Games</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>12</Text>
+              <Text style={styles.statLabel}>Wins</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {courtsLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.lime600} />
+          </View>
+        ) : (
+          <>
+            <View style={styles.heroCarousel}>
+              <Image
+                source={{ uri: HERO_IMAGES[activeImageIndex] }}
+                style={styles.heroImage}
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(2, 6, 23, 0.8)']}
+                style={styles.heroOverlay}
+              />
+              <View style={styles.carouselDots}>
+                {HERO_IMAGES.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.dot,
+                      index === activeImageIndex && styles.activeDot,
+                    ]}
+                  />
+                ))}
               </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>{feature.title}</Text>
-                <Text style={styles.featureDescription}>{feature.description}</Text>
+              <TouchableOpacity
+                style={styles.heroButton}
+                onPress={() => navigateToScreen('FindCourts')}
+              >
+                <Text style={styles.heroButtonText}>Explore Courts</Text>
+                <Ionicons name="arrow-forward" size={16} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.publicStatsContainer}>
+              <View style={styles.publicStatItem}>
+                <Text style={styles.publicStatNumber}>5,000+</Text>
+                <Text style={styles.publicStatLabel}>Courts Available</Text>
+              </View>
+              <View style={styles.publicStatItem}>
+                <Text style={styles.publicStatNumber}>50K+</Text>
+                <Text style={styles.publicStatLabel}>Active Players</Text>
+              </View>
+              <View style={styles.publicStatItem}>
+                <Text style={styles.publicStatNumber}>100K+</Text>
+                <Text style={styles.publicStatLabel}>Games Played</Text>
               </View>
             </View>
-          ))}
-        </View>
 
-        {/* Apply as Professional Section */}
-        {!isVerifiedCoach && !isVerifiedCourtOwner && !coachApplicationPending && !courtOwnerApplicationPending && (
-          <View style={styles.applyCoachSection}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
-              style={styles.applyCoachGradient}
-            >
+            <View style={styles.quickLinksContainer}>
               <TouchableOpacity
-                style={styles.applyCoachButton}
-                onPress={handleApplyAsProfessional}
-                activeOpacity={0.8}
+                style={styles.quickLink}
+                onPress={() => navigateToScreen('FindCourts')}
               >
-                <View style={styles.applyCoachLeft}>
-                  <View style={styles.applyCoachIconWrapper}>
-                    <MaterialIcons name="workspace-premium" size={28} color="#667eea" />
+                <View style={styles.quickLinkIcon}>
+                  <Ionicons name="map" size={24} color={Colors.lime600} />
+                </View>
+                <Text style={styles.quickLinkText}>Find Courts</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickLink}
+                onPress={() => navigateToScreen('ReceiptHistory')}
+              >
+                <View style={styles.quickLinkIcon}>
+                  <Ionicons name="calendar" size={24} color={Colors.lime600} />
+                </View>
+                <Text style={styles.quickLinkText}>My Bookings</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickLink}
+                onPress={() => navigateToScreen('Coaches')}
+              >
+                <View style={styles.quickLinkIcon}>
+                  <Ionicons name="school" size={24} color={Colors.lime600} />
+                </View>
+                <Text style={styles.quickLinkText}>Find Coach</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickLink}
+                onPress={() => navigateToScreen('Tournaments')}
+              >
+                <View style={styles.quickLinkIcon}>
+                  <Ionicons name="trophy" size={24} color={Colors.lime600} />
+                </View>
+                <Text style={styles.quickLinkText}>Tournaments</Text>
+              </TouchableOpacity>
+
+              {isVerifiedCoach && (
+                <TouchableOpacity
+                  style={styles.quickLink}
+                  onPress={() => navigateToScreen('ProfessionalDashboard')}
+                >
+                  <View style={styles.quickLinkIcon}>
+                    <Ionicons name="school" size={24} color={Colors.lime600} />
                   </View>
-                  <View style={styles.applyCoachTextWrapper}>
-                    <Text style={styles.applyCoachTitle}>Apply as Professional</Text>
-                    <Text style={styles.applyCoachDescription}>
-                      🎓 Become a coach or 🏟️ List your court
+                  <Text style={styles.quickLinkText}>Coach</Text>
+                </TouchableOpacity>
+              )}
+
+              {isVerifiedCourtOwner && (
+                <TouchableOpacity
+                  style={styles.quickLink}
+                  onPress={() => navigateToScreen('ProfessionalDashboard')}
+                >
+                  <View style={styles.quickLinkIcon}>
+                    <Ionicons name="storefront" size={24} color={Colors.lime600} />
+                  </View>
+                  <Text style={styles.quickLinkText}>Courts</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {courts.length > 0 && (
+              <View style={styles.courtsSectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="star" size={20} color={Colors.lime600} />
+                  <Text style={styles.sectionTitle}>Popular Courts</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  scrollEnabled={true}
+                  nestedScrollEnabled={true}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.courtsScroll}
+                >
+                  {courts.map((court) => (
+                    <TouchableOpacity
+                      key={court.id}
+                      style={styles.courtCardSmall}
+                      onPress={() =>
+                        navigation.navigate('CourtDetail', { court })
+                      }
+                    >
+                      <Image
+                        source={{
+                          uri: court.cover_image || 'https://picsum.photos/seed/court1/300/300',
+                        }}
+                        style={styles.courtImageSmall}
+                      />
+                      <View style={styles.courtCardContent}>
+                        <Text style={styles.courtNameSmall} numberOfLines={2}>
+                          {court.name}
+                        </Text>
+                        <View style={styles.ratingContainer}>
+                          <Ionicons name="star" size={12} color={Colors.lime600} />
+                          <Text style={styles.ratingText}>
+                            {court.rating?.toFixed(1) || '4.5'}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <View style={styles.promoSection}>
+              <LinearGradient
+                colors={[Colors.lime600, Colors.lime700]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.promoBanner}
+              >
+                <View style={styles.promoContent}>
+                  <Ionicons name="flash" size={32} color={Colors.white} />
+                  <View style={styles.promoText}>
+                    <Text style={styles.promoTitle}>Special Offer</Text>
+                    <Text style={styles.promoDescription}>
+                      Get 20% off on your next booking!
                     </Text>
                   </View>
                 </View>
-                <View style={styles.applyCoachArrow}>
-                  <MaterialIcons name="arrow-forward" size={24} color="#fff" />
-                </View>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
+                <TouchableOpacity style={styles.promoButton}>
+                  <Text style={styles.promoButtonText}>Claim</Text>
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+
+            {/* Removed larger professional banners — moved into top quick links */}
+          </>
         )}
-
-        {/* Pending Professional Application */}
-        {(coachApplicationPending || courtOwnerApplicationPending) && (
-          <View style={styles.applyCoachSection}>
-            <View style={styles.pendingCoachCard}>
-              <View style={styles.pendingIconWrapper}>
-                <MaterialIcons name="pending" size={28} color="#FF9800" />
-              </View>
-              <View style={styles.pendingCoachContent}>
-                <Text style={styles.pendingCoachTitle}>Professional Application Under Review ⏳</Text>
-                <Text style={styles.pendingCoachDescription}>
-                  Our team is reviewing your {coachApplicationPending ? 'coach' : 'court owner'} application. You'll receive a notification once it's approved!
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Popular Courts Section */}
-        <View style={styles.courtsSection}>
-          <Text style={styles.sectionTitle}>Popular Courts</Text>
-          {courtsLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={thematicBlue} />
-              <Text style={styles.loadingText}>Loading courts...</Text>
-            </View>
-          ) : courts.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="location-off" size={32} color={thematicBlue} />
-              <Text style={styles.emptyText}>No courts available</Text>
-            </View>
-          ) : (
-            courts.map((court, index) => (
-            <TouchableOpacity
-              key={court.id || index}
-              style={styles.courtCard}
-              onPress={() => navigation.navigate('CourtDetail', {court})}>
-              <Image
-                source={{uri: court.imageUrl}}
-                style={styles.courtImage}
-                resizeMode="cover"
-              />
-              <View style={styles.courtInfo}>
-                <Text style={styles.courtName}>{court.name}</Text>
-                <View style={styles.courtLocation}>
-                  <MaterialIcons
-                    name="location-on"
-                    size={16}
-                    color={thematicBlue}
-                  />
-                  <Text style={styles.courtLocationText}>{court.location}</Text>
-                </View>
-                <StarRating rating={court.rating} reviewCount={court.reviewCount} size={12} />
-              </View>
-            </TouchableOpacity>
-          ))
-          )}
-        </View>
-
-        {/* CTA Section */}
-        
       </ScrollView>
-
-      {/* Professional Application Modal */}
-      <ProfessionalApplicationModal
-        visible={showApplicationModal}
-        onClose={() => {
-          setShowApplicationModal(false);
-          setApplicationType(null);
-        }}
-        applicationType={applicationType}
-        userId={user?.id}
-        onSuccess={handleApplicationSuccess}
-      />
-
     </View>
   );
 };
@@ -358,324 +318,313 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
   },
   heroSection: {
-    backgroundColor: '#063d7a',
-    margin: 15,
-    padding: 25,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    paddingTop: 50,
+  },
+  greetingContainer: {
+    marginBottom: 20,
+  },
+  greeting: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -0.5,
+  },
+  greetingSubtext: {
+    fontSize: 14,
+    color: Colors.slate300,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.white + '15',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     alignItems: 'center',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.lime600,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: Colors.slate300,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: Colors.white + '30',
+  },
+  loadingContainer: {
+    padding: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroCarousel: {
+    height: 180,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  videoBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   heroImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  blurOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
+    height: '100%',
   },
   heroOverlay: {
-    position: 'relative',
-    zIndex: 1,
-    alignItems: 'center',
-    width: '100%',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
   },
-  welcomeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.white,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: Colors.white,
-    textAlign: 'center',
-    marginBottom: 0,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: Colors.white,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  findCourtsButton: {
+  carouselDots: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    backgroundColor: '#a3ff01',
-    paddingHorizontal: 25,
-    paddingVertical: 12,
-    borderRadius: 25,
-    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  findCourtsText: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.white + '60',
   },
-  featuresSection: {
-    margin: 15,
+  activeDot: {
+    width: 18,
+    backgroundColor: Colors.lime600,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
-  },
-  featureCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    padding: 15,
-    marginBottom: 10,
+  heroButton: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: Colors.lime600,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    gap: 6,
   },
-  featureIcon: {
+  heroButtonText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  quickLinksContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+  },
+  quickLink: {
+    alignItems: 'center',
+    width: '30%',
+  },
+  quickLinkIcon: {
     width: 50,
     height: 50,
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 25,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
-  },
-  featureContent: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: thematicBlue,
-    marginBottom: 3,
-  },
-  featureDescription: {
-    fontSize: 13,
-    color: thematicBlue,
-    lineHeight: 18,
-  },
-  courtsSection: {
-    margin: 15,
-  },
-  courtCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 8,
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickLinkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.slate950,
+    textAlign: 'center',
+  },
+  courtsSectionContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 8,
+    letterSpacing: -0.3,
+  },
+  courtsScroll: {
+    gap: 10,
+  },
+  courtCardSmall: {
+    width: 140,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
   },
-  courtImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    marginRight: 12,
-    backgroundColor: Colors.surfaceAlt,
+  courtImageSmall: {
+    width: '100%',
+    height: 100,
+    backgroundColor: Colors.slate200,
   },
-  courtInfo: {
-    flex: 1,
+  courtCardContent: {
+    padding: 8,
   },
-  courtName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: thematicBlue,
-    marginBottom: 5,
+  courtNameSmall: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.slate950,
+    marginBottom: 4,
   },
-  courtLocation: {
+  ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  courtLocationText: {
-    fontSize: 13,
-    color: thematicBlue,
-    marginLeft: 3,
-  },
-  courtRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    gap: 2,
   },
   ratingText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 3,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.lime600,
   },
-  ctaSection: {
-    backgroundColor: thematicBlue,
-    margin: 15,
-    padding: 25,
-    borderRadius: 12,
-    alignItems: 'center',
+  promoSection: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
-  ctaText: {
-    fontSize: 16,
-    color: Colors.white,
-    textAlign: 'center',
-    marginBottom: 15,
-    fontWeight: '500',
-  },
-  ctaButton: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  ctaButtonText: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: thematicBlue,
-  },
-  emptyContainer: {
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: thematicBlue,
-  },
-  applyCoachSection: {
-    paddingHorizontal: 15,
-    marginVertical: 20,
-  },
-  applyCoachGradient: {
-    borderRadius: 20,
-    elevation: 8,
-    shadowColor: '#764ba2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  applyCoachButton: {
+  promoBanner: {
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
   },
-  applyCoachLeft: {
+  promoContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
-  applyCoachIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  applyCoachTextWrapper: {
+  promoText: {
     flex: 1,
   },
-  applyCoachTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 6,
-    letterSpacing: 0.3,
-  },
-  applyCoachDescription: {
-    fontSize: 13,
-    color: '#fff',
-    opacity: 0.95,
-    lineHeight: 18,
-  },
-  applyCoachArrow: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  pendingCoachCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 20,
-    borderLeftWidth: 5,
-    borderLeftColor: '#FF9800',
-    elevation: 4,
-    shadowColor: '#FF9800',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-  },
-  pendingIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FFF3E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  pendingCoachContent: {
-    flex: 1,
-  },
-  pendingCoachTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-  },
-  pendingCoachDescription: {
+  promoTitle: {
     fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    fontWeight: '900',
+    color: Colors.white,
+    marginBottom: 2,
+  },
+  promoDescription: {
+    fontSize: 12,
+    color: Colors.white + '90',
+    fontWeight: '500',
+  },
+  promoButton: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  promoButtonText: {
+    color: Colors.lime600,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  professionalSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  professionalBanner: {
+    borderRadius: 16,
+    padding: 16,
+  },
+  professionalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  professionalButtonLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  professionalIconWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  professionalButtonText: {
+    flex: 1,
+  },
+  professionalTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: Colors.white,
+    marginBottom: 2,
+  },
+  professionalDescription: {
+    fontSize: 12,
+    color: Colors.white + '90',
+    fontWeight: '500',
+  },
+  publicStatsContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: Colors.white + '08',
+    borderRadius: 14,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: Colors.slate700,
+  },
+  publicStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  publicStatNumber: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.lime600,
+    letterSpacing: -0.5,
+  },
+  publicStatLabel: {
+    fontSize: 10,
+    color: Colors.slate400,
+    marginTop: 4,
+    fontWeight: '600',
   },
 });
 

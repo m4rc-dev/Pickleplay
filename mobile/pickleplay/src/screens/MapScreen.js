@@ -13,28 +13,25 @@ import {
   Linking,
   Alert,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import Colors from '../constants/Colors';
 import { getCourts } from '../services/courtService';
 import { GOOGLE_MAPS_API_KEY } from '../constants/Config';
 
-// Conditionally import WebView only on supported platforms
 let WebView;
 if (Platform.OS !== 'web') {
   WebView = require('react-native-webview').WebView;
 }
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
-
-// Default image for courts without images
 const DEFAULT_COURT_IMAGE = 'https://picsum.photos/seed/court1/300/300';
 
 const MapScreen = ({ navigation, route, onBackNavigation }) => {
   const insets = useSafeAreaInsets();
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [selectedCourt, setSelectedCourt] = useState(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [courts, setCourts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,20 +42,19 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
   const [destinationCourt, setDestinationCourt] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  const [showCourtsPanel, setShowCourtsPanel] = useState(true);
   const webViewRef = useRef(null);
 
-  // Check if we're in directions mode from route params
   useEffect(() => {
     if (route?.params?.showDirections && route?.params?.court) {
       setDirectionsMode(true);
       setDestinationCourt(route.params.court);
-      setUserLocation(null); // Reset user location
+      setUserLocation(null);
       setLocationError(null);
       getUserLocation();
     }
   }, [route?.params]);
 
-  // Get user's current location
   const getUserLocation = async () => {
     try {
       setLocationLoading(true);
@@ -66,7 +62,7 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
       
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocationError('Location permission denied. Please enable location access.');
+        setLocationError('Location permission denied');
         setLocationLoading(false);
         return;
       }
@@ -82,12 +78,11 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
       setLocationLoading(false);
     } catch (err) {
       console.error('Error getting location:', err);
-      setLocationError('Could not get your location. Please try again.');
+      setLocationError('Could not get your location');
       setLocationLoading(false);
     }
   };
 
-  // Fetch courts from Supabase
   const fetchCourts = async () => {
     try {
       setError(null);
@@ -95,11 +90,10 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
       
       if (fetchError) {
         console.error('Error fetching courts:', fetchError);
-        setError('Failed to load courts. Please try again.');
+        setError('Failed to load courts');
         return;
       }
       
-      // Transform the data for map display - only courts with coordinates
       const transformedCourts = (data || [])
         .filter(court => court.latitude && court.longitude)
         .map(court => ({
@@ -130,7 +124,7 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
       setCourts(transformedCourts);
     } catch (err) {
       console.error('Error fetching courts:', err);
-      setError('Failed to load courts. Please try again.');
+      setError('Failed to load courts');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -141,15 +135,71 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
     fetchCourts();
   }, []);
 
+  // Re-inject markers when map loads or data changes
+  useEffect(() => {
+    if (mapLoaded && webViewRef.current && (courts.length > 0 || directionsMode)) {
+      setTimeout(() => {
+        const markersJS = courts.length > 0 ? courts
+          .map(
+            (court, index) => {
+              if (!court.latitude || !court.longitude) {
+                return '';
+              }
+              
+              const varName = `court${index}`;
+              
+              return `
+          const marker_${varName} = new google.maps.Marker({
+            position: { lat: ${court.latitude}, lng: ${court.longitude} },
+            map: map,
+            title: "${(court.name || '').replace(/"/g, '\\"')}",
+            icon: {
+              url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+              scaledSize: new google.maps.Size(40, 40)
+            }
+          });
+          
+          marker_${varName}.addListener('click', function() {
+            try {
+              if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'courtMarkerClick',
+                  court: {
+                    id: "${court.id}",
+                    name: "${(court.name || '').replace(/"/g, '\\"')}",
+                    location: "${(court.location || '').replace(/"/g, '\\"')}",
+                    rating: ${court.rating || 0},
+                    image: "${(court.image || '').replace(/"/g, '\\"')}",
+                    latitude: ${court.latitude},
+                    longitude: ${court.longitude},
+                    phoneNumber: "${(court.phoneNumber || '').replace(/"/g, '\\"')}"
+                  }
+                }));
+              }
+            } catch (e) {
+              console.error('Error sending court data:', e);
+            }
+          });
+        `;
+            }
+          )
+          .filter(Boolean)
+          .join('\n') : '';
+        
+        if (markersJS) {
+          webViewRef.current.injectJavaScript(markersJS + '; true;');
+        }
+      }, 100);
+    }
+  }, [mapLoaded, courts, directionsMode]);
+
   const onRefresh = () => {
     setRefreshing(true);
     setMapLoaded(false);
     fetchCourts();
   };
 
-  // Calculate map center based on courts or default to Cebu City
   const getMapCenter = () => {
-    // If in directions mode with user location, center between user and destination
     if (directionsMode && userLocation && destinationCourt) {
       return {
         lat: (userLocation.lat + destinationCourt.latitude) / 2,
@@ -157,32 +207,23 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
       };
     }
     if (courts.length === 0) {
-      return { lat: 10.3173, lng: 123.8854 }; // Default to Cebu City
+      return { lat: 10.3173, lng: 123.8854 };
     }
     const avgLat = courts.reduce((sum, c) => sum + c.latitude, 0) / courts.length;
     const avgLng = courts.reduce((sum, c) => sum + c.longitude, 0) / courts.length;
     return { lat: avgLat, lng: avgLng };
   };
 
-  // Generate HTML for Google Maps with Directions support
   const generateMapHTML = () => {
     const center = getMapCenter();
-    
-    console.log('Generating map HTML with API key:', GOOGLE_MAPS_API_KEY ? 'Present' : 'Missing');
-    console.log('Number of courts:', courts.length);
-    console.log('Directions mode:', directionsMode);
-    console.log('Map center:', center);
     
     const markersJS = courts.length > 0 ? courts
       .map(
         (court, index) => {
-          // Ensure coordinates are valid
           if (!court.latitude || !court.longitude) {
-            console.log('Skipping court without coordinates:', court.name);
             return '';
           }
           
-          // Use index for valid JS variable names (UUIDs have hyphens which are invalid)
           const varName = `court${index}`;
           
           return `
@@ -191,32 +232,39 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         map: map,
         title: "${(court.name || '').replace(/"/g, '\\"')}",
         icon: {
-          url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+          url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
           scaledSize: new google.maps.Size(40, 40)
         }
       });
       
-      const infoWindow_${varName} = new google.maps.InfoWindow({
-        content: '<div style="font-family: Arial; text-align: center; padding: 8px;"><strong style="color: #0A56A7;">${(court.name || '').replace(/'/g, "\\'")}</strong><br/><span style="color: #666;">${(court.location || '').replace(/'/g, "\\'")}</span><br/>⭐ ${court.rating?.toFixed(1) || '0.0'}</div>'
-      });
-      
       marker_${varName}.addListener('click', function() {
-        infoWindow_${varName}.open(map, marker_${varName});
+        try {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'courtMarkerClick',
+              court: {
+                id: "${court.id}",
+                name: "${(court.name || '').replace(/"/g, '\\"')}",
+                location: "${(court.location || '').replace(/"/g, '\\"')}",
+                rating: ${court.rating || 0},
+                image: "${(court.image || '').replace(/"/g, '\\"')}",
+                latitude: ${court.latitude},
+                longitude: ${court.longitude},
+                phoneNumber: "${(court.phoneNumber || '').replace(/"/g, '\\"')}"
+              }
+            }));
+          }
+        } catch (e) {
+          console.error('Error sending court data:', e);
+        }
       });
     `;
         }
       )
       .filter(Boolean)
       .join('\n') : '';
-    
-    console.log('Generated markers code length:', markersJS.length);
-    if (markersJS) {
-      console.log('Markers code preview:', markersJS.substring(0, 200));
-    }
 
-    // Directions code if in directions mode - Uses OSRM (free routing service)
     const directionsCode = (directionsMode && userLocation && destinationCourt) ? `
-      // Add user location marker (green - starting point)
       const userMarker = new google.maps.Marker({
         position: { lat: ${userLocation.lat}, lng: ${userLocation.lng} },
         map: map,
@@ -224,7 +272,7 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 12,
-          fillColor: '#4CAF50',
+          fillColor: '#a3e635',
           fillOpacity: 1,
           strokeColor: '#fff',
           strokeWeight: 3
@@ -232,19 +280,17 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         zIndex: 1000
       });
       
-      // Add a pulsing effect circle around user location
       const userCircle = new google.maps.Circle({
         center: { lat: ${userLocation.lat}, lng: ${userLocation.lng} },
         radius: 50,
-        fillColor: '#4CAF50',
+        fillColor: '#a3e635',
         fillOpacity: 0.2,
-        strokeColor: '#4CAF50',
+        strokeColor: '#a3e635',
         strokeOpacity: 0.5,
         strokeWeight: 1,
         map: map
       });
       
-      // Add destination marker (red - end point)
       const destMarker = new google.maps.Marker({
         position: { lat: ${destinationCourt.latitude}, lng: ${destinationCourt.longitude} },
         map: map,
@@ -256,15 +302,13 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         zIndex: 1001
       });
       
-      // Add info window for destination
       const destInfoWindow = new google.maps.InfoWindow({
-        content: '<div style="font-family: Arial, sans-serif; padding: 8px; text-align: center;"><strong style="color: #0A56A7; font-size: 14px;">${destinationCourt.name?.replace(/'/g, "\\'") || 'Destination'}</strong></div>'
+        content: '<div style="font-family: Arial, sans-serif; padding: 8px; text-align: center;"><strong style="color: #a3e635; font-size: 14px;">${destinationCourt.name?.replace(/'/g, "\\'") || 'Destination'}</strong></div>'
       });
       destMarker.addListener('click', () => {
         destInfoWindow.open(map, destMarker);
       });
       
-      // Function to show route info panel
       function showRouteInfo(distanceText, timeText, isApproximate) {
         const existingInfo = document.getElementById('route-info');
         if (existingInfo) existingInfo.remove();
@@ -275,7 +319,7 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         infoDiv.innerHTML = \`
           <div style="font-family: Arial, sans-serif;">
             <div style="display: flex; align-items: center; margin-bottom: 12px;">
-              <div style="width: 12px; height: 12px; background: #4CAF50; border-radius: 50%; margin-right: 8px;"></div>
+              <div style="width: 12px; height: 12px; background: #a3e635; border-radius: 50%; margin-right: 8px;"></div>
               <span style="font-size: 13px; color: #666;">Your Location</span>
             </div>
             <div style="display: flex; align-items: center; margin-bottom: 15px;">
@@ -284,12 +328,12 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
             </div>
             <div style="display: flex; justify-content: space-around; background: #f5f5f5; padding: 15px; border-radius: 10px;">
               <div style="text-align: center;">
-                <div style="font-size: 22px; font-weight: bold; color: #0A56A7;">\${distanceText}</div>
+                <div style="font-size: 22px; font-weight: bold; color: #a3e635;">\${distanceText}</div>
                 <div style="font-size: 12px; color: #666; margin-top: 4px;">Distance</div>
               </div>
               <div style="width: 1px; background: #ddd;"></div>
               <div style="text-align: center;">
-                <div style="font-size: 22px; font-weight: bold; color: #0A56A7;">\${timeText}</div>
+                <div style="font-size: 22px; font-weight: bold; color: #a3e635;">\${timeText}</div>
                 <div style="font-size: 12px; color: #666; margin-top: 4px;">Est. Time</div>
               </div>
             </div>
@@ -299,7 +343,6 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         document.body.appendChild(infoDiv);
       }
       
-      // Function to draw straight line fallback
       function drawStraightLine() {
         const routeLine = new google.maps.Polyline({
           path: [
@@ -307,13 +350,12 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
             { lat: ${destinationCourt.latitude}, lng: ${destinationCourt.longitude} }
           ],
           geodesic: true,
-          strokeColor: '#0A56A7',
+          strokeColor: '#a3e635',
           strokeOpacity: 0.8,
           strokeWeight: 5,
           map: map
         });
         
-        // Calculate straight-line distance using Haversine formula
         const R = 6371;
         const dLat = (${destinationCourt.latitude} - ${userLocation.lat}) * Math.PI / 180;
         const dLon = (${destinationCourt.longitude} - ${userLocation.lng}) * Math.PI / 180;
@@ -329,13 +371,11 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         showRouteInfo(distanceText, timeText, true);
       }
       
-      // Fit bounds to show both points
       const bounds = new google.maps.LatLngBounds();
       bounds.extend({ lat: ${userLocation.lat}, lng: ${userLocation.lng} });
       bounds.extend({ lat: ${destinationCourt.latitude}, lng: ${destinationCourt.longitude} });
       map.fitBounds(bounds, { top: 50, bottom: 150, left: 30, right: 30 });
       
-      // Use OSRM (Open Source Routing Machine) - Free routing service
       const osrmUrl = 'https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${destinationCourt.longitude},${destinationCourt.latitude}?overview=full&geometries=geojson';
       
       fetch(osrmUrl)
@@ -348,17 +388,15 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
               lng: coord[0]
             }));
             
-            // Draw the route polyline
             const routePath = new google.maps.Polyline({
               path: coordinates,
               geodesic: true,
-              strokeColor: '#0A56A7',
+              strokeColor: '#a3e635',
               strokeOpacity: 0.9,
               strokeWeight: 6,
               map: map
             });
             
-            // Calculate distance and duration
             const distanceKm = route.distance / 1000;
             const distanceText = distanceKm < 1 ? (route.distance).toFixed(0) + ' m' : distanceKm.toFixed(1) + ' km';
             const durationMin = Math.ceil(route.duration / 60);
@@ -366,12 +404,10 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
             
             showRouteInfo(distanceText, timeText, false);
           } else {
-            console.error('OSRM routing failed, using straight line');
             drawStraightLine();
           }
         })
         .catch(error => {
-          console.error('Error fetching route:', error);
           drawStraightLine();
         });
     ` : '';
@@ -436,7 +472,7 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
           
           function gm_authFailure() {
             document.getElementById('error').style.display = 'block';
-            document.getElementById('error-msg').innerText = 'Google Maps API authentication failed. Check API key restrictions.';
+            document.getElementById('error-msg').innerText = 'Maps authentication failed';
           }
           
           function panToLocation(lat, lng) {
@@ -446,13 +482,12 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
             }
           }
         </script>
-        <script src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=initMap" async defer onerror="document.getElementById('error').style.display='block';document.getElementById('error-msg').innerText='Failed to load Google Maps script';"></script>
+        <script src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=initMap" async defer onerror="document.getElementById('error').style.display='block'; document.getElementById('error-msg').innerText='Failed to load Google Maps';"></script>
       </body>
       </html>
     `;
   };
 
-  // Clear directions mode
   const clearDirections = () => {
     setDirectionsMode(false);
     setDestinationCourt(null);
@@ -461,19 +496,13 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
 
   const handleCardPress = (court) => {
     setSelectedMarker(court.id);
-    // Zoom map to selected location without navigating away
     setTimeout(() => {
       if (webViewRef.current && mapLoaded) {
-        const jsCode = `
-          panToLocation(${court.latitude}, ${court.longitude});
-          true;
-        `;
-        webViewRef.current.injectJavaScript(jsCode);
+        webViewRef.current.injectJavaScript(`panToLocation(${court.latitude}, ${court.longitude}); true;`);
       }
     }, 100);
   };
 
-  // Navigate to court detail - separate function for explicit navigation
   const handleViewDetails = (court) => {
     navigation.navigate('CourtDetail', {
       court: {
@@ -499,224 +528,149 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
         country: court.country,
         latitude: court.latitude,
         longitude: court.longitude,
-      }
+      },
     });
   };
 
-  // Handle back from directions mode
-  const handleBackFromDirections = () => {
-    clearDirections();
-    if (navigation.canGoBack()) {
-      navigation.goBack();
+  const handleCallCourt = (court) => {
+    if (court.phoneNumber) {
+      Linking.openURL(`tel:${court.phoneNumber}`);
+    }
+  };
+
+  const handleDirections = (court) => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL(`maps://maps.apple.com/?daddr=${court.latitude},${court.longitude}`);
+    } else {
+      Linking.openURL(`geo:${court.latitude},${court.longitude}`);
     }
   };
 
   return (
-    <View style={[styles.container, directionsMode && { paddingTop: 0 }]}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
-      {/* Directions Mode Header */}
       {directionsMode && (
-        <View style={[styles.directionsHeader, { paddingTop: insets.top + 10 }]}>
-          <TouchableOpacity style={styles.backFromDirectionsButton} onPress={handleBackFromDirections}>
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.directionsHeaderText}>
-            <Text style={styles.directionsTitle}>Directions</Text>
-            <Text style={styles.directionsSubtitle} numberOfLines={1}>
-              To: {destinationCourt?.name || 'Court'}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.clearDirectionsButton} onPress={clearDirections}>
-            <MaterialIcons name="close" size={20} color={thematicBlue} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Interactive Map - Full screen in directions mode */}
-      <View style={[styles.mapWrapper, directionsMode && styles.mapWrapperFullScreen]}>
-        {/* Loading state for initial court fetch only */}
-        {loading && courts.length === 0 ? (
-          <View style={styles.mapLoadingContainer}>
-            <ActivityIndicator size="large" color={thematicBlue} />
-            <Text style={styles.mapLoadingText}>Loading courts...</Text>
-          </View>
-        ) : directionsMode && locationLoading ? (
-          <View style={styles.mapLoadingContainer}>
-            <ActivityIndicator size="large" color={thematicBlue} />
-            <Text style={styles.mapLoadingText}>Getting your location...</Text>
-            <Text style={styles.mapLoadingSubtext}>
-              Please make sure location services are enabled
-            </Text>
-          </View>
-        ) : directionsMode && locationError ? (
-          /* Location error state */
-          <View style={styles.mapLoadingContainer}>
-            <MaterialIcons name="location-off" size={48} color={thematicBlue} />
-            <Text style={styles.locationErrorText}>{locationError}</Text>
-            <TouchableOpacity style={styles.retryLocationButton} onPress={getUserLocation}>
-              <MaterialIcons name="refresh" size={18} color="#fff" />
-              <Text style={styles.retryLocationButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : directionsMode && !userLocation ? (
-          /* Waiting for location */
-          <View style={styles.mapLoadingContainer}>
-            <ActivityIndicator size="large" color={thematicBlue} />
-            <Text style={styles.mapLoadingText}>Waiting for location...</Text>
-          </View>
-        ) : Platform.OS === 'web' ? (
-          /* Web platform fallback */
-          <View style={styles.webMapFallback}>
-            <MaterialIcons name="map" size={64} color={thematicBlue} />
-            <Text style={styles.webMapText}>Interactive map is available on mobile</Text>
-            <Text style={styles.webMapSubtext}>
-              {directionsMode && destinationCourt 
-                ? `Getting directions to ${destinationCourt.name}`
-                : 'View court locations below'}
-            </Text>
-            {directionsMode && destinationCourt && (
-              <TouchableOpacity 
-                style={styles.openInGoogleMapsButton}
-                onPress={() => {
-                  const url = userLocation 
-                    ? `https://www.google.com/maps/dir/${userLocation.lat},${userLocation.lng}/${destinationCourt.latitude},${destinationCourt.longitude}`
-                    : `https://www.google.com/maps/search/?api=1&query=${destinationCourt.latitude},${destinationCourt.longitude}`;
-                  Linking.openURL(url);
-                }}>
-                <MaterialIcons name="open-in-new" size={18} color="#fff" />
-                <Text style={styles.openInGoogleMapsText}>Open in Google Maps</Text>
-              </TouchableOpacity>
+        <View style={styles.directionsHeader}>
+          <View style={styles.headerContent}>
+            <Text style={styles.destinationText}>{destinationCourt?.name}</Text>
+            {locationLoading && <ActivityIndicator color={Colors.lime600} size="small" />}
+            {locationError && (
+              <Text style={styles.errorText}>{locationError}</Text>
             )}
           </View>
-        ) : WebView ? (
-          <WebView
-            ref={webViewRef}
-            source={{ html: generateMapHTML() }}
-            style={styles.webView}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            scalesPageToFit={true}
-            originWhitelist={['*']}
-            mixedContentMode="always"
-            allowsInlineMediaPlayback={true}
-            geolocationEnabled={true}
-            cacheEnabled={true}
-            cacheMode="LOAD_DEFAULT"
-            onLoadStart={() => {
-              console.log('Map WebView started loading');
-            }}
-            onLoadEnd={() => {
-              console.log('Map WebView loaded successfully');
-              setMapLoaded(true);
-            }}
-            onError={(error) => {
-              console.error('WebView error:', error.nativeEvent);
-            }}
-            onHttpError={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              console.error('WebView HTTP error:', nativeEvent.statusCode, nativeEvent.description);
-            }}
-            onMessage={(event) => {
-              console.log('WebView message:', event.nativeEvent.data);
-            }}
-          />
-        ) : (
-          /* Fallback if WebView is not available */
-          <View style={styles.webMapFallback}>
-            <MaterialIcons name="error-outline" size={64} color={thematicBlue} />
-            <Text style={styles.webMapText}>Map not available</Text>
-            <Text style={styles.webMapSubtext}>Please use the mobile app to view the interactive map</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Courts List Section - Hidden in directions mode */}
-      {!directionsMode && (
-        <ScrollView 
-          style={styles.listSection} 
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[thematicBlue]}
-              tintColor={thematicBlue}
-            />
-          }
-        >
-          <Text style={styles.sectionTitle}>Nearby Courts</Text>
-          
-          {/* Error State */}
-          {error && !loading && (
-            <View style={styles.errorContainer}>
-              <MaterialIcons name="error-outline" size={32} color={thematicBlue} />
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={fetchCourts}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          {/* Empty State */}
-          {!loading && !error && courts.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="location-off" size={32} color={thematicBlue} />
-              <Text style={styles.emptyText}>No courts with locations found</Text>
-              <Text style={styles.emptySubtext}>Pull down to refresh</Text>
-            </View>
-          )}
-          
-          {/* Courts List */}
-          {!loading && !error && courts.map((court) => (
-            <View
-              key={court.id}
-              style={[
-              styles.courtCard,
-              selectedMarker === court.id && styles.courtCardSelected,
-            ]}>
-            <TouchableOpacity 
-              style={styles.courtCardMain}
-              onPress={() => handleCardPress(court)}>
-              <Image source={{ uri: court.image }} style={styles.courtImage} />
-              <View style={styles.cardContent}>
-                <Text style={styles.courtName}>{court.name}</Text>
-                <Text style={styles.courtLocation}>{court.location}</Text>
-                <Text style={styles.courtDescription} numberOfLines={1}>{court.description}</Text>
-              </View>
-            </TouchableOpacity>
-            <View style={styles.cardActions}>
-              <View style={styles.ratingBadge}>
-                <MaterialIcons name="star" size={12} color={thematicBlue} />
-                <Text style={styles.ratingText}>{court.rating?.toFixed(1) || '0.0'}</Text>
-              </View>
-              <TouchableOpacity 
-                style={styles.viewDetailsButton}
-                onPress={() => handleViewDetails(court)}>
-                <MaterialIcons name="info-outline" size={16} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-
-        {/* Map Features */}
-        <View style={styles.featuresSection}>
-          <Text style={styles.sectionTitle}>Map Features</Text>
-          <View style={styles.featureCard}>
-            <MaterialIcons name="touch-app" size={24} color={thematicBlue} />
-            <Text style={styles.featureText}>Tap a court card to locate it on the map</Text>
-          </View>
-          <View style={styles.featureCard}>
-            <MaterialIcons name="info-outline" size={24} color={thematicBlue} />
-            <Text style={styles.featureText}>Tap the info button to view court details</Text>
-          </View>
-          <View style={styles.featureCard}>
-            <MaterialIcons name="location-on" size={24} color={thematicBlue} />
-            <Text style={styles.featureText}>Click map markers for quick info</Text>
-          </View>
+          <TouchableOpacity onPress={clearDirections} style={styles.closeButton}>
+            <Ionicons name="close-circle" size={28} color={Colors.lime600} />
+          </TouchableOpacity>
         </View>
-      </ScrollView>
       )}
+
+      {Platform.OS !== 'web' && WebView ? (
+        <WebView
+          ref={webViewRef}
+          source={{ html: generateMapHTML() }}
+          onLoad={() => setMapLoaded(true)}
+          onMessage={(event) => {
+            try {
+              const message = JSON.parse(event.nativeEvent.data);
+              if (message.type === 'courtMarkerClick') {
+                setSelectedCourt(message.court);
+              }
+            } catch (error) {
+              console.error('Error parsing WebView message:', error);
+            }
+          }}
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.lime600} />
+            </View>
+          )}
+          startInLoadingState={true}
+          style={styles.webview}
+        />
+      ) : (
+        <View style={styles.webviewFallback}>
+          <Text style={styles.webviewFallbackText}>Web maps not supported</Text>
+        </View>
+      )}
+
+      {/* Floating Court Details Card */}
+      {selectedCourt && (
+        <View style={styles.floatingCardContainer}>
+          <TouchableOpacity 
+            style={styles.floatingCard}
+            activeOpacity={0.95}
+            onPress={() => navigation.navigate('CourtDetail', { court: selectedCourt })}
+          >
+            <TouchableOpacity 
+              style={styles.closeCardButton}
+              onPress={() => setSelectedCourt(null)}
+            >
+              <Ionicons name="close" size={20} color={Colors.white} />
+            </TouchableOpacity>
+
+            <Image
+              source={{ uri: selectedCourt.image || DEFAULT_COURT_IMAGE }}
+              style={styles.floatingCardImage}
+            />
+            
+            <LinearGradient
+              colors={['transparent', 'rgba(2, 6, 23, 0.8)']}
+              style={styles.floatingCardOverlay}
+            />
+
+            <View style={styles.floatingCardContent}>
+              <Text style={styles.floatingCardName} numberOfLines={2}>
+                {selectedCourt.name}
+              </Text>
+              
+              <View style={styles.floatingCardMeta}>
+                <Ionicons name="location" size={14} color={Colors.lime600} />
+                <Text style={styles.floatingCardLocation} numberOfLines={1}>
+                  {selectedCourt.location}
+                </Text>
+              </View>
+
+              <View style={styles.floatingCardRating}>
+                <Ionicons name="star" size={14} color={Colors.lime600} />
+                <Text style={styles.floatingCardRatingText}>
+                  {selectedCourt.rating?.toFixed(1) || '0.0'}
+                </Text>
+                <Text style={styles.floatingCardRatingLabel}>(Rating)</Text>
+              </View>
+
+              <View style={styles.floatingCardActions}>
+                <TouchableOpacity 
+                  style={styles.floatingCardButton}
+                  onPress={() => navigation.navigate('CourtDetail', { court: selectedCourt })}
+                >
+                  <Ionicons name="information-circle" size={16} color={Colors.white} />
+                  <Text style={styles.floatingCardButtonText}>Details</Text>
+                </TouchableOpacity>
+
+                {selectedCourt.phoneNumber && (
+                  <TouchableOpacity 
+                    style={styles.floatingCardButton}
+                    onPress={() => Linking.openURL(`tel:${selectedCourt.phoneNumber}`)}
+                  >
+                    <Ionicons name="call" size={16} color={Colors.white} />
+                    <Text style={styles.floatingCardButtonText}>Call</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  style={styles.floatingCardButton}
+                  onPress={() => navigation.navigate('Map', { showDirections: true, court: selectedCourt })}
+                >
+                  <Ionicons name="navigate" size={16} color={Colors.white} />
+                  <Text style={styles.floatingCardButtonText}>Route</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
+
     </View>
   );
 };
@@ -724,305 +678,256 @@ const MapScreen = ({ navigation, route, onBackNavigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.background,
   },
   directionsHeader: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingBottom: 12,
-    paddingHorizontal: 15,
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.slate200,
   },
-  backFromDirectionsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  directionsHeaderText: {
+  headerContent: {
     flex: 1,
-    marginLeft: 10,
   },
-  directionsTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  directionsSubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  clearDirectionsButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapWrapperFullScreen: {
-    flex: 1,
-    height: 'auto',
-  },
-  mapLoadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
-  mapLoadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: thematicBlue,
-  },
-  mapLoadingSubtext: {
-    marginTop: 5,
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    paddingHorizontal: 30,
-  },
-  locationErrorText: {
-    marginTop: 15,
-    fontSize: 14,
-    color: thematicBlue,
-    textAlign: 'center',
-    paddingHorizontal: 30,
-  },
-  retryLocationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 15,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: thematicBlue,
-    borderRadius: 20,
-    gap: 6,
-  },
-  retryLocationButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
+  destinationText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.slate950,
+    marginBottom: 4,
   },
   errorText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: thematicBlue,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: thematicBlue,
-    borderRadius: 6,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
+    color: '#ef4444',
     fontWeight: '600',
   },
-  emptyContainer: {
-    alignItems: 'center',
+  closeButton: {
+    padding: 8,
+  },
+  webview: {
+    flex: 1,
+  },
+  webviewFallback: {
+    flex: 1,
     justifyContent: 'center',
-    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  webviewFallbackText: {
+    fontSize: 16,
+    color: Colors.slate600,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.slate50,
+  },
+  courtsPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  courtsScrollView: {
+    flex: 1,
+  },
+  courtsList: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  emptyCourtsContainer: {
+    width: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyText: {
-    marginTop: 8,
     fontSize: 14,
+    color: Colors.slate600,
     fontWeight: '600',
-    color: thematicBlue,
-  },
-  emptySubtext: {
-    marginTop: 4,
-    fontSize: 12,
-    color: thematicBlue,
-    opacity: 0.7,
-  },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: thematicBlue,
-    marginLeft: 2,
-  },
-  listSection: {
-    flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 15,
-  },
-  
-  mapWrapper: {
-    height: 300,
-    backgroundColor: '#e0e0e0',
-    overflow: 'hidden',
-    borderRadius: 10,
-    margin: 15,
-    marginBottom: 0,
-  },
-  webView: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'transparent',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
   },
   courtCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    padding: 12,
-    marginBottom: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+    width: 160,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: Colors.white,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  courtCardMain: {
-    flexDirection: 'row',
-    flex: 1,
-    alignItems: 'center',
-  },
-  courtCardSelected: {
-    backgroundColor: 'rgba(163, 255, 1, 0.1)',
-    borderWidth: 2,
-    borderColor: activeColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   courtImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    marginRight: 12,
-    backgroundColor: Colors.surfaceAlt,
+    width: '100%',
+    height: 100,
+    backgroundColor: Colors.slate200,
   },
-  cardContent: {
-    flex: 1,
+  courtImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 100,
   },
-  cardActions: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  viewDetailsButton: {
-    backgroundColor: thematicBlue,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  courtCardContent: {
+    padding: 10,
+    backgroundColor: Colors.white,
+    minHeight: 40,
   },
   courtName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: thematicBlue,
-    marginBottom: 3,
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.slate950,
+    marginBottom: 4,
+  },
+  courtMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
   courtLocation: {
-    fontSize: 13,
-    color: thematicBlue,
-    marginBottom: 2,
-  },
-  courtDescription: {
     fontSize: 11,
-    color: thematicBlue,
-    opacity: 0.7,
-  },
-  distance: {
-    fontSize: 14,
+    color: Colors.slate600,
     fontWeight: '600',
-    color: thematicBlue,
-    marginLeft: 10,
+    flex: 1,
   },
-  featuresSection: {
-    margin: 15,
-  },
-  featureCard: {
+  courtRating: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 10,
     alignItems: 'center',
+    gap: 3,
+  },
+  ratingText: {
+    fontSize: 11,
+    color: Colors.lime600,
+    fontWeight: '700',
+  },
+  courtActions: {
+    flexDirection: 'row',
+    backgroundColor: Colors.slate950,
+    paddingVertical: 8,
+    justifyContent: 'space-around',
+  },
+  actionButton: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionButtonText: {
+    fontSize: 9,
+    color: Colors.white,
+    fontWeight: '700',
+  },
+  floatingCardContainer: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    zIndex: 20,
+  },
+  floatingCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: Colors.slate950,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 12,
   },
-  featureText: {
-    fontSize: 14,
-    color: thematicBlue,
-    marginLeft: 15,
-    flex: 1,
-  },
-  webMapFallback: {
-    flex: 1,
+  closeCardButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 30,
   },
-  webMapText: {
-    marginTop: 20,
-    fontSize: 16,
-    fontWeight: '600',
-    color: thematicBlue,
-    textAlign: 'center',
+  floatingCardImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: Colors.slate200,
   },
-  webMapSubtext: {
-    marginTop: 8,
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
+  floatingCardOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
   },
-  openInGoogleMapsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: thematicBlue,
-    borderRadius: 25,
+  floatingCardContent: {
+    padding: 12,
     gap: 8,
   },
-  openInGoogleMapsText: {
-    color: '#fff',
+  floatingCardName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -0.3,
   },
-  mapInitializing: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
+  floatingCardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    padding: 8,
-    borderRadius: 20,
-    gap: 6,
+    gap: 4,
   },
-  mapInitializingText: {
+  floatingCardLocation: {
     fontSize: 12,
-    color: thematicBlue,
+    color: Colors.slate300,
     fontWeight: '500',
+    flex: 1,
+  },
+  floatingCardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  floatingCardRatingText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.lime600,
+  },
+  floatingCardRatingLabel: {
+    fontSize: 11,
+    color: Colors.slate400,
+    fontWeight: '500',
+  },
+  floatingCardActions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  floatingCardButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    backgroundColor: Colors.lime600,
+    borderRadius: 8,
+  },
+  floatingCardButtonText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.2,
   },
 });
 
