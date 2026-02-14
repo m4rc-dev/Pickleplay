@@ -5,14 +5,82 @@ import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
-import { autoCancelLateBookings } from '../services/bookings';
+import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
 import Receipt from './Receipt';
 
 // Always use hourly slots for simplicity
+const ALL_HOUR_SLOTS = [
+  '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
+  '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM',
+  '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
+  '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM', '11:00 PM'
+];
+
+/** Generate time slots based on opening and closing hours (24h format strings like '08:00', '18:00') */
+const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
+  const openH = parseInt(openTime.split(':')[0], 10);
+  const closeH = parseInt(closeTime.split(':')[0], 10);
+  return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
+};
+
 const TIME_SLOTS = [
   '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
 ];
+
+/** Convert a slot start time like '08:00 AM' to a range like '08:00 AM - 09:00 AM' */
+const slotToRange = (slot: string): string => {
+  const [time, period] = slot.split(' ');
+  let [h, m] = time.split(':').map(Number);
+  if (period === 'PM' && h !== 12) h += 12;
+  else if (period === 'AM' && h === 12) h = 0;
+  const endH = (h + 1) % 24;
+  const endPeriod = endH >= 12 ? 'PM' : 'AM';
+  const endH12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
+  return `${slot} - ${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+};
+
+// ─── Philippine Time Helpers (Asia/Manila, UTC+8) ───
+const PH_TIMEZONE = 'Asia/Manila';
+
+/** Get current date/time in Philippine Time */
+const getNowPH = (): Date => {
+  const nowUtc = new Date();
+  // Convert to PH time by formatting then parsing
+  const phStr = nowUtc.toLocaleString('en-US', { timeZone: PH_TIMEZONE });
+  return new Date(phStr);
+};
+
+/** Format a Date to 'YYYY-MM-DD' using Philippine Time */
+const toPhDateStr = (date: Date): string => {
+  // Use Intl to get the PH date parts
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: PH_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return formatter.format(date); // returns 'YYYY-MM-DD'
+};
+
+/** Check if a time slot is in the past based on Philippine Time */
+const isSlotInPast = (slot: string, selectedDate: Date): boolean => {
+  const nowPH = getNowPH();
+  const todayPH = toPhDateStr(new Date());
+  const selectedPH = toPhDateStr(selectedDate);
+
+  // If selected date is in the future, no slots are in the past
+  if (selectedPH > todayPH) return false;
+  // If selected date is in the past, ALL slots are in the past
+  if (selectedPH < todayPH) return true;
+
+  // Same day — compare the slot time to current PH time
+  const [time, period] = slot.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (period === 'PM' && hours !== 12) hours += 12;
+  else if (period === 'AM' && hours === 12) hours = 0;
+
+  const currentPHHour = nowPH.getHours();
+  const currentPHMinute = nowPH.getMinutes();
+
+  // Slot is in the past if the slot start hour has already passed
+  return hours < currentPHHour || (hours === currentPHHour && minutes <= currentPHMinute);
+};
 
 // Helper to convert time slot string to Date
 const getSlotDateTime = (slot: string, baseDate: Date = new Date()): { start: Date; end: Date } => {
@@ -110,6 +178,9 @@ const Booking: React.FC = () => {
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  // Map of slot time -> booking status for slots booked by the CURRENT user on this court+date
+  const [userBookedSlots, setUserBookedSlots] = useState<Map<string, string>>(new Map());
 
 
 
@@ -325,7 +396,8 @@ const Booking: React.FC = () => {
             imageUrl: c.image_url,
             courtType: c.court_type || 'Outdoor',
             ownerId: c.owner_id,
-            cleaningTimeMinutes: c.cleaning_time_minutes || 0
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0,
+            status: c.status || 'Available'
           };
         });
         setLocationCourts(mappedCourts);
@@ -472,25 +544,40 @@ const Booking: React.FC = () => {
     if (!court) {
       setBlockedSlots(new Set());
       setBookedSlots(new Set());
+      setUserBookedSlots(new Map());
       return;
     }
 
     setIsCheckingAvailability(true);
     const newBlockedSlots = new Set<string>();
     const newBookedSlots = new Set<string>();
-    const targetDateStr = date.toISOString().split('T')[0];
+    const newUserBookedSlots = new Map<string, string>();
+    const targetDateStr = toPhDateStr(date);
 
     try {
       // 0. Auto-cancel late bookings first to free up slots immediately
       await autoCancelLateBookings();
 
+      // 0.5 Check daily booking limit (1 booking per player per day per court location)
+      const courtLocationId = court.location_id || court.locationId;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { hasReachedLimit } = await checkDailyBookingLimit(currentUser.id, targetDateStr, courtLocationId);
+        setDailyLimitReached(hasReachedLimit);
+        if (hasReachedLimit) {
+          setSelectedSlot(null);
+        }
+      } else {
+        setDailyLimitReached(false);
+      }
+
       // 1. Fetch court events (blocking events from owner)
       const { data: events } = await getCourtBlockingEvents(court.id);
 
-      // 2. Fetch existing bookings for selected date
+      // 2. Fetch existing bookings for selected date — include player_id + status to identify user's own bookings
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('start_time, end_time, status')
+        .select('start_time, end_time, status, player_id')
         .eq('court_id', court.id)
         .eq('date', targetDateStr)
         .not('status', 'eq', 'cancelled');
@@ -502,10 +589,12 @@ const Booking: React.FC = () => {
       const bookings = bookingsData || [];
 
       const cleaningTimeMinutes = court.cleaningTimeMinutes || 0;
-      console.log('Court cleaning time:', cleaningTimeMinutes, 'minutes');
 
       // Check each time slot
-      for (const slot of TIME_SLOTS) {
+      const slotsToCheck = selectedLocation?.opening_time && selectedLocation?.closing_time
+        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+        : TIME_SLOTS;
+      for (const slot of slotsToCheck) {
         const { start, end } = getSlotDateTime(slot, date);
 
         // Check against court events
@@ -513,8 +602,6 @@ const Booking: React.FC = () => {
           for (const event of events) {
             const eventStart = new Date(event.start_datetime);
             const eventEnd = new Date(event.end_datetime);
-
-            // Check if slot overlaps with event
             if (start < eventEnd && end > eventStart) {
               newBlockedSlots.add(slot);
               break;
@@ -524,25 +611,34 @@ const Booking: React.FC = () => {
 
         // Check against existing bookings (including cleaning time buffer)
         if (bookings && bookings.length > 0) {
-          const startTimeStr = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}:00`;
-
           for (const booking of bookings) {
-            // Parse booking start time
             const [bHours, bMinutes] = booking.start_time.split(':').map(Number);
             const bookingStart = new Date(date);
             bookingStart.setHours(bHours, bMinutes, 0, 0);
 
-            // Parse booking end time (use actual end_time from booking)
             const [eHours, eMinutes] = booking.end_time.split(':').map(Number);
             const bookingEnd = new Date(date);
             bookingEnd.setHours(eHours, eMinutes, 0, 0);
 
-            // Add cleaning buffer AFTER the booking ends
-            const bookingEndWithCleaning = new Date(bookingEnd.getTime() + cleaningTimeMinutes * 60 * 1000);
+            // Check if this slot exactly matches the booking (no cleaning buffer)
+            const isExactOverlap = start < bookingEnd && end > bookingStart;
 
-            // Check if this slot overlaps with the booking OR the cleaning period
-            if (start < bookingEndWithCleaning && end > bookingStart) {
-              console.log('MATCH FOUND - slot overlaps with booking + cleaning:', slot, 'booking:', booking.start_time, '-', booking.end_time, 'cleaning buffer:', cleaningTimeMinutes, 'min');
+            // Check with cleaning buffer for blocking purposes
+            const bookingEndWithCleaning = new Date(bookingEnd.getTime() + cleaningTimeMinutes * 60 * 1000);
+            const isBlockedByCleaning = start < bookingEndWithCleaning && end > bookingStart;
+
+            if (isExactOverlap) {
+              newBookedSlots.add(slot);
+
+              // Track if this specific slot belongs to the current user (exact match only)
+              if (currentUser && booking.player_id === currentUser.id) {
+                // Capitalize status: 'pending' -> 'Pending'
+                const statusLabel = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
+                newUserBookedSlots.set(slot, statusLabel);
+              }
+              break;
+            } else if (isBlockedByCleaning) {
+              // Slot is blocked by cleaning buffer — mark as booked but NOT as user's slot
               newBookedSlots.add(slot);
               break;
             }
@@ -552,6 +648,7 @@ const Booking: React.FC = () => {
 
       setBlockedSlots(newBlockedSlots);
       setBookedSlots(newBookedSlots);
+      setUserBookedSlots(newUserBookedSlots);
     } catch (err) {
       console.error('Error checking availability:', err);
     } finally {
@@ -573,11 +670,11 @@ const Booking: React.FC = () => {
       checkCourtAvailability(selectedCourt, selectedDate);
     }, 5000); // 5 seconds
 
-    // Cleanup interval when court changes or component unmounts
+    // Cleanup interval when court/date changes or component unmounts
     return () => {
       clearInterval(pollInterval);
     };
-  }, [selectedCourt]);
+  }, [selectedCourt, selectedDate]);
 
   // Real-time subscription to bookings - updates for ALL players when anyone books
   useEffect(() => {
@@ -804,12 +901,31 @@ const Booking: React.FC = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');
 
+        // 0.5 COURT OWNER CHECK - Owners cannot book their own courts (unless in Player Mode)
+        const currentActiveRole = localStorage.getItem('active_role');
+        if (selectedCourt.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER') {
+          alert('🚫 As a court owner, you cannot book your own court. Switch to Player Mode to book.');
+          setIsProcessing(false);
+          return;
+        }
+
         // 1. RATE LIMITING - 30 second cooldown
         const BOOKING_COOLDOWN_MS = 30000;
         const now = Date.now();
         if (lastBookingTime && (now - lastBookingTime) < BOOKING_COOLDOWN_MS) {
           const remainingSeconds = Math.ceil((BOOKING_COOLDOWN_MS - (now - lastBookingTime)) / 1000);
           alert(`⏱️ Please wait ${remainingSeconds} seconds before making another booking.`);
+          setIsProcessing(false);
+          return;
+        }
+
+        // 1.5 DAILY BOOKING LIMIT - Max 1 hour per player per day per court location (Philippine Time)
+        const courtLocId = selectedCourt.location_id || selectedCourt.locationId;
+        const targetDateStr_check = toPhDateStr(selectedDate);
+        const { hasReachedLimit } = await checkDailyBookingLimit(user.id, targetDateStr_check, courtLocId);
+        if (hasReachedLimit) {
+          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
+          setDailyLimitReached(true);
           setIsProcessing(false);
           return;
         }
@@ -853,7 +969,7 @@ const Booking: React.FC = () => {
 
         const startTimeFormatted = formatTime(startDateTime);
         const endTimeFormatted = formatTime(endDateTime);
-        const targetDateStr = selectedDate.toISOString().split('T')[0];
+        const targetDateStr = toPhDateStr(selectedDate);
 
         // 3. DUPLICATE SLOT CHECK - Prevent double-booking
         const { data: existingBooking, error: checkError } = await supabase
@@ -872,7 +988,38 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // 3.5. COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
+        // 3.5 FINAL DAILY LIMIT GUARD — scoped to this court location
+        const guardLocationId = selectedCourt.location_id || selectedCourt.locationId;
+        let guardQuery = supabase
+          .from('bookings')
+          .select('id, courts!inner(location_id)')
+          .eq('player_id', user.id)
+          .eq('date', targetDateStr)
+          .neq('status', 'cancelled');
+
+        if (guardLocationId) {
+          guardQuery = guardQuery.eq('courts.location_id', guardLocationId);
+        }
+
+        const { data: playerDayBookings, error: playerDayError } = await guardQuery;
+
+        if (playerDayError) {
+          console.error('Daily limit guard query failed:', playerDayError);
+          alert('🚫 Could not verify your booking limit for this location. Please try again.');
+          setIsProcessing(false);
+          return;
+        }
+
+        if (playerDayBookings && playerDayBookings.length > 0) {
+          console.log('DAILY LIMIT GUARD: Player already has', playerDayBookings.length, 'booking(s) at this location on', targetDateStr);
+          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
+          setDailyLimitReached(true);
+          setSelectedSlot(null);
+          setIsProcessing(false);
+          return;
+        }
+
+        // 3.6. COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
         const isBlocked = await isTimeSlotBlocked(
           selectedCourt.id,
           startDateTime.toISOString(),
@@ -912,7 +1059,7 @@ const Booking: React.FC = () => {
               user_id: selectedCourt.ownerId,
               actor_id: user.id,
               type: 'BOOKING',
-              message: `has booked ${selectedCourt.name} for ${selectedSlot}.`,
+              message: `has booked ${selectedCourt.name} for ${slotToRange(selectedSlot)}.`,
               booking_id: bookingData.id
             });
 
@@ -929,6 +1076,9 @@ const Booking: React.FC = () => {
 
         // Update cooldown timestamp
         setLastBookingTime(Date.now());
+
+        // Player just used their daily 1-hour limit
+        setDailyLimitReached(true);
 
         // Update booked slots to reflect the new booking
         if (selectedSlot) {
@@ -947,6 +1097,7 @@ const Booking: React.FC = () => {
           id: bookingData.id,
           courtName: selectedCourt.name,
           courtLocation: selectedCourt.location,
+          locationName: selectedLocation?.name || '',
           date: targetDateStr,
           startTime: startTimeFormatted,
           endTime: endTimeFormatted,
@@ -960,10 +1111,11 @@ const Booking: React.FC = () => {
         setShowSuccessModal(true);
         setIsBooked(true);
 
-        // Clear selection after a delay
-        setTimeout(() => {
-          setSelectedSlot(null);
-        }, 1000);
+        // Clear slot selection immediately
+        setSelectedSlot(null);
+
+        // Re-check availability and daily limit so the UI updates immediately
+        checkCourtAvailability(selectedCourt, selectedDate);
       } catch (err: any) {
         console.error('Booking error:', err);
 
@@ -1473,6 +1625,16 @@ const Booking: React.FC = () => {
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="text-lg font-black text-slate-900 tracking-tight">{selectedCourt.name}</h3>
                         <div className="flex flex-wrap gap-1.5">
+                          {selectedCourt.status && selectedCourt.status !== 'Available' && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                              selectedCourt.status === 'Fully Booked' ? 'bg-orange-50 text-orange-600'
+                              : selectedCourt.status === 'Coming Soon' ? 'bg-blue-50 text-blue-600'
+                              : selectedCourt.status === 'Maintenance' ? 'bg-amber-50 text-amber-600'
+                              : ''
+                            }`}>
+                              {selectedCourt.status}
+                            </span>
+                          )}
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${selectedCourt.type === 'Indoor'
                             ? 'bg-blue-50 text-blue-600'
                             : 'bg-emerald-50 text-emerald-600'
@@ -1533,10 +1695,13 @@ const Booking: React.FC = () => {
 
                       <div className="grid grid-cols-7 gap-1">
                         {Array.from({ length: 7 }).map((_, i) => {
-                          const date = new Date();
+                          const nowPH = getNowPH();
+                          const date = new Date(nowPH);
                           date.setDate(date.getDate() + i);
-                          const isSelected = selectedDate.toDateString() === date.toDateString();
-                          const dayName = date.toLocaleDateString(undefined, { weekday: 'short' });
+                          const dateStr = toPhDateStr(date);
+                          const selectedStr = toPhDateStr(selectedDate);
+                          const isSelected = selectedStr === dateStr;
+                          const dayName = date.toLocaleDateString('en-US', { weekday: 'short', timeZone: PH_TIMEZONE });
                           const dayNum = date.getDate();
 
                           return (
@@ -1545,6 +1710,7 @@ const Booking: React.FC = () => {
                               onClick={() => {
                                 setSelectedDate(date);
                                 setSelectedSlot(null);
+                                setDailyLimitReached(false); // Reset until checked
                               }}
                               className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 ${isSelected
                                 ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
@@ -1562,6 +1728,25 @@ const Booking: React.FC = () => {
                     </div>
 
                     {/* Time Slots */}
+                    {selectedCourt.status === 'Coming Soon' || selectedCourt.status === 'Maintenance' ? (
+                      <div className={`text-center py-8 rounded-2xl border ${
+                        selectedCourt.status === 'Coming Soon' ? 'bg-blue-50/50 border-blue-100' : 'bg-amber-50/50 border-amber-100'
+                      }`}>
+                        <div className={`w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center text-xl ${
+                          selectedCourt.status === 'Coming Soon' ? 'bg-blue-100' : 'bg-amber-100'
+                        }`}>
+                          {selectedCourt.status === 'Coming Soon' ? '🔜' : '🔧'}
+                        </div>
+                        <h4 className={`text-sm font-black uppercase tracking-wide mb-1 ${
+                          selectedCourt.status === 'Coming Soon' ? 'text-blue-700' : 'text-amber-700'
+                        }`}>{selectedCourt.status}</h4>
+                        <p className="text-[10px] text-slate-500 font-medium max-w-[200px] mx-auto leading-relaxed">
+                          {selectedCourt.status === 'Coming Soon'
+                            ? 'This court is not yet available for booking.'
+                            : 'This court is currently under maintenance.'}
+                        </p>
+                      </div>
+                    ) : (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -1580,42 +1765,88 @@ const Booking: React.FC = () => {
                         <span className="flex items-center gap-1 text-slate-500">
                           <span className="w-2 h-2 rounded-full bg-white border border-slate-200"></span> Available
                         </span>
+                        <span className="flex items-center gap-1 text-emerald-600">
+                          <span className="w-2 h-2 rounded-full bg-emerald-100 border border-emerald-300"></span> Your Slot
+                        </span>
                         <span className="flex items-center gap-1 text-amber-600">
                           <span className="w-2 h-2 rounded-full bg-amber-100 border border-amber-300"></span> Booked
                         </span>
                         <span className="flex items-center gap-1 text-red-600">
                           <span className="w-2 h-2 rounded-full bg-red-100 border border-red-300"></span> Blocked
                         </span>
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <span className="w-2 h-2 rounded-full bg-slate-100 border border-slate-300"></span> Past
+                        </span>
                       </div>
 
+                      {/* Daily Booking Limit Banner */}
+                      {dailyLimitReached && (
+                        <div className="mb-2.5 p-2.5 bg-orange-50 rounded-xl border border-orange-200 flex items-start gap-2">
+                          <AlertCircle size={14} className="text-orange-500 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-orange-700 leading-relaxed font-medium">
+                            You've already booked <span className="font-bold">1 hour</span> at this court location today. Each player is limited to <span className="font-bold">1 booking per court location per day</span>. Choose a different location/date or cancel your existing booking.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-1.5">
-                        {TIME_SLOTS.map(slot => {
+                        {(selectedLocation?.opening_time && selectedLocation?.closing_time
+                          ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                          : TIME_SLOTS
+                        ).map(slot => {
                           const isBlocked = blockedSlots.has(slot);
                           const isBookedSlot = bookedSlots.has(slot);
-                          const isUnavailable = isBlocked || isBookedSlot;
+                          const isUserSlot = userBookedSlots.has(slot);
+                          const userSlotStatus = userBookedSlots.get(slot) || '';
+                          const isPast = isSlotInPast(slot, selectedDate);
+                          const isUnavailable = isBlocked || isBookedSlot || dailyLimitReached || isPast;
 
                           return (
                             <button
                               key={slot}
                               onClick={() => !isUnavailable && setSelectedSlot(slot)}
                               disabled={isUnavailable}
-                              title={isBlocked ? 'Court event scheduled' : isBookedSlot ? 'Already booked' : 'Available'}
-                              className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isBlocked
-                                ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                              title={
+                                isUserSlot ? `Your Slot – ${userSlotStatus}`
+                                : isPast ? 'This time slot has passed'
+                                : dailyLimitReached ? 'Limit reached at this location (1/day)'
+                                : isBlocked ? 'Court event scheduled'
+                                : isBookedSlot ? 'Already booked by another player'
+                                : 'Available'
+                              }
+                              className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${
+                                isUserSlot
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-300 cursor-default'
+                                : isPast
+                                  ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                                : isBlocked
+                                  ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
                                 : isBookedSlot
                                   ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
-                                  : selectedSlot === slot
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                                }`}
+                                : selectedSlot === slot
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
+                                : dailyLimitReached
+                                  ? 'bg-orange-50/50 text-orange-300 border-orange-200 cursor-not-allowed'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                              }`}
                             >
-                              <span className={isUnavailable ? 'line-through' : ''}>
-                                {isUnavailable ? 'Court Locked In' : slot}
+                              <span className={isPast && !isUserSlot ? 'line-through' : ''}>
+                                {isUserSlot
+                                  ? `Your Slot – ${userSlotStatus}`
+                                : isPast
+                                  ? slotToRange(slot)
+                                : isBlocked || isBookedSlot
+                                  ? 'Court Locked In'
+                                  : slotToRange(slot)
+                                }
                               </span>
-                              {isBlocked && (
+                              {isUserSlot && (
+                                <CheckCircle2 size={10} className="absolute top-1 right-1 text-emerald-500" />
+                              )}
+                              {isBlocked && !isUserSlot && (
                                 <Ban size={10} className="absolute top-1 right-1 text-red-400" />
                               )}
-                              {isBookedSlot && !isBlocked && (
+                              {isBookedSlot && !isBlocked && !isUserSlot && (
                                 <AlertCircle size={10} className="absolute top-1 right-1 text-amber-400" />
                               )}
                             </button>
@@ -1624,20 +1855,34 @@ const Booking: React.FC = () => {
                       </div>
 
                       {/* Availability Summary */}
-                      {(blockedSlots.size > 0 || bookedSlots.size > 0) && (
-                        <div className="mt-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                          <p className="text-[10px] text-slate-500">
-                            <span className="font-bold text-slate-700">{TIME_SLOTS.length - blockedSlots.size - bookedSlots.size}</span> of {TIME_SLOTS.length} slots available
-                            {blockedSlots.size > 0 && (
-                              <span className="text-red-500"> · {blockedSlots.size} blocked</span>
-                            )}
-                            {bookedSlots.size > 0 && (
-                              <span className="text-amber-500"> · {bookedSlots.size} booked</span>
-                            )}
-                          </p>
-                        </div>
-                      )}
+                      {(() => {
+                        const dynSlots = selectedLocation?.opening_time && selectedLocation?.closing_time
+                          ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                          : TIME_SLOTS;
+                        const pastCount = dynSlots.filter(s => isSlotInPast(s, selectedDate) && !blockedSlots.has(s) && !bookedSlots.has(s)).length;
+                        const availableCount = dynSlots.length - blockedSlots.size - bookedSlots.size - pastCount;
+                        return (blockedSlots.size > 0 || bookedSlots.size > 0 || pastCount > 0) ? (
+                          <div className="mt-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-[10px] text-slate-500">
+                              <span className="font-bold text-slate-700">{Math.max(0, availableCount)}</span> of {dynSlots.length} slots available
+                              {userBookedSlots.size > 0 && (
+                                <span className="text-emerald-500"> · {userBookedSlots.size} yours</span>
+                              )}
+                              {blockedSlots.size > 0 && (
+                                <span className="text-red-500"> · {blockedSlots.size} blocked</span>
+                              )}
+                              {bookedSlots.size - userBookedSlots.size > 0 && (
+                                <span className="text-amber-500"> · {bookedSlots.size - userBookedSlots.size} booked</span>
+                              )}
+                              {pastCount > 0 && (
+                                <span className="text-slate-400"> · {pastCount} past</span>
+                              )}
+                            </p>
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
+                    )}
 
                     {/* Policy Reminder */}
                     <div className="flex items-start gap-2 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
@@ -1648,12 +1893,20 @@ const Booking: React.FC = () => {
                     </div>
 
                     {/* Booking Button */}
+                    {(() => {
+                      const currentActiveRole = localStorage.getItem('active_role');
+                      const isOwner = !!(user && selectedCourt?.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER');
+                      return (
                     <button
-                      disabled={!selectedSlot || isBooked || isProcessing || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                      disabled={!selectedSlot || isBooked || isProcessing || dailyLimitReached || isOwner || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
                       onClick={handleBooking}
                       className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${isBooked
                         ? 'bg-emerald-500 text-white cursor-default'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200/50'
+                        : isOwner
+                          ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                        : dailyLimitReached
+                          ? 'bg-orange-100 text-orange-500 border border-orange-200 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200/50'
                         }`}
                     >
                       {isProcessing ? <Loader2 className="animate-spin" size={18} /> : (
@@ -1661,6 +1914,16 @@ const Booking: React.FC = () => {
                           <>
                             <CheckCircle2 size={18} />
                             Booking Confirmed!
+                          </>
+                        ) : isOwner ? (
+                          <>
+                            <Ban size={16} />
+                            Court Owner Cannot Book
+                          </>
+                        ) : dailyLimitReached ? (
+                          <>
+                            <Ban size={16} />
+                            Limit Reached (1/location/day)
                           </>
                         ) : selectedSlot && blockedSlots.has(selectedSlot) ? (
                           <>
@@ -1677,6 +1940,8 @@ const Booking: React.FC = () => {
                         )
                       )}
                     </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -1728,12 +1993,33 @@ const Booking: React.FC = () => {
                             <Building2 size={10} />
                             {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
                           </span>
+                          {(() => {
+                              const locStatus = selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed');
+                              const statusStyle = locStatus === 'Active' ? 'bg-emerald-50 text-emerald-700'
+                                  : locStatus === 'Closed' ? 'bg-rose-50 text-rose-600'
+                                  : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-blue-50 text-blue-600';
+                              return (
+                                  <span className={`inline-flex items-center px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold ${statusStyle}`}>
+                                      {locStatus}
+                                  </span>
+                              );
+                          })()}
                           {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
                             selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
                               <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
                                 {amenity}
                               </span>
                             ))
+                          )}
+                          {selectedLocation.opening_time && selectedLocation.closing_time && (
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                              <Clock size={10} />
+                              {(() => {
+                                const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
+                                return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
+                              })()}
+                            </span>
                           )}
                         </div>
                         {selectedLocation.description && (
@@ -1768,37 +2054,74 @@ const Booking: React.FC = () => {
                         <div className="px-4 py-12 text-center">
                           <p className="text-sm text-slate-400">No courts found at this location</p>
                         </div>
-                      ) : locationCourts.map(court => (
+                      ) : (() => {
+                        const locStatus = selectedLocation?.status || (selectedLocation?.is_active ? 'Active' : 'Closed');
+                        const isLocationAvailable = locStatus === 'Active';
+                        return locationCourts.map(court => {
+                        const courtSt = court.status || 'Available';
+                        const isCourtAvailable = isLocationAvailable && (courtSt === 'Available' || courtSt === 'Fully Booked');
+                        const isFullyBooked = courtSt === 'Fully Booked';
+                        const courtStatusLabel = !isLocationAvailable ? locStatus : courtSt !== 'Available' ? courtSt : '';
+                        const courtStatusStyle = courtSt === 'Fully Booked' ? 'bg-orange-50 text-orange-500'
+                            : courtSt === 'Coming Soon' ? 'bg-blue-50 text-blue-500'
+                            : courtSt === 'Maintenance' ? 'bg-amber-50 text-amber-500'
+                            : locStatus === 'Closed' ? 'bg-rose-50 text-rose-500'
+                            : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-500'
+                            : 'bg-blue-50 text-blue-500';
+                        return (
+                        <div key={court.id} className="w-full">
                         <button
-                          key={court.id}
-                          onClick={() => navigate(`/court/${court.id}`)}
-                          className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                          onClick={() => isCourtAvailable && navigate(`/court/${court.id}`)}
+                          disabled={!isCourtAvailable}
+                          className={`w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-all duration-200 ${isCourtAvailable ? 'hover:bg-blue-50/40 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                         >
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
                             <img
                               src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
                               alt={court.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              className={`w-full h-full object-cover transition-transform duration-300 ${isCourtAvailable ? 'group-hover:scale-105' : 'grayscale'}`}
                             />
+                            {!isCourtAvailable && (
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <Ban size={20} className="text-white" />
+                              </div>
+                            )}
                           </div>
                           <div className="flex-1 text-left min-w-0">
-                            <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{court.name}</p>
+                            <p className={`font-bold text-sm tracking-tight mb-1 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-blue-600 transition-colors' : 'text-slate-400'}`}>{court.name}</p>
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                               <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
-                              <span className="text-[11px] font-medium text-slate-400">₱ Fee</span>
-                              <span className="text-[11px] font-medium text-slate-400">🥅 Perm. Nets</span>
+                              {courtStatusLabel && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${courtStatusStyle}`}>{courtStatusLabel}</span>
+                              )}
                             </div>
                           </div>
-                          <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                          {isCourtAvailable && !isFullyBooked && <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />}
                         </button>
-                      ))
+                        {isFullyBooked && isLocationAvailable && (
+                          <div className="px-4 pb-3 -mt-1">
+                            <button
+                              onClick={() => navigate(`/court/${court.id}?advance=true`)}
+                              className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50 flex items-center justify-center gap-2"
+                            >
+                              📅 Book Future Dates
+                            </button>
+                          </div>
+                        )}
+                        </div>
+                        );
+                      });
+                      })()
                     ) : (
                       filteredLocations.length === 0 ? (
                         <div className="px-4 py-12 text-center">
                           <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
                           <p className="text-sm text-slate-400">No locations found</p>
                         </div>
-                      ) : filteredLocations.map(location => (
+                      ) : filteredLocations.map(location => {
+                        const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
+                        const isAvailable = locStatus === 'Active';
+                        return (
                         <button
                           key={location.id}
                           onClick={() => {
@@ -1811,12 +2134,19 @@ const Booking: React.FC = () => {
                           }}
                           className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
                         >
-                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
                             <img
                               src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
                               alt={location.name}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
+                            {!isAvailable && (
+                              <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                  locStatus === 'Closed' ? 'bg-rose-500 text-white'
+                                  : locStatus === 'Maintenance' ? 'bg-amber-500 text-white'
+                                  : 'bg-blue-500 text-white'
+                              }`}>{locStatus}</div>
+                            )}
                           </div>
                           <div className="flex-1 text-left min-w-0">
                             <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
@@ -1827,11 +2157,21 @@ const Booking: React.FC = () => {
                               <span className="text-[11px] font-medium text-slate-400">
                                 🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
                               </span>
+                              {isAvailable ? (
+                                <span className="text-[10px] font-bold text-emerald-500">● Available</span>
+                              ) : (
+                                <span className={`text-[10px] font-bold ${
+                                    locStatus === 'Closed' ? 'text-rose-500'
+                                    : locStatus === 'Maintenance' ? 'text-amber-500'
+                                    : 'text-blue-500'
+                                }`}>● {locStatus}</span>
+                              )}
                             </div>
                           </div>
                           <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
                         </button>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </>
@@ -1939,7 +2279,14 @@ const Booking: React.FC = () => {
       {/* ──────────── SUCCESS MODAL ──────────── */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSuccessModal(false)} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => {
+            setShowSuccessModal(false);
+            setIsBooked(false);
+            setSelectedSlot(null);
+            setSelectedCourt(null);
+            setSelectedLocation(null);
+            navigate('/booking');
+          }} />
           <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-6 sm:p-10 text-center">
               <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -1970,13 +2317,7 @@ const Booking: React.FC = () => {
                   }}
                   className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg"
                 >
-                  Book Another Slot
-                </button>
-                <button
-                  onClick={() => setShowSuccessModal(false)}
-                  className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
-                >
-                  Close
+                  Back to Booking
                 </button>
               </div>
             </div>
@@ -1991,6 +2332,10 @@ const Booking: React.FC = () => {
           onClose={() => {
             setShowReceipt(false);
             setIsBooked(false);
+            setSelectedSlot(null);
+            setSelectedCourt(null);
+            setSelectedLocation(null);
+            navigate('/booking');
           }}
         />
       )}

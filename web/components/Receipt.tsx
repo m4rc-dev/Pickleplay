@@ -9,6 +9,7 @@ interface ReceiptProps {
         id: string;
         courtName: string;
         courtLocation: string;
+        locationName?: string;
         date: string;
         startTime: string;
         endTime: string;
@@ -200,8 +201,15 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                             <span className="text-xs md:text-sm font-black text-slate-900 uppercase italic text-right">{bookingData.courtName}</span>
                                         </div>
 
+                                        {bookingData.locationName && (
+                                            <div className="flex justify-between items-start gap-4 md:gap-8">
+                                                <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Venue</span>
+                                                <span className="text-xs md:text-sm font-black text-slate-900 uppercase text-right max-w-[180px] md:max-w-[240px] leading-tight">{bookingData.locationName}</span>
+                                            </div>
+                                        )}
+
                                         <div className="flex justify-between items-start gap-4 md:gap-8">
-                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Location</span>
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Address</span>
                                             <span className="text-xs md:text-sm font-black text-slate-900 uppercase text-right max-w-[180px] md:max-w-[240px] leading-tight">{bookingData.courtLocation}</span>
                                         </div>
 
