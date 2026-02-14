@@ -173,7 +173,7 @@ const Home: React.FC = () => {
           .order('created_at', { ascending: false })
           .limit(5);
         if (facesError) throw facesError;
-        setPlayerFaces((facesData || []).map((p: any) => p.avatar_url));
+        setPlayerFaces((facesData || []).map((p: any) => p.avatar_url).filter((url: string) => url && url.trim() !== ''));
 
         // Fetch total user count
         const { count, error: countError } = await supabase
