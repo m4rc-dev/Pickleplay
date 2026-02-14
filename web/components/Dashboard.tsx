@@ -128,8 +128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       .limit(3)
       .then(({ data, error }) => {
         if (!error && data) setAnnouncements(data);
-      })
-      .catch(() => {
+      }, () => {
         // Announcements table might not exist
       });
 

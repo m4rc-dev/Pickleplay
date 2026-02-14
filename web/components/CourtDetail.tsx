@@ -565,7 +565,7 @@ const CourtDetail: React.FC = () => {
                                                         : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
                                                     }`}
                                             >
-                                                {isBookedSlot ? 'N/A' : slot}
+                                                {isBookedSlot ? 'Court Locked In' : slot}
                                             </button>
                                         );
                                     })}

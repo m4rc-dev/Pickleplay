@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Eye, Pencil, Trash2, Receipt as ReceiptIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -111,118 +111,7 @@ const Booking: React.FC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
 
-  // ── My Bookings Panel State ──
-  const [showMyBookings, setShowMyBookings] = useState(false);
-  const [myBookings, setMyBookings] = useState<any[]>([]);
-  const [isLoadingMyBookings, setIsLoadingMyBookings] = useState(false);
-  const [myBookingsSearch, setMyBookingsSearch] = useState('');
-  const [myBookingsFilter, setMyBookingsFilter] = useState<'all' | 'pending' | 'confirmed' | 'paid' | 'unpaid' | 'cancelled'>('all');
-  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
-  const [viewingBooking, setViewingBooking] = useState<any>(null);
-  const [editingBooking, setEditingBooking] = useState<any>(null);
 
-  const fetchMyBookings = async () => {
-    setIsLoadingMyBookings(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      // Fetch user profile name
-      let userName = 'User';
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, username')
-          .eq('id', session.user.id)
-          .maybeSingle();
-        if (profile) userName = profile.full_name || profile.username || 'User';
-      } catch (e) { /* ignore */ }
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          court:courts(
-            id,
-            name,
-            location:locations(name, city)
-          )
-        `)
-        .eq('player_id', session.user.id)
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
-      setMyBookings((data || []).map(b => ({ ...b, playerName: userName })));
-    } catch (err) {
-      console.error('Error fetching my bookings:', err);
-    } finally {
-      setIsLoadingMyBookings(false);
-    }
-  };
-
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    setCancellingBookingId(bookingId);
-    try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', bookingId);
-      if (error) throw error;
-      setMyBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b));
-    } catch (err) {
-      console.error('Error cancelling booking:', err);
-      alert('Failed to cancel booking. Please try again.');
-    } finally {
-      setCancellingBookingId(null);
-    }
-  };
-
-  const handleViewBookingReceipt = (booking: any) => {
-    setViewingBooking({
-      id: booking.id,
-      courtName: booking.court?.name || 'Pickleball Court',
-      courtLocation: booking.court?.location
-        ? `${booking.court.location.name}, ${booking.court.location.city}`
-        : 'PicklePlay Facility',
-      date: booking.date,
-      startTime: booking.start_time,
-      endTime: booking.end_time,
-      pricePerHour: booking.total_price,
-      totalPrice: booking.total_price,
-      playerName: booking.playerName || 'User',
-      status: booking.status,
-      confirmedAt: booking.status === 'confirmed' ? booking.updated_at : undefined,
-      paymentMethod: booking.payment_method,
-      paymentStatus: booking.payment_status,
-      amountTendered: booking.amount_tendered,
-      changeAmount: booking.change_amount
-    });
-  };
-
-  const handleRebookFromBooking = (booking: any) => {
-    if (booking.court_id) {
-      navigate(`/court/${booking.court_id}`);
-    }
-    setShowMyBookings(false);
-  };
-
-  const filteredMyBookings = myBookings.filter(b => {
-    // Search filter
-    if (myBookingsSearch.trim()) {
-      const q = myBookingsSearch.toLowerCase();
-      const courtName = (b.court?.name || '').toLowerCase();
-      const courtCity = (b.court?.location?.city || '').toLowerCase();
-      const refId = (b.id || '').toLowerCase();
-      if (!courtName.includes(q) && !courtCity.includes(q) && !refId.includes(q)) return false;
-    }
-    // Status filter
-    if (myBookingsFilter === 'all') return true;
-    if (myBookingsFilter === 'paid') return b.payment_status === 'paid';
-    if (myBookingsFilter === 'unpaid') return b.payment_status !== 'paid' && b.status !== 'cancelled';
-    return b.status === myBookingsFilter;
-  });
 
   const getUserLocation = () => {
     if (userLocation) return;
@@ -1352,7 +1241,7 @@ const Booking: React.FC = () => {
                 <span className="text-sm text-slate-400 font-medium truncate">{searchQuery || 'Search courts or places...'}</span>
               </button>
               <button
-                onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+                onClick={() => navigate('/my-bookings')}
                 className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-xl shrink-0 hover:bg-blue-600 transition-colors"
               >
                 <ClipboardList size={18} />
@@ -1406,7 +1295,7 @@ const Booking: React.FC = () => {
             </div>
             {/* My Bookings Button */}
             <button
-              onClick={() => { setShowMyBookings(true); fetchMyBookings(); }}
+              onClick={() => navigate('/my-bookings')}
               className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-slate-200/50 shrink-0"
             >
               <ClipboardList size={18} />
@@ -1720,7 +1609,9 @@ const Booking: React.FC = () => {
                                     : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
                                 }`}
                             >
-                              <span className={isUnavailable ? 'line-through' : ''}>{slot}</span>
+                              <span className={isUnavailable ? 'line-through' : ''}>
+                                {isUnavailable ? 'Court Locked In' : slot}
+                              </span>
                               {isBlocked && (
                                 <Ban size={10} className="absolute top-1 right-1 text-red-400" />
                               )}
@@ -1779,7 +1670,7 @@ const Booking: React.FC = () => {
                         ) : selectedSlot && bookedSlots.has(selectedSlot) ? (
                           <>
                             <AlertCircle size={16} />
-                            Already Booked
+                            Court Locked In
                           </>
                         ) : (
                           'Confirm Booking'
@@ -2104,188 +1995,7 @@ const Booking: React.FC = () => {
         />
       )}
 
-      {/* ──────────── MY BOOKINGS SLIDE PANEL ──────────── */}
-      {showMyBookings && (
-        <div className="fixed inset-0 z-[110] flex justify-end">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowMyBookings(false); setViewingBooking(null); }} />
-          <div className="relative w-full max-w-lg bg-white shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col h-full">
-            {/* Panel Header */}
-            <div className="px-5 py-4 border-b border-slate-100 bg-white shrink-0">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-1">Reservations</p>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">My Bookings</h2>
-                </div>
-                <button
-                  onClick={() => { setShowMyBookings(false); setViewingBooking(null); }}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
 
-              {/* Search */}
-              <div className="relative mb-3">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search by court, city, or ref ID..."
-                  value={myBookingsSearch}
-                  onChange={(e) => setMyBookingsSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400"
-                />
-              </div>
-
-              {/* Filter Pills */}
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                {([
-                  { key: 'all', label: 'All' },
-                  { key: 'pending', label: 'Pending' },
-                  { key: 'confirmed', label: 'Confirmed' },
-                  { key: 'paid', label: 'Paid' },
-                  { key: 'unpaid', label: 'Unpaid' },
-                  { key: 'cancelled', label: 'Cancelled' }
-                ] as const).map(f => (
-                  <button
-                    key={f.key}
-                    onClick={() => setMyBookingsFilter(f.key)}
-                    className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
-                      myBookingsFilter === f.key
-                        ? f.key === 'cancelled' ? 'bg-red-600 text-white' : f.key === 'paid' ? 'bg-emerald-600 text-white' : f.key === 'unpaid' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Bookings List */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-              {isLoadingMyBookings ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <Loader2 className="animate-spin text-blue-600" size={32} />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading bookings...</p>
-                </div>
-              ) : filteredMyBookings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-4">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-200">
-                    <ClipboardList size={28} className="text-slate-300" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-black text-slate-900 mb-1">No Bookings Found</p>
-                    <p className="text-xs text-slate-400 font-medium">{myBookingsSearch ? 'Try a different search term' : 'Your court reservations will appear here'}</p>
-                  </div>
-                </div>
-              ) : (
-                filteredMyBookings.map((b) => {
-                  const statusColor = b.payment_status === 'paid' ? 'emerald' :
-                    b.status === 'confirmed' ? 'blue' :
-                    b.status === 'cancelled' ? 'red' :
-                    b.status === 'pending' ? 'amber' : 'slate';
-                  const statusLabel = b.payment_status === 'paid' ? 'Paid' : b.status;
-                  const isCancellable = b.status === 'pending' || b.status === 'confirmed';
-
-                  return (
-                    <div
-                      key={b.id}
-                      className={`p-4 bg-white border rounded-2xl transition-all duration-300 hover:shadow-md ${
-                        b.status === 'cancelled' ? 'border-red-100 bg-red-50/30 opacity-70' : 'border-slate-100 hover:border-blue-200'
-                      }`}
-                    >
-                      {/* Top row: Court name + status */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">#{b.id.slice(0, 8)}</p>
-                          <h4 className="text-sm font-black text-slate-900 tracking-tight truncate">{b.court?.name || 'Court'}</h4>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <MapPin size={10} className="text-slate-400" />
-                            <span className="text-[10px] text-slate-400 font-medium truncate">{b.court?.location?.city || 'PicklePlay'}</span>
-                          </div>
-                        </div>
-                        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shrink-0 ${
-                          b.payment_status === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
-                          b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                          b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-600' :
-                          b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
-                          'bg-slate-50 border-slate-200 text-slate-600'
-                        }`}>
-                          {statusLabel}
-                        </span>
-                      </div>
-
-                      {/* Info row */}
-                      <div className="flex items-center gap-4 mb-3 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <CalendarIcon size={12} className="text-blue-500" />
-                          <span className="font-bold text-slate-700">{new Date(b.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={12} className="text-blue-500" />
-                          <span className="font-bold text-slate-700">{b.start_time?.slice(0, 5)} - {b.end_time?.slice(0, 5)}</span>
-                        </div>
-                        <div className="ml-auto">
-                          <span className="text-base font-black text-slate-900">₱{b.total_price}</span>
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => handleViewBookingReceipt(b)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-blue-100 transition-colors"
-                        >
-                          <Eye size={12} /> View
-                        </button>
-                        {b.status !== 'cancelled' && (
-                          <button
-                            onClick={() => handleRebookFromBooking(b)}
-                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-100 transition-colors"
-                          >
-                            <Pencil size={12} /> Rebook
-                          </button>
-                        )}
-                        {isCancellable && (
-                          <button
-                            onClick={() => handleCancelBooking(b.id)}
-                            disabled={cancellingBookingId === b.id}
-                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors disabled:opacity-50"
-                          >
-                            {cancellingBookingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Panel Footer */}
-            <div className="px-5 py-4 border-t border-slate-100 bg-white shrink-0">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
-                <span>{filteredMyBookings.length} booking{filteredMyBookings.length !== 1 ? 's' : ''}</span>
-                <button
-                  onClick={() => { setShowMyBookings(false); navigate('/my-bookings'); }}
-                  className="text-blue-600 hover:underline uppercase tracking-wider text-[10px] font-black"
-                >
-                  View Full Page →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ──────────── BOOKING RECEIPT VIEW (from My Bookings panel) ──────────── */}
-      {viewingBooking && (
-        <Receipt
-          bookingData={viewingBooking}
-          onClose={() => setViewingBooking(null)}
-        />
-      )}
     </div>
   );
 };
