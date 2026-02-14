@@ -5,6 +5,20 @@ import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 
+const ALL_HOUR_SLOTS = [
+    '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
+    '06:00 AM', '07:00 AM', '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM',
+    '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
+    '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM', '11:00 PM'
+];
+
+/** Generate time slots based on opening and closing hours */
+const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
+    const openH = parseInt(openTime.split(':')[0], 10);
+    const closeH = parseInt(closeTime.split(':')[0], 10);
+    return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
+};
+
 const TIME_SLOTS = [
     '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
     '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
@@ -192,7 +206,8 @@ const GuestBooking: React.FC = () => {
                         amenities: Array.isArray(c.amenities) ? c.amenities : [],
                         imageUrl: c.image_url,
                         courtType: c.court_type || 'Outdoor',
-                        ownerId: c.owner_id
+                        ownerId: c.owner_id,
+                        status: c.status || 'Available'
                     };
                 });
                 setLocationCourts(mappedCourts);
@@ -1053,12 +1068,33 @@ const GuestBooking: React.FC = () => {
                                                 <Building2 size={10} />
                                                 {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
                                             </span>
+                                            {(() => {
+                                                const locStatus = selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed');
+                                                const statusStyle = locStatus === 'Active' ? 'bg-emerald-50 text-emerald-700'
+                                                    : locStatus === 'Closed' ? 'bg-rose-50 text-rose-600'
+                                                    : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-600'
+                                                    : 'bg-blue-50 text-blue-600';
+                                                return (
+                                                    <span className={`inline-flex items-center px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold ${statusStyle}`}>
+                                                        {locStatus}
+                                                    </span>
+                                                );
+                                            })()}
                                             {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
                                                 selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
                                                     <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
                                                         {amenity}
                                                     </span>
                                                 ))
+                                            )}
+                                            {selectedLocation.opening_time && selectedLocation.closing_time && (
+                                                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                                    <Clock size={10} />
+                                                    {(() => {
+                                                        const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
+                                                        return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
+                                                    })()}
+                                                </span>
                                             )}
                                         </div>
                                         {selectedLocation.description && (
@@ -1093,37 +1129,74 @@ const GuestBooking: React.FC = () => {
                                         <div className="px-4 py-12 text-center">
                                             <p className="text-sm text-slate-400">No courts found at this location</p>
                                         </div>
-                                    ) : locationCourts.map(court => (
+                                    ) : (() => {
+                                        const locStatus = selectedLocation?.status || (selectedLocation?.is_active ? 'Active' : 'Closed');
+                                        const isLocationAvailable = locStatus === 'Active';
+                                        return locationCourts.map(court => {
+                                        const courtSt = court.status || 'Available';
+                                        const isCourtAvailable = isLocationAvailable && (courtSt === 'Available' || courtSt === 'Fully Booked');
+                                        const isFullyBooked = courtSt === 'Fully Booked';
+                                        const courtStatusLabel = !isLocationAvailable ? locStatus : courtSt !== 'Available' ? courtSt : '';
+                                        const courtStatusStyle = courtSt === 'Fully Booked' ? 'bg-orange-50 text-orange-500'
+                                            : courtSt === 'Coming Soon' ? 'bg-blue-50 text-blue-500'
+                                            : courtSt === 'Maintenance' ? 'bg-amber-50 text-amber-500'
+                                            : locStatus === 'Closed' ? 'bg-rose-50 text-rose-500'
+                                            : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-500'
+                                            : 'bg-blue-50 text-blue-500';
+                                        return (
+                                        <div key={court.id} className="w-full">
                                         <button
-                                            key={court.id}
-                                            onClick={() => navigate(`/court/${court.id}`)}
-                                            className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
+                                            onClick={() => isCourtAvailable && navigate(`/court/${court.id}`)}
+                                            disabled={!isCourtAvailable}
+                                            className={`w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-all duration-200 ${isCourtAvailable ? 'hover:bg-blue-50/40 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                                         >
-                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
                                                 <img
                                                     src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
                                                     alt={court.name}
-                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    className={`w-full h-full object-cover transition-transform duration-300 ${isCourtAvailable ? 'group-hover:scale-105' : 'grayscale'}`}
                                                 />
+                                                {!isCourtAvailable && (
+                                                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                                        <Ban size={20} className="text-white" />
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex-1 text-left min-w-0">
-                                                <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{court.name}</p>
+                                                <p className={`font-bold text-sm tracking-tight mb-1 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-blue-600 transition-colors' : 'text-slate-400'}`}>{court.name}</p>
                                                 <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                                                     <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
-                                                    <span className="text-[11px] font-medium text-slate-400">₱ Fee</span>
-                                                    <span className="text-[11px] font-medium text-slate-400">🥅 Perm. Nets</span>
+                                                    {courtStatusLabel && (
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${courtStatusStyle}`}>{courtStatusLabel}</span>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
+                                            {isCourtAvailable && !isFullyBooked && <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />}
                                         </button>
-                                    ))
+                                        {isFullyBooked && isLocationAvailable && (
+                                          <div className="px-4 pb-3 -mt-1">
+                                            <button
+                                              onClick={() => navigate(`/court/${court.id}?advance=true`)}
+                                              className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50 flex items-center justify-center gap-2"
+                                            >
+                                              📅 Book Future Dates
+                                            </button>
+                                          </div>
+                                        )}
+                                        </div>
+                                        );
+                                    });
+                                    })()
                                 ) : (
                                     filteredLocations.length === 0 ? (
                                         <div className="px-4 py-12 text-center">
                                             <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
                                             <p className="text-sm text-slate-400">No locations found</p>
                                         </div>
-                                    ) : filteredLocations.map(location => (
+                                    ) : filteredLocations.map(location => {
+                                        const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
+                                        const isAvailable = locStatus === 'Active';
+                                        return (
                                         <button
                                             key={location.id}
                                             onClick={() => {
@@ -1136,12 +1209,19 @@ const GuestBooking: React.FC = () => {
                                             }}
                                             className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
                                         >
-                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
                                                 <img
                                                     src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
                                                     alt={location.name}
                                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                                 />
+                                                {!isAvailable && (
+                                                    <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                                        locStatus === 'Closed' ? 'bg-rose-500 text-white'
+                                                        : locStatus === 'Maintenance' ? 'bg-amber-500 text-white'
+                                                        : 'bg-blue-500 text-white'
+                                                    }`}>{locStatus}</div>
+                                                )}
                                             </div>
                                             <div className="flex-1 text-left min-w-0">
                                                 <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
@@ -1152,11 +1232,21 @@ const GuestBooking: React.FC = () => {
                                                     <span className="text-[11px] font-medium text-slate-400">
                                                         🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
                                                     </span>
+                                                    {isAvailable ? (
+                                                        <span className="text-[10px] font-bold text-emerald-500">● Available</span>
+                                                    ) : (
+                                                        <span className={`text-[10px] font-bold ${
+                                                            locStatus === 'Closed' ? 'text-rose-500'
+                                                            : locStatus === 'Maintenance' ? 'text-amber-500'
+                                                            : 'text-blue-500'
+                                                        }`}>● {locStatus}</span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
                                         </button>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>

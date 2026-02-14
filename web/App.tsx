@@ -149,13 +149,23 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
 
 const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ role, themeColor }) => {
   const location = useLocation();
-  const items = [
-    { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
-    { to: '/booking', icon: <Calendar size={20} />, label: 'Book' },
-    { to: '/community', icon: <Globe size={20} />, label: 'Hub' },
-    { to: '/shop', icon: <ShoppingBag size={20} />, label: 'Shop' },
-    { to: '/profile', icon: <User size={20} />, label: 'Me' },
-  ];
+
+  // Build items based on role — court owners get "Bookings" (admin) instead of "Book"
+  const items = role === 'COURT_OWNER'
+    ? [
+        { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
+        { to: '/bookings-admin', icon: <Calendar size={20} />, label: 'Bookings' },
+        { to: '/locations', icon: <MapPin size={20} />, label: 'Courts' },
+        { to: '/revenue', icon: <BarChart3 size={20} />, label: 'Revenue' },
+        { to: '/profile', icon: <User size={20} />, label: 'Me' },
+      ]
+    : [
+        { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
+        { to: '/booking', icon: <Calendar size={20} />, label: 'Book' },
+        { to: '/community', icon: <Globe size={20} />, label: 'Hub' },
+        { to: '/shop', icon: <ShoppingBag size={20} />, label: 'Shop' },
+        { to: '/profile', icon: <User size={20} />, label: 'Me' },
+      ];
 
   if (role === 'guest') return null;
 
@@ -809,6 +819,7 @@ const App: React.FC = () => {
         setUserAvatar(null);
         setCurrentUserId(null);
         localStorage.removeItem('two_factor_pending');
+        localStorage.removeItem('active_role');
         return;
       }
 
@@ -819,6 +830,7 @@ const App: React.FC = () => {
 
       // Set initial state immediately to allow login
       setRole(activeRoleMeta);
+      localStorage.setItem('active_role', activeRoleMeta);
       setAuthorizedProRoles(userRolesMeta.filter(r => r === 'COACH' || r === 'COURT_OWNER'));
 
       try {
@@ -940,6 +952,7 @@ const App: React.FC = () => {
           const activeFromDB = profileRes.data.active_role as UserRole;
           if (activeFromDB) {
             setRole(activeFromDB);
+            localStorage.setItem('active_role', activeFromDB);
           }
           dbRoles = (profileRes.data.roles as UserRole[]) || ['PLAYER'];
           consolidatedRoles = [...dbRoles];
@@ -971,6 +984,7 @@ const App: React.FC = () => {
             setUserName(newProfile.full_name);
             setUserAvatar(newProfile.avatar_url);
             setRole('PLAYER');
+            localStorage.setItem('active_role', 'PLAYER');
             consolidatedRoles = ['PLAYER'];
           } else {
             console.error('❌ Failed to create fallback profile:', createError);
@@ -1359,6 +1373,7 @@ const App: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 800));
 
       setRole(newRole);
+      localStorage.setItem('active_role', newRole);
       // Small delay to ensure state update is processed before navigation
       setTimeout(() => {
         window.location.hash = '#/dashboard';
@@ -1398,6 +1413,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     localStorage.removeItem('two_factor_pending');
     localStorage.removeItem('auth_redirect');
+    localStorage.removeItem('active_role');
     setRole('guest');
     setAuthorizedProRoles([]);
   };

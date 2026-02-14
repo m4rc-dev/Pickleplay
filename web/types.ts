@@ -11,6 +11,8 @@ export interface Player {
   winRate: number;
 }
 
+export type CourtStatus = 'Available' | 'Fully Booked' | 'Coming Soon' | 'Maintenance';
+
 export interface Court {
   id: string;
   name: string;
@@ -29,7 +31,10 @@ export interface Court {
   locationCourtCount?: number; // Total number of courts at this location
   imageUrl?: string;
   courtType?: 'Indoor' | 'Outdoor' | 'Both';
+  status?: CourtStatus; // Per-court status
 }
+
+export type LocationStatus = 'Active' | 'Closed' | 'Maintenance' | 'Coming Soon';
 
 export interface Location {
   id: string;
@@ -40,17 +45,44 @@ export interface Location {
   city: string;
   state?: string;
   postal_code?: string;
+  region?: string;
+  barangay?: string;
   latitude: number;
   longitude: number;
   amenities: string[];
   phone?: string;
   base_cleaning_time: number;
   is_active: boolean;
+  status?: LocationStatus;
   created_at?: string;
   updated_at?: string;
   court_count?: number; // Virtual field for UI
   image_url?: string;
   court_type?: 'Indoor' | 'Outdoor' | 'Both';
+  opening_time?: string; // e.g. '08:00'
+  closing_time?: string; // e.g. '17:00'
+}
+
+export type LocationClosureReason = 'Holiday' | 'Tournament' | 'Maintenance' | 'Private Event' | 'Weather' | 'Other';
+
+export interface LocationClosure {
+  id: string;
+  location_id: string;
+  date: string; // YYYY-MM-DD
+  reason: LocationClosureReason;
+  description?: string;
+  created_at?: string;
+}
+
+export type CourtClosureReason = 'Holiday' | 'Tournament' | 'Maintenance' | 'Private Event' | 'Weather' | 'Other';
+
+export interface CourtClosure {
+  id: string;
+  court_id: string;
+  date: string; // YYYY-MM-DD
+  reason: CourtClosureReason;
+  description?: string;
+  created_at?: string;
 }
 
 export interface Match {

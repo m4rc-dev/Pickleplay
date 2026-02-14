@@ -140,8 +140,9 @@ const MyBookings: React.FC = () => {
             id: booking.id,
             courtName: booking.court?.name || 'Pickleball Court',
             courtLocation: booking.court?.location
-                ? `${booking.court.location.name}, ${booking.court.location.city}`
+                ? `${booking.court.location.address || ''}, ${booking.court.location.city || ''}`
                 : 'PicklePlay Facility',
+            locationName: booking.court?.location?.name || '',
             date: booking.date,
             startTime: booking.start_time,
             endTime: booking.end_time,
