@@ -1494,7 +1494,7 @@ const Home: React.FC = () => {
       </div>
 
       {/* FAQ Section */}
-      <section className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden">
+      <section id="faq" className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden">
         <div className="max-w-4xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-8 md:mb-16">
