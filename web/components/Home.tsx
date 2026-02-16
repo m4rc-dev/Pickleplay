@@ -760,7 +760,7 @@ const Home: React.FC = () => {
           <div className="absolute inset-0 hero-pattern opacity-10"></div>
         </div>
 
-        <div className="relative z-30 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
+        <div className="relative z-50 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
           <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
             The National Network for Philippines
           </div>
@@ -814,9 +814,8 @@ const Home: React.FC = () => {
                 </button>
               </div>
 
-              {/* Suggestions Dropdown */}
               {showSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-4 bg-white border border-slate-200 rounded-[16px] py-4 shadow-xl z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[16px] py-4 shadow-xl z-50 animate-in fade-in slide-in-from-top-2 duration-300">
                   {/* Loading State */}
                   {isLoadingLocation && (
                     <div className="px-6 py-4 flex items-center gap-3 text-slate-500">

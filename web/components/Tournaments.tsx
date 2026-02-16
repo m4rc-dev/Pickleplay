@@ -118,7 +118,7 @@ const Tournaments: React.FC = () => {
     });
 
     return (
-        <div className="max-w-[1800px] mx-auto space-y-12 animate-in fade-in duration-700">
+        <div className="space-y-12 animate-in fade-in duration-700">
             {/* Typographic Header */}
             <div className="mb-12">
                 <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">

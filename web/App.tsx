@@ -156,19 +156,19 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
   // Build items based on role — court owners get "Bookings" (admin) instead of "Book"
   const items = role === 'COURT_OWNER'
     ? [
-        { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
-        { to: '/bookings-admin', icon: <Calendar size={20} />, label: 'Bookings' },
-        { to: '/locations', icon: <MapPin size={20} />, label: 'Courts' },
-        { to: '/revenue', icon: <BarChart3 size={20} />, label: 'Revenue' },
-        { to: '/profile', icon: <User size={20} />, label: 'Me' },
-      ]
+      { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
+      { to: '/bookings-admin', icon: <Calendar size={20} />, label: 'Bookings' },
+      { to: '/locations', icon: <MapPin size={20} />, label: 'Courts' },
+      { to: '/revenue', icon: <BarChart3 size={20} />, label: 'Revenue' },
+      { to: '/profile', icon: <User size={20} />, label: 'Me' },
+    ]
     : [
-        { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
-        { to: '/booking', icon: <Calendar size={20} />, label: 'Book' },
-        { to: '/community', icon: <Globe size={20} />, label: 'Hub' },
-        { to: '/shop', icon: <ShoppingBag size={20} />, label: 'Shop' },
-        { to: '/profile', icon: <User size={20} />, label: 'Me' },
-      ];
+      { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
+      { to: '/booking', icon: <Calendar size={20} />, label: 'Book' },
+      { to: '/community', icon: <Globe size={20} />, label: 'Hub' },
+      { to: '/shop', icon: <ShoppingBag size={20} />, label: 'Shop' },
+      { to: '/profile', icon: <User size={20} />, label: 'Me' },
+    ];
 
   if (role === 'guest') return null;
 
@@ -695,7 +695,10 @@ const NavigationHandler: React.FC<{
       )}
 
       <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
-        <div className={`${role === 'guest' || isAuthPage ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '') : `${location.pathname === '/booking' ? 'p-0' : location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4'} md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full`} transition-colors duration-300`}>
+        <div className={`${role === 'guest' || isAuthPage
+          ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
+          : `${location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4 md:p-8 lg:p-14'} max-w-[1920px] mx-auto w-full`
+          } transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>
               <Route path="/" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
