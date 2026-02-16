@@ -7,15 +7,12 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import Colors from '../constants/Colors';
-
-// Define the new color constants for easy reuse
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
 
 const GlobalFooter = ({ currentScreenIndex = 0, onNavigate }) => {
   const insets = useSafeAreaInsets();
-  const screens = ['Home', 'FindCourts', 'Map', 'Shop', 'Community', 'Profile'];
+  const screens = ['Home', 'FindCourts', 'Map', 'Community', 'Profile'];
 
   const handleNavigation = (screenName, index) => {
     if (__DEV__) {
@@ -45,9 +42,9 @@ const GlobalFooter = ({ currentScreenIndex = 0, onNavigate }) => {
           handleNavigation('Home', 0);
         }}>
         <View style={[styles.navIconContainer, currentScreenIndex === 0 && styles.activeNavIcon]}>
-          <MaterialIcons name="home" size={24} color={currentScreenIndex === 0 ? activeColor : thematicBlue} />
+          <MaterialIcons name="home" size={24} color={currentScreenIndex === 0 ? Colors.slate950 : Colors.slate500} />
         </View>
-        <Text style={styles.navText}>Home</Text>
+        <Text style={[styles.navText, currentScreenIndex === 0 && styles.activeNavText]}>Home</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.navItem}
@@ -56,9 +53,9 @@ const GlobalFooter = ({ currentScreenIndex = 0, onNavigate }) => {
           handleNavigation('FindCourts', 1);
         }}>
         <View style={[styles.navIconContainer, currentScreenIndex === 1 && styles.activeNavIcon]}>
-          <MaterialIcons name="search" size={24} color={currentScreenIndex === 1 ? activeColor : thematicBlue} />
+          <MaterialIcons name="search" size={24} color={currentScreenIndex === 1 ? Colors.slate950 : Colors.slate500} />
         </View>
-        <Text style={styles.navText}>Find</Text>
+        <Text style={[styles.navText, currentScreenIndex === 1 && styles.activeNavText]}>Find</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.navItem}
@@ -67,54 +64,39 @@ const GlobalFooter = ({ currentScreenIndex = 0, onNavigate }) => {
           handleNavigation('Map', 2);
         }}>
         <View style={[styles.navIconContainer, currentScreenIndex === 2 && styles.activeNavIcon]}>
-          <MaterialIcons name="map" size={24} color={currentScreenIndex === 2 ? activeColor : thematicBlue} />
+          <MaterialIcons name="map" size={24} color={currentScreenIndex === 2 ? Colors.slate950 : Colors.slate500} />
         </View>
-        <Text style={styles.navText}>Map</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.navItem}
-        onPress={() => {
-          if (__DEV__) console.log('Shop icon pressed');
-          handleNavigation('Shop', 3);
-        }}>
-        <View style={[styles.navIconContainer, currentScreenIndex === 3 && styles.activeNavIcon]}>
-          <MaterialIcons
-            name="shopping-cart"
-            size={24}
-            color={currentScreenIndex === 3 ? activeColor : thematicBlue}
-          />
-        </View>
-        <Text style={styles.navText}>Shop</Text>
+        <Text style={[styles.navText, currentScreenIndex === 2 && styles.activeNavText]}>Map</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.navItem}
         onPress={() => {
           if (__DEV__) console.log('Community icon pressed');
-          handleNavigation('Community', 4);
+          handleNavigation('Community', 3);
         }}>
-        <View style={[styles.navIconContainer, currentScreenIndex === 4 && styles.activeNavIcon]}>
+        <View style={[styles.navIconContainer, currentScreenIndex === 3 && styles.activeNavIcon]}>
           <MaterialIcons
             name="groups"
             size={24}
-            color={currentScreenIndex === 4 ? activeColor : thematicBlue}
+            color={currentScreenIndex === 3 ? Colors.slate950 : Colors.slate500}
           />
         </View>
-        <Text style={styles.navText}>Community</Text>
+        <Text style={[styles.navText, currentScreenIndex === 3 && styles.activeNavText]}>Community</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.navItem}
         onPress={() => {
           if (__DEV__) console.log('Profile icon pressed');
-          handleNavigation('Profile', 5);
+          handleNavigation('Profile', 4);
         }}>
-        <View style={[styles.navIconContainer, currentScreenIndex === 5 && styles.activeNavIcon]}>
+        <View style={[styles.navIconContainer, currentScreenIndex === 4 && styles.activeNavIcon]}>
           <MaterialIcons
             name="person"
             size={24}
-            color={currentScreenIndex === 5 ? activeColor : thematicBlue}
+            color={currentScreenIndex === 4 ? Colors.slate950 : Colors.slate500}
           />
         </View>
-        <Text style={styles.navText}>Profile</Text>
+        <Text style={[styles.navText, currentScreenIndex === 4 && styles.activeNavText]}>Profile</Text>
       </TouchableOpacity>
     </View>
   );
@@ -122,41 +104,47 @@ const GlobalFooter = ({ currentScreenIndex = 0, onNavigate }) => {
 
 const styles = StyleSheet.create({
   bottomNav: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     flexDirection: 'row',
-    paddingTop: 10,
-    // Shadow for iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    // Elevation for Android
-    elevation: 10,
+    paddingTop: 4,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: Colors.slate100,
+    shadowColor: Colors.slate950,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  activeNavItem: {
-    backgroundColor: thematicBlue,
+    paddingVertical: 0,
   },
   navIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: 28,
+    height: 28,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  activeNavItem: {
   },
   activeNavIcon: {
-    backgroundColor: 'rgba(163, 255, 1, 0.15)',
+    backgroundColor: Colors.lime400,
   },
   navText: {
-    fontSize: 10,
-    color: thematicBlue,
+    fontSize: 7.5,
+    color: Colors.slate600,
     marginTop: 2,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.1,
+  },
+  activeNavText: {
+    color: Colors.slate950,
+    fontWeight: '800',
   },
 });
 

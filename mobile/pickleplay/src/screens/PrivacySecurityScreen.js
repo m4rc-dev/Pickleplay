@@ -1,27 +1,24 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Switch,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {MaterialIcons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
-
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
 
 const PrivacySecurityScreen = ({ navigation }) => {
   const { deleteAccount, deactivateAccount, resetPassword, user } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   const [privacy, setPrivacy] = useState({
     profilePublic: true,
     showOnlineStatus: true,
@@ -31,37 +28,54 @@ const PrivacySecurityScreen = ({ navigation }) => {
     loginAlerts: true,
   });
 
-  const PrivacyItem = ({ icon, title, description, value, onToggle }) => (
-    <View style={styles.privacyItem}>
-      <View style={styles.privacyInfo}>
-        <View style={styles.privacyHeader}>
-          <MaterialIcons name={icon} size={24} color={thematicBlue} />
-          <Text style={styles.privacyTitle}>{title}</Text>
+  const PrivacyToggle = ({ icon, title, description, value, onToggle }) => (
+    <View style={styles.toggleCard}>
+      <View style={styles.toggleLeft}>
+        <View style={[styles.iconContainer, { backgroundColor: value ? Colors.lime400 + '20' : Colors.slate200 }]}>
+          <Ionicons
+            name={icon}
+            size={20}
+            color={value ? Colors.lime400 : Colors.slate500}
+          />
         </View>
-        <Text style={styles.privacyDescription}>{description}</Text>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleTitle}>{title}</Text>
+          <Text style={styles.toggleDescription}>{description}</Text>
+        </View>
       </View>
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: Colors.border, true: activeColor }}
-        thumbColor={value ? thematicBlue : '#f4f3f4'}
+        trackColor={{ false: Colors.slate300, true: Colors.lime400 }}
+        thumbColor={Colors.white}
       />
     </View>
   );
 
-  const ActionItem = ({ icon, title, description, onPress, isDanger }) => (
-    <TouchableOpacity 
-      style={[styles.actionItem, isDanger && styles.dangerItem]}
+  const ActionCard = ({ icon, title, description, onPress, isDanger = false }) => (
+    <TouchableOpacity
+      style={[styles.actionCard, isDanger && styles.dangerCard]}
       onPress={onPress}
+      activeOpacity={0.8}
     >
-      <View style={styles.actionInfo}>
-        <MaterialIcons name={icon} size={24} color={isDanger ? '#FF6B6B' : thematicBlue} />
-        <View style={styles.actionContent}>
+      <View style={styles.actionLeft}>
+        <View style={[styles.actionIconContainer, { backgroundColor: isDanger ? '#FF6B6B' : Colors.slate950 }]}>
+          <Ionicons
+            name={icon}
+            size={20}
+            color={Colors.white}
+          />
+        </View>
+        <View style={styles.actionInfo}>
           <Text style={[styles.actionTitle, isDanger && styles.dangerText]}>{title}</Text>
           <Text style={styles.actionDescription}>{description}</Text>
         </View>
       </View>
-      <MaterialIcons name="chevron-right" size={24} color={isDanger ? '#FF6B6B' : Colors.border} />
+      <Ionicons
+        name="chevron-forward"
+        size={20}
+        color={isDanger ? '#FF6B6B' : Colors.slate400}
+      />
     </TouchableOpacity>
   );
 
@@ -70,7 +84,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
       Alert.alert('Error', 'No email found for your account');
       return;
     }
-    
+
     Alert.alert(
       'Reset Password',
       `A password reset link will be sent to ${user.email}`,
@@ -112,7 +126,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
             setIsDeleting(true);
             const { error } = await deactivateAccount();
             setIsDeleting(false);
-            
+
             if (error) {
               Alert.alert('Error', 'Failed to deactivate account. Please try again.');
             } else {
@@ -137,7 +151,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // Second confirmation
             Alert.alert(
               'Are you absolutely sure?',
               'Type DELETE to confirm permanent account deletion.',
@@ -150,7 +163,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
                     setIsDeleting(true);
                     const { error } = await deleteAccount();
                     setIsDeleting(false);
-                    
+
                     if (error) {
                       Alert.alert('Error', 'Failed to delete account. Please try again.');
                     } else {
@@ -171,86 +184,101 @@ const PrivacySecurityScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color={Colors.white} />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacy & Security</Text>
         <View style={{ width: 28 }} />
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Privacy Settings */}
+        {/* Privacy Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Privacy Settings</Text>
-          <PrivacyItem
-            icon="public"
+          <View style={styles.sectionHeader}>
+            <Ionicons name="shield-checkmark" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Privacy Settings</Text>
+          </View>
+
+          <PrivacyToggle
+            icon="globe"
             title="Public Profile"
             description="Allow others to view your profile"
             value={privacy.profilePublic}
-            onToggle={(value) => setPrivacy({...privacy, profilePublic: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, profilePublic: value })}
           />
-          <PrivacyItem
-            icon="check-circle"
+          <PrivacyToggle
+            icon="eye"
             title="Online Status"
             description="Show when you're using the app"
             value={privacy.showOnlineStatus}
-            onToggle={(value) => setPrivacy({...privacy, showOnlineStatus: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, showOnlineStatus: value })}
           />
-          <PrivacyItem
-            icon="person-add"
+          <PrivacyToggle
+            icon="people"
             title="Friend Requests"
             description="Allow others to send friend requests"
             value={privacy.allowFriendRequests}
-            onToggle={(value) => setPrivacy({...privacy, allowFriendRequests: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, allowFriendRequests: value })}
           />
-          <PrivacyItem
-            icon="trending-up"
+          <PrivacyToggle
+            icon="bar-chart"
             title="Share Statistics"
             description="Share your game stats publicly"
             value={privacy.shareGameStats}
-            onToggle={(value) => setPrivacy({...privacy, shareGameStats: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, shareGameStats: value })}
           />
         </View>
 
-        {/* Security Settings */}
+        {/* Security Settings Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Security</Text>
-          <PrivacyItem
-            icon="lock"
+          <View style={styles.sectionHeader}>
+            <Ionicons name="lock-closed" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Security</Text>
+          </View>
+
+          <PrivacyToggle
+            icon="key"
             title="Two-Factor Auth"
             description="Add an extra layer of security"
             value={privacy.twoFactorAuth}
-            onToggle={(value) => setPrivacy({...privacy, twoFactorAuth: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, twoFactorAuth: value })}
           />
-          <PrivacyItem
+          <PrivacyToggle
             icon="notifications"
             title="Login Alerts"
             description="Get notified of new sign-ins"
             value={privacy.loginAlerts}
-            onToggle={(value) => setPrivacy({...privacy, loginAlerts: value})}
+            onToggle={(value) => setPrivacy({ ...privacy, loginAlerts: value })}
           />
         </View>
 
-        {/* Account Actions */}
+        {/* Account Actions Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <ActionItem
+          <View style={styles.sectionHeader}>
+            <Ionicons name="person-circle" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Account</Text>
+          </View>
+
+          <ActionCard
             icon="lock"
             title="Change Password"
             description="Update your account password"
             onPress={handleChangePassword}
           />
-          <ActionItem
-            icon="block"
+          <ActionCard
+            icon="ban"
             title="Blocked Users"
             description="Manage your blocked users list"
             onPress={handleBlockedUsers}
           />
-          <ActionItem
+          <ActionCard
             icon="download"
             title="Download Your Data"
             description="Get a copy of your personal data"
@@ -260,16 +288,20 @@ const PrivacySecurityScreen = ({ navigation }) => {
 
         {/* Danger Zone */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#FF6B6B' }]}>Danger Zone</Text>
-          <ActionItem
-            icon="pause-circle-filled"
+          <View style={styles.sectionHeader}>
+            <Ionicons name="warning" size={24} color="#FF6B6B" />
+            <Text style={[styles.sectionTitle, { color: '#FF6B6B' }]}>Danger Zone</Text>
+          </View>
+
+          <ActionCard
+            icon="pause-circle"
             title="Deactivate Account"
             description="Temporarily disable your account"
             onPress={handleDeactivateAccount}
             isDanger={true}
           />
-          <ActionItem
-            icon="delete-forever"
+          <ActionCard
+            icon="trash"
             title="Delete Account"
             description="Permanently delete your account"
             onPress={handleDeleteAccount}
@@ -277,22 +309,26 @@ const PrivacySecurityScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* Loading Overlay */}
-        {isDeleting && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={thematicBlue} />
-            <Text style={styles.loadingText}>Processing...</Text>
-          </View>
-        )}
-
         {/* Info Box */}
-        <View style={styles.infoBox}>
-          <MaterialIcons name="info" size={20} color={thematicBlue} />
-          <Text style={styles.infoText}>
-            Your privacy and security are important to us. Review these settings regularly.
-          </Text>
+        <View style={styles.section}>
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={Colors.lime400} />
+            <Text style={styles.infoText}>
+              Your privacy and security are important to us. Review these settings regularly to keep your account safe.
+            </Text>
+          </View>
         </View>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* Loading Overlay */}
+      {isDeleting && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={Colors.lime400} />
+          <Text style={styles.loadingText}>Processing...</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -303,112 +339,142 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
   },
   headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Colors.white,
-    fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
   },
   section: {
-    paddingHorizontal: 15,
-    marginVertical: 10,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 10,
+    letterSpacing: -0.5,
+  },
+  toggleCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
-    marginTop: 8,
-  },
-  privacyItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  privacyInfo: {
+  toggleLeft: {
     flex: 1,
-    marginRight: 10,
-  },
-  privacyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginRight: 12,
   },
-  privacyTitle: {
-    color: Colors.text,
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  toggleInfo: {
+    flex: 1,
+  },
+  toggleTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 12,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
-  privacyDescription: {
-    color: Colors.textSecondary,
+  toggleDescription: {
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
-    marginLeft: 36,
   },
-  actionItem: {
+  actionCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  dangerItem: {
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  dangerCard: {
+    backgroundColor: '#FF6B6B' + '10',
+  },
+  actionLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   actionInfo: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionContent: {
-    marginLeft: 12,
   },
   actionTitle: {
-    color: Colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   dangerText: {
     color: '#FF6B6B',
   },
   actionDescription: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
   },
   infoBox: {
+    backgroundColor: Colors.lime400 + '10',
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
+    alignItems: 'flex-start',
     borderLeftWidth: 4,
-    borderLeftColor: thematicBlue,
+    borderLeftColor: Colors.lime400,
   },
   infoText: {
-    color: Colors.text,
     fontSize: 13,
+    color: Colors.slate600,
     marginLeft: 12,
     flex: 1,
+    lineHeight: 18,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -422,9 +488,10 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: thematicBlue,
+    color: Colors.lime400,
+    fontWeight: '600',
   },
 });
 

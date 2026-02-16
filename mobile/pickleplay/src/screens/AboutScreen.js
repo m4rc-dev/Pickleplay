@@ -5,16 +5,12 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Image,
-  Linking,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {MaterialIcons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
-
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
 
 const AboutScreen = ({ navigation }) => {
   const appInfo = {
@@ -22,14 +18,13 @@ const AboutScreen = ({ navigation }) => {
     buildNumber: '42',
     releaseDate: 'January 2026',
     developer: 'PicklePlay Inc.',
-    website: 'https://pickleplay.com',
   };
 
   const features = [
-    { icon: 'location-on', title: 'Find Courts', description: 'Discover pickleball courts near you' },
-    { icon: 'calendar-today', title: 'Book Courts', description: 'Reserve your favorite court time' },
-    { icon: 'group', title: 'Join Games', description: 'Connect with other players' },
-    { icon: 'map', title: 'Interactive Map', description: 'Explore courts on the map' },
+    { icon: 'location', title: 'Find Courts', description: 'Discover pickleball courts near you' },
+    { icon: 'calendar', title: 'Book Courts', description: 'Reserve your favorite court time' },
+    { icon: 'people', title: 'Join Games', description: 'Connect with other players' },
+    { icon: 'map', title: 'Map View', description: 'Explore courts on the map' },
   ];
 
   const InfoRow = ({ label, value }) => (
@@ -42,7 +37,7 @@ const AboutScreen = ({ navigation }) => {
   const FeatureCard = ({ icon, title, description }) => (
     <View style={styles.featureCard}>
       <View style={styles.featureIconContainer}>
-        <MaterialIcons name={icon} size={28} color={Colors.white} />
+        <Ionicons name={icon} size={24} color={Colors.white} />
       </View>
       <View style={styles.featureContent}>
         <Text style={styles.featureTitle}>{title}</Text>
@@ -53,30 +48,40 @@ const AboutScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color={Colors.white} />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>About</Text>
         <View style={{ width: 28 }} />
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* App Logo & Title */}
+        {/* App Header Section */}
         <View style={styles.appHeaderSection}>
-          <Image
-            source={require('../assets/PickleplayPH.png')}
-            style={styles.logoImage}
-          />
-          <Text style={styles.tagline}>Find. Play. Enjoy.</Text>
+          <View style={styles.logoBadge}>
+            <Image
+              source={require('../assets/PickleplayPH.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.appName}>PicklePlay</Text>
+          <Text style={styles.tagline}>Master Your Game</Text>
         </View>
 
-        {/* App Information */}
+        {/* App Information Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Information</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information" size={20} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>App Information</Text>
+          </View>
           <View style={styles.infoCard}>
             <InfoRow label="Version" value={appInfo.version} />
             <View style={styles.divider} />
@@ -88,9 +93,12 @@ const AboutScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Key Features */}
+        {/* Key Features Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Key Features</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="star" size={20} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Key Features</Text>
+          </View>
           {features.map((feature, index) => (
             <FeatureCard
               key={index}
@@ -103,68 +111,78 @@ const AboutScreen = ({ navigation }) => {
 
         {/* Credits Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Credits</Text>
-          <View style={styles.creditItem}>
-            <MaterialIcons name="code" size={24} color={thematicBlue} />
+          <View style={styles.sectionHeader}>
+            <Ionicons name="heart" size={20} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Credits</Text>
+          </View>
+
+          <TouchableOpacity style={styles.creditItem}>
+            <View style={styles.creditIconContainer}>
+              <Ionicons name="code" size={20} color={Colors.white} />
+            </View>
             <View style={styles.creditContent}>
               <Text style={styles.creditTitle}>Built with React Native</Text>
               <Text style={styles.creditDescription}>Powered by Expo</Text>
             </View>
-          </View>
-          <View style={styles.creditItem}>
-            <MaterialIcons name="favorite" size={24} color={activeColor} />
+            <Ionicons name="chevron-forward" size={20} color={Colors.slate500} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.creditItem}>
+            <View style={styles.creditIconContainer}>
+              <Ionicons name="flame" size={20} color={Colors.white} />
+            </View>
             <View style={styles.creditContent}>
               <Text style={styles.creditTitle}>Made with Love</Text>
               <Text style={styles.creditDescription}>For the pickleball community</Text>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.slate500} />
+          </TouchableOpacity>
         </View>
 
         {/* Links Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Links</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="link" size={20} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Links</Text>
+          </View>
+
           <TouchableOpacity style={styles.linkItem}>
-            <MaterialIcons name="language" size={24} color={thematicBlue} />
+            <View style={styles.linkIconContainer}>
+              <Ionicons name="globe" size={20} color={Colors.white} />
+            </View>
             <View style={styles.linkContent}>
               <Text style={styles.linkTitle}>Visit Website</Text>
               <Text style={styles.linkUrl}>pickleplay.com</Text>
             </View>
-            <MaterialIcons name="open-in-new" size={20} color={Colors.border} />
+            <Ionicons name="open" size={20} color={Colors.slate500} />
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.linkItem}>
-            <MaterialIcons name="bug-report" size={24} color={thematicBlue} />
+            <View style={styles.linkIconContainer}>
+              <Ionicons name="bug" size={20} color={Colors.white} />
+            </View>
             <View style={styles.linkContent}>
               <Text style={styles.linkTitle}>Report a Bug</Text>
               <Text style={styles.linkUrl}>Send us feedback</Text>
             </View>
-            <MaterialIcons name="open-in-new" size={20} color={Colors.border} />
+            <Ionicons name="open" size={20} color={Colors.slate500} />
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.linkItem}>
-            <MaterialIcons name="star" size={24} color={activeColor} />
+            <View style={styles.linkIconContainer}>
+              <Ionicons name="star" size={20} color={Colors.white} />
+            </View>
             <View style={styles.linkContent}>
               <Text style={styles.linkTitle}>Rate Us</Text>
               <Text style={styles.linkUrl}>Leave a review</Text>
             </View>
-            <MaterialIcons name="open-in-new" size={20} color={Colors.border} />
+            <Ionicons name="open" size={20} color={Colors.slate500} />
           </TouchableOpacity>
-        </View>
-
-        {/* About Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About PicklePlay</Text>
-          <View style={styles.aboutBox}>
-            <Text style={styles.aboutText}>
-              PicklePlay is a community-driven platform dedicated to connecting pickleball enthusiasts. 
-              Our mission is to make it easy for players of all levels to find courts, book time slots, 
-              and connect with other players in their area.
-            </Text>
-          </View>
         </View>
 
         {/* Footer */}
         <View style={styles.footerSection}>
-          <Text style={styles.footerText}>© 2026 PicklePlay Inc. All rights reserved.</Text>
-          <Text style={styles.footerSubtext}>Made with ❤️ for pickleball lovers worldwide</Text>
+          <Text style={styles.footerText}>© 2026 PicklePlay Inc. All rights reserved</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -177,59 +195,76 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
   },
   headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Colors.white,
-    fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
   },
   appHeaderSection: {
     alignItems: 'center',
-    paddingVertical: 40,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingVertical: 32,
+  },
+  logoBadge: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.lime400 + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   logoImage: {
-    width: 220,
-    height: 100,
-    resizeMode: 'contain',
-    marginBottom: 15,
+    width: 80,
+    height: 80,
   },
   appName: {
-    color: Colors.text,
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 32,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -1,
+    marginBottom: 4,
   },
   tagline: {
-    color: Colors.textSecondary,
-    fontSize: 16,
-    fontStyle: 'italic',
+    fontSize: 14,
+    color: Colors.slate600,
+    letterSpacing: 0.5,
   },
   section: {
-    paddingHorizontal: 15,
-    marginVertical: 15,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 10,
+    letterSpacing: -0.5,
   },
   infoCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   infoRow: {
     flexDirection: 'row',
@@ -239,33 +274,39 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   infoLabel: {
-    color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: Colors.slate600,
+    letterSpacing: -0.2,
   },
   infoValue: {
-    color: Colors.text,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: Colors.slate950,
+    letterSpacing: -0.2,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
-    marginHorizontal: 16,
+    backgroundColor: Colors.slate100,
   },
   featureCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   featureIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: thematicBlue,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.slate950,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -274,86 +315,97 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   featureTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   featureDescription: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
   },
   creditItem: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  creditIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   creditContent: {
-    marginLeft: 12,
     flex: 1,
   },
   creditTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   creditDescription: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
   },
   linkItem: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  linkIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    backgroundColor: Colors.slate950,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   linkContent: {
     flex: 1,
-    marginLeft: 12,
   },
   linkTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   linkUrl: {
-    color: thematicBlue,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
-  },
-  aboutBox: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: activeColor,
-  },
-  aboutText: {
-    color: Colors.text,
-    fontSize: 14,
-    lineHeight: 22,
   },
   footerSection: {
     alignItems: 'center',
-    paddingVertical: 30,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    marginTop: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 16,
   },
   footerText: {
-    color: Colors.textSecondary,
     fontSize: 12,
-  },
-  footerSubtext: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    marginTop: 5,
+    color: Colors.slate500,
+    textAlign: 'center',
   },
 });
 

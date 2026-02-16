@@ -1,138 +1,222 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    StyleSheet,
     View,
     Text,
-    TouchableOpacity,
+    StyleSheet,
     ScrollView,
+    ActivityIndicator,
+    TouchableOpacity,
+    SafeAreaView,
     StatusBar,
     Image,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../lib/supabase';
 import Colors from '../constants/Colors';
+import { Ionicons } from '@expo/vector-icons';
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
+const BookingReceiptScreen = ({ route, navigation }) => {
+    const { bookingId } = route.params;
+    const [booking, setBooking] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-const BookingReceiptScreen = ({ navigation, route }) => {
-    const { bookingDetails } = route.params || {};
+    useEffect(() => {
+        fetchBookingDetails();
+    }, [bookingId]);
 
-    // Static fallback data if no booking details passed
-    const staticBookingDetails = {
-        bookingId: 'BK-DEMO12345',
-        court: {
-            name: 'Banawa Community Court',
-            location: 'Banawa, Cebu City',
-            rating: 4.8,
-        },
-        date: 'February 3, 2026',
-        time: '08:00 AM',
-        guests: 2,
-        courtFee: '$20.00',
-        serviceFee: '$2.00',
-        totalPrice: '$22.00',
-        paymentMethod: 'Credit Card ****1234',
-        paymentStatus: 'Paid',
-        bookingStatus: 'Confirmed',
+    const fetchBookingDetails = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('bookings')
+                .select(`
+                    *,
+                    courts (*)
+                `)
+                .eq('id', bookingId)
+                .single();
+
+            if (error) throw error;
+            setBooking(data);
+        } catch (err) {
+            console.error('Error fetching booking:', err);
+            setError('Failed to load booking details');
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const booking = bookingDetails || staticBookingDetails;
-
-    if (!booking) {
-        return (
-            <View style={styles.errorContainer}>
-                <Text>Error: No booking details found.</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Home')}>
-                    <Text style={{ color: thematicBlue, marginTop: 10 }}>Go Home</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    const { court, date, time, guests, courtFee, serviceFee, totalPrice, bookingId, paymentMethod, paymentStatus } = booking;
-
-    const handleDone = () => {
-        // Navigate to Home and ensure the state is fully reset
-        navigation.reset({
-            index: 0,
-            routes: [{ name: 'Home', params: { screenIndex: 0 } }],
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
     };
 
+    const formatTime = (timeString) => {
+        try {
+            // Handle time strings like "14:00:00" or "2:00 PM"
+            if (typeof timeString === 'string' && timeString.includes(':')) {
+                const [hours, minutes] = timeString.split(':').slice(0, 2);
+                const hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour % 12 || 12;
+                return `${displayHour}:${minutes} ${ampm}`;
+            }
+            // Fallback for datetime strings
+            const date = new Date(timeString);
+            return date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            console.error('Error formatting time:', error);
+            return timeString;
+        }
+    };
+
+    const handleDone = () => {
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+        });
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar barStyle="light-content" />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={Colors.lime400} />
+                    <Text style={styles.loadingText}>Loading receipt...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (error || !booking) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar barStyle="light-content" />
+                <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle-outline" size={64} color={Colors.lime400} />
+                    <Text style={styles.errorText}>{error || 'Booking not found'}</Text>
+                    <TouchableOpacity style={styles.homeButton} onPress={handleDone}>
+                        <Text style={styles.homeButtonText}>GO HOME</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    const serviceFee = booking.total_price * 0.1;
+    const totalAmount = booking.total_price + serviceFee;
+
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+            <StatusBar barStyle="light-content" />
 
-            <ScrollView contentContainerStyle={styles.content}>
+            {/* Close Button Header */}
+            <View style={styles.headerClose}>
+                <TouchableOpacity onPress={handleDone} style={styles.closeButtonContainer}>
+                    <Ionicons name="close" size={28} color={Colors.white} />
+                </TouchableOpacity>
+            </View>
 
-                {/* Success Icon */}
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.content}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Success Header */}
                 <View style={styles.successHeader}>
                     <View style={styles.iconContainer}>
-                        <MaterialIcons name="check" size={50} color={Colors.white} />
+                        <Ionicons name="checkmark" size={48} color={Colors.slate950} />
                     </View>
-                    <Text style={styles.successTitle}>Booking Confirmed!</Text>
-                    <Text style={styles.successSubtitle}>Your court is reserved.</Text>
+                    <Text style={styles.successTitle}>BOOKING CONFIRMED!</Text>
+                    <Text style={styles.successSubtitle}>Your court is reserved</Text>
                 </View>
 
                 {/* Receipt Card */}
                 <View style={styles.receiptCard}>
-                    {/* Court Info */}
+                    {/* Booking ID & Status */}
                     <View style={styles.headerRow}>
-                        <Text style={styles.label}>Booking ID</Text>
-                        <Text style={styles.value}>{bookingId}</Text>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.courtSection}>
-                        <Text style={styles.courtName}>{court?.name}</Text>
-                        <Text style={styles.courtLocation}>{court?.location}</Text>
-                    </View>
-
-                    <View style={styles.detailsRow}>
-                        <View style={styles.detailItem}>
-                            <MaterialIcons name="calendar-today" size={20} color={thematicBlue} />
-                            <Text style={styles.detailText}>{date}</Text>
+                        <View>
+                            <Text style={styles.label}>BOOKING ID</Text>
+                            <Text style={styles.bookingId}>#{booking.id}</Text>
                         </View>
-                        <View style={styles.detailItem}>
-                            <MaterialIcons name="access-time" size={20} color={thematicBlue} />
-                            <Text style={styles.detailText}>{time}</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.detailItem}>
-                        <MaterialIcons name="people" size={20} color={thematicBlue} />
-                        <Text style={styles.detailText}>{guests} Players</Text>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    {/* Payment Info */}
-                    <View style={styles.row}>
-                        <Text style={styles.label}>Court Fee</Text>
-                        <Text style={styles.value}>{courtFee}</Text>
-                    </View>
-                    <View style={styles.row}>
-                        <Text style={styles.label}>Service Fee</Text>
-                        <Text style={styles.value}>{serviceFee}</Text>
-                    </View>
-                    <View style={[styles.row, styles.totalRow]}>
-                        <Text style={styles.totalLabel}>Total Paid</Text>
-                        <Text style={styles.totalValue}>{totalPrice}</Text>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    {/* Payment Method */}
-                    <View style={styles.row}>
-                        <Text style={styles.label}>Payment Method</Text>
-                        <Text style={styles.value}>{paymentMethod}</Text>
-                    </View>
-                    <View style={styles.row}>
-                        <Text style={styles.label}>Payment Status</Text>
                         <View style={styles.statusBadge}>
-                            <Text style={styles.statusText}>{paymentStatus}</Text>
+                            <Text style={styles.statusText}>CONFIRMED</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    {/* Court Information */}
+                    <View style={styles.courtSection}>
+                        <Text style={styles.sectionLabel}>COURT DETAILS</Text>
+                        <Text style={styles.courtName}>{booking.courts?.name || 'Court'}</Text>
+                        <View style={styles.locationRow}>
+                            <Ionicons name="location" size={16} color={Colors.slate500} />
+                            <Text style={styles.courtLocation}>
+                                {booking.courts?.location || 'Location'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    {/* Date & Time Details */}
+                    <View style={styles.detailsSection}>
+                        <Text style={styles.sectionLabel}>RESERVATION TIME</Text>
+                        
+                        <View style={styles.detailItem}>
+                            <View style={styles.detailIconContainer}>
+                                <Ionicons name="calendar" size={20} color={Colors.lime400} />
+                            </View>
+                            <View style={styles.detailTextContainer}>
+                                <Text style={styles.detailLabel}>Date</Text>
+                                <Text style={styles.detailValue}>{formatDate(booking.date)}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.detailItem}>
+                            <View style={styles.detailIconContainer}>
+                                <Ionicons name="time" size={20} color={Colors.lime400} />
+                            </View>
+                            <View style={styles.detailTextContainer}>
+                                <Text style={styles.detailLabel}>Time</Text>
+                                <Text style={styles.detailValue}>
+                                    {formatTime(booking.start_time)} - {formatTime(booking.end_time)}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    {/* Payment Summary */}
+                    <View style={styles.paymentSection}>
+                        <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
+                        
+                        <View style={styles.row}>
+                            <Text style={styles.rowLabel}>Court Rental</Text>
+                            <Text style={styles.rowValue}>₱{booking.total_price.toFixed(2)}</Text>
+                        </View>
+                        
+                        <View style={styles.row}>
+                            <Text style={styles.rowLabel}>Service Fee</Text>
+                            <Text style={styles.rowValue}>₱{serviceFee.toFixed(2)}</Text>
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.totalRow}>
+                            <Text style={styles.totalLabel}>TOTAL PAID</Text>
+                            <Text style={styles.totalValue}>₱{totalAmount.toFixed(2)}</Text>
                         </View>
                     </View>
                 </View>
@@ -143,8 +227,10 @@ const BookingReceiptScreen = ({ navigation, route }) => {
                         source={require('../assets/PickleplayPH.png')}
                         style={styles.thankYouLogo}
                     />
-                    <Text style={styles.thankYouTitle}>Thank you for booking!</Text>
-                    <Text style={styles.thankYouSubtext}>We hope you have a great game</Text>
+                    <Text style={styles.thankYouTitle}>THANK YOU FOR BOOKING!</Text>
+                    <Text style={styles.thankYouSubtext}>
+                        We hope you have an amazing game
+                    </Text>
                 </View>
 
                 <Image
@@ -158,7 +244,7 @@ const BookingReceiptScreen = ({ navigation, route }) => {
             {/* Done Button */}
             <View style={styles.footer}>
                 <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
-                    <Text style={styles.doneButtonText}>Done</Text>
+                    <Text style={styles.doneButtonText}>DONE</Text>
                 </TouchableOpacity>
             </View>
 
@@ -169,16 +255,58 @@ const BookingReceiptScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: thematicBlue,
+        backgroundColor: Colors.slate950,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    content: {
+        padding: 20,
+        paddingBottom: 40,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 20,
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.slate300,
+        letterSpacing: -0.5,
     },
     errorContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    content: {
         padding: 20,
-        alignItems: 'center',
+    },
+    errorText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.slate200,
+        marginTop: 20,
+        marginBottom: 30,
+        textAlign: 'center',
+        letterSpacing: -0.5,
+    },
+    homeButton: {
+        backgroundColor: Colors.lime400,
+        paddingHorizontal: 40,
+        paddingVertical: 16,
+        borderRadius: 24,
+        shadowColor: Colors.lime400,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    homeButtonText: {
+        color: Colors.slate950,
+        fontSize: 16,
+        fontWeight: '900',
+        letterSpacing: 0.5,
     },
     successHeader: {
         alignItems: 'center',
@@ -186,159 +314,249 @@ const styles = StyleSheet.create({
         marginTop: 20,
     },
     iconContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: activeColor,
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: Colors.lime400,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 15,
+        marginBottom: 20,
+        shadowColor: Colors.lime400,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        elevation: 8,
     },
     successTitle: {
-        fontSize: 24,
-        fontWeight: 'bold',
+        fontSize: 28,
+        fontWeight: '900',
         color: Colors.white,
-        marginBottom: 5,
+        marginBottom: 8,
+        letterSpacing: -1,
     },
     successSubtitle: {
         fontSize: 16,
-        color: 'rgba(255,255,255,0.8)',
+        fontWeight: '500',
+        color: Colors.slate400,
+        letterSpacing: -0.5,
     },
     receiptCard: {
         width: '100%',
         backgroundColor: Colors.white,
-        borderRadius: 20,
-        padding: 25,
+        borderRadius: 24,
+        padding: 24,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 5,
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 6,
     },
     headerRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
+        alignItems: 'flex-start',
+        marginBottom: 8,
     },
     label: {
-        fontSize: 14,
-        color: '#666',
+        fontSize: 11,
+        fontWeight: '700',
+        color: Colors.slate500,
+        marginBottom: 4,
+        letterSpacing: 0.5,
     },
-    value: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
+    bookingId: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: -0.5,
+    },
+    statusBadge: {
+        backgroundColor: Colors.lime400,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 16,
+    },
+    statusText: {
+        color: Colors.slate950,
+        fontSize: 12,
+        fontWeight: '900',
+        letterSpacing: 0.5,
     },
     divider: {
         height: 1,
-        backgroundColor: '#eee',
-        marginVertical: 15,
+        backgroundColor: Colors.slate200,
+        marginVertical: 20,
+    },
+    sectionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: Colors.slate500,
+        marginBottom: 12,
+        letterSpacing: 0.5,
     },
     courtSection: {
-        marginBottom: 15,
+        marginBottom: 0,
     },
     courtName: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: thematicBlue,
-        marginBottom: 5,
+        fontSize: 22,
+        fontWeight: '900',
+        color: Colors.slate950,
+        marginBottom: 8,
+        letterSpacing: -1,
+    },
+    locationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
     courtLocation: {
         fontSize: 14,
-        color: '#666',
+        fontWeight: '500',
+        color: Colors.slate600,
+        letterSpacing: -0.3,
     },
-    detailsRow: {
-        flexDirection: 'row',
-        marginBottom: 10,
-        gap: 20,
+    detailsSection: {
+        gap: 16,
     },
     detailItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 5,
+        gap: 12,
     },
-    detailText: {
-        marginLeft: 8,
+    detailIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: Colors.slate100,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    detailTextContainer: {
+        flex: 1,
+    },
+    detailLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: Colors.slate500,
+        marginBottom: 2,
+        letterSpacing: -0.3,
+    },
+    detailValue: {
         fontSize: 16,
-        color: '#333',
-        fontWeight: '500',
+        fontWeight: '800',
+        color: Colors.slate950,
+        letterSpacing: -0.5,
+    },
+    paymentSection: {
+        marginBottom: 0,
     },
     row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 8,
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    rowLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: Colors.slate600,
+        letterSpacing: -0.3,
+    },
+    rowValue: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: Colors.slate950,
+        letterSpacing: -0.5,
     },
     totalRow: {
-        marginTop: 10,
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 4,
     },
     totalLabel: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: thematicBlue,
+        fontSize: 16,
+        fontWeight: '900',
+        color: Colors.slate950,
+        letterSpacing: -0.5,
     },
     totalValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: activeColor,
-    },
-    statusBadge: {
-        backgroundColor: activeColor,
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    statusText: {
-        color: thematicBlue,
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    watermark: {
-        width: 50,
-        height: 50,
-        opacity: 0.5,
-        marginTop: 20,
-        alignSelf: 'center',
+        fontSize: 24,
+        fontWeight: '900',
+        color: Colors.lime400,
+        letterSpacing: -1,
     },
     thankYouSection: {
         alignItems: 'center',
-        marginTop: 30,
+        marginTop: 40,
         paddingHorizontal: 20,
     },
     thankYouLogo: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        marginBottom: 15,
+        marginBottom: 20,
+        borderWidth: 3,
+        borderColor: Colors.slate800,
     },
     thankYouTitle: {
         fontSize: 20,
-        fontWeight: 'bold',
+        fontWeight: '900',
         color: Colors.white,
-        marginBottom: 5,
+        marginBottom: 8,
+        letterSpacing: -0.5,
+        textAlign: 'center',
     },
     thankYouSubtext: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.7)',
-        fontStyle: 'italic',
+        fontSize: 15,
+        fontWeight: '500',
+        color: Colors.slate400,
+        letterSpacing: -0.3,
+        textAlign: 'center',
+    },
+    watermark: {
+        width: 60,
+        height: 60,
+        opacity: 0.15,
+        marginTop: 30,
+        alignSelf: 'center',
+    },
+    headerClose: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: Colors.slate950,
+    },
+    closeButtonContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(132, 204, 22, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     footer: {
         padding: 20,
         paddingBottom: 30,
+        backgroundColor: Colors.slate950,
     },
     doneButton: {
-        backgroundColor: activeColor,
+        backgroundColor: Colors.lime400,
         paddingVertical: 18,
-        borderRadius: 30,
+        borderRadius: 24,
         alignItems: 'center',
+        shadowColor: Colors.lime400,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
     },
     doneButtonText: {
-        color: thematicBlue,
+        color: Colors.slate950,
         fontSize: 18,
-        fontWeight: 'bold',
+        fontWeight: '900',
+        letterSpacing: 0.5,
     },
 });
 

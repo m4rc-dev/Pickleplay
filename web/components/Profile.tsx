@@ -34,8 +34,11 @@ import {
   Download,
   Calendar,
   ShoppingBag,
-  Star
+  Star,
+  QrCode,
+  Smartphone
 } from 'lucide-react';
+import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
 import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings, createSession } from '../services/supabase';
 import { sendEmailCode, verifyCode, generateBackupCodes, saveBackupCodes } from '../services/twoFactorAuth';
@@ -125,6 +128,10 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   // Profile message state
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // QR Code state (for mobile app deep link)
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   // Avatar upload state
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -644,6 +651,38 @@ Never share them with anyone.`;
 
     fetchProfile();
   }, [userId]);
+
+  // Generate QR code for mobile app deep link
+  useEffect(() => {
+    const generateProfileQR = async () => {
+      if (!profileId) return;
+      try {
+        // Build deep link data for the mobile app
+        // The mobile app uses the "pickleplay://" scheme
+        const qrPayload = JSON.stringify({
+          type: 'profile',
+          userId: profileId,
+          deepLink: `pickleplay://profile/${profileId}`,
+          webUrl: `${window.location.origin}/#/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
+          generatedAt: new Date().toISOString()
+        });
+
+        const dataUrl = await QRCodeLib.toDataURL(qrPayload, {
+          width: 280,
+          margin: 2,
+          color: {
+            dark: '#0f172a',
+            light: '#ffffff'
+          }
+        });
+        setQrCodeDataUrl(dataUrl);
+      } catch (error) {
+        console.error('Error generating profile QR code:', error);
+      }
+    };
+
+    generateProfileQR();
+  }, [profileId]);
 
   useEffect(() => {
     const fetchPreferenceOptions = async () => {
@@ -1551,6 +1590,48 @@ Never share them with anyone.`;
                 <span className="font-black text-slate-950 text-sm">{profileData.matches_played || 0}</span>
               </div>
             </div>
+
+            {/* QR Code — Open in Mobile App */}
+            {isCurrentUser && qrCodeDataUrl && (
+              <div className="pt-8 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <Smartphone className="text-blue-600" size={14} />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Open in App</span>
+                </div>
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={() => setShowQrModal(true)}
+                    className="group relative bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-3 transition-all hover:shadow-lg cursor-pointer"
+                    title="Click to enlarge"
+                  >
+                    <img src={qrCodeDataUrl} alt="Profile QR Code" className="w-32 h-32" />
+                    <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/5 rounded-2xl transition-all flex items-center justify-center">
+                      <ZoomIn className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" size={20} />
+                    </div>
+                  </button>
+                  <p className="text-[10px] text-slate-500 font-semibold text-center leading-relaxed">
+                    Scan with the <span className="font-bold text-slate-700">PicklePlay</span> mobile app
+                  </p>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={() => setShowQrModal(true)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all"
+                    >
+                      <ZoomIn size={11} />
+                      Enlarge
+                    </button>
+                    <a
+                      href={qrCodeDataUrl}
+                      download="pickleplay-profile-qr.png"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all"
+                    >
+                      <Download size={11} />
+                      Save
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2813,6 +2894,63 @@ Never share them with anyone.`;
                   >
                     {isUploadingAvatar ? <><Loader2 size={16} className="animate-spin" /> Uploading...</> : 'Apply & Save'}
                   </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* QR Code Enlarged Modal */}
+          {showQrModal && qrCodeDataUrl && ReactDOM.createPortal(
+            <div
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center z-[9999] p-4 cursor-pointer animate-in fade-in duration-300"
+              onClick={() => setShowQrModal(false)}
+            >
+              <div
+                className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 cursor-default"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-blue-50 rounded-xl">
+                      <QrCode size={20} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-950">Profile QR Code</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Scan with PicklePlay App</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowQrModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                  >
+                    <X size={18} className="text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center gap-6">
+                  <div className="bg-white border-2 border-slate-100 rounded-2xl p-5 shadow-inner">
+                    <img src={qrCodeDataUrl} alt="Profile QR Code" className="w-64 h-64" />
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <p className="text-sm text-slate-600 font-medium">
+                      Point your phone's camera or use the <span className="font-bold text-slate-900">PicklePlay</span> app scanner
+                    </p>
+                    <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-500 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest">
+                      <Smartphone size={12} />
+                      Mobile App Required
+                    </div>
+                  </div>
+
+                  <a
+                    href={qrCodeDataUrl}
+                    download="pickleplay-profile-qr.png"
+                    className="w-full inline-flex items-center justify-center gap-2 h-12 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                  >
+                    <Download size={16} />
+                    Download QR Code
+                  </a>
                 </div>
               </div>
             </div>,

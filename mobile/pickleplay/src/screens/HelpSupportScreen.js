@@ -1,178 +1,219 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Linking,
   Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {MaterialIcons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
-
 const HelpSupportScreen = ({ navigation }) => {
+  const [expandedIndex, setExpandedIndex] = useState(null);
+
   const faqs = [
     {
       question: 'How do I find pickleball courts near me?',
       answer: 'Use the "Find Courts" tab to search for courts in your area. You can filter by distance, amenities, and rating.',
+      icon: 'search',
     },
     {
       question: 'How do I book a court?',
       answer: 'Click on a court in the search results, then tap "Book Court" to reserve your time slot.',
+      icon: 'calendar',
     },
     {
       question: 'Can I cancel a booking?',
       answer: 'Yes, you can cancel up to 24 hours before your scheduled time. Visit your bookings and select cancel.',
+      icon: 'trash',
     },
     {
       question: 'How do I join a game?',
       answer: 'Look for open games in the "Find Courts" tab and request to join. The organizer will approve your request.',
+      icon: 'people',
     },
     {
-      question: 'Is there a cancellation fee?',
+      question: 'What is the cancellation policy?',
       answer: 'Cancellations made 24+ hours before the booking have no fee. Cancellations within 24 hours may incur a fee.',
+      icon: 'information',
     },
   ];
 
-  const [expandedIndex, setExpandedIndex] = React.useState(null);
+  const contactOptions = [
+    {
+      icon: 'mail',
+      title: 'Email Support',
+      description: 'support@pickleplay.ph',
+      action: () => Linking.openURL('mailto:support@pickleplay.ph'),
+    },
+    {
+      icon: 'call',
+      title: 'Call Us',
+      description: '+63 (2) 1234-5678',
+      action: () => Linking.openURL('tel:+6321234567'),
+    },
+    {
+      icon: 'chatbubble',
+      title: 'Live Chat',
+      description: 'Chat with our support team',
+      action: () => Alert.alert('Live Chat', 'Live chat will open shortly. Coming soon!'),
+    },
+  ];
 
-  const FAQItem = ({ index, question, answer }) => (
-    <TouchableOpacity 
-      style={styles.faqItem}
+  const FAQ = ({ index, question, answer, icon }) => (
+    <TouchableOpacity
+      style={styles.faqCard}
       onPress={() => setExpandedIndex(expandedIndex === index ? null : index)}
+      activeOpacity={0.7}
     >
-      <View style={styles.faqQuestion}>
-        <MaterialIcons 
-          name={expandedIndex === index ? 'expand-less' : 'expand-more'} 
-          size={24} 
-          color={thematicBlue} 
+      <View style={styles.faqHeader}>
+        <View style={styles.faqIconContainer}>
+          <Ionicons name={icon} size={20} color={Colors.lime400} />
+        </View>
+        <Text style={styles.faqQuestion} numberOfLines={2}>
+          {question}
+        </Text>
+        <Ionicons
+          name={expandedIndex === index ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={Colors.slate500}
         />
-        <Text style={styles.faqQuestionText}>{question}</Text>
       </View>
       {expandedIndex === index && (
-        <Text style={styles.faqAnswer}>{answer}</Text>
+        <View style={styles.faqAnswerContainer}>
+          <Text style={styles.faqAnswer}>{answer}</Text>
+        </View>
       )}
     </TouchableOpacity>
   );
 
-  const ContactItem = ({ icon, title, description, onPress }) => (
-    <TouchableOpacity style={styles.contactItem} onPress={onPress}>
+  const ContactCard = ({ icon, title, description, action }) => (
+    <TouchableOpacity
+      style={styles.contactCard}
+      onPress={action}
+      activeOpacity={0.8}
+    >
       <View style={styles.contactIconContainer}>
-        <MaterialIcons name={icon} size={24} color={Colors.white} />
+        <Ionicons name={icon} size={24} color={Colors.white} />
       </View>
-      <View style={styles.contactContent}>
+      <View style={styles.contactInfo}>
         <Text style={styles.contactTitle}>{title}</Text>
         <Text style={styles.contactDescription}>{description}</Text>
       </View>
-      <MaterialIcons name="chevron-right" size={24} color={Colors.border} />
+      <Ionicons name="chevron-forward" size={20} color={Colors.slate400} />
     </TouchableOpacity>
   );
 
-  const handleEmail = () => {
-    Linking.openURL('mailto:support@pickleplay.com');
-  };
-
-  const handlePhone = () => {
-    Linking.openURL('tel:+1-800-PICKLE-1');
-  };
-
-  const handleLiveChat = () => {
-    Alert.alert('Live Chat', 'Live chat will open shortly. Coming soon!', [{ text: 'OK' }]);
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color={Colors.white} />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
         <View style={{ width: 28 }} />
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Quick Contact Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Get Help</Text>
-          <ContactItem
-            icon="email"
-            title="Email Support"
-            description="support@pickleplay.com"
-            onPress={handleEmail}
-          />
-          <ContactItem
-            icon="phone"
-            title="Call Us"
-            description="+1-800-PICKLE-1"
-            onPress={handlePhone}
-          />
-          <ContactItem
-            icon="chat"
-            title="Live Chat"
-            description="Chat with our support team"
-            onPress={handleLiveChat}
-          />
+          <View style={styles.sectionHeader}>
+            <Ionicons name="headset-sharp" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Quick Contact</Text>
+          </View>
+
+          {contactOptions.map((option, index) => (
+            <ContactCard
+              key={index}
+              icon={option.icon}
+              title={option.title}
+              description={option.description}
+              action={option.action}
+            />
+          ))}
         </View>
 
         {/* FAQ Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="help-circle-sharp" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+          </View>
+
           {faqs.map((faq, index) => (
-            <FAQItem
+            <FAQ
               key={index}
               index={index}
               question={faq.question}
               answer={faq.answer}
+              icon={faq.icon}
             />
           ))}
         </View>
 
         {/* Resources Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Resources</Text>
-          <TouchableOpacity style={styles.resourceItem}>
-            <MaterialIcons name="description" size={24} color={thematicBlue} />
+          <View style={styles.sectionHeader}>
+            <Ionicons name="book-sharp" size={24} color={Colors.lime400} />
+            <Text style={styles.sectionTitle}>Resources</Text>
+          </View>
+
+          <TouchableOpacity style={styles.resourceCard} activeOpacity={0.8}>
+            <View style={styles.resourceIconContainer}>
+              <Ionicons name="document" size={20} color={Colors.white} />
+            </View>
             <View style={styles.resourceContent}>
               <Text style={styles.resourceTitle}>User Guide</Text>
               <Text style={styles.resourceDescription}>Learn how to use PicklePlay</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={Colors.border} />
+            <Ionicons name="chevron-forward" size={20} color={Colors.slate400} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.resourceItem}>
-            <MaterialIcons name="gavel" size={24} color={thematicBlue} />
-            <View style={styles.resourceContent}>
-              <Text style={styles.resourceTitle}>Terms of Service</Text>
-              <Text style={styles.resourceDescription}>Read our terms and conditions</Text>
+
+          <TouchableOpacity style={styles.resourceCard} activeOpacity={0.8}>
+            <View style={styles.resourceIconContainer}>
+              <Ionicons name="shield-checkmark" size={20} color={Colors.white} />
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={Colors.border} />
+            <View style={styles.resourceContent}>
+              <Text style={styles.resourceTitle}>Terms & Conditions</Text>
+              <Text style={styles.resourceDescription}>Read our terms of service</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.slate400} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.resourceItem}>
-            <MaterialIcons name="privacy-tip" size={24} color={thematicBlue} />
+
+          <TouchableOpacity style={styles.resourceCard} activeOpacity={0.8}>
+            <View style={styles.resourceIconContainer}>
+              <Ionicons name="lock-closed" size={20} color={Colors.white} />
+            </View>
             <View style={styles.resourceContent}>
               <Text style={styles.resourceTitle}>Privacy Policy</Text>
-              <Text style={styles.resourceDescription}>View our privacy policy</Text>
+              <Text style={styles.resourceDescription}>How we protect your data</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={Colors.border} />
+            <Ionicons name="chevron-forward" size={20} color={Colors.slate400} />
           </TouchableOpacity>
         </View>
 
-        {/* Support Status */}
-        <View style={styles.statusBox}>
-          <MaterialIcons name="check-circle" size={20} color={activeColor} />
-          <View style={styles.statusContent}>
-            <Text style={styles.statusTitle}>Support Status</Text>
-            <Text style={styles.statusText}>We typically respond within 2-4 hours</Text>
+        {/* App Info */}
+        <View style={styles.section}>
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={Colors.lime400} />
+            <Text style={styles.infoText}>
+              PicklePlay v1.0.0 • Build 2024.01 • © 2024 All rights reserved
+            </Text>
           </View>
         </View>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -184,135 +225,170 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
   },
   headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Colors.white,
-    fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
   },
   section: {
-    paddingHorizontal: 15,
-    marginVertical: 10,
+    paddingHorizontal: 16,
+    paddingTop: 24,
   },
-  sectionTitle: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  contactItem: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 10,
+    letterSpacing: -0.5,
+  },
+  contactCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   contactIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: thematicBlue,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.lime400,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  contactContent: {
+  contactInfo: {
     flex: 1,
   },
   contactTitle: {
-    color: Colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   contactDescription: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
   },
-  faqItem: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    marginBottom: 10,
+  faqCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  faqQuestion: {
+  faqHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
   },
-  faqQuestionText: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 12,
-    flex: 1,
+  faqIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.lime400 + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  faqAnswer: {
-    color: Colors.textSecondary,
+  faqQuestion: {
+    flex: 1,
     fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate950,
+    marginRight: 8,
+    letterSpacing: -0.2,
+  },
+  faqAnswerContainer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-    lineHeight: 20,
+    borderTopColor: Colors.slate100,
+    borderTopWidth: 1,
   },
-  resourceItem: {
+  faqAnswer: {
+    fontSize: 14,
+    color: Colors.slate600,
+    lineHeight: 20,
+    letterSpacing: -0.1,
+  },
+  resourceCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  resourceIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    backgroundColor: Colors.slate950,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   resourceContent: {
     flex: 1,
-    marginLeft: 12,
   },
   resourceTitle: {
-    color: Colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: -0.3,
   },
   resourceDescription: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: Colors.slate600,
     marginTop: 2,
   },
-  statusBox: {
+  infoBox: {
+    backgroundColor: Colors.lime400 + '10',
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: activeColor,
     alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.lime400,
   },
-  statusContent: {
+  infoText: {
+    fontSize: 13,
+    color: Colors.slate600,
     marginLeft: 12,
     flex: 1,
-  },
-  statusTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  statusText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    marginTop: 2,
+    lineHeight: 18,
   },
 });
 

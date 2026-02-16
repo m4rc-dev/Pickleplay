@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,433 +7,469 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  ImageBackground,
+  TextInput,
+  ActivityIndicator,
   Alert,
+  Platform,
+  Clipboard,
 } from 'react-native';
-import {LinearGradient} from 'expo-linear-gradient';
-import {MaterialIcons, MaterialCommunityIcons} from '@expo/vector-icons';
-import Colors from '../constants/Colors';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import Colors from '../constants/Colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
-
-const ProfileScreen = ({ navigation, onBackNavigation }) => {
-  const [currentScreenIndex, setCurrentScreenIndex] = useState(4);
-  const screens = ['Home', 'Find', 'Map', 'Shop', 'Profile'];
-  const { user, signOut } = useAuth();
-  const [userRole, setUserRole] = useState(null);
-  const [isVerifiedCoach, setIsVerifiedCoach] = useState(false);
-  const [profileData, setProfileData] = useState(null);
+const ProfileScreen = ({ navigation }) => {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    phone: '',
+    avatar_url: '',
+    bio: '',
+    skill_level: '',
+    points: 0,
+    referral_code: '',
+  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({});
 
   useEffect(() => {
-    fetchUserRole();
-    fetchProfileData();
+    fetchProfile();
   }, [user]);
 
-  const fetchUserRole = async () => {
-    if (!user) return;
+  const fetchProfile = async () => {
+    if (!user?.id) return;
 
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('active_role, roles')
-        .eq('id', user.id)
-        .single();
-
-      if (data) {
-        setUserRole(data.active_role);
-        setIsVerifiedCoach(data.roles?.includes('COACH') || false);
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-    }
-  };
-
-  const fetchProfileData = async () => {
-    if (!user) return;
-
-    try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
+      if (error && error.code !== 'PGRST116') throw error;
+
       if (data) {
-        setProfileData(data);
+        const profileInfo = {
+          full_name: data.full_name || '',
+          username: data.username || '',
+          email: data.email || user.email || '',
+          phone: data.phone || '',
+          avatar_url: data.avatar_url || '',
+          bio: data.bio || '',
+          skill_level: data.skill_level || '',
+          points: data.points || 0,
+          referral_code: data.referral_code || '',
+        };
+        setProfileData(profileInfo);
+        setEditData({ ...profileInfo });
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      Alert.alert('Error', 'Failed to load profile');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        // Set the URI in edit data
+        setEditData((prev) => ({
+          ...prev,
+          avatar_url: imageUri,
+        }));
       }
     } catch (error) {
-      console.error('Error fetching profile data:', error);
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
-  // Get user display info from auth metadata
-  const getUserDisplayName = () => {
-    if (user?.user_metadata?.full_name) {
-      return user.user_metadata.full_name;
+  const handleSaveProfile = async () => {
+    if (!editData.full_name || !editData.username) {
+      Alert.alert('Validation Error', 'Name and username are required');
+      return;
     }
-    if (user?.user_metadata?.first_name) {
-      return `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`.trim();
-    }
-    return user?.email?.split('@')[0] || 'Player';
-  };
 
-  const playerStats = {
-    name: getUserDisplayName(),
-    email: user?.email || 'No email',
-    profileImage: user?.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
-    ranking: 'Gold',
-    rankingTier: 2,
-    experience: 650,
-    experienceRequired: 1000,
-    wins: 28,
-    losses: 14,
-    rating: 4.8,
-    gamesPlayed: 42,
-    friends: 12,
-    winRate: 66.7,
-    avgScore: 21,
-  };
+    try {
+      setIsSaving(true);
 
-  const getRankColor = (ranking) => {
-    const ranks = {
-      'Bronze': ['#CD7F32', '#8B4513'],
-      'Silver': ['#C0C0C0', '#808080'],
-      'Gold': ['#FFD700', '#FFA500'],
-      'Platinum': ['#E5E4E2', '#A0B2C6'],
-      'Diamond': ['#B9F2FF', '#00CED1'],
-      'Master': ['#9B30FF', '#4B0082'],
-    };
-    return ranks[ranking] || ['#667eea', '#764ba2'];
-  };
+      const updateData = {
+        full_name: editData.full_name,
+        username: editData.username,
+        phone: editData.phone,
+        bio: editData.bio,
+        skill_level: editData.skill_level,
+      };
 
-  const getRankIcon = (ranking) => {
-    const rankIcons = {
-      'Bronze': 'shield',
-      'Silver': 'shield',
-      'Gold': 'shield',
-      'Platinum': 'diamond',
-      'Diamond': 'diamond',
-      'Master': 'crown',
-    };
-    return rankIcons[ranking] || 'shield';
-  };
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id);
 
-  const getSkillPercentage = (level) => {
-    const levels = {
-      'beginner': 20,
-      'intermediate': 45,
-      'advanced': 70,
-      'expert': 85,
-      'pro': 100,
-      'bronze': 20,
-      'silver': 40,
-      'gold': 60,
-      'platinum': 80,
-      'diamond': 90,
-      'master': 100,
-    };
-    return levels[level?.toLowerCase()] || 50;
-  };
+      if (error) throw error;
 
-  const calculatePower = (stats) => {
-    return Math.round((stats.wins * 10 + (stats.mvp || 0) * 50 + (stats.tournaments || 0) * 100) / 10);
-  };
-
-  const navigateWithDirection = (targetIndex) => {
-    if (targetIndex === currentScreenIndex) return;
-    const isMovingForward = targetIndex > currentScreenIndex;
-    setCurrentScreenIndex(targetIndex);
-    const direction = isMovingForward ? 'right' : 'left';
-    navigation.navigate(screens[targetIndex], { direction, screenIndex: targetIndex });
-  };
-
-  const handleBackPress = () => {
-    if (onBackNavigation) {
-      onBackNavigation();
-    } else if (navigation && navigation.navigate) {
-      navigation.navigate('Home', { direction: 'left', screenIndex: 0 });
+      setProfileData(editData);
+      setIsEditing(false);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      Alert.alert('Error', 'Failed to save profile');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const profileOptions = [
-    {
-      icon: 'person',
-      title: 'Personal Information',
-      description: 'Update your profile details',
-      screen: 'PersonalInformation',
-    },
-    {
-      icon: 'settings',
-      title: 'Settings',
-      description: 'Manage app preferences',
-      screen: 'Settings',
-    },
-    {
-      icon: 'notifications',
-      title: 'Notifications',
-      description: 'Configure notification settings',
-      screen: 'NotificationsPrefs',
-    },
-    {
-      icon: 'security',
-      title: 'Privacy & Security',
-      description: 'Manage your privacy settings',
-      screen: 'PrivacySecurity',
-    },
-    {
-      icon: 'help',
-      title: 'Help & Support',
-      description: 'Get help with the app',
-      screen: 'HelpSupport',
-    },
-    {
-      icon: 'info',
-      title: 'About',
-      description: 'App version and information',
-      screen: 'About',
-    },
-  ];
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              // Navigation will be handled by auth state change
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Landing' }],
-              });
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleCancel = () => {
+    setEditData({ ...profileData });
+    setIsEditing(false);
   };
-
-  const StatCard = ({ icon, label, value, backgroundColor }) => (
-    <View style={[styles.statCard, { backgroundColor }]}>
-      <MaterialIcons name={icon} size={28} color={Colors.white} />
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Background Gradient Profile */}
-        <LinearGradient
-          colors={[thematicBlue, '#0D6EBD', '#15ce2e']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.profileGradient}
-        >
-          {/* Decorative Elements */}
-          <View style={styles.decorCircle1} />
-          <View style={styles.decorCircle2} />
-          
-          {/* Header Section */}
-          <View style={styles.headerSection}>
-            {/* Avatar */}
-            <View style={styles.avatarContainer}>
-              <Image 
-                source={{ uri: user?.user_metadata?.avatar_url || playerStats.profileImage }} 
-                style={styles.avatar} 
-              />
-              <View style={styles.onlineIndicator} />
-            </View>
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.backButton} />
+        <Text style={styles.headerTitle}>PROFILE</Text>
+        <View style={styles.headerButton} />
+      </LinearGradient>
 
-            {/* Player Info */}
-            <View style={styles.playerInfo}>
-              <Text style={styles.playerName}>{getUserDisplayName()}</Text>
-              <Text style={styles.usernameText}>@{user?.email?.split('@')[0] || 'player'}</Text>
-              
-              {/* Roles */}
-              <View style={styles.rolesContainer}>
-                {(profileData?.roles || ['Singles', 'Doubles']).map((role, index) => (
-                  <View key={index} style={styles.roleTag}>
-                    <Text style={styles.roleText}>{role}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Rank Badge */}
-            <View style={styles.rankContainer}>
-              <View style={styles.rankBadgeWrapper}>
-                <LinearGradient
-                  colors={getRankColor(profileData?.rank || playerStats.ranking)}
-                  style={styles.rankBadgeGradient}
-                >
-                  <MaterialCommunityIcons 
-                    name={getRankIcon(profileData?.rank || playerStats.ranking)} 
-                    size={28} 
-                    color="#fff" 
-                  />
-                </LinearGradient>
-                <View style={styles.rankGlow} />
-              </View>
-              <Text style={styles.rankText}>{profileData?.rank || playerStats.ranking}</Text>
-              <View style={styles.ratingRow}>
-                <MaterialIcons name="star" size={14} color={activeColor} />
-                <Text style={styles.ratingText}>{(profileData?.rating || playerStats.rating).toFixed(1)}</Text>
-              </View>
-            </View>
+      <ScrollView style={[styles.content, { backgroundColor: Colors.slate950 }]} showsVerticalScrollIndicator={false}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.lime400} />
+            <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
-
-          {/* Stats Grid */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profileData?.total_matches || playerStats.gamesPlayed}</Text>
-                <Text style={styles.statLabel}>Matches</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profileData?.total_wins || playerStats.wins}</Text>
-                <Text style={styles.statLabel}>Wins</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: activeColor }]}>{(profileData?.win_rate || playerStats.winRate).toFixed(1)}%</Text>
-                <Text style={styles.statLabel}>Win Rate</Text>
-              </View>
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profileData?.total_aces || 0}</Text>
-                <Text style={styles.statLabel}>Aces</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{profileData?.tournaments_played || 0}</Text>
-                <Text style={styles.statLabel}>Tournaments</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#FFD700' }]}>{profileData?.mvp_awards || 0}</Text>
-                <Text style={styles.statLabel}>MVP</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Skill Level Bar */}
-          <View style={styles.skillSection}>
-            <View style={styles.skillHeader}>
-              <Text style={styles.skillLabel}>SKILL LEVEL</Text>
-              <Text style={styles.skillValue}>{profileData?.skill_level || playerStats.ranking}</Text>
-            </View>
-            <View style={styles.skillBarContainer}>
+        ) : (
+          <>
+            {/* Avatar Section with Background Banner */}
+            <ImageBackground
+              source={require('../assets/518273417_1299120308450648_686096007508941878_n.jpg')}
+              style={styles.avatarSection}
+              imageStyle={styles.bannerImage}
+            >
               <LinearGradient
-                colors={[activeColor, '#7CFC00']}
+                colors={['rgba(51, 65, 85, 0.75)', 'rgba(30, 41, 59, 0.85)']}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.skillBarFill, { width: `${getSkillPercentage(profileData?.skill_level || playerStats.ranking)}%` }]}
-              />
-            </View>
-          </View>
-
-          {/* Achievements/Badges Section */}
-          <View style={styles.badgesSection}>
-            <Text style={styles.sectionTitleAchievements}>🏆 ACHIEVEMENTS</Text>
-            <View style={styles.badgesContainer}>
-              <View style={styles.badgeItem}>
-                <LinearGradient
-                  colors={['#FFD700', '#FFA500']}
-                  style={styles.badgeIconLarge}
+                end={{ x: 0, y: 1 }}
+                style={styles.bannerOverlay}
+              >
+                <TouchableOpacity
+                  onPress={handlePickImage}
+                  style={styles.editProfileButton}
+                  activeOpacity={0.7}
                 >
-                  <MaterialIcons name="emoji-events" size={22} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.badgeNameVisible}>{playerStats.ranking} Ranked</Text>
-              </View>
-              <View style={styles.badgeItem}>
-                <LinearGradient
-                  colors={['#E91E63', '#9C27B0']}
-                  style={styles.badgeIconLarge}
-                >
-                  <MaterialIcons name="local-fire-department" size={22} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.badgeNameVisible}>5 Win Streak</Text>
-              </View>
-              <View style={styles.badgeItem}>
-                <LinearGradient
-                  colors={['#00BCD4', '#0097A7']}
-                  style={styles.badgeIconLarge}
-                >
-                  <MaterialIcons name="sports-tennis" size={22} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.badgeNameVisible}>Pro Player</Text>
-              </View>
-            </View>
-          </View>
+                  <Ionicons name="pencil" size={18} color={Colors.white} />
+                </TouchableOpacity>
 
-          {/* Footer Stats */}
-          <View style={styles.footerStats}>
-            <View style={styles.footerStatItem}>
-              <MaterialIcons name="sports-tennis" size={16} color={activeColor} />
-              <Text style={styles.footerStatText}>Power: {calculatePower(playerStats)}</Text>
-            </View>
-            <View style={styles.footerStatItem}>
-              <MaterialIcons name="trending-up" size={16} color={activeColor} />
-              <Text style={styles.footerStatText}>Streak: 5W</Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* Role-Based Access Buttons */}
-        {(userRole === 'court_owner' || userRole === 'both') && (
-          <View style={styles.roleAccessSection}>
-            <TouchableOpacity
-              style={styles.roleButton}
-              onPress={() => navigation.navigate('CourtOwner')}
-            >
-              <View style={styles.roleButtonIcon}>
-                <MaterialIcons name="domain" size={28} color={thematicBlue} />
-              </View>
-              <View style={styles.roleButtonContent}>
-                <Text style={styles.roleButtonTitle}>Court Owner Dashboard</Text>
-                <Text style={styles.roleButtonDescription}>Manage your courts and bookings</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color="#ccc" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {(userRole === 'coach' || userRole === 'both') && isVerifiedCoach && (
-          <View style={styles.roleAccessSection}>
-            <TouchableOpacity
-              style={styles.roleButton}
-              onPress={() => navigation.navigate('Coach')}
-            >
-              <View style={styles.roleButtonIcon}>
-                <MaterialIcons name="school" size={28} color={thematicBlue} />
-              </View>
-              <View style={styles.roleButtonContent}>
-                <View style={styles.coachTitleRow}>
-                  <Text style={styles.roleButtonTitle}>Coach Dashboard</Text>
-                  <MaterialIcons name="verified" size={16} color="#4CAF50" />
+                <View style={styles.profileHeader}>
+                  <View style={styles.avatarContainer}>
+                    <Image
+                      source={{
+                        uri: editData.avatar_url
+                          ? editData.avatar_url
+                          : `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id}`,
+                      }}
+                      style={styles.avatar}
+                    />
+                  </View>
+                  
+                  <View style={styles.profileInfo}>
+                    <Text style={styles.fullName}>{editData.full_name}</Text>
+                    <Text style={styles.username}>@{editData.username}</Text>
+                    <View style={styles.badgeRow}>
+                      {editData.skill_level && (
+                        <View style={styles.skillBadge}>
+                          <Text style={styles.skillBadgeText}>{editData.skill_level}</Text>
+                        </View>
+                      )}
+                      <View style={styles.pointsBadge}>
+                        <Ionicons name="star" size={14} color={Colors.lime400} />
+                        <Text style={styles.pointsText}>{profileData.points || 0} pts</Text>
+                      </View>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.roleButtonDescription}>Manage your students and sessions</Text>
+              </LinearGradient>
+            </ImageBackground>
+
+            {/* Form Section */}
+            <View style={[styles.formSection, { backgroundColor: Colors.slate950 }]}>
+              {/* Full Name */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="person" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Full Name</Text>
+                </View>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.full_name}
+                    onChangeText={(text) =>
+                      setEditData((prev) => ({ ...prev, full_name: text }))
+                    }
+                    placeholder="Enter your full name"
+                    placeholderTextColor={Colors.slate400}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>{profileData.full_name}</Text>
+                )}
               </View>
-              <MaterialIcons name="chevron-right" size={24} color="#ccc" />
+
+              {/* Username */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="at" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Username</Text>
+                </View>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.username}
+                    onChangeText={(text) =>
+                      setEditData((prev) => ({ ...prev, username: text }))
+                    }
+                    placeholder="Enter your username"
+                    placeholderTextColor={Colors.slate400}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>@{profileData.username}</Text>
+                )}
+              </View>
+
+              {/* Email */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="mail" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Email</Text>
+                </View>
+                <Text style={styles.fieldValueDisabled}>{profileData.email}</Text>
+                <Text style={styles.fieldHelper}>Email cannot be changed</Text>
+              </View>
+
+              {/* Phone */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="call" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Phone</Text>
+                </View>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.textInput}
+                    value={editData.phone}
+                    onChangeText={(text) =>
+                      setEditData((prev) => ({ ...prev, phone: text }))
+                    }
+                    placeholder="Enter your phone number"
+                    placeholderTextColor={Colors.slate400}
+                    keyboardType="phone-pad"
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>{profileData.phone || 'Not provided'}</Text>
+                )}
+              </View>
+
+              {/* Bio */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="document-text" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Bio</Text>
+                </View>
+                {isEditing ? (
+                  <TextInput
+                    style={[styles.textInput, styles.bioInput]}
+                    value={editData.bio}
+                    onChangeText={(text) =>
+                      setEditData((prev) => ({ ...prev, bio: text }))
+                    }
+                    placeholder="Tell us about yourself"
+                    placeholderTextColor={Colors.slate400}
+                    multiline
+                    numberOfLines={4}
+                  />
+                ) : (
+                  <Text style={styles.fieldValue}>
+                    {profileData.bio || 'No bio added yet'}
+                  </Text>
+                )}
+              </View>
+
+              {/* Skill Level */}
+              <View style={styles.fieldContainer}>
+                <View style={styles.fieldLabel}>
+                  <Ionicons name="trophy" size={18} color={Colors.lime400} />
+                  <Text style={styles.labelText}>Skill Level</Text>
+                </View>
+                {isEditing ? (
+                  <View style={styles.skillLevelOptions}>
+                    {['Beginner', 'Intermediate', 'Advanced', 'Pro'].map((level) => (
+                      <TouchableOpacity
+                        key={level}
+                        style={[
+                          styles.skillOption,
+                          editData.skill_level === level && styles.skillOptionSelected,
+                        ]}
+                        onPress={() =>
+                          setEditData((prev) => ({ ...prev, skill_level: level }))
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.skillOptionText,
+                            editData.skill_level === level && styles.skillOptionTextSelected,
+                          ]}
+                        >
+                          {level}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.fieldValue}>{profileData.skill_level || 'Not set'}</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Notifications Card */}
+            <TouchableOpacity
+              style={styles.notificationCard}
+              onPress={() => navigation.navigate('NotificationsPrefs')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.notificationCardContent}>
+                <View style={styles.notificationIconContainer}>
+                  <Ionicons name="notifications" size={24} color={Colors.lime400} />
+                </View>
+                <View style={styles.notificationTextContainer}>
+                  <Text style={styles.notificationCardTitle}>Notifications</Text>
+                  <Text style={styles.notificationCardDescription}>
+                    Manage your notification preferences
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.slate400} />
+              </View>
             </TouchableOpacity>
-          </View>
+
+            {/* Action Buttons */}
+            {isEditing && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={isSaving}
+                >
+                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Referral & Points Section */}
+            {profileData.referral_code && (
+              <View style={styles.affiliationSection}>
+                <Text style={styles.affiliationHeader}>AFFILIATION PROGRAM</Text>
+                <Text style={styles.affiliationTitle}>SHARE & EARN.</Text>
+                <Text style={styles.affiliationDescription}>
+                  Invite your pickleball community to PicklePlay and earn rewards for every signup and activity.
+                </Text>
+
+                {/* Total Points Card */}
+                <View style={styles.totalPointsCard}>
+                  <Text style={styles.totalPointsLabel}>YOUR TOTAL POINTS</Text>
+                  <View style={styles.totalPointsRow}>
+                    <Ionicons name="star" size={24} color={Colors.lime400} />
+                    <Text style={styles.totalPointsValue}>{profileData.points || 0}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.referralRow}>
+                  {/* Referral Link Section */}
+                  <View style={styles.referralLinkSection}>
+                    <Text style={styles.sectionLabel}>YOUR REFERRAL LINK</Text>
+                    <View style={styles.linkContainer}>
+                      <TouchableOpacity
+                        style={styles.copyLinkButton}
+                        onPress={() => {
+                          Clipboard.setString(`https://www.pickleplay.ph/#/signup?ref=${profileData.referral_code}`);
+                          Alert.alert('Copied!', 'Referral link copied to clipboard');
+                        }}
+                      >
+                        <Text style={styles.copyLinkText}>COPY LINK</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.referralHashContainer}>
+                      <Text style={styles.referralHashCode}>{profileData.referral_code}</Text>
+                      <Text style={styles.referralHashLabel}>UNIQUE REFERRAL HASH</Text>
+                    </View>
+                  </View>
+
+                  {/* Points Package Section */}
+                  <View style={styles.pointsPackageSection}>
+                    <Text style={styles.sectionLabel}>POINTS PACKAGE</Text>
+                    
+                    <View style={styles.pointsItem}>
+                      <View style={styles.pointsItemLeft}>
+                        <Ionicons name="person-add" size={16} color={Colors.slate500} />
+                        <Text style={styles.pointsItemText}>FRIEND SIGNUP</Text>
+                      </View>
+                      <Text style={styles.pointsValue}>+10 pts</Text>
+                    </View>
+
+                    <View style={styles.pointsItem}>
+                      <View style={styles.pointsItemLeft}>
+                        <Ionicons name="calendar" size={16} color={Colors.slate500} />
+                        <Text style={styles.pointsItemText}>FRIEND BOOKING</Text>
+                      </View>
+                      <Text style={styles.pointsValue}>+8 pts</Text>
+                    </View>
+
+                    <View style={styles.pointsItem}>
+                      <View style={styles.pointsItemLeft}>
+                        <Ionicons name="cart" size={16} color={Colors.slate500} />
+                        <Text style={styles.pointsItemText}>FRIEND PURCHASE</Text>
+                      </View>
+                      <Text style={styles.pointsValue}>+5 pts</Text>
+                    </View>
+
+                    <View style={styles.pointsItem}>
+                      <View style={styles.pointsItemLeft}>
+                        <Ionicons name="star-outline" size={16} color={Colors.slate500} />
+                        <Text style={styles.pointsItemText}>FRIEND REVIEW</Text>
+                      </View>
+                      <Text style={styles.pointsValue}>+3 pts</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.spacer} />
+          </>
         )}
       </ScrollView>
     </View>
@@ -443,507 +479,454 @@ const ProfileScreen = ({ navigation, onBackNavigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: thematicBlue,
+    backgroundColor: Colors.slate950,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -0.5,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  
-  // Profile Gradient Styles
-  profileGradient: {
+  loadingContainer: {
     flex: 1,
-    padding: 20,
-    paddingBottom: 30,
-    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.slate400,
+  },
+  avatarSection: {
+    width: '100%',
     overflow: 'hidden',
-    minHeight: '100%',
   },
-  decorCircle1: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  bannerImage: {
+    resizeMode: 'cover',
   },
-  decorCircle2: {
-    position: 'absolute',
-    bottom: -30,
-    left: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  bannerOverlay: {
+    paddingHorizontal: 28,
+    paddingVertical: 74,
+    position: 'relative',
+    flexDirection: 'column',
   },
-  
-  // Header Section
-  headerSection: {
+  profileHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    justifyContent: 'flex-start',
+    marginTop: -44,
   },
   avatarContainer: {
     position: 'relative',
+    marginRight: 16,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
+    width: 85,
+    height: 85,
+    borderRadius: 42.5,
+    backgroundColor: Colors.slate600,
     borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+    borderColor: Colors.lime400,
   },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#00FF00',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  playerInfo: {
+  profileInfo: {
     flex: 1,
-    marginLeft: 14,
-    marginTop: 4,
+    justifyContent: 'flex-start',
   },
-  playerName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+  fullName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.white,
+    marginBottom: 4,
+    letterSpacing: -0.3,
   },
-  usernameText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
+  username: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.slate300,
     marginBottom: 8,
-  },
-  rolesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  roleTag: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  
-  // Rank Badge
-  rankContainer: {
-    alignItems: 'center',
-    marginLeft: 8,
-    minWidth: 70,
-  },
-  rankBadgeWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankBadgeGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  rankGlow: {
-    position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 215, 0, 0.15)',
-    zIndex: -1,
-  },
-  rankText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginTop: 6,
-    textTransform: 'uppercase',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 2,
-  },
-
-  // Stats Section
-  statsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    marginVertical: 6,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-
-  // Skill Section
-  skillSection: {
-    marginBottom: 16,
-  },
-  skillHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  skillLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.5,
-  },
-  skillValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: activeColor,
-    textAlign: 'right',
-    minWidth: 80,
-  },
-  skillBarContainer: {
-    height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  skillBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-
-  // Badges Section
-  badgesSection: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  sectionTitleAchievements: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFD700',
-    letterSpacing: 1,
-    marginBottom: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  badgesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  badgeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 25,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  badgeIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeIconLarge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-    maxWidth: 100,
-  },
-  badgeNameVisible: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-
-  // Footer Stats
-  footerStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
-    paddingTop: 12,
-    marginTop: 4,
-  },
-  footerStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  footerStatText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  profileImageContainer: {
-    position: 'relative',
-    marginBottom: 15,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: Colors.white,
-  },
-  rankBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  rankBadgeText: {
-    color: '#333',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
   editProfileButton: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    backgroundColor: thematicBlue,
-    borderRadius: 15,
-    padding: 5,
-    borderWidth: 2,
-    borderColor: Colors.white,
-  },
-  profileName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginBottom: 5,
-  },
-  rankingNameText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 5,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 15,
-  },
-  experienceContainer: {
-    width: '80%',
-    alignItems: 'center',
-  },
-  experienceBar: {
-    width: '100%',
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  experienceProgress: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  experienceText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 5,
-  },
-  statsSection: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  statCard: {
-    width: '48%',
-    padding: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.white,
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
-  },
-  optionsSection: {
-    paddingHorizontal: 20,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  optionIcon: {
+    top: 20,
+    right: 20,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: `${thematicBlue}15`,
+    backgroundColor: Colors.lime400,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    zIndex: 10,
   },
-  optionText: {
-    flex: 1,
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.white,
   },
-  optionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  optionDescription: {
+  skillBadge: {
+    backgroundColor: Colors.lime400 + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  skillBadgeText: {
+    color: Colors.lime400,
     fontSize: 12,
-    color: '#888',
+    fontWeight: '700',
   },
-  logoutButton: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFE5E5',
-    marginHorizontal: 20,
-    marginTop: 20,
-    padding: 15,
-    borderRadius: 12,
+    marginTop: 8,
   },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF3B30',
-    marginLeft: 10,
-  },
-  roleAccessSection: {
-    paddingHorizontal: 20,
-    marginBottom: 15,
-  },
-  roleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: activeColor,
-    padding: 18,
-    borderRadius: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  roleButtonIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  roleButtonContent: {
-    flex: 1,
-  },
-  coachTitleRow: {
+  pointsBadge: {
+    backgroundColor: Colors.slate800,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  roleButtonTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 2,
+  pointsText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '800',
   },
-  roleButtonDescription: {
+  formSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  fieldContainer: {
+    marginBottom: 18,
+  },
+  fieldLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  labelText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.slate100,
+  },
+  textInput: {
+    backgroundColor: Colors.slate800,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: Colors.white,
+    fontWeight: '600',
+    borderWidth: 1.5,
+    borderColor: Colors.slate700,
+  },
+  bioInput: {
+    textAlignVertical: 'top',
+    minHeight: 80,
+  },
+  fieldValue: {
+    fontSize: 14,
+    color: Colors.slate100,
+    fontWeight: '600',
+    paddingVertical: 8,
+  },
+  fieldValueDisabled: {
+    fontSize: 14,
+    color: Colors.slate500,
+    fontWeight: '600',
+    paddingVertical: 8,
+  },
+  fieldHelper: {
+    fontSize: 11,
+    color: Colors.slate400,
+    marginTop: 4,
+  },
+  skillLevelOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  skillOption: {
+    backgroundColor: Colors.slate800,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.slate700,
+  },
+  skillOptionSelected: {
+    backgroundColor: Colors.lime400,
+    borderColor: Colors.lime400,
+  },
+  skillOptionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.slate400,
+  },
+  skillOptionTextSelected: {
+    color: Colors.slate950,
+  },
+  actionButtons: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelButton: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: Colors.slate700,
+    backgroundColor: Colors.slate800,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: Colors.slate100,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: Colors.lime400,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: Colors.slate950,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  affiliationSection: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
+  },
+  affiliationHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B7FFF',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  affiliationTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginBottom: 8,
+  },
+  affiliationDescription: {
     fontSize: 13,
-    color: thematicBlue,
-    opacity: 0.8,
+    color: Colors.slate600,
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  totalPointsCard: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  totalPointsLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#6B7FFF',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  totalPointsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  totalPointsValue: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: Colors.slate950,
+  },
+  referralRow: {
+    flexDirection: 'column',
+    gap: 20,
+  },
+  referralLinkSection: {
+    width: '100%',
+  },
+  pointsPackageSection: {
+    width: '100%',
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.slate950,
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  linkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.slate50,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  referralLink: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.slate600,
+    fontWeight: '600',
+  },
+  copyLinkButton: {
+    backgroundColor: Colors.slate950,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  copyLinkText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.white,
+    letterSpacing: 0.5,
+  },
+  referralHashContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  referralHashCode: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#6B7FFF',
+    letterSpacing: 1.5,
+  },
+  referralHashLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.slate400,
+    letterSpacing: 0.5,
+  },
+  pointsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.slate100,
+  },
+  pointsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  pointsItemText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.slate700,
+    letterSpacing: 0.3,
+  },
+  pointsValue: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#6B7FFF',
+  },
+
+  notificationCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: Colors.slate900,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.slate800,
+    overflow: 'hidden',
+  },
+  notificationCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  notificationIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.lime400 + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  notificationTextContainer: {
+    flex: 1,
+  },
+  notificationCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.white,
+    marginBottom: 4,
+  },
+  notificationCardDescription: {
+    fontSize: 13,
+    color: Colors.slate400,
+    fontWeight: '500',
+  },
+
+  spacer: {
+    height: 20,
   },
 });
 

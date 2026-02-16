@@ -9,6 +9,7 @@ interface ReceiptProps {
         id: string;
         courtName: string;
         courtLocation: string;
+        locationName?: string;
         date: string;
         startTime: string;
         endTime: string;
@@ -127,51 +128,51 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
     const modalContent = (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[9999] p-4 overflow-y-auto">
-            <div className="bg-white rounded-[40px] shadow-2xl max-w-5xl w-full my-8 relative animate-in zoom-in-95 duration-300">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full my-4 relative animate-in zoom-in-95 duration-300 max-h-[92vh] flex flex-col">
                 {/* Header - Hidden when printing */}
-                <div className="flex items-center justify-between p-8 border-b border-slate-100 print:hidden">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 print:hidden shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-amber-50'}`}>
                             {isConfirmed ? (
-                                <CheckCircle2 className="text-emerald-600" size={28} />
+                                <CheckCircle2 className="text-emerald-600" size={22} />
                             ) : (
-                                <Clock className="text-amber-600 animate-pulse" size={28} />
+                                <Clock className="text-amber-600 animate-pulse" size={22} />
                             )}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
                                 {isConfirmed ? 'Booking Confirmed' : 'Booking Pending'}
                             </h2>
-                            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                                 {isConfirmed ? 'Your digital pass is ready' : 'Waiting for owner confirmation'}
                             </p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-12 h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center transition-all group"
+                        className="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center justify-center transition-all group"
                     >
-                        <X size={24} className="text-slate-400 group-hover:text-slate-900 transition-colors" />
+                        <X size={20} className="text-slate-400 group-hover:text-slate-900 transition-colors" />
                     </button>
                 </div>
 
                 {/* Receipt Wrapper for Image Export */}
-                <div id="receipt-content" className="bg-white">
-                    <div ref={receiptRef} className="p-4 md:p-10 bg-white">
+                <div id="receipt-content" className="bg-white overflow-y-auto flex-1 min-h-0">
+                    <div ref={receiptRef} className="p-4 md:p-6 bg-white">
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-12">
                             {/* Left Side: Booking Details */}
                             <div className="lg:col-span-7">
                                 {/* Receipt Aesthetic Header */}
-                                <div className="mb-6 md:mb-10 pb-4 md:pb-8 border-b-2 border-dashed border-slate-100">
-                                    <div className="inline-block px-3 md:px-4 py-1 md:py-1.5 bg-slate-950 text-white rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-3 md:mb-4">
+                                <div className="mb-4 md:mb-6 pb-3 md:pb-4 border-b-2 border-dashed border-slate-100">
+                                    <div className="inline-block px-3 py-1 bg-slate-950 text-white rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] mb-2 md:mb-3">
                                         OFFICIAL RECEIPT
                                     </div>
-                                    <h1 className="text-2xl md:text-4xl font-black text-slate-950 uppercase tracking-tighter mb-1">PicklePlay</h1>
-                                    <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] md:tracking-[0.4em]">Philippines Network</p>
+                                    <h1 className="text-xl md:text-2xl font-black text-slate-950 uppercase tracking-tighter mb-0.5">PicklePlay</h1>
+                                    <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">Philippines Network</p>
                                 </div>
 
                                 {/* Status Banner */}
-                                <div className={`mb-4 md:mb-8 p-3 md:p-4 rounded-xl md:rounded-2xl border-2 text-center font-black uppercase tracking-[0.15em] md:tracking-[0.2em] text-xs md:text-sm ${isConfirmed
+                                <div className={`mb-3 md:mb-5 p-2 md:p-3 rounded-xl border-2 text-center font-black uppercase tracking-[0.15em] text-[10px] md:text-xs ${isConfirmed
                                     ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                                     : 'bg-amber-50 border-amber-100 text-amber-600'
                                     }`}>
@@ -179,7 +180,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                 </div>
 
                                 {/* Receipt Info Grid */}
-                                <div className="grid grid-cols-2 gap-4 md:gap-8 mb-4 md:mb-8 pb-4 md:pb-8 border-b border-slate-100">
+                                <div className="grid grid-cols-2 gap-3 md:gap-6 mb-3 md:mb-5 pb-3 md:pb-5 border-b border-slate-100">
                                     <div>
                                         <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1 md:mb-2">Receipt No.</p>
                                         <p className="text-sm md:text-lg font-black text-slate-900 font-mono">#{bookingData.id.slice(0, 8).toUpperCase()}</p>
@@ -200,8 +201,15 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                             <span className="text-xs md:text-sm font-black text-slate-900 uppercase italic text-right">{bookingData.courtName}</span>
                                         </div>
 
+                                        {bookingData.locationName && (
+                                            <div className="flex justify-between items-start gap-4 md:gap-8">
+                                                <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Venue</span>
+                                                <span className="text-xs md:text-sm font-black text-slate-900 uppercase text-right max-w-[180px] md:max-w-[240px] leading-tight">{bookingData.locationName}</span>
+                                            </div>
+                                        )}
+
                                         <div className="flex justify-between items-start gap-4 md:gap-8">
-                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Location</span>
+                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Address</span>
                                             <span className="text-xs md:text-sm font-black text-slate-900 uppercase text-right max-w-[180px] md:max-w-[240px] leading-tight">{bookingData.courtLocation}</span>
                                         </div>
 
@@ -294,11 +302,11 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                     </div>
 
                                     {isConfirmed ? (
-                                        <div className="p-4 md:p-6 bg-white rounded-2xl md:rounded-[32px] shadow-2xl border-2 md:border-4 border-slate-950 mb-4 md:mb-8 transform hover:scale-105 transition-transform duration-500">
-                                            <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-40 h-40 md:w-56 md:h-56" />
+                                        <div className="p-3 md:p-4 bg-white rounded-2xl md:rounded-3xl shadow-2xl border-2 md:border-3 border-slate-950 mb-3 md:mb-5 transform hover:scale-105 transition-transform duration-500">
+                                            <img src={qrCodeDataUrl} alt="Booking QR Code" className="w-32 h-32 md:w-40 md:h-40" />
                                         </div>
                                     ) : (
-                                        <div className="w-40 h-40 md:w-56 md:h-56 bg-white/50 rounded-2xl md:rounded-[32px] flex flex-col items-center justify-center border-2 md:border-4 border-dashed border-slate-200 mb-4 md:mb-8 relative overflow-hidden group">
+                                        <div className="w-32 h-32 md:w-40 md:h-40 bg-white/50 rounded-2xl md:rounded-3xl flex flex-col items-center justify-center border-2 md:border-3 border-dashed border-slate-200 mb-3 md:mb-5 relative overflow-hidden group">
                                             <QrCode className="text-slate-200 group-hover:scale-110 transition-transform duration-500" size={60} />
                                             <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center p-4 md:p-8 text-center text-balance">
                                                 <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase leading-relaxed tracking-widest">
@@ -337,7 +345,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                         </div>
 
                         {/* Verification Note */}
-                        <div className="mt-6 md:mt-12 text-center space-y-1 md:space-y-2 border-t border-slate-50 pt-4 md:pt-8">
+                        <div className="mt-4 md:mt-6 text-center space-y-1 border-t border-slate-50 pt-3 md:pt-4">
                             <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] md:tracking-[0.3em]">Verified Secure Transaction • 2026</p>
                             <p className="text-[7px] md:text-[8px] text-slate-300 font-bold uppercase tracking-wider md:tracking-widest">PicklePlay Philippines • www.pickleplay.ph</p>
                         </div>
@@ -345,7 +353,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                 </div>
 
                 {/* Desktop Buttons */}
-                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 p-4 md:p-8 border-t border-slate-100 print:hidden bg-slate-50/50 rounded-b-3xl md:rounded-b-[40px]">
+                <div className="flex flex-col sm:flex-row gap-2 md:gap-3 p-3 md:p-5 border-t border-slate-100 print:hidden bg-slate-50/50 rounded-b-3xl shrink-0">
                     <button
                         onClick={handlePrint}
                         className="flex-1 h-12 md:h-14 bg-white border-2 border-slate-900 text-slate-900 rounded-2xl md:rounded-[20px] font-black text-xs md:text-sm uppercase tracking-wide md:tracking-widest hover:bg-slate-950 hover:text-white transition-all shadow-xl shadow-slate-200/50 flex items-center justify-center gap-2 active:scale-95"

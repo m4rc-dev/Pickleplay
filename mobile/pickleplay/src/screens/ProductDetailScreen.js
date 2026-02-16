@@ -10,11 +10,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Colors from '../constants/Colors';
 
 const { width } = Dimensions.get('window');
-const thematicBlue = '#0A56A7';
 
 const ProductDetailScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -40,19 +40,19 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" />
       
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity style={styles.headerButton} onPress={goBack}>
-          <Ionicons name="arrow-back" size={24} color={thematicBlue} />
+          <Ionicons name="arrow-back" size={24} color={Colors.slate950} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Product Details</Text>
+        <Text style={styles.headerTitle}>PRODUCT</Text>
         <TouchableOpacity style={styles.headerButton} onPress={toggleFavorite}>
           <Ionicons 
             name={isFavorite ? "heart" : "heart-outline"} 
             size={24} 
-            color={isFavorite ? "#FF4757" : thematicBlue} 
+            color={isFavorite ? "#FF4757" : Colors.slate950} 
           />
         </TouchableOpacity>
       </View>
@@ -66,7 +66,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
         <View style={styles.imageSection}>
           <Image source={{ uri: product.image }} style={styles.productImage} />
           <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{product.category}</Text>
+            <Text style={styles.categoryText}>{product.category.toUpperCase()}</Text>
           </View>
         </View>
 
@@ -81,8 +81,8 @@ const ProductDetailScreen = ({ navigation, route }) => {
                 <Ionicons
                   key={star}
                   name={star <= Math.floor(product.rating) ? "star" : "star-outline"}
-                  size={18}
-                  color="#FFD700"
+                  size={20}
+                  color={Colors.lime400}
                   style={{ marginRight: 2 }}
                 />
               ))}
@@ -96,35 +96,35 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
           {/* Description */}
           <View style={styles.descriptionSection}>
-            <Text style={styles.sectionLabel}>Description</Text>
+            <Text style={styles.sectionLabel}>DESCRIPTION</Text>
             <Text style={styles.description}>{product.description}</Text>
           </View>
 
           {/* Features */}
           <View style={styles.featuresSection}>
-            <Text style={styles.sectionLabel}>Highlights</Text>
+            <Text style={styles.sectionLabel}>HIGHLIGHTS</Text>
             <View style={styles.featuresGrid}>
               <View style={styles.featureItem}>
                 <View style={styles.featureIcon}>
-                  <MaterialIcons name="verified" size={20} color={thematicBlue} />
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.lime400} />
                 </View>
                 <Text style={styles.featureText}>Premium Quality</Text>
               </View>
               <View style={styles.featureItem}>
                 <View style={styles.featureIcon}>
-                  <MaterialIcons name="emoji-events" size={20} color={thematicBlue} />
+                  <Ionicons name="trophy" size={20} color={Colors.lime400} />
                 </View>
                 <Text style={styles.featureText}>Tournament Ready</Text>
               </View>
               <View style={styles.featureItem}>
                 <View style={styles.featureIcon}>
-                  <MaterialIcons name="security" size={20} color={thematicBlue} />
+                  <Ionicons name="shield-checkmark" size={20} color={Colors.lime400} />
                 </View>
                 <Text style={styles.featureText}>1-Year Warranty</Text>
               </View>
               <View style={styles.featureItem}>
                 <View style={styles.featureIcon}>
-                  <MaterialIcons name="local-shipping" size={20} color={thematicBlue} />
+                  <Ionicons name="rocket" size={20} color={Colors.lime400} />
                 </View>
                 <Text style={styles.featureText}>Free Shipping</Text>
               </View>
@@ -133,7 +133,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
 
           {/* Quantity Selector */}
           <View style={styles.quantitySection}>
-            <Text style={styles.sectionLabel}>Quantity</Text>
+            <Text style={styles.sectionLabel}>QUANTITY</Text>
             <View style={styles.quantityRow}>
               <View style={styles.quantitySelector}>
                 <TouchableOpacity 
@@ -141,15 +141,15 @@ const ProductDetailScreen = ({ navigation, route }) => {
                   onPress={decreaseQuantity}
                   disabled={quantity === 1}
                 >
-                  <Ionicons name="remove" size={20} color={quantity === 1 ? "#ccc" : thematicBlue} />
+                  <Ionicons name="remove" size={20} color={quantity === 1 ? Colors.slate300 : Colors.slate950} />
                 </TouchableOpacity>
                 <Text style={styles.qtyText}>{quantity}</Text>
-                <TouchableOpacity style={styles.qtyBtn} onPress={increaseQuantity}>
-                  <Ionicons name="add" size={20} color={thematicBlue} />
+                <TouchableOpacity style={styles.qtyBtnAdd} onPress={increaseQuantity}>
+                  <Ionicons name="add" size={20} color={Colors.slate950} />
                 </TouchableOpacity>
               </View>
               <View style={styles.totalSection}>
-                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalLabel}>TOTAL</Text>
                 <Text style={styles.totalPrice}>${(product.priceNum * quantity).toFixed(2)}</Text>
               </View>
             </View>
@@ -160,15 +160,10 @@ const ProductDetailScreen = ({ navigation, route }) => {
       {/* Bottom Action */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 15 }]}>
         <TouchableOpacity style={styles.addToCartBtn} onPress={addToCart} activeOpacity={0.9}>
-          <LinearGradient
-            colors={[thematicBlue, '#084590']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.addToCartGradient}
-          >
-            <Ionicons name="cart-outline" size={22} color="#fff" />
-            <Text style={styles.addToCartText}>Add to Cart</Text>
-          </LinearGradient>
+          <View style={styles.addToCartContent}>
+            <Ionicons name="cart" size={22} color={Colors.slate950} />
+            <Text style={styles.addToCartText}>ADD TO CART</Text>
+          </View>
         </TouchableOpacity>
       </View>
     </View>
@@ -178,30 +173,31 @@ const ProductDetailScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: Colors.slate50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
+    paddingHorizontal: 20,
     paddingBottom: 15,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: Colors.slate100,
   },
   headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8F9FA',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.slate100,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: thematicBlue,
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 1,
   },
   scrollView: {
     flex: 1,
@@ -210,120 +206,132 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   imageSection: {
-    backgroundColor: '#fff',
-    paddingVertical: 30,
+    backgroundColor: Colors.white,
+    paddingVertical: 40,
     alignItems: 'center',
     position: 'relative',
   },
   productImage: {
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: 20,
+    width: width * 0.65,
+    height: width * 0.65,
+    borderRadius: 24,
+    backgroundColor: Colors.slate50,
   },
   categoryBadge: {
     position: 'absolute',
-    top: 15,
-    left: 15,
-    backgroundColor: thematicBlue + '15',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
+    top: 20,
+    left: 20,
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
   },
   categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: thematicBlue,
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: 0.5,
   },
   infoCard: {
-    backgroundColor: '#fff',
-    marginTop: 10,
-    marginHorizontal: 15,
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: Colors.white,
+    marginTop: 12,
+    marginHorizontal: 20,
+    borderRadius: 24,
+    padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   productName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 10,
+    fontSize: 26,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginBottom: 12,
+    letterSpacing: -1,
   },
   ratingSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   stars: {
     flexDirection: 'row',
-    marginRight: 8,
+    marginRight: 10,
   },
   ratingNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginRight: 5,
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginRight: 6,
+    letterSpacing: -0.5,
   },
   reviewCount: {
-    fontSize: 13,
-    color: '#888',
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.slate500,
+    letterSpacing: -0.3,
   },
   price: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 20,
+    fontSize: 32,
+    fontWeight: '900',
+    color: Colors.lime400,
+    marginBottom: 24,
+    letterSpacing: -1.5,
   },
   descriptionSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginBottom: 12,
+    letterSpacing: 1,
   },
   description: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#666',
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '500',
+    color: Colors.slate600,
+    letterSpacing: -0.3,
   },
   featuresSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -5,
+    marginHorizontal: -6,
   },
   featureItem: {
     width: '50%',
-    paddingHorizontal: 5,
-    marginBottom: 12,
+    paddingHorizontal: 6,
+    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   featureIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: thematicBlue + '10',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.slate100,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   featureText: {
-    fontSize: 13,
-    color: '#444',
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate950,
     flex: 1,
+    letterSpacing: -0.3,
   },
   quantitySection: {
-    paddingTop: 15,
+    paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: Colors.slate100,
   },
   quantityRow: {
     flexDirection: 'row',
@@ -333,67 +341,81 @@ const styles = StyleSheet.create({
   quantitySelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 5,
+    backgroundColor: Colors.slate100,
+    borderRadius: 20,
+    padding: 4,
   },
   qtyBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   qtyBtnDisabled: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: Colors.slate200,
+  },
+  qtyBtnAdd: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   qtyText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontWeight: '900',
+    color: Colors.slate950,
     paddingHorizontal: 20,
+    letterSpacing: -0.5,
   },
   totalSection: {
     alignItems: 'flex-end',
   },
   totalLabel: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.slate500,
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   totalPrice: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: thematicBlue,
+    fontSize: 26,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -1,
   },
   bottomBar: {
-    backgroundColor: '#fff',
-    paddingTop: 15,
+    backgroundColor: Colors.white,
+    paddingTop: 20,
     paddingHorizontal: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: Colors.slate100,
   },
   addToCartBtn: {
-    borderRadius: 15,
+    borderRadius: 24,
     overflow: 'hidden',
+    backgroundColor: Colors.lime400,
+    shadowColor: Colors.lime400,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  addToCartGradient: {
+  addToCartContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
+    gap: 10,
   },
   addToCartText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    marginLeft: 10,
+    color: Colors.slate950,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });
 

@@ -187,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           .limit(3);
 
         if (!error && data) setAnnouncements(data);
-      } catch (err) {
+      }, () => {
         // Announcements table might not exist
       }
     };

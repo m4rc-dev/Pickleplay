@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,15 +7,17 @@ import {
   ScrollView,
   StatusBar,
   Switch,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {MaterialIcons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../constants/Colors';
-
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const NotificationsScreen = ({ navigation }) => {
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const [notifications, setNotifications] = useState({
     gameInvites: true,
     courtUpdates: true,
@@ -27,204 +29,317 @@ const NotificationsScreen = ({ navigation }) => {
     smsNotifications: false,
   });
 
-  const NotificationItem = ({ icon, title, description, value, onToggle }) => (
+  useEffect(() => {
+    loadNotificationPreferences();
+  }, [user]);
+
+  const loadNotificationPreferences = async () => {
+    if (!user?.id) return;
+
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('notification_settings')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data?.notification_settings) {
+        setNotifications({ ...notifications, ...data.notification_settings });
+      }
+    } catch (err) {
+      console.error('Error loading notification preferences:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveNotificationPreferences = async (newSettings) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          notification_settings: newSettings,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error saving notification preferences:', err);
+      Alert.alert('Error', 'Failed to save notification preferences');
+    }
+  };
+
+  const handleToggle = (key, value) => {
+    const newSettings = { ...notifications, [key]: value };
+    setNotifications(newSettings);
+    saveNotificationPreferences(newSettings);
+  };
+
+  const NotificationItem = ({ icon, title, description, value, settingKey }) => (
     <View style={styles.notificationItem}>
       <View style={styles.notificationInfo}>
         <View style={styles.notificationHeader}>
-          <MaterialIcons name={icon} size={24} color={thematicBlue} />
-          <Text style={styles.notificationTitle}>{title}</Text>
+          <View style={styles.iconContainer}>
+            <Ionicons name={icon} size={20} color={Colors.lime400} />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.notificationTitle}>{title}</Text>
+            <Text style={styles.notificationDescription}>{description}</Text>
+          </View>
         </View>
-        <Text style={styles.notificationDescription}>{description}</Text>
       </View>
       <Switch
         value={value}
-        onValueChange={onToggle}
-        trackColor={{ false: Colors.border, true: activeColor }}
-        thumbColor={value ? thematicBlue : '#f4f3f4'}
+        onValueChange={(newValue) => handleToggle(settingKey, newValue)}
+        trackColor={{ false: Colors.slate700, true: Colors.lime400 + '40' }}
+        thumbColor={value ? Colors.lime400 : Colors.slate500}
+        ios_backgroundColor={Colors.slate700}
       />
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.slate950} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color={Colors.white} />
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.lime400} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 28 }} />
-      </View>
+        <Text style={styles.headerTitle}>NOTIFICATIONS</Text>
+        <View style={styles.headerButton} />
+      </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Important Notifications */}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Game & Activity Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Game & Activity</Text>
-          <NotificationItem
-            icon="sports-tennis"
-            title="Game Invites"
-            description="Get notified when invited to play"
-            value={notifications.gameInvites}
-            onToggle={(value) => setNotifications({...notifications, gameInvites: value})}
-          />
-          <NotificationItem
-            icon="info"
-            title="Court Updates"
-            description="Updates about courts you follow"
-            value={notifications.courtUpdates}
-            onToggle={(value) => setNotifications({...notifications, courtUpdates: value})}
-          />
-          <NotificationItem
-            icon="emoji-events"
-            title="Match Results"
-            description="Results from your matches"
-            value={notifications.matchResults}
-            onToggle={(value) => setNotifications({...notifications, matchResults: value})}
-          />
+          <Text style={styles.sectionTitle}>GAME & ACTIVITY</Text>
+          <View style={styles.sectionCard}>
+            <NotificationItem
+              icon="game-controller"
+              title="Game Invites"
+              description="Get notified when invited to play"
+              value={notifications.gameInvites}
+              settingKey="gameInvites"
+            />
+            <NotificationItem
+              icon="location"
+              title="Court Updates"
+              description="Updates about courts you follow"
+              value={notifications.courtUpdates}
+              settingKey="courtUpdates"
+            />
+            <NotificationItem
+              icon="trophy"
+              title="Match Results"
+              description="Results from your matches"
+              value={notifications.matchResults}
+              settingKey="matchResults"
+            />
+          </View>
         </View>
 
-        {/* Social Notifications */}
+        {/* Social Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Social</Text>
-          <NotificationItem
-            icon="group"
-            title="Friend Activity"
-            description="Updates from your friends"
-            value={notifications.friendActivity}
-            onToggle={(value) => setNotifications({...notifications, friendActivity: value})}
-          />
+          <Text style={styles.sectionTitle}>SOCIAL</Text>
+          <View style={styles.sectionCard}>
+            <NotificationItem
+              icon="people"
+              title="Friend Activity"
+              description="Updates from your friends"
+              value={notifications.friendActivity}
+              settingKey="friendActivity"
+            />
+          </View>
         </View>
 
-        {/* Promotional Notifications */}
+        {/* Promotions Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Promotions & Offers</Text>
-          <NotificationItem
-            icon="local-offer"
-            title="Promotions"
-            description="Special offers and promotions"
-            value={notifications.promotions}
-            onToggle={(value) => setNotifications({...notifications, promotions: value})}
-          />
+          <Text style={styles.sectionTitle}>PROMOTIONS & OFFERS</Text>
+          <View style={styles.sectionCard}>
+            <NotificationItem
+              icon="pricetag"
+              title="Promotions"
+              description="Special offers and promotions"
+              value={notifications.promotions}
+              settingKey="promotions"
+            />
+          </View>
         </View>
 
-        {/* Notification Channels */}
+        {/* Notification Channels Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notification Channels</Text>
-          <NotificationItem
-            icon="notifications-active"
-            title="Push Notifications"
-            description="Receive push notifications"
-            value={notifications.pushNotifications}
-            onToggle={(value) => setNotifications({...notifications, pushNotifications: value})}
-          />
-          <NotificationItem
-            icon="email"
-            title="Email Notifications"
-            description="Receive email updates"
-            value={notifications.emailNotifications}
-            onToggle={(value) => setNotifications({...notifications, emailNotifications: value})}
-          />
-          <NotificationItem
-            icon="sms"
-            title="SMS Notifications"
-            description="Receive text message alerts"
-            value={notifications.smsNotifications}
-            onToggle={(value) => setNotifications({...notifications, smsNotifications: value})}
-          />
+          <Text style={styles.sectionTitle}>NOTIFICATION CHANNELS</Text>
+          <View style={styles.sectionCard}>
+            <NotificationItem
+              icon="notifications-active"
+              title="Push Notifications"
+              description="Receive push notifications"
+              value={notifications.pushNotifications}
+              settingKey="pushNotifications"
+            />
+            <NotificationItem
+              icon="mail"
+              title="Email Notifications"
+              description="Receive email updates"
+              value={notifications.emailNotifications}
+              settingKey="emailNotifications"
+            />
+            <NotificationItem
+              icon="chatbox"
+              title="SMS Notifications"
+              description="Receive text message alerts"
+              value={notifications.smsNotifications}
+              settingKey="smsNotifications"
+            />
+          </View>
         </View>
 
         {/* Info Box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info" size={20} color={thematicBlue} />
+          <Ionicons name="information-circle" size={20} color={Colors.lime400} />
           <Text style={styles.infoText}>
             Changes are saved automatically. You can always update these preferences later.
           </Text>
         </View>
+
+        <View style={styles.spacer} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.slate950,
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: thematicBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Colors.white,
-    fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.5,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
   },
   content: {
     flex: 1,
-    paddingBottom: 10,
+    backgroundColor: Colors.slate950,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   section: {
-    paddingHorizontal: 15,
-    marginVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 24,
   },
   sectionTitle: {
-    color: thematicBlue,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.lime400,
+    letterSpacing: 1.5,
     marginBottom: 12,
-    marginTop: 8,
+  },
+  sectionCard: {
+    backgroundColor: Colors.slate900,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.slate800,
+    overflow: 'hidden',
   },
   notificationItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 10,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.slate800,
   },
   notificationInfo: {
     flex: 1,
-    marginRight: 10,
+    marginRight: 12,
   },
   notificationHeader: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.lime400 + '20',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
   },
   notificationTitle: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 12,
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   notificationDescription: {
-    color: Colors.textSecondary,
+    color: Colors.slate400,
     fontSize: 13,
-    marginTop: 2,
-    marginLeft: 36,
+    fontWeight: '500',
+    lineHeight: 18,
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    margin: 15,
-    padding: 15,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: thematicBlue,
+    backgroundColor: Colors.slate900,
+    marginHorizontal: 16,
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.slate800,
+    alignItems: 'flex-start',
   },
   infoText: {
-    color: Colors.text,
+    color: Colors.slate300,
     fontSize: 13,
     marginLeft: 12,
     flex: 1,
+    lineHeight: 20,
+  },
+  spacer: {
+    height: 20,
   },
 });
 

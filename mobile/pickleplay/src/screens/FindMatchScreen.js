@@ -1,23 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Image,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 
-const thematicBlue = '#0A56A7';
-const activeColor = '#a3ff01';
-
-// Skill level options
 const SKILL_LEVELS = [
   { id: 'beginner', label: 'Beginner', range: '1.0 - 2.5' },
   { id: 'intermediate', label: 'Intermediate', range: '2.5 - 3.5' },
@@ -25,14 +21,12 @@ const SKILL_LEVELS = [
   { id: 'pro', label: 'Pro', range: '4.5+' },
 ];
 
-// Game type options
 const GAME_TYPES = [
   { id: 'singles', label: 'Singles', icon: 'person' },
   { id: 'doubles', label: 'Doubles', icon: 'people' },
-  { id: 'mixed', label: 'Mixed Doubles', icon: 'group' },
+  { id: 'mixed', label: 'Mixed', icon: 'people' },
 ];
 
-// Mock available players data
 const MOCK_PLAYERS = [
   {
     id: '1',
@@ -98,26 +92,26 @@ const FindMatchScreen = ({ navigation }) => {
   const handleSearch = () => {
     setIsSearching(true);
     setShowFilters(false);
-    
-    // Simulate API call
+
     setTimeout(() => {
       let filteredPlayers = [...MOCK_PLAYERS];
-      
+
       if (selectedSkillLevel) {
-        filteredPlayers = filteredPlayers.filter(p => p.skillLevel === selectedSkillLevel);
+        filteredPlayers = filteredPlayers.filter((p) => p.skillLevel === selectedSkillLevel);
       }
-      
+
       if (selectedGameType) {
-        filteredPlayers = filteredPlayers.filter(p => p.preferredGameType === selectedGameType);
+        filteredPlayers = filteredPlayers.filter((p) => p.preferredGameType === selectedGameType);
       }
-      
+
       if (searchQuery) {
-        filteredPlayers = filteredPlayers.filter(p => 
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.location.toLowerCase().includes(searchQuery.toLowerCase())
+        filteredPlayers = filteredPlayers.filter(
+          (p) =>
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.location.toLowerCase().includes(searchQuery.toLowerCase())
         );
       }
-      
+
       setPlayers(filteredPlayers);
       setIsSearching(false);
     }, 1500);
@@ -140,48 +134,55 @@ const FindMatchScreen = ({ navigation }) => {
   };
 
   const handleSendRequest = (player) => {
-    // TODO: Implement match request functionality
     alert(`Match request sent to ${player.name}!`);
   };
 
   const getSkillLevelColor = (level) => {
     switch (level) {
-      case 'beginner': return '#4CAF50';
-      case 'intermediate': return '#FF9800';
-      case 'advanced': return '#2196F3';
-      case 'pro': return '#9C27B0';
-      default: return thematicBlue;
+      case 'beginner':
+        return '#10b981';
+      case 'intermediate':
+        return '#f59e0b';
+      case 'advanced':
+        return '#3b82f6';
+      case 'pro':
+        return '#a855f7';
+      default:
+        return Colors.slate500;
     }
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={thematicBlue} />
-
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Gradient Header */}
+      <LinearGradient
+        colors={[Colors.slate950, Colors.slate900]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="chevron-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Find a Match</Text>
         {!showFilters && (
           <TouchableOpacity style={styles.filterButton} onPress={resetFilters}>
-            <MaterialIcons name="tune" size={24} color="#fff" />
+            <Ionicons name="funnel" size={24} color={Colors.white} />
           </TouchableOpacity>
         )}
         {showFilters && <View style={styles.headerRight} />}
-      </View>
+      </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {showFilters ? (
           <View style={styles.filtersContainer}>
             {/* Search Input */}
             <View style={styles.searchContainer}>
-              <MaterialIcons name="search" size={24} color="#999" />
+              <Ionicons name="search" size={20} color={Colors.slate400} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search by name or location..."
-                placeholderTextColor="#999"
+                placeholder="Search by name..."
+                placeholderTextColor={Colors.slate400}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
@@ -189,7 +190,10 @@ const FindMatchScreen = ({ navigation }) => {
 
             {/* Skill Level Selection */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterTitle}>Skill Level</Text>
+              <View style={styles.filterHeader}>
+                <Ionicons name="bar-chart" size={20} color={Colors.lime400} />
+                <Text style={styles.filterTitle}>Skill Level</Text>
+              </View>
               <View style={styles.optionsGrid}>
                 {SKILL_LEVELS.map((level) => (
                   <TouchableOpacity
@@ -198,20 +202,24 @@ const FindMatchScreen = ({ navigation }) => {
                       styles.optionCard,
                       selectedSkillLevel === level.id && styles.optionCardSelected,
                     ]}
-                    onPress={() => setSelectedSkillLevel(
-                      selectedSkillLevel === level.id ? null : level.id
-                    )}
+                    onPress={() =>
+                      setSelectedSkillLevel(selectedSkillLevel === level.id ? null : level.id)
+                    }
                   >
-                    <Text style={[
-                      styles.optionLabel,
-                      selectedSkillLevel === level.id && styles.optionLabelSelected,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionLabel,
+                        selectedSkillLevel === level.id && styles.optionLabelSelected,
+                      ]}
+                    >
                       {level.label}
                     </Text>
-                    <Text style={[
-                      styles.optionRange,
-                      selectedSkillLevel === level.id && styles.optionRangeSelected,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionRange,
+                        selectedSkillLevel === level.id && styles.optionRangeSelected,
+                      ]}
+                    >
                       {level.range}
                     </Text>
                   </TouchableOpacity>
@@ -221,7 +229,10 @@ const FindMatchScreen = ({ navigation }) => {
 
             {/* Game Type Selection */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterTitle}>Game Type</Text>
+              <View style={styles.filterHeader}>
+                <Ionicons name="people" size={20} color={Colors.lime400} />
+                <Text style={styles.filterTitle}>Game Type</Text>
+              </View>
               <View style={styles.gameTypeRow}>
                 {GAME_TYPES.map((type) => (
                   <TouchableOpacity
@@ -230,19 +241,21 @@ const FindMatchScreen = ({ navigation }) => {
                       styles.gameTypeCard,
                       selectedGameType === type.id && styles.gameTypeCardSelected,
                     ]}
-                    onPress={() => setSelectedGameType(
-                      selectedGameType === type.id ? null : type.id
-                    )}
+                    onPress={() =>
+                      setSelectedGameType(selectedGameType === type.id ? null : type.id)
+                    }
                   >
-                    <MaterialIcons
+                    <Ionicons
                       name={type.icon}
                       size={28}
-                      color={selectedGameType === type.id ? '#fff' : thematicBlue}
+                      color={selectedGameType === type.id ? Colors.white : Colors.slate500}
                     />
-                    <Text style={[
-                      styles.gameTypeLabel,
-                      selectedGameType === type.id && styles.gameTypeLabelSelected,
-                    ]}>
+                    <Text
+                      style={[
+                        styles.gameTypeLabel,
+                        selectedGameType === type.id && styles.gameTypeLabelSelected,
+                      ]}
+                    >
                       {type.label}
                     </Text>
                   </TouchableOpacity>
@@ -252,7 +265,7 @@ const FindMatchScreen = ({ navigation }) => {
 
             {/* Find Match Button */}
             <TouchableOpacity style={styles.findMatchButton} onPress={handleSearch}>
-              <MaterialIcons name="search" size={24} color="#fff" />
+              <Ionicons name="search" size={20} color={Colors.white} />
               <Text style={styles.findMatchButtonText}>Find Players</Text>
             </TouchableOpacity>
           </View>
@@ -260,76 +273,89 @@ const FindMatchScreen = ({ navigation }) => {
           <View style={styles.resultsContainer}>
             {isSearching ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={thematicBlue} />
+                <ActivityIndicator size="large" color={Colors.lime400} />
                 <Text style={styles.loadingText}>Finding players near you...</Text>
               </View>
             ) : players.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <MaterialIcons name="person-search" size={64} color={thematicBlue} />
+                <View style={styles.emptyIconContainer}>
+                  <Ionicons name="people" size={64} color={Colors.slate300} />
+                </View>
                 <Text style={styles.emptyTitle}>No Players Found</Text>
                 <Text style={styles.emptySubtitle}>
                   Try adjusting your filters to find more players
                 </Text>
                 <TouchableOpacity style={styles.adjustFiltersButton} onPress={resetFilters}>
+                  <Ionicons name="funnel" size={18} color={Colors.white} />
                   <Text style={styles.adjustFiltersText}>Adjust Filters</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <>
-                <Text style={styles.resultsTitle}>
-                  {players.length} Player{players.length !== 1 ? 's' : ''} Found
-                </Text>
+                <View style={styles.resultsHeader}>
+                  <Text style={styles.resultsTitle}>
+                    {players.length} Player{players.length !== 1 ? 's' : ''} Found
+                  </Text>
+                </View>
                 {players.map((player) => (
                   <View key={player.id} style={styles.playerCard}>
-                    <View style={styles.playerHeader}>
-                      <Image
-                        source={{ uri: player.avatar }}
-                        style={styles.playerAvatar}
-                      />
-                      <View style={styles.onlineIndicator}>
-                        <View style={[
+                    <View style={styles.playerAvatarContainer}>
+                      <Image source={{ uri: player.avatar }} style={styles.playerAvatar} />
+                      <View
+                        style={[
                           styles.onlineDot,
-                          { backgroundColor: player.isOnline ? '#4CAF50' : '#999' }
-                        ]} />
-                      </View>
+                          { backgroundColor: player.isOnline ? Colors.lime400 : Colors.slate400 },
+                        ]}
+                      />
                     </View>
+
                     <View style={styles.playerInfo}>
                       <Text style={styles.playerName}>{player.name}</Text>
-                      <View style={styles.playerDetails}>
-                        <View style={styles.detailRow}>
-                          <MaterialIcons name="location-on" size={14} color="#666" />
-                          <Text style={styles.detailText}>{player.location}</Text>
+
+                      <View style={styles.playerMeta}>
+                        <View style={styles.metaItem}>
+                          <Ionicons name="location-sharp" size={14} color={Colors.slate500} />
+                          <Text style={styles.metaText} numberOfLines={1}>
+                            {player.location}
+                          </Text>
                         </View>
-                        <View style={styles.detailRow}>
-                          <MaterialIcons name="star" size={14} color="#FBBC04" />
-                          <Text style={styles.detailText}>{player.rating.toFixed(1)} DUPR</Text>
+                        <View style={styles.metaItem}>
+                          <Ionicons name="star" size={14} color={Colors.lime400} />
+                          <Text style={styles.metaText}>{player.rating.toFixed(1)}</Text>
                         </View>
                       </View>
-                      <View style={styles.playerTags}>
-                        <View style={[
-                          styles.skillTag,
-                          { backgroundColor: getSkillLevelColor(player.skillLevel) + '20' }
-                        ]}>
-                          <Text style={[
-                            styles.skillTagText,
-                            { color: getSkillLevelColor(player.skillLevel) }
-                          ]}>
+
+                      <View style={styles.playerBadges}>
+                        <View
+                          style={[
+                            styles.skillBadge,
+                            { backgroundColor: getSkillLevelColor(player.skillLevel) + '20' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.skillBadgeText,
+                              { color: getSkillLevelColor(player.skillLevel) },
+                            ]}
+                          >
                             {player.skillLevel.charAt(0).toUpperCase() + player.skillLevel.slice(1)}
                           </Text>
                         </View>
-                        <View style={styles.gameTypeTag}>
-                          <Text style={styles.gameTypeTagText}>
-                            {player.preferredGameType.charAt(0).toUpperCase() + player.preferredGameType.slice(1)}
+                        <View style={[styles.typeBadge, { backgroundColor: Colors.lime400 + '20' }]}>
+                          <Text style={[styles.typeBadgeText, { color: Colors.lime400 }]}>
+                            {player.preferredGameType.charAt(0).toUpperCase() +
+                              player.preferredGameType.slice(1)}
                           </Text>
                         </View>
                       </View>
                     </View>
+
                     <TouchableOpacity
                       style={styles.requestButton}
                       onPress={() => handleSendRequest(player)}
+                      activeOpacity={0.8}
                     >
-                      <MaterialIcons name="sports-tennis" size={20} color="#fff" />
-                      <Text style={styles.requestButtonText}>Request</Text>
+                      <Ionicons name="arrow-forward" size={20} color={Colors.white} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -345,13 +371,12 @@ const FindMatchScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: thematicBlue,
+    paddingHorizontal: 16,
     paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -363,9 +388,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '900',
+    color: Colors.white,
+    letterSpacing: -0.5,
   },
   headerRight: {
     width: 40,
@@ -380,50 +406,57 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filtersContainer: {
-    padding: 20,
+    padding: 16,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 15,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
     fontSize: 16,
-    color: '#333',
+    color: Colors.slate950,
+    fontWeight: '600',
   },
   filterSection: {
-    marginBottom: 25,
+    marginBottom: 24,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   filterTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 12,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginLeft: 8,
+    letterSpacing: -0.5,
   },
   optionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   optionCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: Colors.slate200,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -431,38 +464,39 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   optionCardSelected: {
-    borderColor: thematicBlue,
-    backgroundColor: thematicBlue + '10',
+    borderColor: Colors.lime400,
+    backgroundColor: Colors.lime400 + '10',
   },
   optionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.slate950,
+    marginBottom: 2,
+    letterSpacing: -0.2,
   },
   optionLabelSelected: {
-    color: thematicBlue,
+    color: Colors.lime400,
   },
   optionRange: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    color: Colors.slate600,
+    fontWeight: '600',
   },
   optionRangeSelected: {
-    color: thematicBlue,
+    color: Colors.lime400,
   },
   gameTypeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 10,
   },
   gameTypeCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    marginHorizontal: 5,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 16,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: Colors.slate200,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -470,182 +504,194 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   gameTypeCardSelected: {
-    borderColor: thematicBlue,
-    backgroundColor: thematicBlue,
+    borderColor: Colors.lime400,
+    backgroundColor: Colors.lime400,
   },
   gameTypeLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: thematicBlue,
+    fontWeight: '700',
+    color: Colors.slate600,
     marginTop: 8,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   gameTypeLabelSelected: {
-    color: '#fff',
+    color: Colors.white,
   },
   findMatchButton: {
-    backgroundColor: thematicBlue,
+    backgroundColor: Colors.lime400,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 10,
-    shadowColor: thematicBlue,
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 12,
+    gap: 10,
+    shadowColor: Colors.lime400,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
   },
   findMatchButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   resultsContainer: {
-    padding: 20,
+    padding: 16,
   },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
   loadingText: {
-    marginTop: 15,
+    marginTop: 12,
     fontSize: 16,
-    color: thematicBlue,
+    color: Colors.slate600,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.slate100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginTop: 20,
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.slate950,
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: Colors.slate600,
     textAlign: 'center',
-    marginTop: 10,
+    marginBottom: 20,
+    lineHeight: 20,
   },
   adjustFiltersButton: {
-    marginTop: 20,
-    paddingHorizontal: 25,
+    backgroundColor: Colors.lime400,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: thematicBlue,
-    borderRadius: 25,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   adjustFiltersText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  resultsHeader: {
+    marginBottom: 16,
   },
   resultsTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: thematicBlue,
-    marginBottom: 15,
+    fontWeight: '900',
+    color: Colors.slate950,
+    letterSpacing: -0.5,
   },
   playerCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
-  playerHeader: {
+  playerAvatarContainer: {
     position: 'relative',
   },
   playerAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#E0E0E0',
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.slate200,
   },
   onlineDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: Colors.white,
   },
   playerInfo: {
     flex: 1,
-    marginLeft: 12,
   },
   playerName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  playerDetails: {
-    flexDirection: 'row',
+    fontWeight: '800',
+    color: Colors.slate950,
     marginBottom: 6,
+    letterSpacing: -0.3,
   },
-  detailRow: {
+  playerMeta: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 12,
   },
-  detailText: {
+  metaText: {
     fontSize: 12,
-    color: '#666',
+    color: Colors.slate600,
     marginLeft: 4,
-  },
-  playerTags: {
-    flexDirection: 'row',
-  },
-  skillTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  skillTagText: {
-    fontSize: 10,
     fontWeight: '600',
   },
-  gameTypeTag: {
+  playerBadges: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  skillBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: thematicBlue + '20',
-  },
-  gameTypeTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: thematicBlue,
-  },
-  requestButton: {
-    backgroundColor: thematicBlue,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
     borderRadius: 8,
   },
-  requestButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
+  skillBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  requestButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.lime400,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
