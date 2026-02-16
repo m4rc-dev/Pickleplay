@@ -197,3 +197,37 @@ export interface CourtReview {
     avatar_url: string;
   };
 }
+export interface Subscription {
+  id: string;
+  court_owner_id: string;
+  status: 'trial' | 'active' | 'expired' | 'cancelled';
+  trial_started_at: string;
+  trial_ends_at: string;
+  subscription_started_at?: string;
+  current_period_start?: string;
+  current_period_end?: string;
+  plan_type: 'monthly' | 'yearly';
+  amount?: number;
+  currency: string;
+  payment_provider?: string;
+  payment_provider_subscription_id?: string;
+  payment_provider_customer_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  cancelled_at?: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description?: string;
+  price_monthly: number;
+  price_yearly?: number;
+  currency: string;
+  max_courts?: number;
+  max_bookings_per_month?: number;
+  features: string[];
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}

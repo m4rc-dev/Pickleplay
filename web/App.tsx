@@ -36,8 +36,11 @@ import {
   Bell,
   UserCheck,
   Building2,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
+import ReactDOM from 'react-dom';
 
 import Home from './components/Home';
 import Dashboard from './components/Dashboard';
@@ -104,7 +107,7 @@ const NotificationPanel: React.FC<{
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
             <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
             <div>
-              <p className="text-sm text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">
+              <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
                 <span className="font-bold">{n.actor.name}</span> {n.message}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -128,7 +131,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
       to={to}
       onClick={onClick}
       className={`flex items-center gap-3 p-3.5 rounded-2xl transition-all duration-300 group ${isActive
-        ? isMobile ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/95 text-blue-600 shadow-lg'
+        ? isMobile ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/95 text-slate-900 shadow-lg'
         : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : 'text-white/80 hover:bg-white/10 hover:text-white'
         } ${isCollapsed ? 'justify-center' : ''}`}
     >
@@ -329,7 +332,7 @@ const NavigationHandler: React.FC<{
     if (role === 'COACH') return 'rose';
     if (role === 'COURT_OWNER') return 'amber';
     if (role === 'ADMIN') return 'indigo';
-    return 'blue';
+    return 'slate';
   };
   const themeColor = getThemeColor();
 
@@ -340,7 +343,7 @@ const NavigationHandler: React.FC<{
   return (
     <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#EBEBE6' }}>
       {role !== 'guest' && !isAuthPage && (
-        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-50`} style={{ backgroundColor: '#1E40AF' }}>
+        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60]`} style={{ backgroundColor: '#1E40AF' }}>
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="absolute -right-3 bottom-12 w-6 h-6 border rounded-full flex items-center justify-center shadow-md z-[60] transition-all hover:scale-110 active:scale-95 cursor-pointer bg-white border-slate-200 text-slate-600"
@@ -348,14 +351,13 @@ const NavigationHandler: React.FC<{
             {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
 
-          <div className={`p-8 flex items-center mb-4 ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
-            <Link to="/" className="flex items-center gap-3 font-black text-2xl tracking-tighter shrink-0 transition-all">
-              <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-16 h-16 object-contain rounded-xl" />
+          <div className={`${isSidebarCollapsed ? 'p-4' : 'p-8'} flex items-center mb-4 transition-all duration-300 ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
+            <Link to="/" className="flex items-center gap-3 font-black text-xl tracking-tighter shrink-0 transition-all">
+              <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className={`${isSidebarCollapsed ? 'w-12 h-12' : 'w-20 h-20'} object-contain rounded-xl transition-all duration-300`} />
               {!isSidebarCollapsed && (
-                <div className="animate-in fade-in duration-500 text-white font-black flex flex-col leading-none">
-                  <span className="text-2xl">PICKLEPLAY</span>
-                  <span className="text-xs tracking-wider opacity-80">PHILIPPINES</span>
-                </div>
+                <span className="text-white font-black leading-none animate-in fade-in slide-in-from-left-2 duration-300">
+                  PICKLEPLAY<br />PHILIPPINES
+                </span>
               )}
             </Link>
           </div>
@@ -432,40 +434,40 @@ const NavigationHandler: React.FC<{
                   <>
                     <button
                       onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800"
+                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-[#0b0e14] border-slate-800 text-white"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
-                          <RefreshCw size={18} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
+                          <RefreshCw size={22} className={`transition-transform duration-500 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
                         </div>
                         <div className="text-left">
-                          <p className="text-[10px] font-black uppercase tracking-widest leading-none">
+                          <p className="text-[11px] font-black uppercase tracking-widest leading-none">
                             {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Player Mode' : `${role.replace('_', ' ')} Mode`)}
                           </p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">
                             Switch Role
                           </p>
                         </div>
                       </div>
-                      <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={18} className={`text-slate-500 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Dropdown Menu */}
                     {isRoleDropdownOpen && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
-                        <div className="p-2 space-y-1">
+                      <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#0b0e14] border border-slate-800/50 rounded-[28px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                        <div className="p-2.5 space-y-1">
                           {/* Player option */}
                           <button
                             onClick={() => {
                               handleRoleSwitch('PLAYER');
                               setIsRoleDropdownOpen(false);
                             }}
-                            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === 'PLAYER'
+                            className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === 'PLAYER'
                               ? 'bg-lime-400 text-slate-900'
-                              : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                              : 'text-white/70 hover:bg-slate-800 hover:text-white'
                               }`}
                           >
-                            <User size={16} />
+                            <User size={20} className={role === 'PLAYER' ? 'text-slate-900' : 'text-white/40'} />
                             <span className="text-[11px] font-black uppercase tracking-widest">Player</span>
                             {role === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
                           </button>
@@ -478,12 +480,15 @@ const NavigationHandler: React.FC<{
                                 handleRoleSwitch(proRole);
                                 setIsRoleDropdownOpen(false);
                               }}
-                              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all text-left ${role === proRole
+                              className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === proRole
                                 ? 'bg-lime-400 text-slate-900'
-                                : 'text-white/80 hover:bg-slate-700 hover:text-white'
+                                : 'text-white/70 hover:bg-slate-800 hover:text-white'
                                 }`}
                             >
-                              {proRole === 'COACH' ? <GraduationCap size={16} /> : <Building2 size={16} />}
+                              {proRole === 'COACH' ?
+                                <GraduationCap size={20} className={role === proRole ? 'text-slate-900' : 'text-white/40'} /> :
+                                <Building2 size={20} className={role === proRole ? 'text-slate-900' : 'text-white/40'} />
+                              }
                               <span className="text-[11px] font-black uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
                               {role === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
                             </button>
@@ -564,13 +569,9 @@ const NavigationHandler: React.FC<{
 
       {/* Mobile Top Header */}
       {!isAuthPage && (
-        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white border-b border-slate-100' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white/20 backdrop-blur-xl border-b border-white/20 shadow-lg' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
-            <div className="flex flex-col leading-none">
-              <span className="text-xl">PICKLEPLAY</span>
-              <span className="text-[10px] tracking-wider opacity-70">PHILIPPINES</span>
-            </div>
           </Link>
           <div className="flex items-center gap-4">
             {role === 'guest' ? (
@@ -612,7 +613,6 @@ const NavigationHandler: React.FC<{
             </nav>
             <div className="p-4 border-t border-slate-100">
               <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center gap-2 w-full px-6 py-3.5 rounded-xl bg-blue-600 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">
-                <LogIn size={18} />
                 Let's Pickle
               </Link>
             </div>
@@ -671,19 +671,15 @@ const NavigationHandler: React.FC<{
 
       {/* Guest Desktop Header */}
       {role === 'guest' && !isAuthPage && (
-        <header className={`hidden md:flex fixed top-4 left-4 right-4 md:left-12 md:right-12 h-20 z-50 transition-all duration-500 ease-in-out rounded-full items-center px-12 justify-between ${headerActive ? 'bg-white shadow-xl' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-[150%]'}`}>
+        <header className={`hidden md:flex fixed top-0 left-0 right-0 h-20 z-50 transition-all duration-500 ease-in-out items-center px-6 md:px-12 lg:px-24 justify-between ${headerActive ? 'bg-white/20 backdrop-blur-xl shadow-lg border-b border-white/10' : 'bg-white/10 backdrop-blur-md border-b border-white/20'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-2xl tracking-tighter transition-colors ${headerActive ? 'text-slate-950' : 'text-white'}`}>
-            <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 object-contain rounded-xl" />
-            <div className="flex flex-col leading-none">
-              <span className="text-2xl">PICKLEPLAY</span>
-              <span className="text-xs tracking-wider opacity-70">PHILIPPINES</span>
-            </div>
+            <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-14 h-14 object-contain rounded-xl" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 font-black text-sm uppercase tracking-[0.2em] transition-colors ${headerActive ? 'text-slate-600' : 'text-white/80'}`}>
-            <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PLAY GUIDE</Link>
-            <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>PRO SHOP</Link>
-            <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-blue-600' : 'hover:text-white'}`}>NEWS</Link>
-            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black ${headerActive ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700' : 'bg-white text-slate-950 hover:bg-lime-400 shadow-black/20'}`}><LogIn size={18} /> LET'S PICKLE</Link>
+            <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>
+            <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>
+            <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>
+            <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black bg-blue-600 text-white shadow-blue-900/20`}>LET'S PICKLE</Link>
           </nav>
         </header>
       )}
@@ -772,6 +768,13 @@ const App: React.FC = () => {
   const [role, setRole] = useState<UserRole>('guest');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [applications, setApplications] = useState<ProfessionalApplication[]>([]);
+  const [activeApplication, setActiveApplication] = useState<ProfessionalApplication | null>(null);
+  const [showStatusModal, setShowStatusModal] = useState<{ show: boolean, type: 'success' | 'error', title: string, message: string }>({
+    show: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
   const [authorizedProRoles, setAuthorizedProRoles] = useState<UserRole[]>([]);
   const [followedUsers, setFollowedUsers] = useState<string[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -1497,23 +1500,61 @@ const App: React.FC = () => {
 
       if (profileError) throw profileError;
 
-      // 4. Update UI State
+      // 4. Create Notification for the user
+      await supabase.from('notifications').insert({
+        user_id: application.playerId,
+        type: 'SYSTEM',
+        message: `Your professional application has been approved! You are now a ${newRole}.`,
+        actor_id: session.user.id
+      });
+
+      // 5. If Court Owner, initialize trial
+      if (newRole === 'COURT_OWNER') {
+        const { createTrialSubscription } = await import('./services/subscriptions');
+        await createTrialSubscription(application.playerId);
+      }
+
+      // 6. Update UI State
       setApplications(apps => apps.map(a => a.id === id ? { ...a, status: 'APPROVED' } : a));
-      alert(`Application approved! ${application.playerName} is now a ${newRole}.`);
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'Application Approved!',
+        message: `${application.playerName} is now a ${newRole}. The user has been notified.`
+      });
     } catch (err: any) {
       console.error('Approval Error:', err.message);
-      alert('Failed to approve application: ' + err.message);
+      setShowStatusModal({
+        show: true,
+        type: 'error',
+        title: 'Approval Failed',
+        message: `Failed to approve application: ${err.message}`
+      });
     }
   };
 
   const handleReject = async (id: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const application = applications.find(a => a.id === id);
+      if (!application) throw new Error('Application not found');
+
       const { error } = await supabase
         .from('professional_applications')
         .update({ status: 'REJECTED', processed_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
+
+      // Create Notification for the user
+      await supabase.from('notifications').insert({
+        user_id: application.playerId,
+        type: 'SYSTEM',
+        message: `Your professional application for ${application.requestedRole} has been declined.`,
+        actor_id: session.user.id
+      });
 
       setApplications(apps => apps.map(a => a.id === id ? { ...a, status: 'REJECTED' } : a));
     } catch (err: any) {
@@ -1613,6 +1654,38 @@ const App: React.FC = () => {
         />
         {isSwitchingRole && <RoleSwitchOverlay targetRole={roleSwitchTarget} />}
       </>
+      {/* Custom Status Modal (Success/Error) */}
+      {showStatusModal.show && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className={`p-8 text-center ${showStatusModal.type === 'success' ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+              <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 ${showStatusModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                {showStatusModal.type === 'success' ? <CheckCircle2 size={40} /> : <AlertCircle size={40} />}
+              </div>
+              <h3 className={`text-2xl font-black uppercase tracking-tighter mb-2 ${showStatusModal.type === 'success' ? 'text-emerald-900' : 'text-rose-900'}`}>
+                {showStatusModal.title}
+              </h3>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                {showStatusModal.message}
+              </p>
+            </div>
+            <div className="p-6 bg-white">
+              <button
+                onClick={() => setShowStatusModal({ ...showStatusModal, show: false })}
+                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all
+                  ${showStatusModal.type === 'success'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 hover:shadow-emerald-200'
+                    : 'bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700 hover:shadow-rose-200'
+                  }`}
+              >
+                GOT IT
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </Router>
   );
 };

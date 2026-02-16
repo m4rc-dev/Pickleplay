@@ -14,6 +14,8 @@ import {
 } from 'recharts';
 import { supabase } from '../services/supabase';
 import { submitCourtReview } from '../services/reviews';
+import { getSubscription, calculateDaysRemaining, createTrialSubscription } from '../services/subscriptions';
+import { Subscription } from '../types';
 import {
   TrendingUp,
   Target,
@@ -40,11 +42,14 @@ import {
   Star,
   Radio,
   MapPin,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
 import { Skeleton } from './ui/Skeleton';
+import { calculateGraceDaysRemaining, isInGracePeriod, isHardLocked } from '../services/subscriptions';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -103,6 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string>('');
   const [accessCodeValue, setAccessCodeValue] = useState<string>('');
+  const [applicationType, setApplicationType] = useState<string>('');
   const [recentLessons, setRecentLessons] = useState<any[]>([]);
   const [recentCourts, setRecentCourts] = useState<any[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -116,26 +122,103 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [timeRange, setTimeRange] = useState<'7D' | '1M' | '6M' | '1Y'>('6M');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [activeLogs, setActiveLogs] = useState<any[]>([]);
+  const [showStatusModal, setShowStatusModal] = useState<{ show: boolean, type: 'success' | 'error', title: string, message: string }>({
+    show: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
+
+  // Subscription state
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
+
+  const fetchUserData = () => {
+    if (userRole === 'PLAYER') {
+      fetchPlayerLessons();
+      fetchPlayerCourts();
+    }
+  };
+
+  const handleFileUpload = (files: File[]) => {
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/jpg',
+      'image/png'
+    ];
+
+    files.forEach((file: File) => {
+      if (!allowedTypes.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type.`);
+        return;
+      }
+      if (file.size > maxSize) {
+        errors.push(`${file.name}: File too large.`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      setUploadError(errors.join('\n'));
+    } else {
+      setUploadError('');
+    }
+
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
 
     // Fetch Announcements (For Everyone) - handle missing table
-    supabase.from('announcements')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(3)
-      .then(({ data, error }) => {
+    const fetchAnnouncements = async () => {
+      try {
+        const { data, error } = await supabase.from('announcements')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
         if (!error && data) setAnnouncements(data);
-      })
-      .catch(() => {
+      } catch (err) {
         // Announcements table might not exist
-      });
+      }
+    };
+    fetchAnnouncements();
 
     if (userRole === 'PLAYER' && currentUserId) {
       fetchPlayerLessons();
       fetchPlayerCourts();
+    }
+
+    if (userRole === 'COURT_OWNER' && currentUserId) {
+      const fetchSubscriptionData = async () => {
+        const { data, error } = await getSubscription(currentUserId);
+        if (!error && data) {
+          setSubscription(data);
+          const remaining = calculateDaysRemaining(data.trial_ends_at);
+          setDaysRemaining(remaining);
+
+          // Don't auto-expire anymore - let grace period handle it
+          // Users get 10 days grace after trial ends before features lock
+        } else if (!data) {
+          // Self-Healing: Create trial if missing
+          console.log('Self-healing: initializing trial for court owner...');
+          const { data: newSub } = await createTrialSubscription(currentUserId);
+          if (newSub) {
+            setSubscription(newSub);
+            setDaysRemaining(calculateDaysRemaining(newSub.trial_ends_at));
+          }
+        }
+      };
+      fetchSubscriptionData();
     }
 
     const fetchCourtOwnerMetrics = async () => {
@@ -445,10 +528,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       setShowBroadcastModal(false);
       setBroadcastTitle('');
       setBroadcastContent('');
-      alert('Broadcast sent successfully to all users!');
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'Broadcast Sent!',
+        message: 'Your announcement has been dispatched to all users successfully.'
+      });
     } catch (err) {
       console.error('Broadcast failed:', err);
-      alert('Failed to send broadcast.');
+      setShowStatusModal({
+        show: true,
+        type: 'error',
+        title: 'Broadcast Failed',
+        message: 'Failed to send the broadcast notice. Please try again.'
+      });
     } finally {
       setIsBroadcasting(false);
     }
@@ -541,14 +634,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       if (!result.success) throw new Error(result.error);
 
-      alert('Court review submitted! Thank you!');
       setIsCourtReviewModalOpen(false);
       setReviewComment('');
       setReviewRating(5);
       fetchPlayerCourts();
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'Feedback Received',
+        message: 'Court review submitted! Thank you for helping the community.'
+      });
+      fetchUserData();
     } catch (err: any) {
       console.error('Court review error:', err);
-      alert('Failed: ' + err.message);
+      setShowStatusModal({
+        show: true,
+        type: 'error',
+        title: 'Review Failed',
+        message: `Failed to submit review: ${err.message}`
+      });
     } finally {
       setIsSubmittingReview(false);
     }
@@ -570,14 +674,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       if (reviewError) throw reviewError;
 
-      alert('Review submitted! Thank you for your feedback.');
       setIsReviewModalOpen(false);
       setReviewComment('');
       setReviewRating(5);
       fetchPlayerLessons();
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'Review Posted',
+        message: 'Your review has been submitted! Thank you for your feedback.'
+      });
+      fetchUserData();
     } catch (err: any) {
       console.error('Review submission error:', err);
-      alert('Failed to submit review: ' + err.message);
+      setShowStatusModal({
+        show: true,
+        type: 'error',
+        title: 'Review Failed',
+        message: `Failed to submit review: ${err.message}`
+      });
     } finally {
       setIsSubmittingReview(false);
     }
@@ -591,7 +706,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     try {
       const rating = parseFloat(newDuprRating);
       if (isNaN(rating) || rating < 0 || rating > 8.0) {
-        alert('Please enter a valid DUPR rating (0.000 - 8.000)');
+        setShowStatusModal({
+          show: true,
+          type: 'error',
+          title: 'Invalid Rating',
+          message: 'Please enter a valid DUPR rating between 0.000 and 8.000'
+        });
+        setIsLoggingDupr(false);
         return;
       }
 
@@ -637,10 +758,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         setRatingHistory(mappedHistory);
       }
 
-      alert('DUPR rating updated successfully!');
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'DUPR Updated',
+        message: 'Your DUPR rating has been synchronized successfully.'
+      });
+      fetchUserData();
     } catch (err: any) {
       console.error('Logging DUPR failed:', err);
-      alert('Failed to log DUPR: ' + err.message);
+      setShowStatusModal({
+        show: true,
+        type: 'error',
+        title: 'Sync Failed',
+        message: `Failed to log DUPR: ${err.message}`
+      });
     } finally {
       setIsLoggingDupr(false);
     }
@@ -649,44 +781,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
-    const validFiles: File[] = [];
-    const errors: string[] = [];
-    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'image/jpeg',
-      'image/jpg',
-      'image/png'
-    ];
-
-    Array.from(files).forEach((file: File) => {
-      // Check file type
-      if (!allowedTypes.includes(file.type)) {
-        errors.push(`${file.name}: Invalid file type. Only PDF, DOC, DOCX, JPG, and PNG are allowed.`);
-        return;
-      }
-
-      // Check file size
-      if (file.size > maxSize) {
-        errors.push(`${file.name}: File too large. Maximum size is 10MB.`);
-        return;
-      }
-
-      validFiles.push(file);
-    });
-
-    if (errors.length > 0) {
-      setUploadError(errors.join('\n'));
-    } else {
-      setUploadError('');
-    }
-
-    setSelectedFiles(prev => [...prev, ...validFiles]);
-
-    // Reset input value to allow re-uploading the same file
+    handleFileUpload(Array.from(files));
     e.target.value = '';
   };
 
@@ -815,8 +910,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         )}
       </div>
 
-      {/* Free Trial Banner for Court Owners */}
-      {userRole === 'COURT_OWNER' && !isLoading && (
+
+      {/* Active Trial Banner - Days 1-30 */}
+      {userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
         <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-amber-100 relative overflow-hidden animate-fade-in">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -828,11 +924,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <span className="text-xs font-black uppercase tracking-widest text-amber-100">Limited Time Offer</span>
                 </div>
                 <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
-                  🎉 Welcome to PicklePlay!
+                  🎉 1 Month Free Trial
                 </h3>
                 <p className="text-amber-50 text-sm md:text-base leading-relaxed max-w-2xl">
-                  You're now enjoying a <span className="font-black text-white">1-month FREE trial</span> with full access to all premium features.
-                  Manage unlimited courts, track bookings, analyze revenue, and grow your business—completely free for 30 days!
+                  You're enjoying full access to all premium features completely free!
+                  Manage courts, track bookings, and grow your business.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 mt-4">
                   <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
@@ -850,9 +946,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 </div>
               </div>
               <div className="shrink-0">
-                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30">
+                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30 text-center">
                   <p className="text-xs font-bold text-amber-100 uppercase tracking-widest mb-1">Trial Ends In</p>
-                  <p className="text-4xl font-black text-white">30</p>
+                  <p className="text-4xl font-black text-white">{daysRemaining}</p>
                   <p className="text-xs font-bold text-amber-100 uppercase">Days</p>
                 </div>
               </div>
@@ -860,6 +956,82 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           </div>
         </div>
       )}
+
+      {/* Grace Period Banner - Days 31-40 (Positive messaging!) */}
+      {userRole === 'COURT_OWNER' && !isLoading && subscription && isInGracePeriod(subscription) && (
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-orange-100 relative overflow-hidden animate-fade-in">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={20} className="text-orange-200" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-orange-100">Special Grace Period</span>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
+                  🎊 Congratulations! You Still Have {calculateGraceDaysRemaining(subscription.trial_ends_at)} Days to Subscribe
+                </h3>
+                <p className="text-orange-50 text-sm md:text-base leading-relaxed max-w-2xl">
+                  <span className="font-black text-white">All features remain fully active!</span>{' '}
+                  We've extended your access as a special courtesy. Subscribe now to continue enjoying premium features without interruption.
+                </p>
+                <div className="flex flex-wrap items-center gap-4 mt-4">
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <CheckCircle2 size={16} className="text-orange-100" />
+                    <span className="text-xs font-bold text-white">Still Full Access</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                    <CheckCircle2 size={16} className="text-orange-100" />
+                    <span className="text-xs font-bold text-white">No Features Locked</span>
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 space-y-3">
+                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30 text-center">
+                  <p className="text-xs font-bold text-orange-100 uppercase tracking-widest mb-1">Grace Period</p>
+                  <p className="text-4xl font-black text-white">{calculateGraceDaysRemaining(subscription.trial_ends_at)}</p>
+                  <p className="text-xs font-bold text-orange-100 uppercase">Days Left</p>
+                </div>
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="w-full bg-white text-orange-600 font-black px-6 py-3 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-orange-900/20 hover:scale-105 transition-all"
+                >
+                  Subscribe Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hard Lock Banner - Day 41+ */}
+      {userRole === 'COURT_OWNER' && !isLoading && subscription && isHardLocked(subscription) && (
+        <div className="bg-gradient-to-r from-rose-500 to-rose-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-rose-100 relative overflow-hidden animate-fade-in">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex-1 text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                  <AlertCircle size={20} className="text-rose-200" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-rose-100">Subscription Required</span>
+                </div>
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">🔒 Subscription Needed to Continue</h3>
+                <p className="text-rose-50 text-sm md:text-base leading-relaxed max-w-xl">
+                  Your trial and grace period have ended. To continue managing your courts and accessing premium features, please select a subscription plan.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/profile')}
+                className="bg-white text-rose-600 font-black px-8 py-4 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-rose-900/20 hover:scale-105 transition-all"
+              >
+                Subscribe to Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {renderRoleMetrics()}
@@ -1208,327 +1380,310 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       {/* Submit Docs Application Modal - Refined Stacking logic */}
       {showSubmitConfirm && ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300 overflow-y-auto">
-          <div className="bg-white rounded-[40px] p-10 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-300 my-8 z-[100]">
-            <div className="space-y-6">
-              <div className="text-center">
-                <h3 className="text-2xl font-black text-slate-950 mb-2 uppercase tracking-tighter">Professional Application</h3>
-                <p className="text-slate-500 font-medium text-sm">
-                  Apply to become a certified coach or register your court facility
-                </p>
-              </div>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300 overflow-y-auto">
+          <div className="bg-white rounded-[40px] p-8 md:p-12 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-300 my-8">
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmittingReview(true);
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
 
-              <form className="space-y-4" onSubmit={async (e) => {
-                e.preventDefault();
+                // 1. Check if it's an access code submission
+                if (accessCodeValue.trim()) {
+                  const { data: codeData, error: codeError } = await supabase
+                    .from('access_codes')
+                    .select('*')
+                    .eq('code', accessCodeValue.trim().toUpperCase())
+                    .eq('is_used', false)
+                    .single();
 
-                const formData = new FormData(e.currentTarget);
-                const applicationType = formData.get('applicationType') as string;
+                  if (codeData) {
+                    const { data: profile } = await supabase
+                      .from('profiles')
+                      .select('roles')
+                      .eq('id', user.id)
+                      .single();
 
-                if (!applicationType) {
-                  alert('Please select an application type');
-                  return;
-                }
+                    const currentRoles = profile?.roles || ['PLAYER'];
+                    const requestedRole = applicationType === 'coach' ? 'COACH' : 'COURT_OWNER';
 
-                const accessCode = formData.get('accessCode') as string;
+                    if (!currentRoles.includes(requestedRole)) {
+                      currentRoles.push(requestedRole);
+                    }
 
-                // Validate: require files if no access code is provided
-                if (!accessCode || !accessCode.trim()) {
-                  if (selectedFiles.length === 0) {
-                    setUploadError('Please upload at least one supporting document, or enter a valid access code to skip this requirement.');
+                    const { error: updateError } = await supabase
+                      .from('profiles')
+                      .update({
+                        roles: currentRoles,
+                        active_role: requestedRole
+                      })
+                      .eq('id', user.id);
+
+                    if (updateError) throw updateError;
+
+                    // Explicitly create trial subscription record as well
+                    await createTrialSubscription(user.id);
+
+                    await supabase
+                      .from('access_codes')
+                      .update({
+                        is_used: true,
+                        used_by: user.id,
+                        used_at: new Date().toISOString()
+                      })
+                      .eq('id', codeData.id);
+
+                    setShowStatusModal({
+                      show: true,
+                      type: 'success',
+                      title: 'Access Granted!',
+                      message: `Promotional access granted! Welcome as a ${requestedRole}. THE PAGE WILL REFRESH AUTOMATICALLY.`
+                    });
+                    setShowSubmitConfirm(false);
+                    setTimeout(() => window.location.reload(), 3000);
+                    return;
+                  } else if (codeError && codeError.code !== 'PGRST116') {
+                    throw codeError;
+                  } else {
+                    setShowStatusModal({
+                      show: true,
+                      type: 'error',
+                      title: 'Invalid Code',
+                      message: 'Invalid or expired access code. Please check and try again.'
+                    });
                     return;
                   }
                 }
 
-                try {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (!user) throw new Error('Not authenticated');
-
-                  // 1. Check for Access Code
-                  if (accessCode && accessCode.trim()) {
-                    const { data: codeData, error: codeError } = await supabase
-                      .from('access_codes')
-                      .select('*')
-                      .eq('code', accessCode.toUpperCase().trim())
-                      .eq('is_used', false)
-                      .single();
-
-                    if (codeData) {
-                      // Fetch current profile to get existing roles
-                      const { data: profile } = await supabase
-                        .from('profiles')
-                        .select('roles')
-                        .eq('id', user.id)
-                        .single();
-
-                      const currentRoles = profile?.roles || ['PLAYER'];
-                      const requestedRole = applicationType === 'coach' ? 'COACH' : 'COURT_OWNER';
-
-                      if (!currentRoles.includes(requestedRole)) {
-                        currentRoles.push(requestedRole);
-                      }
-
-                      // Update profile directly
-                      const { error: updateError } = await supabase
-                        .from('profiles')
-                        .update({
-                          roles: currentRoles,
-                          active_role: requestedRole
-                        })
-                        .eq('id', user.id);
-
-                      if (updateError) throw updateError;
-
-                      // Mark code as used
-                      await supabase
-                        .from('access_codes')
-                        .update({
-                          is_used: true,
-                          used_by: user.id,
-                          used_at: new Date().toISOString()
-                        })
-                        .eq('id', codeData.id);
-
-                      alert(`Promotional access granted! Welcome as a ${requestedRole}.`);
-                      setShowSubmitConfirm(false);
-                      window.location.reload();
-                      return;
-                    } else if (codeError && codeError.code !== 'PGRST116') {
-                      throw codeError;
-                    } else {
-                      alert('Invalid or expired access code. Please check and try again.');
-                      return;
-                    }
-                  }
-
-                  // Upload files to Supabase Storage
-                  const uploadedFileUrls: string[] = [];
-
-                  if (selectedFiles.length > 0) {
-                    const bucketName = 'application-documents';
-
-                    for (const file of selectedFiles) {
-                      const fileExt = file.name.split('.').pop();
-                      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-                      const { data, error } = await supabase.storage
-                        .from(bucketName)
-                        .upload(fileName, file, {
-                          cacheControl: '3600',
-                          upsert: false
-                        });
-
-                      if (error) {
-                        console.error('Upload error:', error);
-                        throw new Error(`Failed to upload ${file.name}: ${error.message}`);
-                      }
-
-                      // Get public URL
-                      const { data: { publicUrl } } = supabase.storage
-                        .from(bucketName)
-                        .getPublicUrl(fileName);
-
-                      uploadedFileUrls.push(publicUrl);
-                    }
-                  }
-
-                  // Submit application with file URLs
-                  const requestedRole = applicationType === 'coach' ? 'COACH' : 'COURT_OWNER';
-
-                  if (onSubmitApplication) {
-                    onSubmitApplication({
-                      playerId: user.id,
-                      playerName: user.email || 'Unknown',
-                      requestedRole,
-                      experienceSummary: `Application submitted with ${selectedFiles.length} document(s)`,
-                      documentName: uploadedFileUrls.join(', ') || 'No documents'
-                    });
-                  }
-
-                  alert('Application submitted successfully! Our team will review your documents within 3-5 business days.');
-                  setShowSubmitConfirm(false);
-                  setSelectedFiles([]);
-                  setUploadError('');
-                } catch (error: any) {
-                  console.error('Submission error:', error);
-                  alert(`Failed to submit application: ${error.message}`);
+                // Standard application path
+                if (!accessCodeValue.trim() && selectedFiles.length === 0) {
+                  setUploadError('Supporting documents are required.');
+                  return;
                 }
-              }}>
+
+                const uploadedFileUrls: string[] = [];
+                if (selectedFiles.length > 0) {
+                  const bucketName = 'application-documents';
+                  for (const file of selectedFiles) {
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${user.id}/${Math.random()}.${fileExt}`;
+                    const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file);
+                    if (uploadError) throw uploadError;
+                    const { data: { publicUrl } } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+                    uploadedFileUrls.push(publicUrl);
+                  }
+                }
+
+                const requestedRole = applicationType === 'coach' ? 'COACH' : 'COURT_OWNER';
+
+                if (onSubmitApplication) {
+                  onSubmitApplication({
+                    playerId: user.id,
+                    playerName: user.email || 'Unknown',
+                    requestedRole,
+                    experienceSummary: `Application submitted with ${selectedFiles.length} document(s)`,
+                    documentName: uploadedFileUrls.join(', ') || 'No documents'
+                  });
+                }
+
+                setShowStatusModal({
+                  show: true,
+                  type: 'success',
+                  title: 'Submission Received!',
+                  message: 'Application submitted successfully! Our team will review your documents within 3-5 business days.'
+                });
+                setShowSubmitConfirm(false);
+                setSelectedFiles([]);
+                setUploadError('');
+              } catch (error: any) {
+                console.error('Submission error:', error);
+                setShowStatusModal({
+                  show: true,
+                  type: 'error',
+                  title: 'Submission Failed',
+                  message: `Failed to submit application: ${error.message}`
+                });
+              } finally {
+                setIsSubmittingReview(false);
+              }
+            }}>
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100/50 text-blue-600">
+                    <Award size={32} />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Become a Professional</h3>
+                  <p className="text-slate-500 text-sm font-medium mt-1">Unlock pro features and grow your pickleball presence.</p>
+                </div>
+
                 {/* Application Type */}
-                <div>
-                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-2">
-                    Application Type
-                  </label>
-                  <select
-                    name="applicationType"
-                    required
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select type...</option>
-                    {!authorizedProRoles.includes('COACH') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COACH' && a.status === 'PENDING') && (
-                      <option value="coach">Certified Coach</option>
-                    )}
-                    {!authorizedProRoles.includes('COURT_OWNER') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COURT_OWNER' && a.status === 'PENDING') && (
-                      <option value="court_owner">Court Owner / Facility</option>
-                    )}
-                    {authorizedProRoles.includes('COACH') && authorizedProRoles.includes('COURT_OWNER') && (
-                      <option disabled>You already hold all professional roles</option>
-                    )}
-                    {applications.some(a => a.playerId === currentUserId && a.status === 'PENDING') && (
-                      <option disabled>Existing application pending review</option>
-                    )}
-                  </select>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Application Type</label>
+                  <div className="relative">
+                    <select
+                      name="applicationType"
+                      required
+                      value={applicationType}
+                      onChange={(e) => setApplicationType(e.target.value)}
+                      className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-black text-slate-900 focus:outline-none focus:border-blue-500 appearance-none transition-all"
+                    >
+                      <option value="">Select type...</option>
+                      {!authorizedProRoles.includes('COACH') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COACH' && a.status === 'PENDING') && (
+                        <option value="coach">Certified Coach</option>
+                      )}
+                      {!authorizedProRoles.includes('COURT_OWNER') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COURT_OWNER' && a.status === 'PENDING') && (
+                        <option value="court_owner">Court Owner / Facility</option>
+                      )}
+                    </select>
+                    <PlusCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                  </div>
                 </div>
 
                 {/* Access Code */}
-                <div className="pt-2">
-                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-2 flex items-center justify-between">
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
                     Access Code (Promotional)
-                    <span className="text-[9px] font-bold text-slate-400 normal-case italic">{accessCodeValue.trim() ? 'Code entered - documents optional' : 'Optional'}</span>
+                    <span className="text-[9px] font-bold text-blue-500 normal-case italic">
+                      {accessCodeValue.trim() ? "Applied" : "Optional"}
+                    </span>
                   </label>
                   <div className="relative">
                     <input
                       name="accessCode"
                       type="text"
-                      placeholder="e.g. PICKLE-PRO-2024"
+                      placeholder="e.g. PRO-JOIN-2024"
                       value={accessCodeValue}
-                      onChange={(e) => {
-                        setAccessCodeValue(e.target.value);
-                        setUploadError(''); // Clear error when user types access code
-                      }}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 font-mono font-bold text-sm text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-indigo-50/30 uppercase"
+                      onChange={(e) => setAccessCodeValue(e.target.value)}
+                      className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-mono font-black text-sm text-blue-600 focus:outline-none focus:border-blue-500 uppercase transition-all"
                     />
-                    <Key size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <Key className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   </div>
                 </div>
 
-                {/* File Upload */}
-                <div className="relative">
-                  <div className="flex items-center gap-2 mb-2">
-                    <label className="block text-xs font-black text-slate-700 uppercase tracking-widest">
-                      Supporting Documents
-                      {!accessCodeValue.trim() && <span className="text-red-500 ml-1">*</span>}
+                {/* File Upload Zone */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1 relative">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                      Verification Documents {!accessCodeValue.trim() && <span className="text-red-500">*</span>}
                     </label>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onMouseEnter={() => setShowHelp(true)}
-                        onMouseLeave={() => setShowHelp(false)}
-                        className="text-slate-400 hover:text-blue-600 transition-colors"
-                      >
-                        <HelpCircle size={16} />
-                      </button>
-                      {showHelp && (
-                        <div className="absolute left-0 top-6 w-72 bg-slate-900 text-white p-4 rounded-xl shadow-2xl z-50 text-left animate-fade-in">
-                          <p className="text-xs font-black uppercase tracking-wider text-lime-400 mb-2">Required Documents</p>
-                          <div className="space-y-3 text-xs">
+                    <button type="button" onMouseEnter={() => setShowHelp(true)} onMouseLeave={() => setShowHelp(false)} className="text-slate-400 outline-none">
+                      <HelpCircle size={16} />
+                    </button>
+
+                    {showHelp && (
+                      <div className="absolute right-0 bottom-full mb-3 w-72 bg-white/95 backdrop-blur-xl p-6 rounded-[32px] shadow-2xl border border-slate-100/50 z-[120] animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-none">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 text-blue-600">
+                            <Shield size={16} />
+                            <p className="text-[10px] font-black uppercase tracking-widest leading-none">Verification Guide</p>
+                          </div>
+
+                          <div className="space-y-4">
                             <div>
-                              <p className="font-bold mb-1">For Coaches:</p>
-                              <ul className="list-disc list-inside text-slate-300 space-y-1">
-                                <li>Coaching certification (PPR, IPTPA, etc.)</li>
-                                <li>Valid ID or driver's license</li>
-                                <li>Proof of insurance (optional)</li>
+                              <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Certified Coach Requirements:</p>
+                              <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Coaching Certificate
+                                </li>
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Government ID
+                                </li>
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Professional Experience
+                                </li>
                               </ul>
                             </div>
+
                             <div>
-                              <p className="font-bold mb-1">For Court Owners:</p>
-                              <ul className="list-disc list-inside text-slate-300 space-y-1">
-                                <li>Business license or registration</li>
-                                <li>Facility photos (courts, amenities)</li>
-                                <li>Proof of ownership/lease agreement</li>
+                              <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Court Owner Requirements:</p>
+                              <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Valid Business Permit
+                                </li>
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Facility Utility Bill
+                                </li>
+                                <li className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Valid Government ID
+                                </li>
                               </ul>
                             </div>
                           </div>
-                          <div className="mt-3 pt-3 border-t border-slate-700">
-                            <p className="text-xs text-slate-400">💡 Tip: Clear, high-quality scans are preferred</p>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Max 10MB per file</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">PDF, DOC, Images</p>
                           </div>
                         </div>
-                      )}
-                    </div>
+                        {/* Arrow */}
+                        <div className="absolute right-2 top-full w-4 h-4 bg-white/95 border-r border-b border-slate-100/50 rotate-45 -translate-y-2 z-[-1]" />
+                      </div>
+                    )}
                   </div>
-                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-blue-400 transition-colors">
+
+                  <div
+                    className="border-2 border-dashed border-slate-100 bg-slate-50/50 rounded-2xl p-6 text-center hover:bg-slate-50 transition-all relative"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const files = Array.from(e.dataTransfer.files) as File[];
+                      if (files.length > 0) handleFileUpload(files);
+                    }}
+                  >
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      className="hidden"
-                      id="file-upload"
-                      onChange={handleFileChange}
+                      onChange={(e) => handleFileUpload(Array.from(e.target.files || []) as File[])}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
                     />
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <BookOpen className="text-slate-400" size={24} />
-                      </div>
-                      <p className="text-sm font-bold text-slate-900 mb-1">Click to upload files</p>
-                      <p className="text-xs text-slate-500 font-medium">PDF, DOC, or images (Max 10MB each)</p>
-                    </label>
+                    <BookOpen className="mx-auto text-slate-300 mb-2" size={24} />
+                    <p className="text-[10px] font-black uppercase text-slate-900">Upload Files</p>
+                    <p className="text-[9px] font-bold text-slate-400">PDF, DOC, or Images</p>
                   </div>
 
-                  {/* Error Messages */}
-                  {uploadError && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-                      <p className="text-xs font-bold text-red-600 whitespace-pre-line">{uploadError}</p>
-                    </div>
-                  )}
-
-                  {/* Selected Files List */}
+                  {/* File List */}
                   {selectedFiles.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Selected Files ({selectedFiles.length})</p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto no-scrollbar">
                       {selectedFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <BookOpen className="text-blue-600 shrink-0" size={16} />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-slate-900 truncate">{file.name}</p>
-                              <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
+                        <div key={index} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                          <div className="min-w-0 flex-1 flex items-center gap-2">
+                            <BookOpen size={12} className="text-blue-500 shrink-0" />
+                            <p className="text-[10px] font-bold text-slate-900 truncate">{file.name}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFile(index)}
-                            className="ml-2 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                            title="Remove file"
-                          >
-                            <X size={16} />
+                          <button type="button" onClick={() => handleRemoveFile(index)} className="text-slate-300 hover:text-rose-600 transition-all p-1">
+                            <X size={14} />
                           </button>
                         </div>
                       ))}
                     </div>
                   )}
-
-                  <p className="text-xs text-slate-400 mt-2 font-medium">
-                    Upload certifications, licenses, or facility documents
-                  </p>
-                  {!accessCodeValue.trim() && selectedFiles.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1 font-semibold">
-                      ⚠️ At least one document is required unless you have an access code
-                    </p>
-                  )}
                 </div>
 
-                {/* Action Buttons */}
+                {/* Footer Buttons */}
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
                     onClick={() => {
                       setShowSubmitConfirm(false);
-                      setSelectedFiles([]);
-                      setUploadError('');
                       setAccessCodeValue('');
+                      setSelectedFiles([]);
                     }}
-                    className="flex-1 bg-slate-100 text-slate-900 font-black py-4 px-6 rounded-2xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
+                    className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 text-white font-black py-4 px-6 rounded-2xl hover:bg-lime-400 hover:text-slate-900 transition-all text-xs uppercase tracking-widest shadow-lg"
+                    disabled={isSubmittingReview}
+                    className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Submit Application
+                    {isSubmittingReview ? 'Submitting...' : 'Apply Now'}
                   </button>
                 </div>
-              </form>
-            </div>
+              </div>
+            </form>
           </div>
         </div>,
         document.body
@@ -1654,80 +1809,116 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         )
       }
       {/* Admin Logs Modal */}
-      {showLogsModal && ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[40px] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh] z-[100]">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter flex items-center gap-3">
-                  <History className="text-indigo-600" /> System Activity.
-                </h3>
-                <p className="text-slate-500 font-medium text-sm mt-1">Real-time administrative and security events.</p>
+      {
+        showLogsModal && ReactDOM.createPortal(
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[40px] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh] z-[100]">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter flex items-center gap-3">
+                    <History className="text-indigo-600" /> System Activity.
+                  </h3>
+                  <p className="text-slate-500 font-medium text-sm mt-1">Real-time administrative and security events.</p>
+                </div>
+                <button
+                  onClick={() => setShowLogsModal(false)}
+                  className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button
-                onClick={() => setShowLogsModal(false)}
-                className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4 no-scrollbar">
-              {activeLogs.length > 0 ? (
-                activeLogs.map((log, i) => (
-                  <div key={i} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-100 hover:bg-white transition-all">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.event_type === 'SECURITY' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'}`}>
-                          {log.event_type}
+              <div className="flex-1 overflow-y-auto pr-2 space-y-4 no-scrollbar">
+                {activeLogs.length > 0 ? (
+                  activeLogs.map((log, i) => (
+                    <div key={i} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-100 hover:bg-white transition-all">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.event_type === 'SECURITY' ? 'bg-rose-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                            {log.event_type}
+                          </span>
+                          <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">{log.action}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                          {new Date(log.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">{log.action}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">
-                        {new Date(log.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">
-                        {log.agent_name?.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs font-black text-slate-900 leading-tight mb-1">{log.details}</p>
-                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">
-                          Target: <span className="font-bold text-slate-700">{log.target_name}</span> • Agent: <span className="font-bold text-slate-700">{log.agent_name}</span>
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">
+                          {log.agent_name?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-black text-slate-900 leading-tight mb-1">{log.details}</p>
+                          <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">
+                            Target: <span className="font-bold text-slate-700">{log.target_name}</span> • Agent: <span className="font-bold text-slate-700">{log.agent_name}</span>
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-20 opacity-30 uppercase font-black text-xs">No recent activity found</div>
-              )}
-            </div>
+                  ))
+                ) : (
+                  <div className="text-center py-20 opacity-30 uppercase font-black text-xs">No recent activity found</div>
+                )}
+              </div>
 
-            <div className="mt-8 pt-8 border-t border-slate-100 flex gap-4">
-              <button
-                onClick={() => setShowLogsModal(false)}
-                className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  setShowLogsModal(false);
-                  navigate('/admin?tab=audit');
-                }}
-                className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"
-              >
-                Go to Audit Console <ArrowRight size={14} />
-              </button>
+              <div className="mt-8 pt-8 border-t border-slate-100 flex gap-4">
+                <button
+                  onClick={() => setShowLogsModal(false)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLogsModal(false);
+                    navigate('/admin?tab=audit');
+                  }}
+                  className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"
+                >
+                  Go to Audit Console <ArrowRight size={14} />
+                </button>
+              </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        )
+      }
 
-    </div>
+      {/* Custom Status Modal (Success/Error) */}
+      {
+        showStatusModal.show && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className={`p-8 text-center ${showStatusModal.type === 'success' ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 ${showStatusModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                  {showStatusModal.type === 'success' ? <CheckCircle2 size={40} /> : <AlertCircle size={40} />}
+                </div>
+                <h3 className={`text-2xl font-black uppercase tracking-tighter mb-2 ${showStatusModal.type === 'success' ? 'text-emerald-900' : 'text-rose-900'}`}>
+                  {showStatusModal.title}
+                </h3>
+                <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                  {showStatusModal.message}
+                </p>
+              </div>
+              <div className="p-6 bg-white">
+                <button
+                  onClick={() => setShowStatusModal({ ...showStatusModal, show: false })}
+                  className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all
+                  ${showStatusModal.type === 'success'
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 hover:shadow-emerald-200'
+                      : 'bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700 hover:shadow-rose-200'
+                    }`}
+                >
+                  GOT IT
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+    </div >
   );
 };
 

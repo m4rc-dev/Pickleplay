@@ -17,6 +17,7 @@ import {
   BarChart3,
   AlertCircle,
   CheckCircle,
+  CheckCircle2,
   LogOut,
   Loader2,
   ArrowLeftRight,
@@ -2997,20 +2998,80 @@ Never share them with anyone.`;
 
           {/* Billing Tab */}
           {activeTab === 'billing' && (
-            <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm">
-              <div className="flex flex-col items-center justify-center py-20 space-y-6">
-                <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center">
-                  <CreditCard className="text-amber-600" size={40} />
+            <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-8">
+              <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
+                <CreditCard className="text-emerald-600" /> Subscription Management
+              </h3>
+
+              {/* Note: For court owners only, fetch their subscription status */}
+              {userRole === 'COURT_OWNER' ? (
+                <div className="border-t border-slate-100 pt-8 space-y-6">
+                  <div className="bg-slate-50 rounded-2xl p-6">
+                    <p className="text-sm font-bold text-slate-700 mb-4">🎉 Trial & Subscription Status</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Your subscription details will be displayed here. This is a placeholder - the actual implementation
+                      would fetch your subscription from the database and show Active Trial, Grace Period, or Hard Locked status.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-black text-slate-950 uppercase">Available Plans</h4>
+
+                    {/* Pro Plan */}
+                    <div className="border-2 border-emerald-500 rounded-2xl p-6 bg-emerald-50/50 relative overflow-hidden">
+                      <div className="absolute top-3 right-3 bg-emerald-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                        Recommended
+                      </div>
+                      <h5 className="text-xl font-black text-slate-950 mb-1">Pro Plan</h5>
+                      <p className="text-3xl font-black text-emerald-600 mb-3">₱999<span className="text-sm text-slate-500 font-normal">/month</span></p>
+                      <ul className="space-y-2 mb-6">
+                        <li className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>Unlimited Courts & Locations</span>
+                        </li>
+                        <li className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>Advanced Revenue Analytics</span>
+                        </li>
+                        <li className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>Priority Customer Support</span>
+                        </li>
+                        <li className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>Tournament Management</span>
+                        </li>
+                        <li className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>Broadcast Announcements</span>
+                        </li>
+                      </ul>
+                      <button className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold transition-all">
+                        Subscribe to Pro
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      <strong>💳 Payment Integration Coming Soon:</strong> Subscription activation is currently being developed.
+                      You can still enjoy your free trial and grace period!
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center space-y-2">
-                  <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tight">Coming Soon</h3>
-                  <p className="text-slate-500 font-medium max-w-md">Wallet, billing, and payment features will be available in a future update.</p>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 space-y-6 border-t border-slate-100 pt-8">
+                  <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center">
+                    <ShoppingBag className="text-slate-400" size={40} />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <h4 className="text-2xl font-black text-slate-950 uppercase tracking-tight">Player Account</h4>
+                    <p className="text-slate-500 font-medium max-w-md">
+                      Billing and subscriptions are for Court Owners only. Players enjoy free access to all features!
+                    </p>
+                  </div>
                 </div>
-                <div className="inline-flex items-center gap-2 px-6 py-3 bg-amber-50 rounded-full">
-                  <Sparkles className="text-amber-600" size={16} />
-                  <span className="text-xs font-black text-amber-600 uppercase tracking-wider">Under Development</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
 

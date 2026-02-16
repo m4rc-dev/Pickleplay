@@ -313,17 +313,17 @@ const Home: React.FC = () => {
         const locationData = (data || []).map(loc => {
           const courts = (loc as any).courts || [];
           const city = loc.city || '';
-          
+
           // Calculate aggregated data from courts
           let totalRating = 0;
           let totalReviews = 0;
           let totalPrice = 0;
           let courtCount = 0;
-          
+
           courts.forEach((court: any) => {
             courtCount++;
             if (court.base_price) totalPrice += court.base_price;
-            
+
             const reviews = court.court_reviews || [];
             reviews.forEach((review: any) => {
               totalRating += review.rating;
@@ -354,7 +354,7 @@ const Home: React.FC = () => {
         console.error('Error fetching locations:', err);
       }
     };
-    
+
     fetchCourts();
     fetchLocations();
   }, []);
@@ -724,7 +724,7 @@ const Home: React.FC = () => {
       {/* Cinematic Hero */}
       <section className="relative min-h-screen md:min-h-[95vh] flex flex-col items-center justify-center pt-16 md:pt-24 pb-28 md:pb-40 bg-slate-950 z-40">
         {/* Overlapping player faces and user count - Desktop: Corner positioning, Mobile: Hidden (moved below title) */}
-        <div className="hidden md:flex absolute left-8 bottom-8 md:bottom-14 z-40 items-center gap-3 select-none">
+        <div className="hidden md:flex absolute left-6 md:left-12 lg:left-24 bottom-8 md:bottom-14 z-40 items-center gap-3 select-none">
           <div className="flex -space-x-4">
             {playerFaces.map((face, idx) => (
               <img
@@ -761,12 +761,12 @@ const Home: React.FC = () => {
         </div>
 
         <div className="relative z-30 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-4 py-1.5 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
             The National Network for Philippines
           </div>
           <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
-            <span className="text-6xl sm:text-7xl md:text-8xl lg:text-[13rem]">PICKLEBALL</span> <br />
-            <span className="text-lime-400 text-5xl sm:text-8xl md:text-9xl lg:text-[11rem]">PHILIPPINES.</span>
+            <span className="text-5xl sm:text-6xl md:text-7xl lg:text-[10rem]">PICKLEPLAY</span> <br />
+            <span className="text-lime-400 text-4xl sm:text-7xl md:text-8xl lg:text-[9rem]">PHILIPPINES</span>
           </h1>
 
           {/* Mobile-only Player Badge */}
@@ -787,13 +787,13 @@ const Home: React.FC = () => {
               {totalUsers.toLocaleString()}+ Active
             </span>
           </div>
-          <p className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto font-medium leading-relaxed mb-8 md:mb-12">
+          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed mb-8 md:mb-12">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
           <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-slate-900/90 border border-white/20 backdrop-blur-xl rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
-                <Search className="ml-3 md:ml-6 text-slate-500" size={18} />
+              <div className="relative flex items-center bg-white/15 border border-white/30 backdrop-blur-xl rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
+                <Search className="ml-3 md:ml-6 text-white/50" size={18} />
                 <input
                   type="text"
                   placeholder="Find courts..."
@@ -804,13 +804,13 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 min-w-0 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-600"
+                  className="flex-1 min-w-0 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-white/40"
                 />
                 <button
                   type="submit"
-                  className="bg-lime-400 hover:bg-lime-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 h-11 md:h-12 px-4 md:px-10 rounded-full font-black flex items-center gap-1.5 md:gap-3 transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white h-11 md:h-12 px-4 md:px-10 rounded-full font-black flex items-center justify-center transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
                 >
-                  LOCATE <ArrowRight className="w-3 h-3 md:w-5 md:h-5" />
+                  LOCATE
                 </button>
               </div>
 
@@ -977,145 +977,145 @@ const Home: React.FC = () => {
                 {featuredList.slice(0, 10).map((item, idx) => {
                   // Check if item is a location (has court_count) or court (has base_price)
                   const isLocation = item.hasOwnProperty('court_count');
-                  
+
                   return (
-                  <div
-                    key={idx}
-                    className="group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden"
-                  >
-                    {isLocation ? (
-                      // Location Card Template
-                      <>
-                        <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
-                          <img
-                            src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
-                            alt={item.name}
-                            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                          {/* Price Badge on Image */}
-                          <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                            <span className="text-lg font-black text-slate-900">₱{item.avg_price || 0}</span>
-                            <span className="text-xs font-semibold text-slate-500">/hr avg</span>
-                          </div>
-                        </Link>
-
-                        <div className="p-4">
-                          {/* Rating Badge */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="flex items-center gap-0.5">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <svg
-                                  key={star}
-                                  className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
-                                  fill="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
-                                </svg>
-                              ))}
+                    <div
+                      key={idx}
+                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden"
+                    >
+                      {isLocation ? (
+                        // Location Card Template
+                        <>
+                          <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
+                            <img
+                              src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
+                              alt={item.name}
+                              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            {/* Price Badge on Image */}
+                            <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                              <span className="text-lg font-black text-slate-900">₱{item.avg_price || 0}</span>
+                              <span className="text-xs font-semibold text-slate-500">/hr avg</span>
                             </div>
-                            <span className="text-xs font-bold text-slate-600">
-                              {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
-                              {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
-                            </span>
-                          </div>
-
-                          {/* Location Name/City */}
-                          <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
-                            <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
-                              {item.name}
-                            </h5>
                           </Link>
-                          
-                          {/* Location Details */}
-                          <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
-                            <MapPin size={14} className="text-slate-400" />
-                            <span className="line-clamp-1">{item.court_count || 0} {item.court_count === 1 ? 'court' : 'courts'} • {item.address}</span>
-                          </p>
 
-                          {/* Book Button */}
-                          <Link
-                            to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
-                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            Book Now
-                          </Link>
-                        </div>
-                      </>
-                    ) : (
-                      // Court Card Template (Fallback)
-                      <>
-                        <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`} className="relative block overflow-hidden">
-                          <img
-                            src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
-                            alt={item.name}
-                            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                          <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                            <span className="text-lg font-black text-slate-900">₱{item.base_price ?? 0}</span>
-                            <span className="text-xs font-semibold text-slate-500">/hr</span>
-                          </div>
-                        </Link>
-
-                        <div className="p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="flex items-center gap-0.5">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <svg
-                                  key={star}
-                                  className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
-                                  fill="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
-                                </svg>
-                              ))}
+                          <div className="p-4">
+                            {/* Rating Badge */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="flex items-center gap-0.5">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <svg
+                                    key={star}
+                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                  </svg>
+                                ))}
+                              </div>
+                              <span className="text-xs font-bold text-slate-600">
+                                {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
+                                {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
+                              </span>
                             </div>
-                            <span className="text-xs font-bold text-slate-600">
-                              {item.rating && item.rating > 0 ? `${item.rating}` : 'New'}
-                              {item.reviewCount && item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}
-                            </span>
+
+                            {/* Location Name/City */}
+                            <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
+                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                                {item.name}
+                              </h5>
+                            </Link>
+
+                            {/* Location Details */}
+                            <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
+                              <MapPin size={14} className="text-slate-400" />
+                              <span className="line-clamp-1">{item.court_count || 0} {item.court_count === 1 ? 'court' : 'courts'} • {item.address}</span>
+                            </p>
+
+                            {/* Book Button */}
+                            <Link
+                              to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
+                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Book Now
+                            </Link>
                           </div>
-
-                          <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}>
-                            <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
-                              {item.name}
-                            </h5>
+                        </>
+                      ) : (
+                        // Court Card Template (Fallback)
+                        <>
+                          <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`} className="relative block overflow-hidden">
+                            <img
+                              src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
+                              alt={item.name}
+                              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                              <span className="text-lg font-black text-slate-900">₱{item.base_price ?? 0}</span>
+                              <span className="text-xs font-semibold text-slate-500">/hr</span>
+                            </div>
                           </Link>
-                          
-                          <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
-                            <MapPin size={14} className="text-slate-400" />
-                            <span className="line-clamp-1">{item.city}, {item.region || 'PH'}</span>
-                          </p>
 
-                          <Link
-                            to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}
-                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            Book Now
-                          </Link>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                          <div className="p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="flex items-center gap-0.5">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <svg
+                                    key={star}
+                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                  </svg>
+                                ))}
+                              </div>
+                              <span className="text-xs font-bold text-slate-600">
+                                {item.rating && item.rating > 0 ? `${item.rating}` : 'New'}
+                                {item.reviewCount && item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}
+                              </span>
+                            </div>
+
+                            <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}>
+                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                                {item.name}
+                              </h5>
+                            </Link>
+
+                            <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
+                              <MapPin size={14} className="text-slate-400" />
+                              <span className="line-clamp-1">{item.city}, {item.region || 'PH'}</span>
+                            </p>
+
+                            <Link
+                              to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}
+                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Book Now
+                            </Link>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
-                })} 
+                })}
               </div>
 
               {/* Scroll Indicator Dots */}
               <div className="flex justify-center gap-2 mt-4 md:hidden">
                 {featuredList.slice(0, Math.min(10, featuredList.length)).map((_, idx) => (
                   idx === activeCarouselIndex ? (
-                    <img 
+                    <img
                       key={idx}
-                      src="/images/Ball.png" 
-                      alt="Active" 
+                      src="/images/Ball.png"
+                      alt="Active"
                       className="w-3 h-3 object-contain"
                     />
                   ) : (
@@ -1150,7 +1150,7 @@ const Home: React.FC = () => {
         {/* Background decorations */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-[150px] -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] translate-y-1/2"></div>
-        
+
         <div className="max-w-[1800px] mx-auto relative">
           {/* Section Header */}
           <div className="mb-8 md:mb-16">
@@ -1290,7 +1290,7 @@ const Home: React.FC = () => {
                     <Play className="text-white fill-white" size={32} />
                   </div>
                 </div>
-                
+
                 {/* Free Badge */}
                 <div className="absolute top-4 right-4 bg-lime-500 text-white px-4 py-2 rounded-full text-xs font-black uppercase tracking-wide flex items-center gap-1">
                   <Star size={14} />
@@ -1314,15 +1314,15 @@ const Home: React.FC = () => {
                 <h3 className="text-xl md:text-4xl lg:text-5xl font-black text-white leading-tight">
                   Start Your Pickleball Journey Today!
                 </h3>
-                
+
                 <p className="text-white/60 text-sm md:text-base">
                   Our guides are designed for absolute beginners. Read the first few sections free, then sign up to unlock everything and track your progress!
                 </p>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                  <Link 
-                    to="/guides/rules" 
+                  <Link
+                    to="/guides/rules"
                     className="bg-lime-500 hover:bg-lime-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-full font-black text-sm md:text-base transition-all shadow-lg shadow-lime-500/30 hover:shadow-xl hover:shadow-lime-500/40 active:scale-95 flex items-center gap-2"
                   >
                     Start Learning
