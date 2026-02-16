@@ -63,6 +63,8 @@ import TwoFactorVerify from './components/TwoFactorVerify';
 import AuthCallback from './components/AuthCallback';
 import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
+import FAQ from './components/FAQ';
+import ChatbotButton from './components/ChatbotButton';
 
 // Guides Components
 import GuidesIndex from './components/guides/GuidesIndex';
@@ -711,6 +713,7 @@ const NavigationHandler: React.FC<{
               <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
               <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FAQ /> : <Navigate to="/" />} />
               <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
               <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <CourtDetail />} />
@@ -1701,6 +1704,9 @@ const App: React.FC = () => {
         </div>,
         document.body
       )}
+
+      {/* Chatbot Button - Available on all pages */}
+      <ChatbotButton />
 
     </Router>
   );
