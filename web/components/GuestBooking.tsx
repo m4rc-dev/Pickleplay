@@ -549,12 +549,13 @@ const GuestBooking: React.FC = () => {
 
     const handleBooking = () => {
         // Store redirect URL in localStorage for after login
-        let redirectUrl = '/booking';
-        const params = new URLSearchParams();
-        if (searchQuery) params.set('q', searchQuery);
-        if (selectedCourt) params.set('court', selectedCourt.name);
-        if (selectedSlot) params.set('slot', selectedSlot);
-        if (params.toString()) redirectUrl += '?' + params.toString();
+        // Use court ID for unique identification (avoids name collisions between owners)
+        let redirectUrl = selectedCourt ? `/court/${selectedCourt.id}` : '/booking';
+        if (!selectedCourt) {
+            const params = new URLSearchParams();
+            if (searchQuery) params.set('q', searchQuery);
+            if (params.toString()) redirectUrl += '?' + params.toString();
+        }
         localStorage.setItem('auth_redirect', redirectUrl);
 
         setShowLoginModal(true);
@@ -1377,12 +1378,12 @@ const GuestBooking: React.FC = () => {
                             <div className="space-y-3">
                                 <button
                                     onClick={() => {
-                                        let redirectUrl = '/booking';
-                                        const params = new URLSearchParams();
-                                        if (searchQuery) params.set('q', searchQuery);
-                                        if (selectedCourt) params.set('court', selectedCourt.name);
-                                        if (selectedSlot) params.set('slot', selectedSlot);
-                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        let redirectUrl = selectedCourt ? `/court/${selectedCourt.id}` : '/booking';
+                                        if (!selectedCourt) {
+                                            const params = new URLSearchParams();
+                                            if (searchQuery) params.set('q', searchQuery);
+                                            if (params.toString()) redirectUrl += '?' + params.toString();
+                                        }
                                         navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
                                     }}
                                     className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg"
@@ -1391,12 +1392,12 @@ const GuestBooking: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={() => {
-                                        let redirectUrl = '/booking';
-                                        const params = new URLSearchParams();
-                                        if (searchQuery) params.set('q', searchQuery);
-                                        if (selectedCourt) params.set('court', selectedCourt.name);
-                                        if (selectedSlot) params.set('slot', selectedSlot);
-                                        if (params.toString()) redirectUrl += '?' + params.toString();
+                                        let redirectUrl = selectedCourt ? `/court/${selectedCourt.id}` : '/booking';
+                                        if (!selectedCourt) {
+                                            const params = new URLSearchParams();
+                                            if (searchQuery) params.set('q', searchQuery);
+                                            if (params.toString()) redirectUrl += '?' + params.toString();
+                                        }
                                         navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
                                     }}
                                     className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg shadow-blue-200/50"

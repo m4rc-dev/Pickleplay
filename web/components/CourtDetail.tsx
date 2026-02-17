@@ -28,6 +28,7 @@ import { getCourtReviews } from '../services/reviews';
 import { checkDailyBookingLimit } from '../services/bookings';
 import { MessageSquare, X, CircleCheck } from 'lucide-react';
 import Receipt from './Receipt';
+import { getLocationPolicies, LocationPolicy } from '../services/policies';
 
 const ALL_HOUR_SLOTS = [
     '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
@@ -166,6 +167,12 @@ const CourtDetail: React.FC = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online' | null>(null);
 
+    // Location entry confirmation & policies
+    const [showLocationEntryModal, setShowLocationEntryModal] = useState(true);
+    const [locationConfirmed, setLocationConfirmed] = useState(false);
+    const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
+    const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
+
     useEffect(() => {
         const fetchUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -260,6 +267,16 @@ const CourtDetail: React.FC = () => {
 
                 setCourt(mappedCourt);
                 setLocationName(loc?.name || '');
+
+                // Fetch location policies
+                if (data.location_id) {
+                    setIsLoadingPolicies(true);
+                    const policyResult = await getLocationPolicies(data.location_id);
+                    if (policyResult.data) {
+                        setLocationPolicies(policyResult.data);
+                    }
+                    setIsLoadingPolicies(false);
+                }
             } catch (err) {
                 console.error('Error fetching court details:', err);
                 navigate('/booking');
@@ -668,8 +685,7 @@ const CourtDetail: React.FC = () => {
                         total_price: court.pricePerHour,
                         status: 'pending',
                         payment_status: 'unpaid',
-                        payment_method: 'cash',
-                        is_checked_in: false
+                        payment_method: 'cash'
                     })
                     .select()
                     .single();
@@ -914,6 +930,24 @@ const CourtDetail: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Location Policies */}
+                            {locationPolicies.length > 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Court Policies</p>
+                                    {locationPolicies.map((policy) => (
+                                        <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Shield size={14} className="text-amber-600" />
+                                                <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                            </div>
+                                            <div className="text-xs text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                                {policy.content}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1301,6 +1335,60 @@ const CourtDetail: React.FC = () => {
                 </div>,
             document.body)}
 
+            {/* Location Entry Confirmation Modal */}
+            {showLocationEntryModal && !locationConfirmed && court && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="p-6 sm:p-8 text-center space-y-5">
+                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto">
+                                <MapPin size={32} className="text-blue-600" />
+                            </div>
+                            <div className="space-y-2">
+                                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">You are about to book in</h2>
+                                <p className="text-lg font-black text-blue-600 uppercase tracking-wide">{locationName || 'This Location'}</p>
+                                <p className="text-sm text-slate-500 font-medium">{court.location}</p>
+                            </div>
+
+                            {/* Show policies in the entry modal */}
+                            {locationPolicies.length > 0 && (
+                                <div className="text-left max-h-48 overflow-y-auto space-y-3">
+                                    {locationPolicies.map((policy) => (
+                                        <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Shield size={12} className="text-amber-600" />
+                                                <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                            </div>
+                                            <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                                {policy.content}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="space-y-3 pt-2">
+                                <button
+                                    onClick={() => {
+                                        setShowLocationEntryModal(false);
+                                        setLocationConfirmed(true);
+                                    }}
+                                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-200/50"
+                                >
+                                    Confirm & Continue
+                                </button>
+                                <button
+                                    onClick={() => navigate(-1)}
+                                    className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-sm transition-all"
+                                >
+                                    Go Back
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+            document.body)}
+
             {/* Success Modal */}
             {showSuccessModal && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
@@ -1313,6 +1401,24 @@ const CourtDetail: React.FC = () => {
                             <h2 className="text-2xl font-bold text-slate-900">Booked Successfully!</h2>
                             <p className="text-sm text-slate-500">Your court time has been reserved. Check "My Bookings" for details.</p>
                         </div>
+
+                        {/* Policy Reminder after booking */}
+                        {locationPolicies.length > 0 && (
+                            <div className="text-left max-h-40 overflow-y-auto space-y-2">
+                                {locationPolicies.map((policy) => (
+                                    <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                        <div className="flex items-center gap-1.5 mb-1.5">
+                                            <Shield size={12} className="text-amber-600" />
+                                            <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                        </div>
+                                        <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                            {policy.content}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         <div className="space-y-3">
                             <button
                                 onClick={() => {
