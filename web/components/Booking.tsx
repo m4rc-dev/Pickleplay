@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
 import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
 import Receipt from './Receipt';
+import { getLocationPolicies, LocationPolicy } from '../services/policies';
 
 // Always use hourly slots for simplicity
 const ALL_HOUR_SLOTS = [
@@ -182,6 +183,12 @@ const Booking: React.FC = () => {
   // Map of slot time -> booking status for slots booked by the CURRENT user on this court+date
   const [userBookedSlots, setUserBookedSlots] = useState<Map<string, string>>(new Map());
 
+  // Location entry confirmation & policies
+  const [showLocationEntryModal, setShowLocationEntryModal] = useState(false);
+  const [locationConfirmed, setLocationConfirmed] = useState(false);
+  const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
+  const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
+  const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
 
 
   const getUserLocation = () => {
@@ -359,6 +366,21 @@ const Booking: React.FC = () => {
 
         if (locError) throw locError;
         setSelectedLocation(locData);
+
+        // Fetch location policies
+        setIsLoadingPolicies(true);
+        const policyResult = await getLocationPolicies(urlLocationId);
+        if (policyResult.data) {
+            setLocationPolicies(policyResult.data);
+        }
+        setIsLoadingPolicies(false);
+
+        // Show location entry modal
+        if (!locationConfirmed || pendingLocationId !== urlLocationId) {
+            setPendingLocationId(urlLocationId);
+            setShowLocationEntryModal(true);
+            setLocationConfirmed(false);
+        }
 
         // Fetch courts belonging to this location
         const { data: courtsData, error: courtsError } = await supabase
@@ -1044,7 +1066,7 @@ const Booking: React.FC = () => {
             total_price: selectedCourt.pricePerHour,
             status: 'pending',
             payment_status: 'unpaid',
-            is_checked_in: false
+            payment_method: 'cash'
           })
           .select()
           .single();
@@ -1887,6 +1909,23 @@ const Booking: React.FC = () => {
                       </p>
                     </div>
 
+                    {/* Location Policies from Owner */}
+                    {locationPolicies.length > 0 && (
+                      <div className="space-y-2">
+                        {locationPolicies.map((policy) => (
+                          <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Shield size={12} className="text-amber-600" />
+                              <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                            </div>
+                            <div className="text-[10px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                              {policy.content}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Booking Button */}
                     {(() => {
                       const currentActiveRole = localStorage.getItem('active_role');
@@ -2269,6 +2308,63 @@ const Booking: React.FC = () => {
         </div>
       )}
 
+      {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL ──────────── */}
+      {showLocationEntryModal && !locationConfirmed && selectedLocation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 sm:p-8 text-center space-y-5">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto">
+                <MapPin size={32} className="text-blue-600" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">You are about to book in</h2>
+                <p className="text-lg font-black text-blue-600 uppercase tracking-wide">{selectedLocation.name}</p>
+                <p className="text-sm text-slate-500 font-medium">{selectedLocation.address}, {selectedLocation.city}</p>
+              </div>
+
+              {/* Show policies in the entry modal */}
+              {locationPolicies.length > 0 && (
+                <div className="text-left max-h-48 overflow-y-auto space-y-2">
+                  {locationPolicies.map((policy) => (
+                    <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Shield size={12} className="text-amber-600" />
+                        <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                      </div>
+                      <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                        {policy.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowLocationEntryModal(false);
+                    setLocationConfirmed(true);
+                  }}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200/50"
+                >
+                  Confirm & Continue
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLocationEntryModal(false);
+                    navigate('/booking');
+                  }}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                >
+                  Go Back
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ──────────── SUCCESS MODAL ──────────── */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -2286,9 +2382,27 @@ const Booking: React.FC = () => {
                 <CircleCheck size={32} className="text-emerald-500" />
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Successfully Booked!</h2>
-              <p className="text-slate-500 font-medium mb-8 leading-relaxed text-sm sm:text-base">
+              <p className="text-slate-500 font-medium mb-4 leading-relaxed text-sm sm:text-base">
                 Your court time has been reserved. You can find your booking details in "My Bookings".
               </p>
+
+              {/* Policy Reminder after booking */}
+              {locationPolicies.length > 0 && (
+                <div className="text-left max-h-40 overflow-y-auto space-y-2 mb-4">
+                  {locationPolicies.map((policy) => (
+                    <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Shield size={12} className="text-amber-600" />
+                        <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                      </div>
+                      <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                        {policy.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-3">
                 <button
                   onClick={() => {

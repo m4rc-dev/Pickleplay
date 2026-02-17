@@ -33,8 +33,10 @@ import {
   History,
   Plus,
   Trash2,
-  Copy
+  Copy,
+  QrCode
 } from 'lucide-react';
+import QRCodeGenerator from './QRCodeGenerator';
 import {
   BarChart,
   Bar,
@@ -84,7 +86,7 @@ interface AdminDashboardProps {
   currentAdminRole?: UserRole;
 }
 
-type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit';
+type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onApprove, onReject, currentAdminRole = 'ADMIN' }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -507,6 +509,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Users" />
             <TabButton active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Security" icon={<Lock size={14} />} />
             <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
+            <TabButton active={activeTab === 'qr-codes'} onClick={() => setActiveTab('qr-codes')} label="QR Codes" icon={<QrCode size={14} />} />
             <TabButton active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} label="Audit" icon={<Eye size={14} />} />
           </div>
         </div>
@@ -975,6 +978,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             </div>
           </div>
         )}
+
+        {activeTab === 'qr-codes' && <QRCodeGenerator />}
 
         {activeTab === 'audit' && (
           <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden animate-slide-up">

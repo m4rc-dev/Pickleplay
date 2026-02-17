@@ -108,6 +108,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 interface CourtWithDistance {
+  id: string;
   name: string;
   location: string;
   city: string;
@@ -119,6 +120,7 @@ interface CourtWithDistance {
   rating?: number;
   reviewCount?: number;
   imageUrl?: string;
+  location_id?: string;
 }
 
 interface LocationWithDistance {
@@ -249,8 +251,9 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('courts')
           .select(`
-            name, base_price, latitude, longitude, location_id, image_url,
+            id, name, base_price, latitude, longitude, location_id, image_url,
             locations (
+              id,
               address,
               city,
               latitude,
@@ -275,6 +278,7 @@ const Home: React.FC = () => {
           }
 
           return {
+            id: (c as any).id,
             name: c.name,
             location: city,
             city: city,
@@ -284,7 +288,8 @@ const Home: React.FC = () => {
             base_price: c.base_price ?? 0,
             rating: avgRating,
             reviewCount: reviews.length,
-            imageUrl: c.image_url
+            imageUrl: c.image_url,
+            location_id: c.location_id
           };
         });
         setCourts(courtData);
@@ -605,9 +610,11 @@ const Home: React.FC = () => {
   const handleSuggestionClick = (suggestion: CourtWithDistance) => {
     setSearchQuery(suggestion.name);
     setShowSuggestions(false);
-    // Pass court coordinates for direct pin navigation
-    if (suggestion.latitude && suggestion.longitude) {
-      navigate(`/booking?court=${encodeURIComponent(suggestion.name)}&lat=${suggestion.latitude}&lng=${suggestion.longitude}&zoom=16`);
+    // Navigate using court ID for unique identification (avoids name collisions between owners)
+    if (suggestion.location_id && suggestion.latitude && suggestion.longitude) {
+      navigate(`/booking?locationId=${suggestion.location_id}&lat=${suggestion.latitude}&lng=${suggestion.longitude}&zoom=16`);
+    } else if (suggestion.id) {
+      navigate(`/court/${suggestion.id}`);
     } else {
       navigate(`/booking?q=${encodeURIComponent(suggestion.name)}`);
     }
@@ -1018,20 +1025,6 @@ const Home: React.FC = () => {
                                 {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
                               </span>
                             </div>
-
-                            {/* Location Name/City */}
-                            <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
-                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
-                                {item.name}
-                              </h5>
-                            </Link>
-
-                            {/* Location Details */}
-                            <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
-                              <MapPin size={14} className="text-slate-400" />
-                              <span className="line-clamp-1">{item.court_count || 0} {item.court_count === 1 ? 'court' : 'courts'} • {item.address}</span>
-                            </p>
-
                             {/* Book Button */}
                             <Link
                               to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
@@ -1047,7 +1040,7 @@ const Home: React.FC = () => {
                       ) : (
                         // Court Card Template (Fallback)
                         <>
-                          <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`} className="relative block overflow-hidden">
+                          <Link to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`} className="relative block overflow-hidden">
                             <img
                               src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
                               alt={item.name}
@@ -1079,7 +1072,7 @@ const Home: React.FC = () => {
                               </span>
                             </div>
 
-                            <Link to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}>
+                            <Link to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`}>
                               <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
                                 {item.name}
                               </h5>
@@ -1091,7 +1084,7 @@ const Home: React.FC = () => {
                             </p>
 
                             <Link
-                              to={`/booking?court=${encodeURIComponent(item.name)}&lat=${item.latitude}&lng=${item.longitude}&zoom=16`}
+                              to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`}
                               className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

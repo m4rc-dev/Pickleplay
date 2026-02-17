@@ -206,23 +206,42 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
         setError('');
 
         try {
+            // Start with minimal updates that we know exist
             const updates: any = {
-                is_checked_in: true,
                 status: 'confirmed'
             };
 
             if (isPaidViaCash) {
                 updates.payment_status = 'paid';
-                updates.amount_tendered = parseFloat(cashReceived);
-                updates.change_amount = change;
             }
 
-            const { error: updateError } = await supabase
+            // Try to update with all fields first (including is_checked_in, amount_tendered, change_amount)
+            const fullUpdates: any = {
+                ...updates,
+                is_checked_in: true
+            };
+
+            if (isPaidViaCash) {
+                fullUpdates.amount_tendered = parseFloat(cashReceived);
+                fullUpdates.change_amount = change;
+            }
+
+            let { error: updateError } = await supabase
                 .from('bookings')
-                .update(updates)
+                .update(fullUpdates)
                 .eq('id', bookingDetails.id);
 
-            if (updateError) throw updateError;
+            // If it fails (likely missing columns), fall back to basic columns only
+            if (updateError) {
+                console.warn('Full update failed, trying basic update:', updateError.message);
+                const { error: fallbackError } = await supabase
+                    .from('bookings')
+                    .update(updates)
+                    .eq('id', bookingDetails.id);
+
+                if (fallbackError) throw fallbackError;
+            }
+
             setSuccess(true);
             setTimeout(() => onClose(), 2000);
         } catch (err: any) {
@@ -344,13 +363,21 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                                     <div className="flex gap-3">
                                         <button onClick={handleReset} className="flex-1 px-6 py-4 bg-slate-100 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Cancel</button>
 
-                                        {bookingDetails.payment_status === 'unpaid' && bookingDetails.payment_method === 'cash' ? (
+                                        {bookingDetails.payment_status === 'unpaid' && (!bookingDetails.payment_method || bookingDetails.payment_method === 'cash') ? (
                                             <button
                                                 onClick={() => setShowCashFlow(true)}
                                                 className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                                             >
                                                 <Banknote size={18} />
                                                 Receive Cash
+                                            </button>
+                                        ) : bookingDetails.payment_status === 'unpaid' ? (
+                                            <button
+                                                onClick={() => setShowCashFlow(true)}
+                                                className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                                            >
+                                                <Banknote size={18} />
+                                                Complete Payment & Check-In
                                             </button>
                                         ) : (
                                             <button

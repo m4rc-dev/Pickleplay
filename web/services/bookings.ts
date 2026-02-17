@@ -83,7 +83,6 @@ export const autoCancelLateBookings = async (): Promise<{ cancelled: number; err
             .select('id, start_time, court_id, player_id')
             .eq('date', todayStr)
             .eq('status', 'pending')
-            .eq('is_checked_in', false)
             .lt('start_time', currentTimeStr);
 
         if (fetchError) {
