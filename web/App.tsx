@@ -697,7 +697,7 @@ const NavigationHandler: React.FC<{
       <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
         <div className={`${role === 'guest' || isAuthPage
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
-          : `${location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4 md:p-8 lg:p-14'} max-w-[1920px] mx-auto w-full`
+          : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           } transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>

@@ -1394,7 +1394,7 @@ const Booking: React.FC = () => {
               </button>
               <button
                 onClick={() => navigate('/my-bookings')}
-                className="w-10 h-10 flex items-center justify-center bg-slate-900 text-white rounded-xl shrink-0 hover:bg-blue-600 transition-colors"
+                className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-xl shrink-0 hover:bg-blue-700 transition-colors"
               >
                 <ClipboardList size={18} />
               </button>
@@ -1419,7 +1419,7 @@ const Booking: React.FC = () => {
             ))}
             <button
               onClick={handleNearMe}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-lime-400 text-slate-950 border border-lime-300 hover:bg-lime-500 transition-all"
             >
               <Navigation size={12} fill="currentColor" />
               Near Me
@@ -1448,7 +1448,7 @@ const Booking: React.FC = () => {
             {/* My Bookings Button */}
             <button
               onClick={() => navigate('/my-bookings')}
-              className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 hover:bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-slate-200/50 shrink-0"
+              className="flex items-center gap-2.5 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-blue-200/50 shrink-0"
             >
               <ClipboardList size={18} />
               My Bookings
@@ -1473,10 +1473,10 @@ const Booking: React.FC = () => {
         </div>
 
         {/* ──────────── MAIN CONTENT GRID ──────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
           {/* ═══ LEFT COLUMN ═══ */}
-          <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+          <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
             {/* Desktop Search Bar */}
             <form
               onSubmit={(e) => {
@@ -1597,7 +1597,7 @@ const Booking: React.FC = () => {
               <button
                 type="button"
                 onClick={handleNearMe}
-                className="flex items-center gap-2 px-5 lg:px-6 py-3 bg-emerald-500 text-white rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200/50 shrink-0"
+                className="flex items-center gap-2 px-5 lg:px-6 py-3 bg-lime-400 text-slate-950 rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-lime-500 transition-all shadow-lg shadow-lime-400/20 shrink-0"
               >
                 <Navigation size={16} fill="currentColor" />
                 <span>Near Me</span>
@@ -1605,7 +1605,7 @@ const Booking: React.FC = () => {
             </form>
 
             {/* ─── List Container ─── */}
-            <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
+            <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-200px)] lg:max-h-[calc(100vh-220px)]">
 
               {selectedCourt ? (
                 /* ─── Court Selected — Booking Interface ─── */
@@ -1627,9 +1627,9 @@ const Booking: React.FC = () => {
                         <div className="flex flex-wrap gap-1.5">
                           {selectedCourt.status && selectedCourt.status !== 'Available' && (
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${selectedCourt.status === 'Fully Booked' ? 'bg-orange-50 text-orange-600'
-                                : selectedCourt.status === 'Coming Soon' ? 'bg-blue-50 text-blue-600'
-                                  : selectedCourt.status === 'Maintenance' ? 'bg-amber-50 text-amber-600'
-                                    : ''
+                              : selectedCourt.status === 'Coming Soon' ? 'bg-blue-50 text-blue-600'
+                                : selectedCourt.status === 'Maintenance' ? 'bg-amber-50 text-amber-600'
+                                  : ''
                               }`}>
                               {selectedCourt.status}
                             </span>
@@ -1811,18 +1811,18 @@ const Booking: React.FC = () => {
                                             : 'Available'
                                 }
                                 className={`py-2 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isUserSlot
-                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-300 cursor-default'
-                                    : isPast
-                                      ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
-                                      : isBlocked
-                                        ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
-                                        : isBookedSlot
-                                          ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
-                                          : selectedSlot === slot
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
-                                            : dailyLimitReached
-                                              ? 'bg-orange-50/50 text-orange-300 border-orange-200 cursor-not-allowed'
-                                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-300 cursor-default'
+                                  : isPast
+                                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                                    : isBlocked
+                                      ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                      : isBookedSlot
+                                        ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
+                                        : selectedSlot === slot
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
+                                          : dailyLimitReached
+                                            ? 'bg-orange-50/50 text-orange-300 border-orange-200 cursor-not-allowed'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
                                   }`}
                               >
                                 <span className={isPast && !isUserSlot ? 'line-through' : ''}>
@@ -2035,7 +2035,7 @@ const Booking: React.FC = () => {
                     <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       {urlLocationId && selectedLocation
                         ? `Courts at ${selectedLocation.name} (${locationCourts.length})`
-                        : `${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
+                        : `${filteredLocations.length} Court${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
                       }
                     </h2>
                   </div>
@@ -2137,8 +2137,8 @@ const Booking: React.FC = () => {
                               />
                               {!isAvailable && (
                                 <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${locStatus === 'Closed' ? 'bg-rose-500 text-white'
-                                    : locStatus === 'Maintenance' ? 'bg-amber-500 text-white'
-                                      : 'bg-blue-500 text-white'
+                                  : locStatus === 'Maintenance' ? 'bg-amber-500 text-white'
+                                    : 'bg-blue-500 text-white'
                                   }`}>{locStatus}</div>
                               )}
                             </div>
@@ -2155,8 +2155,8 @@ const Booking: React.FC = () => {
                                   <span className="text-[10px] font-bold text-emerald-500">● Available</span>
                                 ) : (
                                   <span className={`text-[10px] font-bold ${locStatus === 'Closed' ? 'text-rose-500'
-                                      : locStatus === 'Maintenance' ? 'text-amber-500'
-                                        : 'text-blue-500'
+                                    : locStatus === 'Maintenance' ? 'text-amber-500'
+                                      : 'text-blue-500'
                                     }`}>● {locStatus}</span>
                                 )}
                               </div>
@@ -2173,7 +2173,7 @@ const Booking: React.FC = () => {
           </div>
 
           {/* ═══ RIGHT COLUMN — MAP ═══ */}
-          <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+          <div className={`lg:col-span-3 xl:col-span-3 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
             <div className={`md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden relative md:sticky md:top-8 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
               {isLoading ? (
                 <div className="h-full bg-slate-100 flex items-center justify-center">

@@ -171,7 +171,7 @@ const MyBookings: React.FC = () => {
                     </div>
                     <button
                         onClick={() => navigate('/booking')}
-                        className="px-10 py-5 bg-slate-950 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-blue-600 transition-all shadow-2xl shadow-slate-200/50 flex items-center gap-3"
+                        className="px-10 py-5 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-blue-600 transition-all shadow-2xl shadow-slate-200/50 flex items-center gap-3"
                     >
                         <Calendar size={20} /> Book A Court
                     </button>

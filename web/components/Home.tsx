@@ -651,7 +651,7 @@ const Home: React.FC = () => {
 
   // Derive Featured Locations and Title based on GPS status and user location
   const getFeaturedData = () => {
-    let title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+    let title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
     let featuredList = [];
 
     // Prioritize locations over courts
@@ -668,10 +668,10 @@ const Home: React.FC = () => {
             ? `${cityName}, ${userRegion}`
             : (cityName === 'Your Location' && userRegion ? userRegion : cityName);
 
-          title = <span>Featured Courts in <span className="text-lime-500">{displayLocation}.</span></span>;
+          title = <span>Featured Courts in <span className="text-lime-400">{displayLocation}.</span></span>;
         } else {
           // GPS enabled but city info still loading or unavailable
-          title = <span>Featured Locations <span className="text-lime-500">Near You.</span></span>;
+          title = <span>Featured Locations <span className="text-lime-400">Near You.</span></span>;
         }
 
         // Logic for selecting locations based on GPS
@@ -700,14 +700,14 @@ const Home: React.FC = () => {
         }
       } else {
         // Location OFF: Show top 4 rated locations across PH (5 to 1 stars)
-        title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+        title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
         featuredList = allLocationsSorted.slice(0, 4);
       }
     } else {
       // Fallback to courts if no locations are available (temporary)
       console.warn('⚠️ No locations found, falling back to courts');
       const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-      title = <span>Featured Courts in the <span className="text-lime-500">Philippines.</span></span>;
+      title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
       featuredList = allCourtsSorted.slice(0, 4);
     }
 
