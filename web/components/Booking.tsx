@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -43,7 +43,7 @@ const slotToRange = (slot: string): string => {
   return `${slot} - ${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
 };
 
-// ΓöÇΓöÇΓöÇ Philippine Time Helpers (Asia/Manila, UTC+8) ΓöÇΓöÇΓöÇ
+// ─── Philippine Time Helpers (Asia/Manila, UTC+8) ───
 const PH_TIMEZONE = 'Asia/Manila';
 
 /** Get current date/time in Philippine Time */
@@ -72,7 +72,7 @@ const isSlotInPast = (slot: string, selectedDate: Date): boolean => {
   // If selected date is in the past, ALL slots are in the past
   if (selectedPH < todayPH) return true;
 
-  // Same day ΓÇö compare the slot time to current PH time
+  // Same day — compare the slot time to current PH time
   const [time, period] = slot.split(' ');
   let [hours, minutes] = time.split(':').map(Number);
   if (period === 'PM' && hours !== 12) hours += 12;
@@ -604,7 +604,7 @@ const Booking: React.FC = () => {
       // 1. Fetch court events (blocking events from owner)
       const { data: events } = await getCourtBlockingEvents(court.id);
 
-      // 2. Fetch existing bookings for selected date ΓÇö include player_id + status to identify user's own bookings
+      // 2. Fetch existing bookings for selected date — include player_id + status to identify user's own bookings
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('start_time, end_time, status, player_id')
@@ -668,7 +668,7 @@ const Booking: React.FC = () => {
               }
               break;
             } else if (isBlockedByCleaning) {
-              // Slot is blocked by cleaning buffer ΓÇö mark as booked but NOT as user's slot
+              // Slot is blocked by cleaning buffer — mark as booked but NOT as user's slot
               newBookedSlots.add(slot);
               break;
             }
@@ -875,7 +875,7 @@ const Booking: React.FC = () => {
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;">
                   <span style="font-size:10px;font-weight:800;color:#2563eb;background:#eff6ff;padding:3px 8px;border-radius:6px;letter-spacing:0.3px;">${locCourts.length} ${locCourts.length === 1 ? 'COURT' : 'COURTS'}</span>
-                  ${location.amenities && location.amenities.length > 0 ? `<span style="font-size:10px;color:#94a3b8;font-weight:500;">${location.amenities.slice(0, 2).join(' ┬╖ ')}</span>` : ''}
+                  ${location.amenities && location.amenities.length > 0 ? `<span style="font-size:10px;color:#94a3b8;font-weight:500;">${location.amenities.slice(0, 2).join(' · ')}</span>` : ''}
                 </div>
               </div>
             </div>
@@ -923,7 +923,7 @@ const Booking: React.FC = () => {
       }
     });
 
-    console.log(`≡ƒôì Displaying ${markersRef.current.length} location markers on map`);
+    console.log(`📍 Displaying ${markersRef.current.length} location markers on map`);
   };
 
   // Re-render markers when data or filters change
@@ -943,7 +943,7 @@ const Booking: React.FC = () => {
         // 0.5 COURT OWNER CHECK - Owners cannot book their own courts (unless in Player Mode)
         const currentActiveRole = localStorage.getItem('active_role');
         if (selectedCourt.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER') {
-          alert('≡ƒÜ½ As a court owner, you cannot book your own court. Switch to Player Mode to book.');
+          alert('🚫 As a court owner, you cannot book your own court. Switch to Player Mode to book.');
           setIsProcessing(false);
           return;
         }
@@ -953,7 +953,7 @@ const Booking: React.FC = () => {
         const now = Date.now();
         if (lastBookingTime && (now - lastBookingTime) < BOOKING_COOLDOWN_MS) {
           const remainingSeconds = Math.ceil((BOOKING_COOLDOWN_MS - (now - lastBookingTime)) / 1000);
-          alert(`ΓÅ▒∩╕Å Please wait ${remainingSeconds} seconds before making another booking.`);
+          alert(`⏱️ Please wait ${remainingSeconds} seconds before making another booking.`);
           setIsProcessing(false);
           return;
         }
@@ -963,7 +963,7 @@ const Booking: React.FC = () => {
         const targetDateStr_check = toPhDateStr(selectedDate);
         const { hasReachedLimit } = await checkDailyBookingLimit(user.id, targetDateStr_check, courtLocId);
         if (hasReachedLimit) {
-          alert('≡ƒÜ½ You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
+          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
           setDailyLimitReached(true);
           setIsProcessing(false);
           return;
@@ -979,7 +979,7 @@ const Booking: React.FC = () => {
         if (userBookingsError) throw userBookingsError;
 
         if (userBookings && userBookings.length >= 5) {
-          alert('≡ƒÜ½ You have reached the maximum of 5 pending bookings. Please complete or cancel existing bookings first.');
+          alert('🚫 You have reached the maximum of 5 pending bookings. Please complete or cancel existing bookings first.');
           setIsProcessing(false);
           return;
         }
@@ -1022,12 +1022,12 @@ const Booking: React.FC = () => {
         if (checkError) throw checkError;
 
         if (existingBooking) {
-          alert('ΓÜá∩╕Å This time slot is already booked. Please choose another time.');
+          alert('⚠️ This time slot is already booked. Please choose another time.');
           setIsProcessing(false);
           return;
         }
 
-        // 3.5 FINAL DAILY LIMIT GUARD ΓÇö scoped to this court location
+        // 3.5 FINAL DAILY LIMIT GUARD — scoped to this court location
         const guardLocationId = selectedCourt.location_id || selectedCourt.locationId;
         let guardQuery = supabase
           .from('bookings')
@@ -1044,14 +1044,14 @@ const Booking: React.FC = () => {
 
         if (playerDayError) {
           console.error('Daily limit guard query failed:', playerDayError);
-          alert('≡ƒÜ½ Could not verify your booking limit for this location. Please try again.');
+          alert('🚫 Could not verify your booking limit for this location. Please try again.');
           setIsProcessing(false);
           return;
         }
 
         if (playerDayBookings && playerDayBookings.length > 0) {
           console.log('DAILY LIMIT GUARD: Player already has', playerDayBookings.length, 'booking(s) at this location on', targetDateStr);
-          alert('≡ƒÜ½ You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
+          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
           setDailyLimitReached(true);
           setSelectedSlot(null);
           setIsProcessing(false);
@@ -1066,7 +1066,7 @@ const Booking: React.FC = () => {
         );
 
         if (isBlocked) {
-          alert('≡ƒÜ½ This time slot is unavailable. The court owner has scheduled an event during this time.');
+          alert('🚫 This time slot is unavailable. The court owner has scheduled an event during this time.');
           setIsProcessing(false);
           return;
         }
@@ -1160,7 +1160,7 @@ const Booking: React.FC = () => {
 
         // Handle duplicate booking constraint violation
         if (err.message?.includes('unique_court_booking') || err.code === '23505') {
-          alert('ΓÜá∩╕Å This time slot was just booked by someone else. Please choose another time.');
+          alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
           // Refresh availability to show updated slots
           setSelectedSlot(null);
           checkCourtAvailability(selectedCourt, selectedDate);
@@ -1229,7 +1229,7 @@ const Booking: React.FC = () => {
           const infoWindow = new window.google.maps.InfoWindow({
             content: `
               <div style="padding: 8px; font-family: Inter, sans-serif; text-align: center;">
-                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">≡ƒôì You are here</p>
+                <p style="margin: 0; font-weight: 800; font-size: 14px; color: #3b82f6;">📍 You are here</p>
                 <p style="margin: 4px 0 0; font-weight: 500; font-size: 11px; color: #64748b;">Your current location</p>
               </div>
             `,
@@ -1331,7 +1331,7 @@ const Booking: React.FC = () => {
 
   return (
     <div className="md:space-y-10 animate-in fade-in duration-700">
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ MOBILE HEADER BAR ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── MOBILE HEADER BAR ──────────── */}
       <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         {/* Search row */}
         <div className="px-4 pt-3 pb-2">
@@ -1410,7 +1410,7 @@ const Booking: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
-                          <p className="text-xs text-slate-400 truncate">{location.city} ┬╖ {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
+                          <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
                         </div>
                       </button>
                     ))}
@@ -1467,10 +1467,10 @@ const Booking: React.FC = () => {
         )}
       </div>
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ MAIN CONTAINER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── MAIN CONTAINER ──────────── */}
       <div className="pb-0 md:pb-10">
 
-        {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ DESKTOP HEADER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+        {/* ──────────── DESKTOP HEADER ──────────── */}
         <div className="hidden md:block mb-6 lg:mb-8">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-5">
             <div>
@@ -1511,10 +1511,10 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ MAIN CONTENT GRID ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+        {/* ──────────── MAIN CONTENT GRID ──────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
 
-          {/* ΓòÉΓòÉΓòÉ LEFT COLUMN ΓòÉΓòÉΓòÉ */}
+          {/* ═══ LEFT COLUMN ═══ */}
           <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'} transition-all duration-300`}>
             {/* Desktop Search Bar */}
             <form
@@ -1615,7 +1615,7 @@ const Booking: React.FC = () => {
                                 <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
                                 <p className="text-xs text-slate-400 truncate">
                                   {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
-                                  {location.city && <span> ┬╖ {location.city}</span>}
+                                  {location.city && <span> · {location.city}</span>}
                                 </p>
                               </div>
                             </button>
@@ -1643,7 +1643,7 @@ const Booking: React.FC = () => {
               </button>
             </form>
 
-            {/* ΓöÇΓöÇΓöÇ Back button for court detail view ΓöÇΓöÇΓöÇ */}
+            {/* ─── Back button for court detail view ─── */}
             {heroActiveCourt && !selectedCourt && (
               <button
                 onClick={() => { setHeroCourtId(null); navigate('/booking'); }}
@@ -1654,14 +1654,14 @@ const Booking: React.FC = () => {
               </button>
             )}
 
-            {/* ΓöÇΓöÇΓöÇ List Container ΓöÇΓöÇΓöÇ */}
+            {/* ─── List Container ─── */}
             <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-[calc(100vh-280px)] lg:h-[calc(100vh-300px)]">
 
               {selectedCourt ? (
-                /* ΓöÇΓöÇΓöÇ Court Selected ΓÇö Court Detail Info (left panel) ΓöÇΓöÇΓöÇ */
+                /* ─── Court Selected — Court Detail Info (left panel) ─── */
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-4 md:p-4 space-y-4">
-                    {/* Back button ΓÇö returns to court detail, not all the way to list */}
+                    {/* Back button — returns to court detail, not all the way to list */}
                     <button
                       onClick={() => setSelectedCourt(null)}
                       className="flex items-center gap-1.5 text-slate-500 text-xs font-bold hover:text-blue-600 transition-colors"
@@ -1699,7 +1699,7 @@ const Booking: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                        <p className="text-lg font-black text-slate-900">Γé▒{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>
+                        <p className="text-lg font-black text-slate-900">₱{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Capacity</p>
@@ -1707,7 +1707,7 @@ const Booking: React.FC = () => {
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Rating</p>
-                        <p className="text-base font-black text-slate-900">New Γÿå</p>
+                        <p className="text-base font-black text-slate-900">New</p>
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</p>
@@ -1767,10 +1767,10 @@ const Booking: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                /* ΓöÇΓöÇΓöÇ Location List (matching GuestBooking) ΓöÇΓöÇΓöÇ */
+                /* ─── Location List (matching GuestBooking) ─── */
                 <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
 
-                  {/* Location Detail Header ΓÇö no back button, court detail panel has its own */}
+                  {/* Location Detail Header — no back button, court detail panel has its own */}
                   {urlLocationId && selectedLocation && (
                     <div className="border-b border-slate-100 shrink-0">
                       {selectedLocation.image_url && (
@@ -1900,7 +1900,7 @@ const Booking: React.FC = () => {
                                 <div className="flex-1 text-left min-w-0">
                                   <p className={`font-bold text-sm tracking-tight mb-1 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-blue-600 transition-colors' : 'text-slate-400'}`}>{court.name}</p>
                                   <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                                    <span className="text-[11px] font-medium text-slate-400">≡ƒÄ╛ {court.numCourts} Units</span>
+                                    <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
                                     {courtStatusLabel && (
                                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${courtStatusStyle}`}>{courtStatusLabel}</span>
                                     )}
@@ -1958,7 +1958,7 @@ const Booking: React.FC = () => {
                                     onClick={() => navigate(`/court/${court.id}?advance=true`)}
                                     className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50 flex items-center justify-center gap-2"
                                   >
-                                    ≡ƒôà Book Future Dates
+                                    📅 Book Future Dates
                                   </button>
                                 </div>
                               )}
@@ -2008,15 +2008,15 @@ const Booking: React.FC = () => {
                                   <MapPin size={11} className="text-blue-400" /> {location.city}
                                 </span>
                                 <span className="text-[11px] font-medium text-slate-400">
-                                  ≡ƒÄ╛ {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
+                                  🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
                                 </span>
                                 {isAvailable ? (
-                                  <span className="text-[10px] font-bold text-emerald-500">ΓùÅ Available</span>
+                                  <span className="text-[10px] font-bold text-emerald-500">● Available</span>
                                 ) : (
                                   <span className={`text-[10px] font-bold ${locStatus === 'Closed' ? 'text-rose-500'
                                       : locStatus === 'Maintenance' ? 'text-amber-500'
                                         : 'text-blue-500'
-                                    }`}>ΓùÅ {locStatus}</span>
+                                    }`}>● {locStatus}</span>
                                 )}
                               </div>
                             </div>
@@ -2031,11 +2031,11 @@ const Booking: React.FC = () => {
             </div>
           </div>
 
-          {/* ΓòÉΓòÉΓòÉ RIGHT COLUMN ΓÇö MAP / COURT DETAIL / SCHEDULE ΓòÉΓòÉΓòÉ */}
+          {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL / SCHEDULE ═══ */}
           <div className={`lg:col-span-3 xl:col-span-1 transition-all duration-300 hidden md:block`}>
             <div className="md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden relative md:sticky md:top-8 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
-              {/* ΓöÇΓöÇ Map ΓÇö always in DOM so Google Maps never loses its container ΓöÇΓöÇ */}
+              {/* ── Map — always in DOM so Google Maps never loses its container ── */}
               <div
                 className="absolute inset-0 transition-opacity duration-300"
                 style={{ opacity: (!heroActiveCourt && !selectedCourt) ? 1 : 0, pointerEvents: (!heroActiveCourt && !selectedCourt) ? 'auto' : 'none' }}
@@ -2049,7 +2049,7 @@ const Booking: React.FC = () => {
                 )}
               </div>
 
-              {/* ΓöÇΓöÇ Court Detail Panel ΓöÇΓöÇ */}
+              {/* ── Court Detail Panel ── */}
               <div
                 className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-300"
                 style={{
@@ -2091,7 +2091,7 @@ const Booking: React.FC = () => {
                             <Navigation size={14} className="text-blue-400 shrink-0" />
                             <div>
                               <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none">Rate</p>
-                              <p className="text-lg font-black leading-tight">Γé▒{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-slate-400 ml-0.5">/hr</span></p>
+                              <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-slate-400 ml-0.5">/hr</span></p>
                             </div>
                           </div>
                         )}
@@ -2100,7 +2100,7 @@ const Booking: React.FC = () => {
                             <Clock size={14} className="text-amber-600 shrink-0" />
                             <div>
                               <p className="text-[8px] font-black text-amber-700 uppercase tracking-widest leading-none">Hours</p>
-                              <p className="text-xs font-bold text-amber-900 leading-tight mt-0.5">{selectedLocation.opening_time} ΓÇô {selectedLocation.closing_time}</p>
+                              <p className="text-xs font-bold text-amber-900 leading-tight mt-0.5">{selectedLocation.opening_time} - {selectedLocation.closing_time}</p>
                             </div>
                           </div>
                         )}
@@ -2128,7 +2128,7 @@ const Booking: React.FC = () => {
                 )}
               </div>
 
-              {/* ΓöÇΓöÇ Select Schedule Panel ΓöÇΓöÇ */}
+              {/* ── Select Schedule Panel ── */}
               <div
                 className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-300"
                 style={{
@@ -2207,7 +2207,7 @@ const Booking: React.FC = () => {
                         {selectedCourt.status === 'Coming Soon' || selectedCourt.status === 'Maintenance' ? (
                           <div className={`text-center py-8 rounded-2xl border ${selectedCourt.status === 'Coming Soon' ? 'bg-blue-50/50 border-blue-100' : 'bg-amber-50/50 border-amber-100'}`}>
                             <div className={`w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center text-xl ${selectedCourt.status === 'Coming Soon' ? 'bg-blue-100' : 'bg-amber-100'}`}>
-                              {selectedCourt.status === 'Coming Soon' ? '≡ƒö£' : '≡ƒöº'}
+                              {selectedCourt.status === 'Coming Soon' ? '🔜' : '🔧'}
                             </div>
                             <h4 className={`text-sm font-black uppercase tracking-wide mb-1 ${selectedCourt.status === 'Coming Soon' ? 'text-blue-700' : 'text-amber-700'}`}>{selectedCourt.status}</h4>
                             <p className="text-[10px] text-slate-500 font-medium max-w-[200px] mx-auto leading-relaxed">
@@ -2261,7 +2261,7 @@ const Booking: React.FC = () => {
                                       : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'}`}
                                   >
                                     <span className={isPast && !isUserSlot ? 'line-through' : ''}>
-                                      {isUserSlot ? `Your Slot ΓÇô ${userSlotStatus}` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Court Locked In' : slotToRange(slot)}
+                                      {isUserSlot ? `Your Slot - ${userSlotStatus}` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Court Locked In' : slotToRange(slot)}
                                     </span>
                                     {isUserSlot && <CheckCircle2 size={10} className="absolute top-1 right-1 text-emerald-500" />}
                                     {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1 right-1 text-red-400" />}
@@ -2275,7 +2275,7 @@ const Booking: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Proceed to Book ΓÇö sticky footer */}
+                    {/* Proceed to Book — sticky footer */}
                     <div className="shrink-0 p-4 border-t border-slate-100 bg-white">
                       {(() => {
                         const currentActiveRole = localStorage.getItem('active_role');
@@ -2286,7 +2286,7 @@ const Booking: React.FC = () => {
                             onClick={handleBooking}
                             className={`w-full py-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : dailyLimitReached ? 'bg-orange-100 text-orange-500 border border-orange-200 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200/50'}`}
                           >
-                            {isProcessing ? <Loader2 className="animate-spin" size={18} /> : isBooked ? <><CheckCircle2 size={18} /> Booking Confirmed!</> : isOwner ? <><Ban size={16} /> Court Owner Cannot Book</> : dailyLimitReached ? <><Ban size={16} /> Limit Reached</> : selectedSlot && blockedSlots.has(selectedSlot) ? <><Ban size={16} /> Court Blocked</> : selectedSlot && bookedSlots.has(selectedSlot) ? <><AlertCircle size={16} /> Court Locked In</> : <>Proceed to Book ΓåÆ</>}
+                            {isProcessing ? <Loader2 className="animate-spin" size={18} /> : isBooked ? <><CheckCircle2 size={18} /> Booking Confirmed!</> : isOwner ? <><Ban size={16} /> Court Owner Cannot Book</> : dailyLimitReached ? <><Ban size={16} /> Limit Reached</> : selectedSlot && blockedSlots.has(selectedSlot) ? <><Ban size={16} /> Court Blocked</> : selectedSlot && bookedSlots.has(selectedSlot) ? <><AlertCircle size={16} /> Court Locked In</> : <>Proceed to Book &rarr;</>
                           </button>
                         );
                       })()}
@@ -2300,7 +2300,7 @@ const Booking: React.FC = () => {
         </div>
       </div>
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ MOBILE BOTTOM BAR ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
       {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
           <div className="flex justify-center items-center gap-2 px-4 py-2.5">
@@ -2322,7 +2322,7 @@ const Booking: React.FC = () => {
         </nav>
       )}
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ MOBILE FILTERS DRAWER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
       {showFilters && (
         <div className="fixed inset-0 z-[110] flex items-end md:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
@@ -2382,7 +2382,7 @@ const Booking: React.FC = () => {
         </div>
       )}
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ LOCATION ENTRY CONFIRMATION MODAL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL ──────────── */}
       {showLocationEntryModal && !locationConfirmed && selectedLocation && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
@@ -2439,7 +2439,7 @@ const Booking: React.FC = () => {
         document.body
       )}
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ SUCCESS MODAL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── SUCCESS MODAL ──────────── */}
       {showSuccessModal && ReactDOM.createPortal(
         <div
           className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300"
@@ -2511,7 +2511,7 @@ const Booking: React.FC = () => {
         document.body
       )}
 
-      {/* ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ RECEIPT MODAL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+      {/* ──────────── RECEIPT MODAL ──────────── */}
       {showReceipt && receiptData && (
         <Receipt
           bookingData={receiptData}
