@@ -701,7 +701,7 @@ const NavigationHandler: React.FC<{
         </header>
       )}
 
-      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
         <div className={`${role === 'guest' || isAuthPage
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
           : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
@@ -754,7 +754,7 @@ const NavigationHandler: React.FC<{
         </div>
       </main>
 
-      <MobileBottomNav role={role} themeColor={themeColor} />
+
 
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
@@ -1370,6 +1370,13 @@ const App: React.FC = () => {
   }, [currentUserId]);
 
   const handleRoleSwitch = async (newRole: UserRole) => {
+    // Security: Only allow switching to PLAYER or roles the user is authorized for
+    if (newRole !== 'PLAYER' && !authorizedProRoles.includes(newRole)) {
+      console.error(`Unauthorized role switch attempt: ${newRole}`);
+      alert('You are not authorized for this role. Please apply and get approved first.');
+      return;
+    }
+
     setIsSwitchingRole(true);
     setRoleSwitchTarget(newRole);
 

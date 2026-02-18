@@ -1307,8 +1307,8 @@ Never share them with anyone.`;
                 {/* Divider */}
                 <div className="h-8 w-px bg-slate-200" />
 
-                {/* Role Switcher - Always visible for current user */}
-                {isCurrentUser && (
+                {/* Role Switcher - Only visible when user has authorized pro roles */}
+                {isCurrentUser && authorizedProRoles.length > 0 && (
                   <div className="relative">
                     <button
                       onClick={() => setShowRoleDropdown(!showRoleDropdown)}
@@ -1337,8 +1337,8 @@ Never share them with anyone.`;
                               {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
                             </button>
 
-                            {/* Pro Roles - show authorized or all available */}
-                            {(authorizedProRoles.length > 0 ? authorizedProRoles : (['COACH', 'COURT_OWNER'] as UserRole[])).map((role) => (
+                            {/* Pro Roles - only show roles the user is actually authorized for */}
+                            {authorizedProRoles.map((role) => (
                               <button
                                 key={role}
                                 onClick={() => { onRoleSwitch && onRoleSwitch(role); setShowRoleDropdown(false); }}
@@ -1353,6 +1353,14 @@ Never share them with anyone.`;
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* Show current role badge (no dropdown) for player-only users */}
+                {isCurrentUser && authorizedProRoles.length === 0 && (
+                  <div className="h-10 px-4 rounded-full bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-widest flex items-center gap-2">
+                    <User size={12} className="text-blue-500" />
+                    <span>Player Mode</span>
                   </div>
                 )}
 
@@ -1540,43 +1548,52 @@ Never share them with anyone.`;
                   </div>
                 </div>
                 <div className="h-8 w-px bg-slate-200" />
-                <div className="relative">
-                  <button
-                    onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                    className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
-                  >
-                    <Sparkles size={12} className="text-lime-400" />
-                    <span>{displayRole.replace('_', ' ')} Mode</span>
-                  </button>
-                  {showRoleDropdown && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
-                      <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                        <div className="p-2 space-y-1">
-                          <button
-                            onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
-                          >
-                            <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
-                            <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
-                            {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
-                          </button>
-                          {(authorizedProRoles.length > 0 ? authorizedProRoles : (['COACH', 'COURT_OWNER'] as UserRole[])).map((proRole) => (
+                {/* Only show dropdown when user has authorized pro roles */}
+                {authorizedProRoles.length > 0 ? (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                      className="h-10 px-4 rounded-full bg-slate-900 text-white font-black text-[9px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+                    >
+                      <Sparkles size={12} className="text-lime-400" />
+                      <span>{displayRole.replace('_', ' ')} Mode</span>
+                    </button>
+                    {showRoleDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowRoleDropdown(false)} />
+                        <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="p-2 space-y-1">
                             <button
-                              key={proRole}
-                              onClick={() => { onRoleSwitch && onRoleSwitch(proRole); setShowRoleDropdown(false); }}
-                              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === proRole ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                              onClick={() => { onRoleSwitch && onRoleSwitch('PLAYER'); setShowRoleDropdown(false); }}
+                              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === 'PLAYER' ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
                             >
-                              <Sparkles size={16} className={displayRole === proRole ? 'text-lime-600' : 'text-slate-400'} />
-                              <span className="font-black text-[10px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
-                              {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                              <User size={16} className={displayRole === 'PLAYER' ? 'text-lime-600' : 'text-slate-400'} />
+                              <span className="font-black text-[10px] uppercase tracking-widest">Player</span>
+                              {displayRole === 'PLAYER' && <div className="ml-auto w-2 h-2 rounded-full bg-lime-500" />}
                             </button>
-                          ))}
+                            {authorizedProRoles.map((proRole) => (
+                              <button
+                                key={proRole}
+                                onClick={() => { onRoleSwitch && onRoleSwitch(proRole); setShowRoleDropdown(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${displayRole === proRole ? 'bg-lime-100 text-lime-900' : 'hover:bg-slate-50 text-slate-700'}`}
+                              >
+                                <Sparkles size={16} className={displayRole === proRole ? 'text-lime-600' : 'text-slate-400'} />
+                                <span className="font-black text-[10px] uppercase tracking-widest">{proRole.replace('_', ' ')}</span>
+                                {displayRole === proRole && <div className="ml-auto w-2 h-2 rounded-full bg-slate-900" />}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  /* Show static badge for player-only users */
+                  <div className="h-10 px-4 rounded-full bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-widest flex items-center gap-2">
+                    <User size={12} className="text-blue-500" />
+                    <span>Player Mode</span>
+                  </div>
+                )}
               </div>
             )}
 
