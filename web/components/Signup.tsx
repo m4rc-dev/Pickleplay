@@ -1,68 +1,155 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import {
-    Trophy,
-    Mail,
-    Lock,
-    User,
     Eye,
     EyeOff,
-    ArrowRight,
     AlertCircle,
     Loader2,
     CheckCircle2,
-    ArrowLeft
+    ArrowLeft,
+    X,
+    Shield
 } from 'lucide-react';
 
+// ─── Default T&C ──────────────────────────────────────────────────────────────
+const DEFAULT_TERMS = `
+<h1>Terms and Conditions</h1>
+<p><strong>Effective Date:</strong> February 18, 2026</p>
+<p>Welcome to PicklePlay Philippines. By creating an account and using our platform, you agree to the following terms and conditions.</p>
+
+<h2>1. Acceptance of Terms</h2>
+<p>By registering for and using the PicklePlay platform (&ldquo;Service&rdquo;), you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions (&ldquo;Terms&rdquo;). If you do not agree to these Terms, you may not use the Service.</p>
+
+<h2>2. Account Registration</h2>
+<p>You must provide accurate, current, and complete information during the registration process. You are responsible for safeguarding your password and for all activities that occur under your account. You must notify us immediately of any unauthorized use of your account.</p>
+
+<h2>3. User Conduct</h2>
+<p>You agree not to:</p>
+<ul>
+<li>Use the Service for any unlawful purpose or in violation of any applicable law</li>
+<li>Impersonate any person or entity, or misrepresent your affiliation</li>
+<li>Upload or transmit any harmful, offensive, or inappropriate content</li>
+<li>Attempt to gain unauthorized access to any part of the Service</li>
+<li>Interfere with or disrupt the Service or servers</li>
+</ul>
+
+<h2>4. Court Bookings &amp; Payments</h2>
+<p>All court bookings made through the platform are subject to availability and the policies of the respective court owners. Cancellation and refund policies are determined by individual court owners and will be displayed at the time of booking.</p>
+
+<h2>5. Professional Roles</h2>
+<p>Users who apply for Coach or Court Owner roles are subject to additional verification and approval. PicklePlay reserves the right to approve or reject applications at its sole discretion.</p>
+
+<h2>6. Privacy &amp; Data</h2>
+<p>Your use of the Service is also governed by our Privacy Policy. We collect and process personal data as described therein. By using the Service, you consent to such processing.</p>
+
+<h2>7. Intellectual Property</h2>
+<p>All content, trademarks, and intellectual property on the platform are owned by PicklePlay Philippines. You may not copy, reproduce, or distribute any content without prior written permission.</p>
+
+<h2>8. Limitation of Liability</h2>
+<p>PicklePlay is provided &ldquo;as is&rdquo; without warranties of any kind. We shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service.</p>
+
+<h2>9. Termination</h2>
+<p>We reserve the right to suspend or terminate your account at any time for violation of these Terms or for any other reason at our sole discretion.</p>
+
+<h2>10. Changes to Terms</h2>
+<p>We may update these Terms from time to time. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
+
+<h2>11. Contact</h2>
+<p>For questions about these Terms, please contact us through the platform&rsquo;s support channels.</p>
+`;
+
+// ─── Terms Modal ──────────────────────────────────────────────────────────────
+const TermsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+    const [termsContent, setTermsContent] = useState<string>('');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setLoading(true);
+        (async () => {
+            try {
+                const { data } = await supabase.from('platform_content').select('content').eq('slug', 'terms-and-conditions').maybeSingle();
+                setTermsContent(data?.content || DEFAULT_TERMS);
+            } catch { setTermsContent(DEFAULT_TERMS); }
+            finally { setLoading(false); }
+        })();
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-white w-full max-w-2xl max-h-[80vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><Shield size={18} className="text-blue-600" /></div>
+                        <div>
+                            <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Terms & Conditions</h2>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">PicklePlay Philippines</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all"><X size={18} /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5 text-sm text-slate-700 leading-relaxed">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-blue-600" /></div>
+                    ) : (
+                        <div className="prose prose-sm prose-slate max-w-none prose-headings:font-extrabold prose-headings:tracking-tight prose-headings:text-slate-900 prose-h1:text-lg prose-h1:mb-3 prose-h1:mt-4 prose-h2:text-sm prose-h2:mb-2 prose-h2:mt-4 prose-p:mb-2 prose-p:text-slate-600 prose-li:text-slate-600 prose-li:mb-0.5 prose-strong:text-slate-900 prose-ul:my-2 prose-ol:my-2" dangerouslySetInnerHTML={{ __html: termsContent }} />
+                    )}
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+                    <button onClick={onClose} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-extrabold py-3.5 rounded-xl uppercase tracking-wider text-xs transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25">
+                        I Understand
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const GoogleIcon = () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.07 5.07 0 01-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11.96 11.96 0 001 12c0 1.78.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    </svg>
+);
+
+// ─── Main Signup ──────────────────────────────────────────────────────────────
 const Signup: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [fullName, setFullName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [showTermsModal, setShowTermsModal] = useState(false);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const redirectUrl = searchParams.get('redirect') || '/dashboard';
-    const [showSocialButtons, setShowSocialButtons] = useState(true);
 
     const normalizeUsername = (value: string) =>
-        value
-            .toLowerCase()
-            .trim()
-            .replace(/\s+/g, '_')
-            .replace(/[^a-z0-9_]/g, '')
-            .slice(0, 30);
+        value.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30);
 
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+        if (!agreedToTerms) { setError('You must agree to the Terms & Conditions before signing up.'); return; }
         setLoading(true);
         setError(null);
         try {
             const referralCode = searchParams.get('ref');
-
-            // Store referral code in localStorage as fallback
-            if (referralCode) {
-                localStorage.setItem('referral_code', referralCode);
-            }
-
-            // Store redirect URL in localStorage for after OAuth callback
-            if (redirectUrl && redirectUrl !== '/dashboard') {
-                localStorage.setItem('auth_redirect', redirectUrl);
-            }
-
-            // Build callback URL with referral code as query parameter
+            if (referralCode) localStorage.setItem('referral_code', referralCode);
+            if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
+            localStorage.setItem('terms_accepted_at', new Date().toISOString());
             const callbackUrl = referralCode
                 ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
                 : `${window.location.origin}/#/auth/callback`;
-
-            const { error: authError } = await supabase.auth.signInWithOAuth({
-                provider,
-                options: {
-                    redirectTo: callbackUrl
-                }
-            });
+            const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
             if (authError) throw authError;
         } catch (err: any) {
             setError(err.message || `Failed to sign in with ${provider}.`);
@@ -72,219 +159,267 @@ const Signup: React.FC = () => {
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!agreedToTerms) { setError('You must agree to the Terms & Conditions before signing up.'); return; }
+        if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+        if (password.length < 8) { setError('Password must be at least 8 characters long.'); return; }
         setLoading(true);
         setError(null);
-
         try {
             const referralCode = searchParams.get('ref');
-
             const { data, error: authError } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                        username: fullName.toLowerCase().replace(/\s+/g, '_'),
-                        referred_by_code: referralCode
-                    }
-                }
+                email, password,
+                options: { data: { full_name: fullName, username: fullName.toLowerCase().replace(/\s+/g, '_'), referred_by_code: referralCode } }
             });
-
             if (authError) throw authError;
-
             if (data.user) {
                 if (data.session) {
-                    const { error: profileError } = await supabase
-                        .from('profiles')
-                        .upsert({
-                            id: data.user.id,
-                            email: data.user.email || email,
-                            full_name: fullName,
-                            username: normalizeUsername(fullName || data.user.email?.split('@')[0] || 'player')
-                        }, { onConflict: 'id' });
-
-                    if (profileError) {
-                        console.error('Failed to upsert profile fields during signup:', profileError);
-                    }
+                    const { error: profileError } = await supabase.from('profiles').upsert({
+                        id: data.user.id, email: data.user.email || email, full_name: fullName,
+                        username: normalizeUsername(fullName || data.user.email?.split('@')[0] || 'player'),
+                        terms_accepted_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
+                    if (profileError) console.error('Failed to upsert profile fields during signup:', profileError);
                 }
-
                 setSuccess(true);
-                // Pass redirect URL to login page so user is redirected after logging in
-                const loginUrl = redirectUrl !== '/dashboard'
-                    ? `/login?redirect=${encodeURIComponent(redirectUrl)}`
-                    : '/login';
+                const loginUrl = redirectUrl !== '/dashboard' ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login';
                 setTimeout(() => navigate(loginUrl), 3000);
             }
         } catch (err: any) {
             setError(err.message || 'Failed to create account. Please try again.');
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     };
 
+    /* ── Success ── */
     if (success) {
         return (
-            <div className="min-h-screen w-full flex items-center justify-center bg-slate-950 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/80 to-blue-900/40 z-10" />
-                <div className="relative z-20 text-center space-y-6 max-w-sm px-6">
-                    <div className="inline-flex items-center justify-center w-24 h-24 bg-lime-400 rounded-full mb-4 shadow-3xl shadow-lime-400/20 animate-bounce">
-                        <CheckCircle2 size={48} className="text-slate-950" />
+            <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-100 flex items-center justify-center px-4">
+                <div className="text-center space-y-5 max-w-sm">
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-lime-400 rounded-full shadow-xl shadow-lime-400/30 animate-bounce">
+                        <CheckCircle2 size={40} className="text-slate-900" />
                     </div>
-                    <h1 className="text-4xl font-black text-white tracking-tighter uppercase">Success!</h1>
-                    <p className="text-slate-400 font-medium text-lg leading-relaxed">
-                        Your account has been created. Redirecting you to the login page...
-                    </p>
-                    <div className="flex justify-center">
-                        <Loader2 className="animate-spin text-lime-400" size={32} />
-                    </div>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Account Created!</h1>
+                    <p className="text-slate-500 text-base leading-relaxed">You're all set. Redirecting you to login...</p>
+                    <Loader2 className="animate-spin text-blue-600 mx-auto" size={28} />
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-950">
-            {/* Background stays consistent with Login */}
-            <div
-                className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-30 scale-105"
-                style={{ backgroundImage: 'url("/login-bg.png")' }}
-            />
+        <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-100 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+            {/* ── Scattered Ball.png background decorations ── */}
+            <img src="/images/Ball.png" alt="" className="absolute top-[5%] right-[4%] w-16 h-16 opacity-20 -rotate-12 pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[12%] left-[5%] w-12 h-12 opacity-15 rotate-[25deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[38%] right-[6%] w-10 h-10 opacity-[0.12] -rotate-45 pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[52%] left-[3%] w-14 h-14 opacity-20 rotate-[35deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute bottom-[15%] right-[5%] w-12 h-12 opacity-15 rotate-[15deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute bottom-[8%] left-[8%] w-10 h-10 opacity-[0.12] -rotate-[55deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[22%] right-[38%] w-8 h-8 opacity-[0.08] rotate-[40deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute bottom-[32%] left-[25%] w-9 h-9 opacity-[0.10] -rotate-[20deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[68%] right-[22%] w-11 h-11 opacity-15 rotate-[55deg] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute top-[2%] right-[48%] w-8 h-8 opacity-[0.10] rotate-[20deg] pointer-events-none select-none" />
 
-            <div className="absolute inset-0 z-10 bg-gradient-to-br from-slate-950 via-slate-950/80 to-blue-900/40" />
-            <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] rounded-full -translate-y-1/2 -translate-x-1/2" />
-
-            <div className="relative z-20 w-full max-w-md px-6 my-12">
-                {/* Back to Home Button */}
+            {/* Back to Home — above card */}
+            <div className="w-full max-w-[900px] mb-4">
                 <Link
                     to="/"
-                    className="inline-flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-4 text-sm font-bold uppercase tracking-widest"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
                 >
-                    <ArrowLeft size={16} />
+                    <ArrowLeft size={14} />
                     Back to Home
                 </Link>
+            </div>
 
-                <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[48px] p-8 md:p-12 shadow-2xl">
-                    <div className="text-center mb-10">
-                        <h1 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase mb-2">Join the Elite.</h1>
-                        <p className="text-slate-400 font-medium tracking-tight">Create your PicklePlay account.</p>
+            {/* ═══════ CENTERED CARD ═══════ */}
+            <div className="w-full max-w-[900px] bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/60 overflow-hidden">
+                <div className="flex flex-col lg:flex-row min-h-[560px]">
+
+                    {/* ── LEFT COLUMN — Pickleball photo + branding ── */}
+                    <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden rounded-l-3xl">
+                        <img
+                            src="/images/home-images/pb7.jpg"
+                            alt="Pickleball action"
+                            className="absolute inset-0 w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-br from-slate-900/75 via-slate-900/55 to-slate-900/75" />
+
+                        <div className="relative z-10 flex flex-col justify-between p-9 w-full">
+                            {/* Logo */}
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <div className="absolute -inset-1.5 bg-white/20 rounded-xl blur-md" />
+                                    <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="relative w-11 h-11 rounded-xl object-contain shadow-lg ring-2 ring-white/20" />
+                                </div>
+                                <div>
+                                    <span className="text-white font-black text-base tracking-tight">PicklePlay</span>
+                                    <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest">Philippines</p>
+                                </div>
+                            </div>
+
+                            {/* Headline */}
+                            <div className="space-y-5">
+                                <h2 className="text-3xl xl:text-4xl font-black text-white leading-[1.15] tracking-tight">
+                                    Launch your game<br />
+                                    <span className="text-lime-400">to the next level.</span>
+                                </h2>
+                                <div className="flex gap-3">
+                                    <div className="w-1 rounded-full bg-blue-500 shrink-0" />
+                                    <p className="text-white/50 text-sm leading-relaxed">
+                                        Build your player profile and get<br />matched with top courts & events.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
+                        </div>
                     </div>
 
-                    <form onSubmit={handleSignup} className="space-y-5">
-                        {error && (
-                            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center gap-3 text-rose-400 text-sm">
-                                <AlertCircle size={18} className="shrink-0" />
-                                <p className="font-medium">{error}</p>
-                            </div>
-                        )}
+                    {/* ── RIGHT COLUMN — Form ── */}
+                    <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-100">
+                        {/* Mobile logo */}
+                        <div className="lg:hidden flex justify-center mb-5">
+                            <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-12 h-12 rounded-xl object-contain shadow-md" />
+                        </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Full Name</label>
-                            <div className="relative">
-                                <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                        {/* Title */}
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tight text-center lg:text-center mb-6">Create Account</h1>
+
+                        <form onSubmit={handleSignup} className="space-y-4">
+                            {error && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm">
+                                    <AlertCircle size={16} className="shrink-0" />
+                                    <p className="font-medium">{error}</p>
+                                </div>
+                            )}
+
+                            {/* Full Name */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Full Name</label>
                                 <input
                                     type="text"
                                     required
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
-                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:border-blue-600 transition-all"
-                                    placeholder="John Doe"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                    placeholder="Juan Dela Cruz"
                                 />
                             </div>
-                        </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Email Address</label>
-                            <div className="relative">
-                                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                            {/* Email */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
                                 <input
                                     type="email"
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-4 pl-14 pr-6 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:border-blue-600 transition-all"
-                                    placeholder="name@company.com"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                    placeholder="name@example.com"
                                 />
+                            </div>
+
+                            {/* Password + Confirm */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            required
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                            placeholder="••••••••"
+                                        />
+                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Confirm</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            required
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className={`w-full bg-white border rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
+                                                confirmPassword && confirmPassword !== password
+                                                    ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
+                                                    : 'border-slate-200 focus:border-blue-600 focus:ring-blue-600/10'
+                                            }`}
+                                            placeholder="••••••••"
+                                        />
+                                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Terms */}
+                            <div className="flex items-start gap-2.5 pt-1">
+                                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600/20" />
+                                    <span className="text-xs text-slate-500 leading-relaxed">
+                                        I agree to the{' '}
+                                        <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-blue-600 font-bold hover:text-blue-700 underline underline-offset-2 transition-colors">
+                                            Terms & Privacy Policy
+                                        </button>
+                                    </span>
+                                </label>
+                            </div>
+
+                            {/* CTA */}
+                            <button
+                                type="submit"
+                                disabled={loading || !agreedToTerms}
+                                className={`w-full font-extrabold h-[48px] rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${
+                                    agreedToTerms
+                                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                }`}
+                            >
+                                {loading ? <Loader2 size={22} className="animate-spin" /> : 'Create Account'}
+                            </button>
+                        </form>
+
+                        {/* Divider */}
+                        <div className="relative my-5">
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+                            <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
+                                <span className="bg-white px-4 text-slate-400">sign up with</span>
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Password</label>
-                            <div className="relative">
-                                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-                                <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-4 pl-14 pr-14 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:border-blue-600 transition-all"
-                                    placeholder="••••••••"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
-                                >
-                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                </button>
-                            </div>
-                            <p className="text-[10px] text-slate-600 tracking-tight ml-4 mt-2">Must be at least 8 characters long.</p>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black h-16 rounded-2xl uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-2xl shadow-blue-600/20"
-                        >
-                            {loading ? (
-                                <Loader2 size={24} className="animate-spin" />
-                            ) : (
-                                <>
-                                    Create Account <ArrowRight size={20} />
-                                </>
-                            )}
-                        </button>
-                    </form>
-
-                    {/* Social Login Section */}
-                    <div className="relative my-8">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/10"></div>
-                        </div>
-                        <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
-                            <span className="bg-[#0f172a] px-4 text-slate-500">Or continue with</span>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
+                        {/* Google */}
                         <button
                             type="button"
                             onClick={() => handleSocialLogin('google')}
-                            className="flex items-center justify-center gap-3 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl py-4 transition-all active:scale-[0.95] group"
+                            disabled={!agreedToTerms}
+                            className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group ${
+                                agreedToTerms
+                                    ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
+                                    : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
+                            }`}
                         >
-                            <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                            </svg>
-                            <span className="text-white text-xs font-black uppercase tracking-widest">Google</span>
+                            <GoogleIcon />
                         </button>
+
+                        {/* Bottom link */}
+                        <p className="mt-5 text-center text-slate-500 text-sm">
+                            Already have an account?{' '}
+                            <Link to="/login" className="text-blue-600 font-bold hover:text-blue-700 transition-colors underline underline-offset-2">
+                                Sign In
+                            </Link>
+                        </p>
                     </div>
-
-                    <p className="mt-8 text-center text-slate-400 text-sm font-medium">
-                        Already have an account?{' '}
-                        <Link to="/login" className="text-white font-black hover:text-blue-500 transition-colors uppercase tracking-tight ml-1">
-                            Log in instead
-                        </Link>
-                    </p>
-                </div>
-
-                <div className="mt-8 text-center">
-                    <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em] max-w-[280px] mx-auto leading-relaxed">
-                        By signing up, you agree to our <span className="text-slate-400">Terms of Service</span> and <span className="text-slate-400">Privacy Policy</span>.
-                    </p>
                 </div>
             </div>
+
+            {/* Terms Modal */}
+            <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} />
         </div>
     );
 };
