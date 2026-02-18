@@ -21,7 +21,7 @@ const Login: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const redirectUrl = searchParams.get('redirect') || '/dashboard';
+    const redirectUrl = searchParams.get('redirect') || '/';
 
     const normalizeUsername = (value: string) =>
         value
@@ -80,7 +80,7 @@ const Login: React.FC = () => {
             }
 
             // Store redirect URL in localStorage for after OAuth callback
-            if (redirectUrl && redirectUrl !== '/dashboard') {
+            if (redirectUrl && redirectUrl !== '/') {
                 localStorage.setItem('auth_redirect', redirectUrl);
             }
 
@@ -135,7 +135,7 @@ const Login: React.FC = () => {
                     // Store redirect for after 2FA verification
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     const finalRedirect = storedRedirect || redirectUrl;
-                    if (finalRedirect && finalRedirect !== '/dashboard') {
+                    if (finalRedirect && finalRedirect !== '/') {
                         localStorage.setItem('auth_redirect', finalRedirect);
                     }
                     navigate('/verify-2fa');
