@@ -263,3 +263,111 @@ export interface SubscriptionPlan {
   created_at?: string;
   updated_at?: string;
 }
+
+// Community Features Types
+export type GroupPrivacy = 'public' | 'private';
+export type GroupMemberRole = 'admin' | 'moderator' | 'member';
+export type GroupMemberStatus = 'active' | 'pending' | 'banned';
+export type EventType = 'meetup' | 'tournament' | 'social' | 'training' | 'other';
+export type RsvpStatus = 'going' | 'maybe' | 'not_going';
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  privacy: GroupPrivacy;
+  avatar_url?: string;
+  cover_url?: string;
+  location?: string;
+  tags: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  member_count: number;
+  rules?: string;
+  settings?: Record<string, any>;
+  user_is_member?: boolean; // Whether the current user is a member
+}
+
+export interface GroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role: GroupMemberRole;
+  status: GroupMemberStatus;
+  joined_at: string;
+  user?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+    user_role?: UserRole;
+  };
+}
+
+export interface GroupEvent {
+  id: string;
+  group_id: string;
+  title: string;
+  description?: string;
+  event_type?: EventType;
+  location?: string;
+  start_time: string;
+  end_time?: string;
+  max_attendees?: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  settings?: Record<string, any>;
+  rsvp_count?: number;
+  user_rsvp_status?: RsvpStatus | null;
+}
+
+export interface EventRsvp {
+  id: string;
+  event_id: string;
+  user_id: string;
+  status: RsvpStatus;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+  };
+}
+
+export interface DirectMessage {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  updated_at: string;
+  thread_id?: string;
+  reply_to?: string;
+  sender?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+  };
+  recipient?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+  };
+}
+
+export interface MessageThread {
+  id: string;
+  participant_1: string;
+  participant_2: string;
+  last_message_at: string;
+  created_at: string;
+  last_message?: DirectMessage;
+  other_participant?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+  };
+}

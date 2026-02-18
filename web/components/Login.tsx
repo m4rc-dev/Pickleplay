@@ -18,7 +18,7 @@ const Login: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const redirectUrl = searchParams.get('redirect') || '/dashboard';
+    const redirectUrl = searchParams.get('redirect') || '/';
 
     const normalizeUsername = (value: string) =>
         value.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30);

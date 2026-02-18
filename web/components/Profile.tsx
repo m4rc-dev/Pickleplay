@@ -44,7 +44,7 @@ import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, ge
 import { sendEmailCode, verifyCode, generateBackupCodes, saveBackupCodes } from '../services/twoFactorAuth';
 import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
-import { PostCard } from './Community';
+import { PostCard } from './community';
 
 interface ProfileProps {
   userRole: UserRole;

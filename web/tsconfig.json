@@ -1,4 +1,4 @@
-{
+﻿{
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,
@@ -28,7 +28,8 @@
     "noEmit": true,
     "strict": false,
     "resolveJsonModule": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": false
   },
   "include": [
     "**/*.ts",

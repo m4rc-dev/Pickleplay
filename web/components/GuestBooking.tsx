@@ -53,6 +53,9 @@ const GuestBooking: React.FC = () => {
     const [selectedLocation, setSelectedLocation] = useState<any>(null);
     const [locationCourts, setLocationCourts] = useState<Court[]>([]);
     const [isLoadingLocationDetail, setIsLoadingLocationDetail] = useState(false);
+    // Hero expansion: clicking a court in the list shows the court detail + schedule in the right panel
+    const [heroCourtId, setHeroCourtId] = useState<string | null>(null);
+    const heroActiveCourt = heroCourtId ? (locationCourts.find(c => c.id === heroCourtId) ?? null) : null;
 
     // Distance calculation helper (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -409,6 +412,15 @@ const GuestBooking: React.FC = () => {
         }
     }, [urlLocationId, urlLat, urlLng, urlZoom, isLoading]);
 
+    // Re-center map and trigger resize when returning to map view or hero is cleared
+    useEffect(() => {
+        if (!heroActiveCourt && googleMapRef.current && window.google) {
+            setTimeout(() => {
+                window.google.maps.event.trigger(googleMapRef.current, 'resize');
+            }, 350);
+        }
+    }, [heroActiveCourt]);
+
     const initializeMap = () => {
         if (!mapRef.current || !window.google) return;
 
@@ -521,6 +533,7 @@ const GuestBooking: React.FC = () => {
 
                 marker.addListener('click', () => {
                     navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                    setHeroCourtId(null);
                     if (window.innerWidth < 768) {
                         setViewMode('list');
                     }
@@ -889,10 +902,10 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* ──────────── MAIN CONTENT GRID ──────────── */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
                     {/* ═══ LEFT COLUMN ═══ */}
-                    <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
                         {/* Desktop Search Bar */}
                         <form
                             onSubmit={(e) => {
@@ -1020,7 +1033,18 @@ const GuestBooking: React.FC = () => {
                             </button>
                         </form>
 
-                        {/* ─── List Container ─── */}
+                        {/* ─── Back button for court detail view ─── */}
+                    {heroActiveCourt && !selectedCourt && (
+                        <button
+                            onClick={() => setHeroCourtId(null)}
+                            className="hidden md:flex items-center gap-1.5 text-slate-500 text-xs font-bold hover:text-blue-600 transition-colors mb-3"
+                        >
+                            <ChevronLeft size={14} />
+                            Back to Locations
+                        </button>
+                    )}
+
+                    {/* ─── List Container ─── */}
                         <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
 
                             {/* Location Detail Header */}
@@ -1147,7 +1171,16 @@ const GuestBooking: React.FC = () => {
                                         return (
                                         <div key={court.id} className="w-full">
                                         <button
-                                            onClick={() => isCourtAvailable && navigate(`/court/${court.id}`)}
+                                            onClick={() => {
+                                                if (isCourtAvailable) {
+                                                    setHeroCourtId(court.id);
+                                                    if (window.innerWidth >= 768) {
+                                                        // Desktop: show in right panel
+                                                    } else {
+                                                        navigate(`/court/${court.id}`);
+                                                    }
+                                                }
+                                            }}
                                             disabled={!isCourtAvailable}
                                             className={`w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-all duration-200 ${isCourtAvailable ? 'hover:bg-blue-50/40 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                                         >
@@ -1253,16 +1286,120 @@ const GuestBooking: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* ═══ RIGHT COLUMN — MAP ═══ */}
-                    <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
-                        <div className={`md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
-                            {isLoading ? (
-                                <div className="h-full bg-slate-100 flex items-center justify-center">
-                                    <Loader2 className="animate-spin text-blue-600" size={40} />
-                                </div>
-                            ) : (
-                                <div ref={mapRef} className="h-full w-full" />
-                            )}
+                    {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL ═══ */}
+                    <div className={`lg:col-span-3 xl:col-span-3 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+                        <div className="md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
+
+                            {/* ── Map — always in DOM so Google Maps never loses its container ── */}
+                            <div
+                                className="absolute inset-0 transition-opacity duration-300"
+                                style={{ opacity: !heroActiveCourt ? 1 : 0, pointerEvents: !heroActiveCourt ? 'auto' : 'none' }}
+                            >
+                                {isLoading ? (
+                                    <div className="h-full bg-slate-100 flex items-center justify-center">
+                                        <Loader2 className="animate-spin text-blue-600" size={40} />
+                                    </div>
+                                ) : (
+                                    <div ref={mapRef} className="h-full w-full" />
+                                )}
+                            </div>
+
+                            {/* ── Court Detail Panel ── */}
+                            <div
+                                className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-300"
+                                style={{
+                                    opacity: (heroActiveCourt && selectedLocation) ? 1 : 0,
+                                    transform: (heroActiveCourt && selectedLocation) ? 'translateX(0)' : 'translateX(32px)',
+                                    pointerEvents: (heroActiveCourt && selectedLocation) ? 'auto' : 'none',
+                                }}
+                            >
+                                {heroActiveCourt && selectedLocation && (
+                                    <>
+                                        {/* Hero Image */}
+                                        <div className="relative flex-1 min-h-0">
+                                            <img
+                                                src={heroActiveCourt.imageUrl || selectedLocation.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800'}
+                                                alt={heroActiveCourt.name}
+                                                className="absolute inset-0 w-full h-full object-cover"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                                            {/* Back button */}
+                                            <button
+                                                onClick={() => setHeroCourtId(null)}
+                                                className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white/90 backdrop-blur-sm text-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-white transition-all shadow-md"
+                                            >
+                                                <ChevronLeft size={14} />
+                                                Back
+                                            </button>
+                                            <div className="absolute bottom-4 left-4 right-4 z-10">
+                                                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-lg leading-tight">{heroActiveCourt.name}</h2>
+                                                <p className="text-xs text-white/70 font-medium mt-0.5 truncate">{selectedLocation.name}</p>
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-white border border-white/30">{heroActiveCourt.type || 'Court'}</span>
+                                                    {typeof heroActiveCourt.numCourts === 'number' && (
+                                                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-white border border-white/30">{heroActiveCourt.numCourts} {heroActiveCourt.numCourts === 1 ? 'Unit' : 'Units'}</span>
+                                                    )}
+                                                    {heroActiveCourt.status && heroActiveCourt.status !== 'Available' && (
+                                                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-orange-500/90 text-white">{heroActiveCourt.status}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Details + CTA */}
+                                        <div className="shrink-0 flex flex-col gap-2.5 p-4 bg-white">
+                                            <div className="flex gap-2">
+                                                {heroActiveCourt.pricePerHour != null && (
+                                                    <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-slate-900 rounded-xl text-white">
+                                                        <Navigation size={14} className="text-blue-400 shrink-0" />
+                                                        <div>
+                                                            <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none">Rate</p>
+                                                            <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-slate-400 ml-0.5">/hr</span></p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {selectedLocation.opening_time && selectedLocation.closing_time && (
+                                                    <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-amber-50 rounded-xl border border-amber-100">
+                                                        <Clock size={14} className="text-amber-600 shrink-0" />
+                                                        <div>
+                                                            <p className="text-[8px] font-black text-amber-700 uppercase tracking-widest leading-none">Hours</p>
+                                                            <p className="text-xs font-bold text-amber-900 leading-tight mt-0.5">{selectedLocation.opening_time} - {selectedLocation.closing_time}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {Array.isArray(heroActiveCourt.amenities) && heroActiveCourt.amenities.length > 0 && (
+                                                <div className="flex items-center gap-1.5 overflow-hidden">
+                                                    {(heroActiveCourt.amenities as string[]).slice(0, 6).map((a, i) => (
+                                                        <span key={i} className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 whitespace-nowrap shrink-0">{a}</span>
+                                                    ))}
+                                                    {heroActiveCourt.amenities.length > 6 && (
+                                                        <span className="text-[10px] font-semibold text-slate-400 shrink-0">+{heroActiveCourt.amenities.length - 6}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        let redirectUrl = `/court/${heroActiveCourt.id}`;
+                                                        localStorage.setItem('auth_redirect', redirectUrl);
+                                                        setShowLoginModal(true);
+                                                    }}
+                                                    className="flex-1 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-blue-200/50 active:scale-[0.98] transition-all"
+                                                >
+                                                    Sign In to Book
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate(`/court/${heroActiveCourt.id}`)}
+                                                    className="px-4 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-widest active:scale-[0.98] transition-all"
+                                                >
+                                                    Details
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
                         </div>
                     </div>
                 </div>

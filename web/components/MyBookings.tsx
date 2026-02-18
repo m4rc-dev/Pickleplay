@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
 import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, MessageCircle, X, Send, Receipt as ReceiptIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -239,7 +240,7 @@ const MyBookings: React.FC = () => {
                                             <div className="flex items-center gap-3 ml-auto">
                                                 <div className="text-right">
                                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Amount Paid</p>
-                                                    <p className="text-2xl font-black text-slate-900 tracking-tighter leading-none">₱{b.total_price}</p>
+                                                    <p className="text-2xl font-black text-slate-900 tracking-tighter leading-none">Γé▒{b.total_price}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -297,9 +298,11 @@ const MyBookings: React.FC = () => {
                 </div>
             </div>
 
-            {showReviewModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md" onClick={() => setShowReviewModal(false)} />
+            {showReviewModal && ReactDOM.createPortal(
+                <div
+                    className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300"
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowReviewModal(false); }}
+                >
                     <div className="relative w-full max-w-lg bg-white rounded-[48px] shadow-3xl p-10 space-y-8 animate-in zoom-in-95 duration-300">
                         <div className="flex items-center justify-between">
                             <div>
@@ -365,7 +368,8 @@ const MyBookings: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {showReceiptModal && selectedBookingForReceipt && (

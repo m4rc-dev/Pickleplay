@@ -31,11 +31,11 @@ const TwoFactorVerify: React.FC = () => {
       // Check if user actually has 2FA enabled
       const settings = await getSecuritySettings(user.id);
       if (!settings.data?.two_factor_enabled) {
-        // No 2FA, go straight to dashboard
+        // No 2FA, go straight to home (role-based redirect)
         localStorage.removeItem('two_factor_pending');
         const storedRedirect = localStorage.getItem('auth_redirect');
         localStorage.removeItem('auth_redirect');
-        navigate(storedRedirect || '/dashboard');
+        navigate(storedRedirect || '/');
         return;
       }
 
@@ -124,7 +124,7 @@ const TwoFactorVerify: React.FC = () => {
           localStorage.removeItem('two_factor_pending');
           const storedRedirect = localStorage.getItem('auth_redirect');
           localStorage.removeItem('auth_redirect');
-          navigate(storedRedirect || '/dashboard');
+          navigate(storedRedirect || '/');
         }, 1000);
       } else {
         setError(result.message);
