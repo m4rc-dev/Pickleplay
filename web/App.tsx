@@ -1,4 +1,4 @@
-
+﻿
 
 // This file contains the main application logic, routing, and navigation components.
 import React, { useState, useEffect, useRef } from 'react';

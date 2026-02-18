@@ -219,7 +219,7 @@ const CourtDetail: React.FC = () => {
                         .select('date, reason, description')
                         .eq('location_id', loc.id)
                         .gte('date', new Date().toISOString().split('T')[0]);
-                    
+
                     // Also fetch court-specific closures
                     const { data: courtClosureData } = await supabase
                         .from('court_closures')
@@ -805,18 +805,6 @@ const CourtDetail: React.FC = () => {
                                 Home
                             </button>
                         )}
-                        {user && (
-                            <button
-                                onClick={fetchMyBookings}
-                                className="px-4 py-2 bg-white border border-slate-200 text-xs font-bold text-slate-600 rounded-lg hover:border-blue-400 hover:text-blue-600 transition-all active:scale-95"
-                            >
-                                My Bookings
-                            </button>
-                        )}
-                        <span className={`px-3 py-1.5 rounded-lg text-[11px] font-bold ${court.type === 'Indoor' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'
-                            }`}>
-                            {court.type}
-                        </span>
                     </div>
                 </div>
 
@@ -830,12 +818,11 @@ const CourtDetail: React.FC = () => {
                                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mb-2">Court Details</p>
                                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 tracking-tight leading-tight mb-3">{court.name}</h1>
                                 {court.status && court.status !== 'Available' && (
-                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 ${
-                                        court.status === 'Fully Booked' ? 'bg-orange-50 text-orange-600 border border-orange-200'
+                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 ${court.status === 'Fully Booked' ? 'bg-orange-50 text-orange-600 border border-orange-200'
                                         : court.status === 'Coming Soon' ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                                        : court.status === 'Maintenance' ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                                        : ''
-                                    }`}>
+                                            : court.status === 'Maintenance' ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                                                : ''
+                                        }`}>
                                         {court.status === 'Fully Booked' ? '⏳' : court.status === 'Coming Soon' ? '🔜' : '🔧'} {court.status}
                                     </div>
                                 )}
@@ -952,245 +939,243 @@ const CourtDetail: React.FC = () => {
                     </div>
 
                     {/* Right: Booking Sidebar */}
-                    <div className="lg:sticky lg:top-36 space-y-4">
+                    <div className="lg:sticky lg:top-8 space-y-4">
                         {court.status === 'Coming Soon' || court.status === 'Maintenance' ? (
-                        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
-                            <div className={`text-center py-8 ${court.status === 'Coming Soon' ? 'text-blue-600' : 'text-amber-600'}`}>
-                                <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-2xl ${
-                                    court.status === 'Coming Soon' ? 'bg-blue-50' : 'bg-amber-50'
-                                }`}>
-                                    {court.status === 'Coming Soon' ? '🔜' : '🔧'}
+                            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
+                                <div className={`text-center py-8 ${court.status === 'Coming Soon' ? 'text-blue-600' : 'text-amber-600'}`}>
+                                    <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-2xl ${court.status === 'Coming Soon' ? 'bg-blue-50' : 'bg-amber-50'
+                                        }`}>
+                                        {court.status === 'Coming Soon' ? '🔜' : '🔧'}
+                                    </div>
+                                    <h3 className="text-lg font-black tracking-tight uppercase mb-2">{court.status}</h3>
+                                    <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-[240px] mx-auto">
+                                        {court.status === 'Coming Soon'
+                                            ? 'This court is not yet available for booking. Stay tuned for updates!'
+                                            : 'This court is currently under maintenance. Please check back later.'}
+                                    </p>
                                 </div>
-                                <h3 className="text-lg font-black tracking-tight uppercase mb-2">{court.status}</h3>
-                                <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-[240px] mx-auto">
-                                    {court.status === 'Coming Soon'
-                                        ? 'This court is not yet available for booking. Stay tuned for updates!'
-                                        : 'This court is currently under maintenance. Please check back later.'}
-                                </p>
                             </div>
-                        </div>
                         ) : (
-                        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-950 tracking-tight mb-1">Select Schedule</h3>
-                                <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">When will you be playing?</p>
-                            </div>
+                            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-950 tracking-tight mb-1">Select Schedule</h3>
+                                    <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">When will you be playing?</p>
+                                </div>
 
-                            {/* Future Dates Banner — shown whenever selected date is NOT today */}
-                            {(() => {
-                                const todayStr = toPhDateStr(getNowPH());
-                                const selStr = toPhDateStr(selectedDate);
-                                const isFutureDate = selStr > todayStr;
-                                if (!isFutureDate) return null;
-                                return (
-                                    <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
-                                        <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
-                                            <span className="text-sm">📅</span>
+                                {/* Future Dates Banner — shown whenever selected date is NOT today */}
+                                {(() => {
+                                    const todayStr = toPhDateStr(getNowPH());
+                                    const selStr = toPhDateStr(selectedDate);
+                                    const isFutureDate = selStr > todayStr;
+                                    if (!isFutureDate) return null;
+                                    return (
+                                        <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                                            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                                                <span className="text-sm">📅</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider leading-none mb-0.5">Booking For Future Dates</p>
+                                                <p className="text-[10px] text-orange-600/80 font-medium leading-snug">
+                                                    You're booking for <span className="font-bold">{selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: PH_TIMEZONE })}</span>. Make sure you pick the correct date.
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider leading-none mb-0.5">Booking For Future Dates</p>
-                                            <p className="text-[10px] text-orange-600/80 font-medium leading-snug">
-                                                You're booking for <span className="font-bold">{selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: PH_TIMEZONE })}</span>. Make sure you pick the correct date.
-                                            </p>
-                                        </div>
+                                    );
+                                })()}
+
+                                {/* Date Picker */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                        <span>Choose Date</span>
+                                        <CalendarIcon size={14} className="text-blue-600" />
                                     </div>
-                                );
-                            })()}
-
-                            {/* Date Picker */}
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                    <span>Choose Date</span>
-                                    <CalendarIcon size={14} className="text-blue-600" />
-                                </div>
-                                <div className="grid grid-cols-7 gap-1.5">
-                                    {Array.from({ length: 7 }).map((_, i) => {
-                                        const nowPH = getNowPH();
-                                        const date = new Date(nowPH);
-                                        date.setDate(date.getDate() + i);
-                                        const dateStr = toPhDateStr(date);
-                                        const selectedStr = toPhDateStr(selectedDate);
-                                        const isSelected = selectedStr === dateStr;
-                                        const isDateFullyBooked = fullyBookedDates.has(dateStr);
-                                        const isDateClosed = locationClosures.has(dateStr);
-                                        const isUnavailable = isDateFullyBooked || isDateClosed;
-                                        return (
-                                            <button
-                                                key={i}
-                                                onClick={() => {
-                                                    if (isUnavailable && !isDateClosed) return;
-                                                    // Allow clicking closed dates to see the closure notice
-                                                    setSelectedDate(date);
-                                                    setSelectedSlot(null);
-                                                    setDailyLimitReached(false);
-                                                    setIsBooked(false);
-                                                }}
-                                                disabled={isDateFullyBooked && !isDateClosed}
-                                                className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 relative ${isSelected && !isUnavailable
-                                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
-                                                    : isSelected && isDateClosed
-                                                        ? 'bg-rose-500 text-white shadow-md shadow-rose-200/50'
-                                                    : isDateClosed
-                                                        ? 'bg-rose-50 text-rose-300 cursor-pointer opacity-70'
-                                                    : isDateFullyBooked
-                                                        ? 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-60'
-                                                        : 'bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600'
-                                                    }`}
-                                            >
-                                                <span className={`text-[8px] font-bold uppercase mb-0.5 ${isSelected && !isUnavailable ? 'text-blue-200' : isDateClosed ? 'text-rose-300' : isDateFullyBooked ? 'text-slate-300' : 'text-slate-400'}`}>
-                                                    {date.toLocaleDateString('en-US', { weekday: 'short', timeZone: PH_TIMEZONE }).slice(0, 3)}
-                                                </span>
-                                                <span className={`text-sm font-bold ${isUnavailable ? 'line-through' : ''}`}>{date.getDate()}</span>
-                                                {isDateClosed && (
-                                                    <span className="text-[6px] font-black text-rose-400 uppercase leading-none mt-0.5">Closed</span>
-                                                )}
-                                                {isDateFullyBooked && !isDateClosed && (
-                                                    <span className="text-[6px] font-black text-orange-400 uppercase leading-none mt-0.5">Full</span>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Location Closure Notice */}
-                            {locationClosures.has(toPhDateStr(selectedDate)) && (() => {
-                                const detail = locationClosureDetails.get(toPhDateStr(selectedDate));
-                                return (
-                                    <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-rose-50 to-red-50 rounded-xl border border-rose-200">
-                                        <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center shrink-0">
-                                            <span className="text-sm">🚫</span>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-rose-700 uppercase tracking-wider leading-none mb-0.5">
-                                                {detail?.reason?.startsWith('Court:') ? 'Court Closed' : 'Location Closed'}
-                                            </p>
-                                            <p className="text-[10px] text-rose-600/80 font-medium leading-snug">
-                                                {detail?.reason?.startsWith('Court:') ? detail.reason.replace('Court: ', '') : (detail?.reason || 'Closed')}{detail?.description ? ` — ${detail.description}` : ''}
-                                            </p>
-                                        </div>
+                                    <div className="grid grid-cols-7 gap-1.5">
+                                        {Array.from({ length: 7 }).map((_, i) => {
+                                            const nowPH = getNowPH();
+                                            const date = new Date(nowPH);
+                                            date.setDate(date.getDate() + i);
+                                            const dateStr = toPhDateStr(date);
+                                            const selectedStr = toPhDateStr(selectedDate);
+                                            const isSelected = selectedStr === dateStr;
+                                            const isDateFullyBooked = fullyBookedDates.has(dateStr);
+                                            const isDateClosed = locationClosures.has(dateStr);
+                                            const isUnavailable = isDateFullyBooked || isDateClosed;
+                                            return (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => {
+                                                        if (isUnavailable && !isDateClosed) return;
+                                                        // Allow clicking closed dates to see the closure notice
+                                                        setSelectedDate(date);
+                                                        setSelectedSlot(null);
+                                                        setDailyLimitReached(false);
+                                                        setIsBooked(false);
+                                                    }}
+                                                    disabled={isDateFullyBooked && !isDateClosed}
+                                                    className={`flex flex-col items-center py-2.5 rounded-xl transition-all duration-200 relative ${isSelected && !isUnavailable
+                                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
+                                                        : isSelected && isDateClosed
+                                                            ? 'bg-rose-500 text-white shadow-md shadow-rose-200/50'
+                                                            : isDateClosed
+                                                                ? 'bg-rose-50 text-rose-300 cursor-pointer opacity-70'
+                                                                : isDateFullyBooked
+                                                                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-60'
+                                                                    : 'bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600'
+                                                        }`}
+                                                >
+                                                    <span className={`text-[8px] font-bold uppercase mb-0.5 ${isSelected && !isUnavailable ? 'text-blue-200' : isDateClosed ? 'text-rose-300' : isDateFullyBooked ? 'text-slate-300' : 'text-slate-400'}`}>
+                                                        {date.toLocaleDateString('en-US', { weekday: 'short', timeZone: PH_TIMEZONE }).slice(0, 3)}
+                                                    </span>
+                                                    <span className={`text-sm font-bold ${isUnavailable ? 'line-through' : ''}`}>{date.getDate()}</span>
+                                                    {isDateClosed && (
+                                                        <span className="text-[6px] font-black text-rose-400 uppercase leading-none mt-0.5">Closed</span>
+                                                    )}
+                                                    {isDateFullyBooked && !isDateClosed && (
+                                                        <span className="text-[6px] font-black text-orange-400 uppercase leading-none mt-0.5">Full</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })()}
-
-                            {/* Slots */}
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                    <span>Choose Slot</span>
-                                    <Clock size={14} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto">
-                                    {activeTimeSlots.map(slot => {
-                                        const isBlocked = blockedSlots.has(slot);
-                                        const isBookedSlot = bookedSlots.has(slot);
-                                        const isUserSlot = userBookedSlots.has(slot);
-                                        const userSlotStatus = userBookedSlots.get(slot) || '';
-                                        const isPast = isSlotInPast(slot, selectedDate);
-                                        const isOccupied = isBlocked || isBookedSlot || dailyLimitReached || isPast;
-                                        const isSelected = selectedSlot === slot;
 
-                                        return (
-                                            <button
-                                                key={slot}
-                                                disabled={isOccupied}
-                                                onClick={() => setSelectedSlot(slot)}
-                                                title={
-                                                    isUserSlot ? `Your Slot – ${userSlotStatus}`
-                                                    : isBlocked ? 'Court Locked In by Owner'
-                                                    : isPast ? 'This time has passed'
-                                                    : dailyLimitReached ? 'Limit reached at this location (1/day)'
-                                                    : isBookedSlot ? 'Booked by another player'
-                                                    : 'Available'
-                                                }
-                                                className={`py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all ${
-                                                    isUserSlot
+                                {/* Location Closure Notice */}
+                                {locationClosures.has(toPhDateStr(selectedDate)) && (() => {
+                                    const detail = locationClosureDetails.get(toPhDateStr(selectedDate));
+                                    return (
+                                        <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-rose-50 to-red-50 rounded-xl border border-rose-200">
+                                            <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center shrink-0">
+                                                <span className="text-sm">🚫</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-rose-700 uppercase tracking-wider leading-none mb-0.5">
+                                                    {detail?.reason?.startsWith('Court:') ? 'Court Closed' : 'Location Closed'}
+                                                </p>
+                                                <p className="text-[10px] text-rose-600/80 font-medium leading-snug">
+                                                    {detail?.reason?.startsWith('Court:') ? detail.reason.replace('Court: ', '') : (detail?.reason || 'Closed')}{detail?.description ? ` — ${detail.description}` : ''}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Slots */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                        <span>Choose Slot</span>
+                                        <Clock size={14} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto">
+                                        {activeTimeSlots.map(slot => {
+                                            const isBlocked = blockedSlots.has(slot);
+                                            const isBookedSlot = bookedSlots.has(slot);
+                                            const isUserSlot = userBookedSlots.has(slot);
+                                            const userSlotStatus = userBookedSlots.get(slot) || '';
+                                            const isPast = isSlotInPast(slot, selectedDate);
+                                            const isOccupied = isBlocked || isBookedSlot || dailyLimitReached || isPast;
+                                            const isSelected = selectedSlot === slot;
+
+                                            return (
+                                                <button
+                                                    key={slot}
+                                                    disabled={isOccupied}
+                                                    onClick={() => setSelectedSlot(slot)}
+                                                    title={
+                                                        isUserSlot ? `Your Slot – ${userSlotStatus}`
+                                                            : isBlocked ? 'Court Locked In by Owner'
+                                                                : isPast ? 'This time has passed'
+                                                                    : dailyLimitReached ? 'Limit reached at this location (1/day)'
+                                                                        : isBookedSlot ? 'Booked by another player'
+                                                                            : 'Available'
+                                                    }
+                                                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all ${isUserSlot
                                                         ? 'bg-emerald-50 border-emerald-300 text-emerald-600 cursor-default'
-                                                    : isSelected
-                                                        ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                                                    : isPast
-                                                        ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed line-through'
-                                                    : isBlocked
-                                                        ? 'bg-red-50 border-red-200 text-red-300 cursor-not-allowed'
-                                                    : isOccupied
-                                                        ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
-                                                }`}
-                                            >
-                                                {isUserSlot
-                                                    ? `Your Slot – ${userSlotStatus}`
-                                                    : isBlocked
-                                                        ? '🔒 Court Locked In'
-                                                    : isBookedSlot
-                                                        ? 'Court Locked In'
-                                                        : slotToRange(slot)
-                                                }
-                                            </button>
-                                        );
-                                    })}
+                                                        : isSelected
+                                                            ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                                                            : isPast
+                                                                ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed line-through'
+                                                                : isBlocked
+                                                                    ? 'bg-red-50 border-red-200 text-red-300 cursor-not-allowed'
+                                                                    : isOccupied
+                                                                        ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                                                        }`}
+                                                >
+                                                    {isUserSlot
+                                                        ? `Your Slot – ${userSlotStatus}`
+                                                        : isBlocked
+                                                            ? '🔒 Court Locked In'
+                                                            : isBookedSlot
+                                                                ? 'Court Locked In'
+                                                                : slotToRange(slot)
+                                                    }
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Daily Limit Banner */}
+                                    {dailyLimitReached && (
+                                        <div className="mt-3 p-3 bg-orange-50 rounded-xl border border-orange-200 flex items-start gap-2">
+                                            <AlertCircle size={14} className="text-orange-500 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] text-orange-700 leading-relaxed font-medium">
+                                                You've already booked <span className="font-bold">1 hour</span> at this court location today. Each player is limited to <span className="font-bold">1 booking per court location per day</span>. Choose a different location/date or cancel your existing booking.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Daily Limit Banner */}
-                                {dailyLimitReached && (
-                                    <div className="mt-3 p-3 bg-orange-50 rounded-xl border border-orange-200 flex items-start gap-2">
-                                        <AlertCircle size={14} className="text-orange-500 shrink-0 mt-0.5" />
-                                        <p className="text-[10px] text-orange-700 leading-relaxed font-medium">
-                                            You've already booked <span className="font-bold">1 hour</span> at this court location today. Each player is limited to <span className="font-bold">1 booking per court location per day</span>. Choose a different location/date or cancel your existing booking.
-                                        </p>
+                                {/* Price Summary */}
+                                {selectedSlot && (
+                                    <div className="p-4 bg-slate-900 rounded-xl text-white">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Total Price</span>
+                                            <span className="text-xl font-black">₱{court.pricePerHour}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                                            <CheckCircle2 size={11} className="text-emerald-400" />
+                                            Includes gear storage & locker usage
+                                        </div>
                                     </div>
                                 )}
+
+                                <button
+                                    onClick={handleBooking}
+                                    disabled={!selectedSlot || isProcessing || isBooked || dailyLimitReached || isCourtOwner}
+                                    className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isBooked
+                                        ? 'bg-emerald-500 text-white'
+                                        : isCourtOwner
+                                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                            : dailyLimitReached
+                                                ? 'bg-orange-100 text-orange-500 border border-orange-200 cursor-not-allowed'
+                                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
+                                        }`}
+                                >
+                                    {isProcessing ? <Loader2 size={18} className="animate-spin" /> : (
+                                        isBooked ? (
+                                            <>
+                                                <CheckCircle2 size={18} />
+                                                Booked!
+                                            </>
+                                        ) : isCourtOwner ? (
+                                            <>
+                                                <Ban size={16} />
+                                                Court Owner Cannot Book
+                                            </>
+                                        ) : dailyLimitReached ? (
+                                            <>
+                                                <Ban size={16} />
+                                                Limit Reached (1/location/day)
+                                            </>
+                                        ) : (
+                                            <>
+                                                {user ? 'Proceed to Book' : 'Login to Book'}
+                                                <ArrowRight size={16} />
+                                            </>
+                                        )
+                                    )}
+                                </button>
                             </div>
-
-                            {/* Price Summary */}
-                            {selectedSlot && (
-                                <div className="p-4 bg-slate-900 rounded-xl text-white">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Total Price</span>
-                                        <span className="text-xl font-black">₱{court.pricePerHour}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
-                                        <CheckCircle2 size={11} className="text-emerald-400" />
-                                        Includes gear storage & locker usage
-                                    </div>
-                                </div>
-                            )}
-
-                            <button
-                                onClick={handleBooking}
-                                disabled={!selectedSlot || isProcessing || isBooked || dailyLimitReached || isCourtOwner}
-                                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isBooked
-                                    ? 'bg-emerald-500 text-white'
-                                    : isCourtOwner
-                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                    : dailyLimitReached
-                                        ? 'bg-orange-100 text-orange-500 border border-orange-200 cursor-not-allowed'
-                                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
-                                    }`}
-                            >
-                                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : (
-                                    isBooked ? (
-                                        <>
-                                            <CheckCircle2 size={18} />
-                                            Booked!
-                                        </>
-                                    ) : isCourtOwner ? (
-                                        <>
-                                            <Ban size={16} />
-                                            Court Owner Cannot Book
-                                        </>
-                                    ) : dailyLimitReached ? (
-                                        <>
-                                            <Ban size={16} />
-                                            Limit Reached (1/location/day)
-                                        </>
-                                    ) : (
-                                        <>
-                                            {user ? 'Proceed to Book' : 'Login to Book'}
-                                            <ArrowRight size={16} />
-                                        </>
-                                    )
-                                )}
-                            </button>
-                        </div>
                         )}
 
                         <div className="bg-amber-50 rounded-xl p-4 border border-amber-100/80 flex gap-3">
@@ -1266,7 +1251,7 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>,
-            document.body)}
+                document.body)}
 
             {/* Payment Modal */}
             {showPaymentModal && ReactDOM.createPortal(
@@ -1333,7 +1318,7 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>,
-            document.body)}
+                document.body)}
 
             {/* Location Entry Confirmation Modal */}
             {showLocationEntryModal && !locationConfirmed && court && ReactDOM.createPortal(
@@ -1443,7 +1428,7 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>,
-            document.body)}
+                document.body)}
 
             {showReceiptModal && selectedBookingForReceipt && (
                 <Receipt
@@ -1509,7 +1494,7 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>,
-            document.body)}
+                document.body)}
 
             {/* Reviews Modal */}
             {showReviewsModal && ReactDOM.createPortal(
@@ -1586,7 +1571,7 @@ const CourtDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>,
-            document.body)}
+                document.body)}
         </div>
     );
 };
