@@ -1088,27 +1088,54 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
 
         <div className="space-y-6">
-          {userRole !== 'ADMIN' && (authorizedProRoles.length < 2) && !isLoading && (
-            <div className="bg-blue-600 p-8 rounded-3xl text-white shadow-2xl shadow-blue-100 relative overflow-hidden group border border-blue-500 animate-fade-in">
-              <div className="relative z-10">
-                <h3 className="text-2xl font-black mb-2 flex items-center gap-3 text-white-500 tracking-tighter uppercase">
-                  PRO UPGRADE.
-                </h3>
-                <p className="text-blue-100 text-sm mb-6 leading-relaxed font-medium">
-                  {authorizedProRoles.length === 0
-                    ? "Get certified as a coach or register your court facility to join our network."
-                    : `You are already a ${authorizedProRoles[0].replace('_', ' ')}. Apply for another role to expand your business.`}
-                </p>
-                <button
-                  onClick={() => setShowSubmitConfirm(true)}
-                  className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl hover:bg-lime-400 hover:text-slate-900 transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-lg"
-                >
-                  SUBMIT DOCS <ArrowRight size={16} />
-                </button>
-              </div>
-              <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110" />
-            </div>
+          {/* PRO UPGRADE Card - Skeleton or Content */}
+          {userRole !== 'ADMIN' && (authorizedProRoles.length < 2) && (
+            <>
+              {isLoading ? (
+                <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+                  <Skeleton className="w-40 h-6 mb-4 rounded-xl" />
+                  <Skeleton className="w-full h-4 mb-2 rounded-lg" />
+                  <Skeleton className="w-3/4 h-4 mb-6 rounded-lg" />
+                  <Skeleton className="w-full h-14 rounded-2xl" />
+                  <Skeleton className="w-32 h-3 mx-auto mt-4 rounded-lg" />
+                </div>
+              ) : (
+                <div className="bg-gradient-to-br from-lime-500 via-green-500 to-emerald-600 p-8 rounded-3xl shadow-2xl shadow-lime-100 relative overflow-hidden group animate-fade-in">
+                  {/* Decorative Elements */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
+                  
+                  <div className="relative z-10">
+                    <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">
+                      PRO UPGRADE.
+                    </h3>
+                    <p className="text-lime-50 text-sm mb-6 leading-relaxed font-medium">
+                      {authorizedProRoles.length === 0
+                        ? "Get certified as a coach or register your court facility to join our network."
+                        : `You are already a ${authorizedProRoles[0].replace('_', ' ')}. Apply for another role to expand your business.`}
+                    </p>
+                    <button
+                      onClick={() => setShowSubmitConfirm(true)}
+                      className="w-full bg-white text-lime-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
+                    >
+                      <Award size={18} className="group-hover/button:rotate-12 transition-transform" />
+                      SUBMIT DOCS
+                      <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
+                    </button>
+                    
+                    <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
+                      <Sparkles size={12} className="text-white/80" />
+                      Unlock professional features
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
+
+          {/* ADMIN ACTIONS Card */}
           {userRole === 'ADMIN' && !isLoading && (
             <div className="bg-slate-800 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group border border-slate-700 animate-fade-in">
               <div className="relative z-10">
@@ -1128,28 +1155,45 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
             </div>
           )}
 
-          <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
-            <h2 className="text-base font-black text-slate-900 mb-6 uppercase tracking-tighter leading-none">Meta Updates</h2>
-            <div className="space-y-5">
-              {announcements.length > 0 ? (
-                announcements.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                      <Megaphone size={18} />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm leading-tight">{item.title}</p>
-                      <p className="text-xs text-slate-500 font-medium line-clamp-1">{item.content}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-xs text-slate-400 font-medium italic">No active announcements.</p>
-                </div>
-              )}
+          {/* NEED HELP Card - Skeleton or Content */}
+          {isLoading ? (
+            <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+              <Skeleton className="w-32 h-6 mb-4 rounded-xl" />
+              <Skeleton className="w-full h-4 mb-2 rounded-lg" />
+              <Skeleton className="w-5/6 h-4 mb-6 rounded-lg" />
+              <Skeleton className="w-full h-14 rounded-2xl" />
+              <Skeleton className="w-36 h-3 mx-auto mt-4 rounded-lg" />
+            </div>
+          ) : (
+            <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            
+            <div className="relative z-10">
+              <h2 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">Need Help?</h2>
+              
+              <p className="text-blue-50 text-sm font-medium leading-relaxed mb-6">
+                Have questions about Pickleplay? Check out our frequently asked questions for quick answers and helpful tips.
+              </p>
+              
+              <button
+                onClick={() => navigate('/faq')}
+                className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
+              >
+                <BookOpen size={18} className="group-hover/button:rotate-12 transition-transform" />
+                View FAQ
+                <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
+              </button>
+              
+              <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
+                <Sparkles size={12} className="text-white/80" />
+                Quick answers & guidance
+              </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
