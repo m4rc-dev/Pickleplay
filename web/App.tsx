@@ -39,14 +39,16 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  Shield
+  Shield,
+  MessageCircle,
+  Users
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 
 import Home from './components/Home';
 import Dashboard from './components/Dashboard';
 import Booking from './components/Booking';
-import Community from './components/Community';
+import Community, { GroupDetail, GroupManage } from './components/community';
 import Rankings from './components/Rankings';
 import AdminDashboard from './components/AdminDashboard';
 import Tournaments from './components/Tournaments';
@@ -66,7 +68,9 @@ import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import ChatbotButton from './components/ChatbotButton';
-
+import FindPartners from './components/partners/FindPartners';
+import DirectMessages from './components/partners/DirectMessages';
+import Others from './components/Others';
 
 // Guides Components
 import GuidesIndex from './components/guides/GuidesIndex';
@@ -130,21 +134,22 @@ const NotificationPanel: React.FC<{
 const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
+  const isPrimaryBook = !isMobile && to === '/booking';
 
   return (
     <Link
       to={to}
       onClick={onClick}
-      className={`flex items-center gap-3 p-3.5 rounded-2xl transition-all duration-300 group ${isActive
+      className={`flex items-center gap-3 ${isPrimaryBook ? 'p-5' : 'p-3.5'} rounded-2xl transition-all duration-300 group ${isActive
         ? isMobile ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/95 text-slate-900 shadow-lg'
-        : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : 'text-white/80 hover:bg-white/10 hover:text-white'
-        } ${isCollapsed ? 'justify-center' : ''}`}
+        : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/80 hover:bg-white/10 hover:text-white'}`
+        } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''}`}
     >
-      <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
+      <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'}`}>
         {icon}
       </div>
       {!isCollapsed && (
-        <span className="font-black text-[13px] uppercase tracking-widest animate-in fade-in slide-in-from-left-2 duration-300">
+        <span className={`font-black ${isPrimaryBook ? 'text-[14px]' : 'text-[13px]'} uppercase tracking-widest animate-in fade-in slide-in-from-left-2 duration-300`}>
           {label}
         </span>
       )}
@@ -278,6 +283,7 @@ const NavigationHandler: React.FC<{
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isOthersOpen, setIsOthersOpen] = useState(true);
   const scrollContainerRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -378,7 +384,9 @@ const NavigationHandler: React.FC<{
           </div>
 
           <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
-            <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+            {role !== 'PLAYER' && (
+              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+            )}
             {role === 'ADMIN' && (
               <div className="relative space-y-1.5">
                 <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
@@ -388,12 +396,60 @@ const NavigationHandler: React.FC<{
             )}
             {role === 'PLAYER' && (
               <>
-                <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                {/* ── PRIMARY FEATURE: Book Courts ── */}
+                {isSidebarCollapsed ? (
+                  <Link to="/booking" className="flex justify-center items-center p-3 rounded-2xl bg-lime-400/20 hover:bg-lime-400/30 text-lime-300 transition-all duration-300 group">
+                    <div className="transition-transform duration-300 group-hover:scale-110">
+                      <Calendar size={24} />
+                    </div>
+                  </Link>
+                ) : (
+                  <Link
+                    to="/booking"
+                    className={`block rounded-2xl transition-all duration-300 group ${
+                      location.pathname === '/booking'
+                        ? 'bg-lime-400 shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
+                        : 'bg-gradient-to-br from-lime-400/90 to-lime-500/80 hover:from-lime-400 hover:to-lime-500 shadow-[0_6px_24px_-4px_rgba(163,230,53,0.4)] hover:shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
+                    } active:scale-95`}
+                  >
+                    <div className="flex items-center gap-3.5 px-5 py-4">
+                      <div className="shrink-0 w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                        <Calendar size={22} className="text-slate-900" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-[14px] uppercase tracking-widest text-slate-900 leading-none">Book Courts</p>
+                        <p className="text-[10px] font-semibold text-slate-700/80 mt-0.5">Reserve your court now</p>
+                      </div>
+                      <ArrowRight size={16} className="text-slate-900/60 shrink-0 transition-transform duration-300 group-hover:translate-x-1" />
+                    </div>
+                  </Link>
+                )}
+                <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                {/* Others group (collapsible) */}
+                <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+                  <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
+                    <button
+                      onClick={() => setIsOthersOpen(v => !v)}
+                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/80' : 'text-white/60 hover:text-white/80'}`}
+                      aria-expanded={isOthersOpen}
+                      aria-controls="others-group"
+                    >
+                      <span>Others</span>
+                      <ChevronDown size={14} className={`transition-transform duration-300 ${isOthersOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isOthersOpen && (
+                      <div id="others-group" className="mt-2 space-y-2 pl-2">
+                        <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                        <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                        <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                        <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </>
             )}
             {role === 'COACH' && (
@@ -645,15 +701,18 @@ const NavigationHandler: React.FC<{
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X size={24} /></button>
             </div>
             <nav className="flex-1 space-y-2 overflow-y-auto scrollbar-hide py-2">
-              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+              {role !== 'PLAYER' && (
+                <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+              )}
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
                 <>
                   <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               {role === 'COACH' && (
@@ -702,13 +761,18 @@ const NavigationHandler: React.FC<{
       )}
 
       <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
-        <div className={`${role === 'guest' || isAuthPage
-          ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
-          : `${location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4 md:p-8 lg:p-14'} max-w-[1920px] mx-auto w-full`
-          } transition-colors duration-300`}>
+        <div className={`${role === 'guest' || isAuthPage ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '') : `${location.pathname === '/booking' || location.pathname.startsWith('/community/groups/') ? 'p-0' : location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4'} ${location.pathname.startsWith('/community/groups/') ? '' : 'md:p-8 lg:p-14 max-w-[1920px] mx-auto'} w-full`} transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>
-              <Route path="/" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <Home /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/" element={
+                isTwoFactorPending
+                  ? <Navigate to="/verify-2fa" replace />
+                  : role === 'guest'
+                    ? <Home />
+                    : role === 'PLAYER'
+                      ? <Navigate to="/booking" replace />
+                      : <Navigate to="/dashboard" replace />
+              } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
@@ -728,6 +792,11 @@ const NavigationHandler: React.FC<{
               <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Tournaments /> : <Navigate to="/" />} />
               <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
+              <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
+              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FindPartners /> : <Navigate to="/" />} />
+              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
+              <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
               <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
               <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
               <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />

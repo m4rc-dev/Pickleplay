@@ -50,6 +50,8 @@ import {
 import { UserRole, ProfessionalApplication } from '../types';
 import { Skeleton } from './ui/Skeleton';
 import { calculateGraceDaysRemaining, isInGracePeriod, isHardLocked } from '../services/subscriptions';
+import BookCourtHero from './ui/BookCourtHero';
+import CourtDiscoveryStrip from './ui/CourtDiscoveryStrip';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -910,6 +912,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         )}
       </div>
 
+      {/* Primary booking CTA & discovery visible above the fold (PLAYER) */}
+      {userRole === 'PLAYER' && (
+        <div className="space-y-4">
+          <BookCourtHero />
+          <CourtDiscoveryStrip />
+        </div>
+      )}
 
       {/* Active Trial Banner - Days 1-30 */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
