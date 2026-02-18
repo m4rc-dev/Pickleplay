@@ -66,6 +66,8 @@ import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import ChatbotButton from './components/ChatbotButton';
+import Invitations from './components/Invitations';
+import Achievements from './components/Achievements';
 
 
 // Guides Components
@@ -278,6 +280,7 @@ const NavigationHandler: React.FC<{
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const scrollContainerRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -321,7 +324,12 @@ const NavigationHandler: React.FC<{
   const headerActive = isScrolled || !isHomePage;
 
   const onLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
     handleLogout();
+    setShowLogoutModal(false);
     setIsMobileMenuOpen(false);
     navigate('/');
   };
@@ -722,6 +730,8 @@ const NavigationHandler: React.FC<{
               <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
               <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FAQ /> : <Navigate to="/" />} />
+              <Route path="/invitations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Invitations /> : <Navigate to="/" />} />
+              <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements /> : <Navigate to="/" />} />
               <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
               <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <CourtDetail />} />
@@ -781,6 +791,40 @@ const NavigationHandler: React.FC<{
           onConfirm={handleConfirmUsername}
           isLoading={isUpdatingUsername}
         />
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-8 text-center bg-slate-50">
+              <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 bg-rose-100 text-rose-600">
+                <LogOut size={40} />
+              </div>
+              <h3 className="text-2xl font-black uppercase tracking-tighter mb-2 text-slate-900">
+                Confirm Logout
+              </h3>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                Are you sure you want to log out? You'll need to sign in again to access your account.
+              </p>
+            </div>
+            <div className="p-6 bg-white flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all bg-slate-100 text-slate-700 hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all bg-rose-600 text-white shadow-lg shadow-rose-100 hover:bg-rose-700 hover:shadow-rose-200"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

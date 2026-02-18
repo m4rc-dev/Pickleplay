@@ -44,7 +44,9 @@ import {
   MapPin,
   Sparkles,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Gift,
+  UserPlus
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole, ProfessionalApplication } from '../types';
@@ -862,14 +864,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   };
 
   return (
-    <div className="space-y-8 md:space-y-10 animate-fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-6 md:space-y-8 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <div className={`w-2 h-2 rounded-full bg-${themeColor}-500 animate-pulse`} />
             <p className={`text-[10px] font-black text-${themeColor}-600 uppercase tracking-[0.3em]`}>Session: {userRole.replace('_', ' ')}</p>
           </div>
-          <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-tight">
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter uppercase leading-tight">
             {userName ? `Welcome, ${userName.split(' ')[0]}` : 'Pickleball Intelligence'}
           </h1>
         </div>
@@ -1033,11 +1035,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       )}
 
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {renderRoleMetrics()}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Chart + Sidebar Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+        {/* Chart */}
         <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
@@ -1087,7 +1091,70 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           </div>
         </div>
 
+        {/* Sidebar Column - Invitations inbox for PLAYER, Action cards for others */}
         <div className="space-y-6">
+          {/* PLAYER: Invitations Inbox Card */}
+          {userRole === 'PLAYER' && (
+            <>
+              {isLoading ? (
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm space-y-4">
+                  <Skeleton className="w-40 h-6 mb-2 rounded-xl" />
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50">
+                      <Skeleton className="w-10 h-10 rounded-xl" />
+                      <div className="flex-1 space-y-1.5"><Skeleton className="w-28 h-4 rounded-lg" /><Skeleton className="w-40 h-3 rounded-lg" /></div>
+                    </div>
+                  ))}
+                  <Skeleton className="w-full h-12 rounded-2xl" />
+                </div>
+              ) : (
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-base font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+                      <UserPlus size={18} className="text-slate-900" />
+                      Invitations
+                    </h2>
+                    <button
+                      onClick={() => navigate('/invitations')}
+                      className="text-[10px] font-black text-slate-900 uppercase tracking-widest hover:text-slate-700 flex items-center gap-1"
+                    >
+                      View All <ArrowRight size={12} />
+                    </button>
+                  </div>
+                  {announcements.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {announcements.slice(0, 3).map((item: any) => (
+                        <div key={item.id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:border-purple-200 hover:bg-purple-50/30 transition-all cursor-pointer group/item">
+                          <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 group-hover/item:scale-105 transition-transform">
+                            <UserPlus size={18} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-slate-800 text-sm leading-tight truncate">{item.title}</p>
+                            <p className="text-[10px] text-slate-400 font-medium truncate">{item.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6">
+                      <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <UserPlus className="text-slate-300" size={22} />
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold">No invitations yet</p>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => navigate('/invitations')}
+                    className="w-full mt-4 bg-lime-500 hover:bg-lime-600 text-slate-900 font-black py-3.5 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-lg shadow-lime-100 hover:shadow-xl hover:shadow-lime-200"
+                  >
+                    <UserPlus size={16} />
+                    Invite Players
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
           {/* PRO UPGRADE Card - Skeleton or Content */}
           {userRole !== 'ADMIN' && (authorizedProRoles.length < 2) && (
             <>
@@ -1097,38 +1164,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <Skeleton className="w-full h-4 mb-2 rounded-lg" />
                   <Skeleton className="w-3/4 h-4 mb-6 rounded-lg" />
                   <Skeleton className="w-full h-14 rounded-2xl" />
-                  <Skeleton className="w-32 h-3 mx-auto mt-4 rounded-lg" />
                 </div>
               ) : (
-                <div className="bg-gradient-to-br from-lime-500 via-green-500 to-emerald-600 p-8 rounded-3xl shadow-2xl shadow-lime-100 relative overflow-hidden group animate-fade-in">
-                  {/* Decorative Elements */}
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
-                  
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden group animate-fade-in">
+                  <Trophy className="absolute -bottom-6 -right-6 w-24 h-24 text-slate-100 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
                   <div className="relative z-10">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">
-                      PRO UPGRADE.
-                    </h3>
-                    <p className="text-lime-50 text-sm mb-6 leading-relaxed font-medium">
+                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">PRO UPGRADE.</h3>
+                    <p className="text-slate-500 text-xs mb-4 leading-relaxed font-medium">
                       {authorizedProRoles.length === 0
-                        ? "Get certified as a coach or register your court facility to join our network."
-                        : `You are already a ${authorizedProRoles[0].replace('_', ' ')}. Apply for another role to expand your business.`}
+                        ? "Get certified as a coach or register your court facility."
+                        : `Already a ${authorizedProRoles[0].replace('_', ' ')}. Apply for another role.`}
                     </p>
                     <button
                       onClick={() => setShowSubmitConfirm(true)}
-                      className="w-full bg-white text-lime-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
+                      className="w-full bg-blue-600 text-white font-black py-3 px-5 rounded-xl transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 hover:shadow-xl group/button"
                     >
-                      <Award size={18} className="group-hover/button:rotate-12 transition-transform" />
-                      SUBMIT DOCS
-                      <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
+                      <Award size={16} className="group-hover/button:rotate-12 transition-transform" />
+                      Submit Docs <ArrowRight size={14} className="group-hover/button:translate-x-1 transition-transform" />
                     </button>
-                    
-                    <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
-                      <Sparkles size={12} className="text-white/80" />
-                      Unlock professional features
-                    </div>
                   </div>
                 </div>
               )}
@@ -1137,108 +1190,106 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
           {/* ADMIN ACTIONS Card */}
           {userRole === 'ADMIN' && !isLoading && (
-            <div className="bg-slate-800 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group border border-slate-700 animate-fade-in">
+            <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-2xl relative overflow-hidden group border border-slate-700 animate-fade-in">
               <div className="relative z-10">
-                <h3 className="text-2xl font-black mb-2 flex items-center gap-3 text-lime-400 tracking-tighter uppercase">
-                  ADMIN ACTIONS
-                </h3>
-                <p className="text-slate-300 text-sm mb-6 leading-relaxed font-medium">
-                  Manage platform settings and user roles from the admin console.
-                </p>
+                <h3 className="text-lg font-black mb-2 flex items-center gap-2 text-lime-400 tracking-tighter uppercase">ADMIN ACTIONS</h3>
+                <p className="text-slate-300 text-xs mb-4 leading-relaxed font-medium">Manage platform settings and user roles.</p>
                 <button
                   onClick={() => navigate('/admin')}
-                  className="w-full bg-white/90 text-slate-900 font-black py-4 px-6 rounded-2xl hover:bg-lime-400 transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-lg"
+                  className="w-full bg-white/90 text-slate-900 font-black py-3 px-5 rounded-xl hover:bg-lime-400 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-lg"
                 >
-                  GO TO CONSOLE <Shield size={16} />
+                  GO TO CONSOLE <Shield size={14} />
                 </button>
               </div>
             </div>
           )}
 
-          {/* NEED HELP Card - Skeleton or Content */}
+          {/* NEED HELP / FAQ Card */}
           {isLoading ? (
-            <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-sm">
-              <Skeleton className="w-32 h-6 mb-4 rounded-xl" />
-              <Skeleton className="w-full h-4 mb-2 rounded-lg" />
-              <Skeleton className="w-5/6 h-4 mb-6 rounded-lg" />
-              <Skeleton className="w-full h-14 rounded-2xl" />
-              <Skeleton className="w-36 h-3 mx-auto mt-4 rounded-lg" />
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
+              <Skeleton className="w-32 h-5 mb-3 rounded-xl" />
+              <Skeleton className="w-full h-3.5 mb-2 rounded-lg" />
+              <Skeleton className="w-5/6 h-3.5 mb-4 rounded-lg" />
+              <Skeleton className="w-full h-12 rounded-2xl" />
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            
-            <div className="relative z-10">
-              <h2 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">Need Help?</h2>
-              
-              <p className="text-blue-50 text-sm font-medium leading-relaxed mb-6">
-                Have questions about Pickleplay? Check out our frequently asked questions for quick answers and helpful tips.
-              </p>
-              
-              <button
-                onClick={() => navigate('/faq')}
-                className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
-              >
-                <BookOpen size={18} className="group-hover/button:rotate-12 transition-transform" />
-                View FAQ
-                <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
-              </button>
-              
-              <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
-                <Sparkles size={12} className="text-white/80" />
-                Quick answers & guidance
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden group animate-fade-in">
+              <BookOpen className="absolute -bottom-5 -right-5 w-20 h-20 text-slate-100 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
+              <div className="relative z-10">
+                <h2 className="text-base font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">Need Help?</h2>
+                <p className="text-slate-500 text-xs font-medium leading-relaxed mb-4">
+                  Check out our FAQ for quick answers and helpful tips.
+                </p>
+                <button
+                  onClick={() => navigate('/faq')}
+                  className="w-full bg-blue-600 text-white font-black py-3 px-5 rounded-xl transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 hover:shadow-xl group/button"
+                >
+                  <BookOpen size={16} className="group-hover/button:rotate-12 transition-transform" />
+                  View FAQ <ArrowRight size={14} className="group-hover/button:translate-x-1 transition-transform" />
+                </button>
               </div>
             </div>
-          </div>
           )}
         </div>
       </div>
 
+      {/* Player: Achievements Quick Access */}
+      {userRole === 'PLAYER' && !isLoading && (
+        <div
+          onClick={() => navigate('/achievements')}
+          className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-6 md:p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in cursor-pointer transition-all duration-300"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h3 className="text-xl md:text-2xl font-black text-white mb-2 tracking-tight uppercase">Achievements</h3>
+              <p className="text-blue-50 text-sm font-medium leading-relaxed max-w-xl">
+                Track your badges, earn achievement points, and collect digital certificates.
+              </p>
+            </div>
+            <button className="shrink-0 bg-white text-blue-600 font-black px-6 md:px-8 py-3.5 md:py-4 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl transition-all flex items-center gap-2 md:gap-3 group/button">
+              <Trophy size={18} className="group-hover/button:rotate-12 transition-transform" />
+              View Progress
+            </button>
+          </div>
+        </div>
+      )}
+
       {userRole === 'PLAYER' && !isLoading && (recentLessons.length > 0 || recentCourts.length > 0) && (
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
           {recentLessons.length > 0 && (
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-                  <History className="text-rose-600" /> Recent Coaching
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-base font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+                  <History size={18} className="text-rose-600" /> Recent Coaching
                 </h2>
-                <Link to="/schedule" className="text-xs font-bold text-rose-600 hover:gap-3 transition-all flex items-center gap-2">
-                  View All <ArrowRight size={14} />
+                <Link to="/schedule" className="text-[10px] font-black text-rose-600 uppercase tracking-widest hover:text-rose-700 flex items-center gap-1">
+                  View All <ArrowRight size={12} />
                 </Link>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-3">
                 {recentLessons.map((lesson) => (
-                  <div key={lesson.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
-                    <div className="flex items-center gap-4 mb-4">
-                      <img
-                        src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
-                        className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
-                        alt="Coach"
-                      />
-                      <div>
-                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{lesson.coach?.full_name || 'Coach'}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{lesson.date} • {lesson.time}</p>
-                      </div>
+                  <div key={lesson.id} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-rose-200 hover:bg-rose-50/30 transition-all group/lesson">
+                    <img
+                      src={lesson.coach?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${lesson.coach_id}`}
+                      className="w-11 h-11 rounded-xl object-cover shadow-sm bg-white shrink-0 group-hover/lesson:scale-105 transition-transform"
+                      alt="Coach"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-800 text-sm leading-tight truncate">{lesson.coach?.full_name || 'Coach'}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">{lesson.date} • {lesson.time}</p>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' :
-                        lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                          'bg-slate-200 text-slate-600'
-                        }`}>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${lesson.status === 'confirmed' ? 'bg-lime-100 text-lime-700' : lesson.status === 'completed' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
                         {lesson.status}
                       </span>
                       {lesson.status === 'completed' && (
                         <button
-                          onClick={() => {
-                            setSelectedLessonForReview(lesson);
-                            setIsReviewModalOpen(true);
-                          }}
-                          className="text-[10px] font-black text-white bg-rose-600 px-4 py-2 rounded-xl hover:bg-rose-700 transition-all flex items-center gap-2"
+                          onClick={() => { setSelectedLessonForReview(lesson); setIsReviewModalOpen(true); }}
+                          className="text-[9px] font-black text-white bg-rose-600 px-3 py-1.5 rounded-lg hover:bg-rose-700 transition-all flex items-center gap-1.5"
                         >
-                          <Star size={12} fill="currentColor" /> Rate Coach
+                          <Star size={10} fill="currentColor" /> Rate
                         </button>
                       )}
                     </div>
@@ -1249,52 +1300,45 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           )}
 
           {recentCourts.length > 0 && (
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200/60 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-                  <Building2 className="text-blue-600" /> Recent Court Sessions
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-base font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+                  <Building2 size={18} className="text-blue-600" /> Recent Court Sessions
                 </h2>
-                <Link to="/bookings" className="text-xs font-bold text-blue-600 hover:gap-3 transition-all flex items-center gap-2">
-                  All Bookings <ArrowRight size={14} />
+                <Link to="/bookings" className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-700 flex items-center gap-1">
+                  All Bookings <ArrowRight size={12} />
                 </Link>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-3">
                 {recentCourts.map((booking) => (
-                  <div key={booking.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
-                    <div className="flex items-center gap-4 mb-4">
-                      {booking.court?.image_url ? (
-                        <img
-                          src={booking.court.image_url}
-                          className="w-12 h-12 rounded-2xl object-cover shadow-sm bg-white"
-                          alt="Court"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center shadow-sm">
-                          <MapPin size={24} className="text-blue-600" />
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{booking.court?.name || 'Pickleball Court'}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{booking.booking_date} • {booking.start_time}</p>
+                  <div key={booking.id} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all group/booking">
+                    {booking.court?.image_url ? (
+                      <img
+                        src={booking.court.image_url}
+                        className="w-11 h-11 rounded-xl object-cover shadow-sm bg-white shrink-0 group-hover/booking:scale-105 transition-transform"
+                        alt="Court"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shadow-sm shrink-0">
+                        <MapPin size={20} className="text-blue-600" />
                       </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-800 text-sm leading-tight truncate">{booking.court?.name || 'Pickleball Court'}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">{booking.booking_date} • {booking.start_time}</p>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-[9px] font-black uppercase tracking-widest">
-                        Finished
-                      </span>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-widest">Finished</span>
                       {!booking.has_review ? (
                         <button
-                          onClick={() => {
-                            setSelectedCourtForReview(booking);
-                            setIsCourtReviewModalOpen(true);
-                          }}
-                          className="text-[10px] font-black text-white bg-blue-600 px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                          onClick={() => { setSelectedCourtForReview(booking); setIsCourtReviewModalOpen(true); }}
+                          className="text-[9px] font-black text-white bg-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-all flex items-center gap-1.5"
                         >
-                          <Star size={12} fill="currentColor" /> Rate Court
+                          <Star size={10} fill="currentColor" /> Rate
                         </button>
                       ) : (
-                        <span className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
-                          <Check size={12} /> Reviewed
+                        <span className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase">
+                          <Check size={10} /> Reviewed
                         </span>
                       )}
                     </div>

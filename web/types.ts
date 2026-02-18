@@ -263,3 +263,97 @@ export interface SubscriptionPlan {
   created_at?: string;
   updated_at?: string;
 }
+
+// Player Invitation System
+export interface PlayerInvitation {
+  id: string;
+  booking_id: string;
+  inviter_id: string;
+  invitee_id?: string | null;
+  invitee_email?: string | null;
+  invitee_username?: string | null;
+  invitation_method: 'username' | 'email' | 'link' | 'qr' | 'social';
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  invitation_link?: string;
+  qr_code_data?: string;
+  message?: string;
+  created_at?: string;
+  responded_at?: string;
+  expires_at?: string;
+  inviter?: { full_name: string; avatar_url: string; username: string };
+  invitee?: { full_name: string; avatar_url: string; username: string };
+  booking?: {
+    booking_date: string;
+    start_time: string;
+    end_time: string;
+    court?: { name: string; location?: string };
+  };
+}
+
+export interface BookingWaitingList {
+  id: string;
+  booking_id: string;
+  user_id: string;
+  position: number;
+  joined_at?: string;
+  notified: boolean;
+  user?: { full_name: string; avatar_url: string };
+}
+
+// Achievements & Certificates
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  badge_icon?: string;
+  badge_color?: string;
+  category: 'milestone' | 'skill' | 'social' | 'attendance' | 'special';
+  requirement_type: 'matches_played' | 'hours_played' | 'rating' | 'attendance_rate' | 'streak' | 'opponents' | 'tournaments';
+  requirement_value: number;
+  points_reward: number;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface PlayerAchievement {
+  id: string;
+  user_id: string;
+  achievement_id: string;
+  earned_at?: string;
+  progress: number;
+  is_completed: boolean;
+  achievement?: Achievement;
+}
+
+export interface Certificate {
+  id: string;
+  user_id: string;
+  certificate_type: 'achievement' | 'tournament' | 'milestone' | 'special';
+  title: string;
+  description?: string;
+  template_name?: string;
+  certificate_data?: Record<string, any>;
+  certificate_url?: string;
+  issued_at?: string;
+  certificate_number?: string;
+  is_public: boolean;
+}
+
+export interface PlayerStats {
+  id: string;
+  user_id: string;
+  total_matches: number;
+  matches_completed: number;
+  total_hours_played: number;
+  win_count: number;
+  loss_count: number;
+  attendance_rate: number;
+  current_streak: number;
+  longest_streak: number;
+  unique_opponents: number;
+  tournaments_played: number;
+  tournaments_won: number;
+  total_points: number;
+  last_played_at?: string;
+  updated_at?: string;
+}
