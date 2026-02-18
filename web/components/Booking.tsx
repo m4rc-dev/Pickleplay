@@ -1515,7 +1515,7 @@ const Booking: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
           {/* ═══ LEFT COLUMN ═══ */}
-          <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'} transition-all duration-300`}>
+          <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'} transition-all duration-300`}>
             {/* Desktop Search Bar */}
             <form
               onSubmit={(e) => {
@@ -2032,7 +2032,7 @@ const Booking: React.FC = () => {
           </div>
 
           {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL / SCHEDULE ═══ */}
-          <div className={`lg:col-span-3 xl:col-span-1 transition-all duration-300 hidden md:block`}>
+          <div className={`lg:col-span-3 xl:col-span-3 transition-all duration-300 hidden md:block`}>
             <div className="md:rounded-2xl md:border md:border-slate-200 md:shadow-sm overflow-hidden relative md:sticky md:top-8 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
               {/* ── Map — always in DOM so Google Maps never loses its container ── */}
