@@ -889,10 +889,10 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* ──────────── MAIN CONTENT GRID ──────────── */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-2 gap-0 lg:gap-6 xl:gap-8 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
                     {/* ═══ LEFT COLUMN ═══ */}
-                    <div className={`lg:col-span-2 xl:col-span-1 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
                         {/* Desktop Search Bar */}
                         <form
                             onSubmit={(e) => {
@@ -1254,7 +1254,7 @@ const GuestBooking: React.FC = () => {
                     </div>
 
                     {/* ═══ RIGHT COLUMN — MAP ═══ */}
-                    <div className={`lg:col-span-3 xl:col-span-1 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-3 xl:col-span-3 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
                         <div className={`md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 transition-all duration-300 ${viewMode === 'list' ? 'h-0 md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)] opacity-100'}`}>
                             {isLoading ? (
                                 <div className="h-full bg-slate-100 flex items-center justify-center">
