@@ -326,10 +326,11 @@ const NavigationHandler: React.FC<{
 
   const headerActive = isScrolled || !isHomePage;
 
-  const onLogoutClick = () => {
-    handleLogout();
+  const onLogoutClick = async () => {
     setIsMobileMenuOpen(false);
-    navigate('/');
+    await handleLogout();
+    window.location.hash = '#/login';
+    window.location.reload();
   };
 
   const toggleNotifications = () => {
@@ -341,8 +342,13 @@ const NavigationHandler: React.FC<{
   };
 
   const handleNotificationClick = (notification: Notification) => {
-    if (notification.bookingId) {
-      navigate('/bookings-admin');
+    if (notification.type === 'BOOKING' && notification.bookingId) {
+      // Court owners go to bookings admin, players go to my bookings
+      if (role === 'COURT_OWNER' || role === 'ADMIN') {
+        navigate('/bookings-admin');
+      } else {
+        navigate('/my-bookings');
+      }
     }
     // Add more navigation logic for other notification types if needed
     setIsNotificationsOpen(false); // Close panel after clicking
@@ -760,7 +766,7 @@ const NavigationHandler: React.FC<{
         </header>
       )}
 
-      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? '#020617' : '#EBEBE6' }}>
         <div className={`${role === 'guest' || isAuthPage
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
           : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
@@ -1227,26 +1233,48 @@ const App: React.FC = () => {
       if (session?.user) {
         const { data: notifs, error: notifError } = await supabase
           .from('notifications')
-          .select('*, profiles!notifications_actor_id_fkey(full_name, avatar_url)')
+          .select('*')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
           .limit(20);
 
+        console.log('Notifications fetch result:', { count: notifs?.length, error: notifError });
+
+        if (notifError) {
+          console.error('Notification fetch error:', notifError);
+        }
+
         if (!notifError && notifs) {
-          const mappedNotifs: Notification[] = notifs.map(n => ({
-            id: n.id,
-            type: n.type as any,
-            message: n.message,
-            actor: {
-              name: n.profiles?.full_name || 'System',
-              avatar: n.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${n.actor_id}`,
-              id: n.actor_id
-            },
-            timestamp: n.created_at,
-            isRead: n.is_read,
-            bookingId: n.booking_id,
-            metadata: n.metadata
-          }));
+          // Fetch actor profiles separately
+          const actorIds = [...new Set(notifs.map(n => n.actor_id).filter(Boolean))];
+          let profilesMap: Record<string, { full_name: string; avatar_url: string }> = {};
+          if (actorIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url')
+              .in('id', actorIds);
+            if (profiles) {
+              profilesMap = Object.fromEntries(profiles.map(p => [p.id, p]));
+            }
+          }
+
+          const mappedNotifs: Notification[] = notifs.map(n => {
+            const actorProfile = profilesMap[n.actor_id];
+            return {
+              id: n.id,
+              type: n.type as any,
+              message: n.message,
+              actor: {
+                name: actorProfile?.full_name || n.title || 'System',
+                avatar: actorProfile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${n.actor_id}`,
+                id: n.actor_id
+              },
+              timestamp: n.created_at,
+              isRead: n.is_read,
+              bookingId: n.booking_id,
+              metadata: n.metadata
+            };
+          });
           setNotifications(mappedNotifs);
         }
       }
@@ -1504,12 +1532,16 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
     localStorage.removeItem('two_factor_pending');
     localStorage.removeItem('auth_redirect');
     localStorage.removeItem('active_role');
+    localStorage.setItem('came_from_logout', 'true');
     setRole('guest');
     setAuthorizedProRoles([]);
+    setUserName(null);
+    setUserAvatar(null);
+    setCurrentUserId(null);
+    await supabase.auth.signOut();
   };
 
   const handleFollow = async (userId: string, userName: string) => {

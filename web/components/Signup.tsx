@@ -192,38 +192,43 @@ const Signup: React.FC = () => {
     /* ── Success ── */
     if (success) {
         return (
-            <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-100 flex items-center justify-center px-4">
+            <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center px-4">
                 <div className="text-center space-y-5 max-w-sm">
                     <div className="inline-flex items-center justify-center w-20 h-20 bg-lime-400 rounded-full shadow-xl shadow-lime-400/30 animate-bounce">
                         <CheckCircle2 size={40} className="text-slate-900" />
                     </div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Account Created!</h1>
-                    <p className="text-slate-500 text-base leading-relaxed">You're all set. Redirecting you to login...</p>
-                    <Loader2 className="animate-spin text-blue-600 mx-auto" size={28} />
+                    <h1 className="text-3xl font-black text-white tracking-tight uppercase">Account Created!</h1>
+                    <p className="text-white/50 text-base leading-relaxed">You're all set. Redirecting you to login...</p>
+                    <Loader2 className="animate-spin text-lime-400 mx-auto" size={28} />
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-100 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-            {/* ── Scattered Ball.png background decorations ── */}
-            <img src="/images/Ball.png" alt="" className="absolute top-[5%] right-[4%] w-16 h-16 opacity-20 -rotate-12 pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[12%] left-[5%] w-12 h-12 opacity-15 rotate-[25deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[38%] right-[6%] w-10 h-10 opacity-[0.12] -rotate-45 pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[52%] left-[3%] w-14 h-14 opacity-20 rotate-[35deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[15%] right-[5%] w-12 h-12 opacity-15 rotate-[15deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[8%] left-[8%] w-10 h-10 opacity-[0.12] -rotate-[55deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[22%] right-[38%] w-8 h-8 opacity-[0.08] rotate-[40deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[32%] left-[25%] w-9 h-9 opacity-[0.10] -rotate-[20deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[68%] right-[22%] w-11 h-11 opacity-15 rotate-[55deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[2%] right-[48%] w-8 h-8 opacity-[0.10] rotate-[20deg] pointer-events-none select-none" />
+        <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+            {/* ── Chromatic gradient blobs ── */}
+            <div className="absolute -top-[20%] -left-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-br from-lime-500/20 via-green-500/15 to-emerald-500/10 blur-[7.5rem] pointer-events-none" />
+            <div className="absolute -bottom-[20%] -right-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-tl from-blue-600/20 via-blue-500/15 to-cyan-500/10 blur-[7.5rem] pointer-events-none" />
+            <div className="absolute top-[30%] left-[50%] -translate-x-1/2 w-[31.25rem] h-[31.25rem] rounded-full bg-gradient-to-r from-lime-400/10 to-blue-500/10 blur-[6.25rem] pointer-events-none" />
+
+            {/* ── Large & clear Ball.png background decorations ── */}
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-2%] right-[-3%] w-28 h-28 sm:w-36 sm:h-36 lg:w-48 lg:h-48 opacity-[0.18] -rotate-12 drop-shadow-[0_8px_30px_rgba(132,204,22,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[8%] left-[-2%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] rotate-[25deg] drop-shadow-[0_6px_25px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[35%] right-[2%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] -rotate-45 drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[50%] left-[1%] w-28 h-28 sm:w-36 sm:h-36 lg:w-44 lg:h-44 opacity-[0.17] rotate-[35deg] drop-shadow-[0_8px_28px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[8%] right-[1%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] rotate-[15deg] drop-shadow-[0_6px_25px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[-3%] left-[6%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] -rotate-[55deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[20%] right-[35%] w-16 h-16 sm:w-20 sm:h-20 lg:w-28 lg:h-28 opacity-[0.12] rotate-[40deg] drop-shadow-[0_4px_18px_rgba(132,204,22,0.10)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[28%] left-[22%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] -rotate-[20deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[65%] right-[20%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] rotate-[55deg] drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-1%] right-[50%] w-14 h-14 sm:w-18 sm:h-18 lg:w-24 lg:h-24 opacity-[0.11] rotate-[20deg] drop-shadow-[0_4px_16px_rgba(59,130,246,0.10)] pointer-events-none select-none" />
 
             {/* Back to Home — above card */}
-            <div className="w-full max-w-[900px] mb-4">
+            <div className="relative z-10 w-full max-w-[56.25rem] mb-4">
                 <Link
                     to="/"
-                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white/80 transition-colors"
                 >
                     <ArrowLeft size={14} />
                     Back to Home
@@ -231,8 +236,8 @@ const Signup: React.FC = () => {
             </div>
 
             {/* ═══════ CENTERED CARD ═══════ */}
-            <div className="w-full max-w-[900px] bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/60 overflow-hidden">
-                <div className="flex flex-col lg:flex-row min-h-[560px]">
+            <div className="relative z-10 w-full max-w-[56.25rem] bg-white rounded-3xl shadow-2xl shadow-black/30 border border-white/10 overflow-hidden">
+                <div className="flex flex-col lg:flex-row min-h-[35rem]">
 
                     {/* ── LEFT COLUMN — Pickleball photo + branding ── */}
                     <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden rounded-l-3xl">
@@ -252,7 +257,7 @@ const Signup: React.FC = () => {
                                 </div>
                                 <div>
                                     <span className="text-white font-black text-base tracking-tight">PicklePlay</span>
-                                    <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest">Philippines</p>
+                                    <p className="text-white/40 text-[0.5625rem] font-bold uppercase tracking-widest">Philippines</p>
                                 </div>
                             </div>
 
@@ -270,19 +275,19 @@ const Signup: React.FC = () => {
                                 </div>
                             </div>
 
-                            <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
+                            <p className="text-white/20 text-[0.625rem] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
                         </div>
                     </div>
 
                     {/* ── RIGHT COLUMN — Form ── */}
-                    <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-100">
+                    <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-200">
                         {/* Mobile logo */}
                         <div className="lg:hidden flex justify-center mb-5">
                             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-12 h-12 rounded-xl object-contain shadow-md" />
                         </div>
 
                         {/* Title */}
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight text-center lg:text-center mb-6">Create Account</h1>
+                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-6">Create Account</h1>
 
                         <form onSubmit={handleSignup} className="space-y-4">
                             {error && (
@@ -294,26 +299,26 @@ const Signup: React.FC = () => {
 
                             {/* Full Name */}
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Full Name</label>
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Full Name</label>
                                 <input
                                     type="text"
                                     required
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                    className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
                                     placeholder="Juan Dela Cruz"
                                 />
                             </div>
 
                             {/* Email */}
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Email Address</label>
                                 <input
                                     type="email"
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                    className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
                                     placeholder="name@example.com"
                                 />
                             </div>
@@ -321,14 +326,14 @@ const Signup: React.FC = () => {
                             {/* Password + Confirm */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                                    <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Password</label>
                                     <div className="relative">
                                         <input
                                             type={showPassword ? 'text' : 'password'}
                                             required
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                            className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 pr-10 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
                                             placeholder="••••••••"
                                         />
                                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
@@ -337,17 +342,17 @@ const Signup: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Confirm</label>
+                                    <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Confirm</label>
                                     <div className="relative">
                                         <input
                                             type={showConfirmPassword ? 'text' : 'password'}
                                             required
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
-                                            className={`w-full bg-white border rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${
+                                            className={`w-full bg-slate-50/50 border rounded-xl py-3 px-4 pr-10 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all ${
                                                 confirmPassword && confirmPassword !== password
                                                     ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
-                                                    : 'border-slate-200 focus:border-blue-600 focus:ring-blue-600/10'
+                                                    : 'border-slate-300 focus:border-blue-600 focus:ring-blue-600/10'
                                             }`}
                                             placeholder="••••••••"
                                         />
@@ -361,8 +366,8 @@ const Signup: React.FC = () => {
                             {/* Terms */}
                             <div className="flex items-start gap-2.5 pt-1">
                                 <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600/20" />
-                                    <span className="text-xs text-slate-500 leading-relaxed">
+                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
+                                    <span className="text-xs text-slate-700 font-medium leading-relaxed">
                                         I agree to the{' '}
                                         <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-blue-600 font-bold hover:text-blue-700 underline underline-offset-2 transition-colors">
                                             Terms & Privacy Policy
@@ -375,7 +380,7 @@ const Signup: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={loading || !agreedToTerms}
-                                className={`w-full font-extrabold h-[48px] rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${
+                                className={`w-full font-extrabold h-12 rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${
                                     agreedToTerms
                                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
                                         : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
@@ -387,9 +392,9 @@ const Signup: React.FC = () => {
 
                         {/* Divider */}
                         <div className="relative my-5">
-                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-                            <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
-                                <span className="bg-white px-4 text-slate-400">sign up with</span>
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-300" /></div>
+                            <div className="relative flex justify-center text-[0.625rem] font-bold uppercase tracking-widest">
+                                <span className="bg-white px-4 text-slate-500">sign up with</span>
                             </div>
                         </div>
 
@@ -400,15 +405,15 @@ const Signup: React.FC = () => {
                             disabled={!agreedToTerms}
                             className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group ${
                                 agreedToTerms
-                                    ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
-                                    : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
+                                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 hover:border-slate-400'
+                                    : 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
                             }`}
                         >
                             <GoogleIcon />
                         </button>
 
                         {/* Bottom link */}
-                        <p className="mt-5 text-center text-slate-500 text-sm">
+                        <p className="mt-5 text-center text-slate-600 text-sm font-medium">
                             Already have an account?{' '}
                             <Link to="/login" className="text-blue-600 font-bold hover:text-blue-700 transition-colors underline underline-offset-2">
                                 Sign In

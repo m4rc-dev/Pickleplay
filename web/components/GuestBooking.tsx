@@ -71,7 +71,7 @@ const GuestBooking: React.FC = () => {
     };
 
     const getUserLocation = () => {
-        if (userLocation) return;
+        if (gpsEnabled === true && userLocation) return;
         setIsLoadingLocation(true);
 
         const successCallback = async (position: GeolocationPosition) => {
@@ -443,17 +443,56 @@ const GuestBooking: React.FC = () => {
         const map = new window.google.maps.Map(mapRef.current, {
             center,
             zoom,
+            mapTypeId: 'terrain',
             styles: [
-                {
-                    featureType: 'poi',
-                    elementType: 'labels',
-                    stylers: [{ visibility: 'off' }]
-                }
+                // Base land — natural green tint
+                { featureType: 'landscape.natural', elementType: 'geometry.fill', stylers: [{ color: '#dde8cd' }] },
+                { featureType: 'landscape.natural.terrain', elementType: 'geometry.fill', stylers: [{ color: '#c5d6a8' }] },
+                { featureType: 'landscape.natural.landcover', elementType: 'geometry.fill', stylers: [{ color: '#c8dba5' }] },
+                // Man-made landscape — soft warm gray
+                { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#e4e0d8' }] },
+                // Water — natural blue-green
+                { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a3c8e9' }] },
+                { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a7fa5' }] },
+                { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#dceaf5' }, { weight: 2 }] },
+                // Parks & green areas — lush green
+                { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#b5d48c' }] },
+                { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#4a7a2e' }] },
+                // Sports complexes — vibrant green highlight
+                { featureType: 'poi.sports_complex', elementType: 'geometry.fill', stylers: [{ color: '#a8cf6f' }] },
+                { featureType: 'poi.sports_complex', elementType: 'labels.text.fill', stylers: [{ color: '#3d6b1f' }] },
+                // Hide other POI labels for clean look
+                { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.business', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.medical', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.school', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.government', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                // Roads — earthy tones
+                { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#f0d9a8' }] },
+                { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c9a96e' }, { weight: 0.8 }] },
+                { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#6b5a35' }] },
+                { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#f5edd5' }] },
+                { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#d4c49e' }, { weight: 0.5 }] },
+                { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#f8f4ea' }] },
+                { featureType: 'road.local', elementType: 'geometry.stroke', stylers: [{ color: '#e0d8c4' }, { weight: 0.3 }] },
+                { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5544' }] },
+                { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#f5f0e6' }, { weight: 3 }] },
+                // Transit — muted
+                { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#dbd4c4' }] },
+                { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+                // Administrative borders — earthy brown
+                { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#b5a88a' }, { weight: 1.2 }] },
+                { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#3a3528' }] },
+                { featureType: 'administrative.province', elementType: 'labels.text.fill', stylers: [{ color: '#6b6352' }] },
+                // General labels
+                { elementType: 'labels.text.fill', stylers: [{ color: '#4a4639' }] },
+                { elementType: 'labels.text.stroke', stylers: [{ color: '#f0ebe0' }, { weight: 2.5 }] },
             ],
             mapTypeControl: false,
             fullscreenControl: false,
             streetViewControl: false,
             panControl: false,
+            tilt: 0,
         });
 
         googleMapRef.current = map;
@@ -751,6 +790,7 @@ const GuestBooking: React.FC = () => {
                                     placeholder="Search courts or places..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
+                                    onFocus={() => { if (gpsEnabled !== true) getUserLocation(); }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             handleSearch(searchQuery);
@@ -766,6 +806,32 @@ const GuestBooking: React.FC = () => {
 
                             {/* Mobile Search Dropdown */}
                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/60 z-50 max-h-[65vh] overflow-y-auto">
+                                {/* GPS Enable Prompt */}
+                                {gpsEnabled !== true && !userCity && (
+                                  <button
+                                    type="button"
+                                    onClick={getUserLocation}
+                                    className="w-full text-left px-4 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
+                                  >
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                      <Navigation size={14} className="text-blue-600" fill="currentColor" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-bold text-blue-700">
+                                        {gpsEnabled === false ? 'Location Blocked — Tap to Retry' : 'Enable Location'}
+                                      </p>
+                                      <p className="text-xs text-slate-400">
+                                        {gpsEnabled === false ? 'Check browser settings if it keeps failing' : 'Allow GPS to find courts near you'}
+                                      </p>
+                                    </div>
+                                  </button>
+                                )}
+                                {isLoadingLocation && (
+                                  <div className="px-4 py-3.5 flex items-center gap-3 text-slate-500 border-b border-slate-100">
+                                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-sm font-medium">Getting your location...</span>
+                                  </div>
+                                )}
                                 {userCity && (
                                     <>
                                         <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
@@ -830,7 +896,7 @@ const GuestBooking: React.FC = () => {
                         </div>
                     ) : (
                         <button
-                            onClick={() => setIsSearchExpanded(true)}
+                            onClick={() => { setIsSearchExpanded(true); getUserLocation(); }}
                             className="w-full flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-left hover:border-slate-300 transition-colors"
                         >
                             <Search size={16} className="text-slate-400 shrink-0" />
@@ -936,7 +1002,7 @@ const GuestBooking: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    onFocus={() => setShowDesktopSuggestions(true)}
+                                    onFocus={() => { setShowDesktopSuggestions(true); if (gpsEnabled !== true) getUserLocation(); }}
                                     onBlur={() => setTimeout(() => setShowDesktopSuggestions(false), 200)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
@@ -955,6 +1021,23 @@ const GuestBooking: React.FC = () => {
                                                 <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                                                 <span className="text-sm font-medium">Getting your location...</span>
                                             </div>
+                                        )}
+
+                                        {/* GPS Enable Prompt */}
+                                        {gpsEnabled !== true && !isLoadingLocation && !userCity && (
+                                          <button
+                                            type="button"
+                                            onClick={getUserLocation}
+                                            className="w-full text-left px-5 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
+                                          >
+                                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                              <Navigation size={14} className="text-blue-600" fill="currentColor" />
+                                            </div>
+                                            <div>
+                                              <p className="text-sm font-bold text-blue-700">Enable Location</p>
+                                              <p className="text-xs text-slate-400">Allow GPS to find courts near you</p>
+                                            </div>
+                                          </button>
                                         )}
 
                                         {userCity && (
@@ -1353,7 +1436,11 @@ const GuestBooking: React.FC = () => {
                                                         <Navigation size={14} className="text-blue-400 shrink-0" />
                                                         <div>
                                                             <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none">Rate</p>
-                                                            <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-slate-400 ml-0.5">/hr</span></p>
+                                                            {heroActiveCourt.pricePerHour > 0 ? (
+                                                                <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-slate-400 ml-0.5">/hr</span></p>
+                                                            ) : (
+                                                                <p className="text-lg font-black leading-tight text-emerald-400">FREE</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )}
