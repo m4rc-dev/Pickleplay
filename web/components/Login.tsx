@@ -68,8 +68,8 @@ const Login: React.FC = () => {
             if (referralCode) localStorage.setItem('referral_code', referralCode);
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
             const callbackUrl = referralCode
-                ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
-                : `${window.location.origin}/#/auth/callback`;
+                ? `${window.location.origin}/auth/callback?ref=${referralCode}`
+                : `${window.location.origin}/auth/callback`;
             const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
             if (authError) throw authError;
         } catch (err: any) {

@@ -31,15 +31,15 @@ const AuthCallback: React.FC = () => {
                 const storedCode = localStorage.getItem('referral_code');
                 console.log('🔍 AuthCallback: Current localStorage referral_code:', storedCode);
 
-                // Extract OAuth parameters from the hash
-                // The hash looks like: #/auth/callback#access_token=...&refresh_token=...
-                const hashParts = window.location.hash.split('#');
-                const oauthHash = hashParts.length > 2 ? hashParts[2] : hashParts[1];
+                // Extract OAuth parameters from the URL
+                // With BrowserRouter, they should be in the search params or hash depending on Supabase config
+                // but usually they come in the hash after a redirect: #access_token=...
+                const oauthHash = window.location.hash.substring(1);
 
                 console.log('🔍 AuthCallback: OAuth hash:', oauthHash);
 
                 // Parse the OAuth parameters
-                const params = new URLSearchParams(oauthHash);
+                const params = new URLSearchParams(oauthHash || window.location.search);
                 const accessToken = params.get('access_token');
                 const refreshToken = params.get('refresh_token');
 

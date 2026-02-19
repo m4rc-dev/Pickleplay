@@ -1,8 +1,8 @@
-﻿
+
 
 // This file contains the main application logic, routing, and navigation components.
 import React, { useState, useEffect, useRef } from 'react';
-import { HashRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   Trophy,
   Calendar,
@@ -68,6 +68,8 @@ import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import ChatbotButton from './components/ChatbotButton';
+import MatchVerifyPage from './components/MatchVerifyPage';
+
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
 import Others from './components/Others';
@@ -89,6 +91,7 @@ import CourtCalendar from './components/court-owner/CourtCalendar';
 import LocationsList from './components/court-owner/location/LocationsList';
 import LocationDetailPage from './components/court-owner/location/LocationDetailPage';
 import LocationPolicies from './components/court-owner/LocationPolicies';
+import Achievements from './components/Achievements';
 import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
@@ -412,11 +415,10 @@ const NavigationHandler: React.FC<{
                 ) : (
                   <Link
                     to="/booking"
-                    className={`block rounded-2xl transition-all duration-300 group ${
-                      location.pathname === '/booking'
+                    className={`block rounded-2xl transition-all duration-300 group ${location.pathname === '/booking'
                         ? 'bg-lime-400 shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
                         : 'bg-gradient-to-br from-lime-400/90 to-lime-500/80 hover:from-lime-400 hover:to-lime-500 shadow-[0_6px_24px_-4px_rgba(163,230,53,0.4)] hover:shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
-                    } active:scale-95`}
+                      } active:scale-95`}
                   >
                     <div className="flex items-center gap-3.5 px-5 py-4">
                       <div className="shrink-0 w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
@@ -434,6 +436,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {/* Others group (collapsible) */}
                 <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
@@ -718,6 +721,8 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
@@ -807,6 +812,7 @@ const NavigationHandler: React.FC<{
               <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
               <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
               <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
+              <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
               <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
               <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
 
@@ -826,6 +832,7 @@ const NavigationHandler: React.FC<{
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
+              <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>

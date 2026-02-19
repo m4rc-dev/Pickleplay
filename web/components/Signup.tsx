@@ -147,8 +147,8 @@ const Signup: React.FC = () => {
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
             localStorage.setItem('terms_accepted_at', new Date().toISOString());
             const callbackUrl = referralCode
-                ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
-                : `${window.location.origin}/#/auth/callback`;
+                ? `${window.location.origin}/auth/callback?ref=${referralCode}`
+                : `${window.location.origin}/auth/callback`;
             const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
             if (authError) throw authError;
         } catch (err: any) {
@@ -349,11 +349,10 @@ const Signup: React.FC = () => {
                                             required
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
-                                            className={`w-full bg-slate-50/50 border rounded-xl py-3 px-4 pr-10 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:bg-white transition-all ${
-                                                confirmPassword && confirmPassword !== password
+                                            className={`w-full bg-white border rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${confirmPassword && confirmPassword !== password
                                                     ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
-                                                    : 'border-slate-300 focus:border-blue-600 focus:ring-blue-600/10'
-                                            }`}
+                                                    : 'border-slate-200 focus:border-blue-600 focus:ring-blue-600/10'
+                                                }`}
                                             placeholder="••••••••"
                                         />
                                         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
@@ -380,11 +379,10 @@ const Signup: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={loading || !agreedToTerms}
-                                className={`w-full font-extrabold h-12 rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${
-                                    agreedToTerms
+                                className={`w-full font-extrabold h-[48px] rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${agreedToTerms
                                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
                                         : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                }`}
+                                    }`}
                             >
                                 {loading ? <Loader2 size={22} className="animate-spin" /> : 'Create Account'}
                             </button>
@@ -403,11 +401,10 @@ const Signup: React.FC = () => {
                             type="button"
                             onClick={() => handleSocialLogin('google')}
                             disabled={!agreedToTerms}
-                            className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group ${
-                                agreedToTerms
-                                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-300 hover:border-slate-400'
-                                    : 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
-                            }`}
+                            className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group ${agreedToTerms
+                                    ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
+                                    : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
+                                }`}
                         >
                             <GoogleIcon />
                         </button>

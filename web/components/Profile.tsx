@@ -663,7 +663,7 @@ Never share them with anyone.`;
           type: 'profile',
           userId: profileId,
           deepLink: `pickleplay://profile/${profileId}`,
-          webUrl: `${window.location.origin}/#/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
+          webUrl: `${window.location.origin}/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
           generatedAt: new Date().toISOString()
         });
 
