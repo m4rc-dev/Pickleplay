@@ -54,8 +54,8 @@ const Signup: React.FC = () => {
 
             // Build callback URL with referral code as query parameter
             const callbackUrl = referralCode
-                ? `${window.location.origin}/#/auth/callback?ref=${referralCode}`
-                : `${window.location.origin}/#/auth/callback`;
+                ? `${window.location.origin}/auth/callback?ref=${referralCode}`
+                : `${window.location.origin}/auth/callback`;
 
             const { error: authError } = await supabase.auth.signInWithOAuth({
                 provider,

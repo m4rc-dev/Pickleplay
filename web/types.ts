@@ -85,13 +85,47 @@ export interface CourtClosure {
   created_at?: string;
 }
 
+export type MatchType = 'Singles' | 'Doubles';
+export type MatchStatus = 'Upcoming' | 'Live' | 'Completed' | 'Cancelled';
+
 export interface Match {
   id: string;
-  date: string;
-  type: 'Singles' | 'Doubles';
-  players: string[];
-  score: string;
-  status: 'Upcoming' | 'Completed';
+  host_id: string;
+  court_id?: string;
+  type: MatchType;
+  status: MatchStatus;
+  verification_code: string;
+  match_date: string; // ISO Date
+  start_time?: string;
+  end_time?: string;
+  score?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MatchPlayer {
+  match_id: string;
+  player_id: string;
+  is_verified: boolean;
+  verified_at?: string;
+  profiles?: {
+    full_name: string;
+    avatar_url: string;
+    username: string;
+  };
+}
+
+export interface PlayerRating {
+  id: string;
+  match_id: string;
+  rater_id: string;
+  ratee_id: string;
+  skill_level: number;
+  sportsmanship: number;
+  reliability: number;
+  fair_play: number;
+  comment?: string;
+  created_at?: string;
 }
 
 export interface ChatMessage {

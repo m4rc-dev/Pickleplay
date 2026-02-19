@@ -44,12 +44,16 @@ import {
   MapPin,
   Sparkles,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  QrCode
 } from 'lucide-react';
 // Fix: Import UserRole from the centralized types.ts file.
-import { UserRole, ProfessionalApplication } from '../types';
+import { UserRole, ProfessionalApplication, Match } from '../types';
 import { Skeleton } from './ui/Skeleton';
 import { calculateGraceDaysRemaining, isInGracePeriod, isHardLocked } from '../services/subscriptions';
+import { getPendingRatings, getMatchDetails, updateMatchStatus } from '../services/matches';
+import MatchVerification from './MatchVerification';
+import PlayerRatingModal from './PlayerRatingModal';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -128,6 +132,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     title: '',
     message: ''
   });
+
+  // Match System State
+  const [isMatchVerificationOpen, setIsMatchVerificationOpen] = useState(false);
+  const [pendingRatings, setPendingRatings] = useState<Match[]>([]);
+  const [selectedMatchForRating, setSelectedMatchForRating] = useState<{ matchId: string, rateeId: string, rateeName: string } | null>(null);
 
   // Subscription state
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -448,6 +457,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         }
       };
       fetchRatingHistory();
+
+      // Fetch Pending Match Ratings
+      const fetchPendingRatings = async () => {
+        if (!currentUserId) return;
+        const { data, error } = await getPendingRatings(currentUserId);
+        if (data) setPendingRatings(data);
+      };
+      fetchPendingRatings();
     }
     else if (userRole === 'COACH' && currentUserId) {
       // Fetch Coach Metrics
@@ -502,8 +519,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       fetchCourtOwnerMetrics();
     }
 
+    // Check for match verification success from URL redirect
+    const verifiedMessage = localStorage.getItem('match_verified_message');
+    if (verifiedMessage) {
+      setShowStatusModal({
+        show: true,
+        type: 'success',
+        title: 'MATCH VERIFIED',
+        message: verifiedMessage
+      });
+      localStorage.removeItem('match_verified_message');
+    }
+
     return () => clearTimeout(timer);
-  }, [userRole, currentUserId, timeRange]);
+  }, [userRole, currentUserId, navigate]);
 
   console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
@@ -790,6 +819,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     setUploadError('');
   };
 
+  const handleMatchVerified = async (matchId: string) => {
+    // Refresh dashboard data or show notification
+    fetchUserData();
+    const { data } = await getPendingRatings(currentUserId!);
+    if (data) setPendingRatings(data);
+  };
+
   const renderRoleMetrics = () => {
     if (isLoading) {
       return Array(3).fill(0).map((_, i) => (
@@ -888,15 +924,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 <History size={16} /> Logs
               </button>
             )}
+            {userRole === 'PLAYER' && (
+              <button
+                onClick={() => setIsMatchVerificationOpen(true)}
+                className="whitespace-nowrap bg-blue-600 hover:bg-blue-600 text-white font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center gap-2"
+              >
+                <QrCode size={16} /> Log Match
+              </button>
+            )}
             <button
               onClick={() => {
                 console.log('Action Button Clicked - Role:', userRole);
                 if (userRole === 'ADMIN') setShowBroadcastModal(true);
                 else if (userRole === 'COACH') navigate('/clinics');
                 else if (userRole === 'COURT_OWNER') {
-                  // Show a menu or just navigate to courts? 
-                  // Let's add a condition or a way to choose.
-                  // For now, let's keep it simple and maybe navigate to tournaments if they want.
                   navigate('/tournaments-admin');
                 }
                 else if (userRole === 'PLAYER') setShowLogDuprModal(true);
@@ -1035,7 +1076,43 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {renderRoleMetrics()}
+
       </div>
+
+
+      {/* Pending Match Ratings Banner */}
+      {userRole === 'PLAYER' && pendingRatings.length > 0 && (
+        <div className="mb-8 p-6 bg-gradient-to-r from-indigo-600 to-blue-600 rounded-[32px] text-white shadow-xl shadow-indigo-100 flex flex-col md:flex-row items-center justify-between gap-4 animate-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
+              <Star size={24} fill="white" />
+            </div>
+            <div>
+              <h4 className="font-black uppercase tracking-tight text-lg">Pending Match Ratings</h4>
+              <p className="text-xs text-indigo-100 font-medium tracking-wide">You have {pendingRatings.length} verified match{pendingRatings.length > 1 ? 'es' : ''} waiting for your feedback.</p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              const match = pendingRatings[0];
+              const { data } = await getMatchDetails(match.id);
+              if (data && data.players) {
+                const opponent = data.players.find(p => p.player_id !== currentUserId);
+                if (opponent) {
+                  setSelectedMatchForRating({
+                    matchId: match.id,
+                    rateeId: opponent.player_id,
+                    rateeName: opponent.profiles?.full_name || 'Opponent'
+                  });
+                }
+              }
+            }}
+            className="bg-white text-indigo-600 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+          >
+            RATE NOW
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden">
@@ -1100,13 +1177,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <Skeleton className="w-32 h-3 mx-auto mt-4 rounded-lg" />
                 </div>
               ) : (
-                <div className="bg-gradient-to-br from-lime-500 via-green-500 to-emerald-600 p-8 rounded-3xl shadow-2xl shadow-lime-100 relative overflow-hidden group animate-fade-in">
+                <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
                   {/* Decorative Elements */}
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
-                  
+
                   <div className="relative z-10">
                     <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">
                       PRO UPGRADE.
@@ -1118,13 +1195,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                     </p>
                     <button
                       onClick={() => setShowSubmitConfirm(true)}
-                      className="w-full bg-white text-lime-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
+                      className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
                     >
                       <Award size={18} className="group-hover/button:rotate-12 transition-transform" />
                       SUBMIT DOCS
                       <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
                     </button>
-                    
+
                     <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
                       <Sparkles size={12} className="text-white/80" />
                       Unlock professional features
@@ -1165,34 +1242,34 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <Skeleton className="w-36 h-3 mx-auto mt-4 rounded-lg" />
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            
-            <div className="relative z-10">
-              <h2 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">Need Help?</h2>
-              
-              <p className="text-blue-50 text-sm font-medium leading-relaxed mb-6">
-                Have questions about Pickleplay? Check out our frequently asked questions for quick answers and helpful tips.
-              </p>
-              
-              <button
-                onClick={() => navigate('/faq')}
-                className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
-              >
-                <BookOpen size={18} className="group-hover/button:rotate-12 transition-transform" />
-                View FAQ
-                <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
-              </button>
-              
-              <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
-                <Sparkles size={12} className="text-white/80" />
-                Quick answers & guidance
+            <div className="bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
+              {/* Decorative Elements */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+              <div className="relative z-10">
+                <h2 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">Need Help?</h2>
+
+                <p className="text-blue-50 text-sm font-medium leading-relaxed mb-6">
+                  Have questions about Pickleplay? Check out our frequently asked questions for quick answers and helpful tips.
+                </p>
+
+                <button
+                  onClick={() => navigate('/faq')}
+                  className="w-full bg-white text-blue-600 font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest shadow-xl shadow-black/10 hover:scale-105 hover:shadow-2xl group/button"
+                >
+                  <BookOpen size={18} className="group-hover/button:rotate-12 transition-transform" />
+                  View FAQ
+                  <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
+                </button>
+
+                <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
+                  <Sparkles size={12} className="text-white/80" />
+                  Quick answers & guidance
+                </div>
               </div>
             </div>
-          </div>
           )}
         </div>
       </div>
@@ -1961,6 +2038,32 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           document.body
         )
       }
+
+      {/* Match Verification Modal */}
+      {isMatchVerificationOpen && ReactDOM.createPortal(
+        <MatchVerification
+          userId={currentUserId!}
+          onClose={() => setIsMatchVerificationOpen(false)}
+          onMatchVerified={handleMatchVerified}
+        />,
+        document.body
+      )}
+
+      {/* Player Rating Modal */}
+      {selectedMatchForRating && ReactDOM.createPortal(
+        <PlayerRatingModal
+          matchId={selectedMatchForRating.matchId}
+          raterId={currentUserId!}
+          rateeId={selectedMatchForRating.rateeId}
+          rateeName={selectedMatchForRating.rateeName}
+          onClose={() => setSelectedMatchForRating(null)}
+          onSuccess={() => {
+            // Mark match as rated locally or refresh
+            setPendingRatings(prev => prev.filter(m => m.id !== selectedMatchForRating.matchId));
+          }}
+        />,
+        document.body
+      )}
 
     </div >
   );
