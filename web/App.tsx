@@ -409,11 +409,10 @@ const NavigationHandler: React.FC<{
                 ) : (
                   <Link
                     to="/booking"
-                    className={`block rounded-2xl transition-all duration-300 group ${
-                      location.pathname === '/booking'
+                    className={`block rounded-2xl transition-all duration-300 group ${location.pathname === '/booking'
                         ? 'bg-lime-400 shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
                         : 'bg-gradient-to-br from-lime-400/90 to-lime-500/80 hover:from-lime-400 hover:to-lime-500 shadow-[0_6px_24px_-4px_rgba(163,230,53,0.4)] hover:shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
-                    } active:scale-95`}
+                      } active:scale-95`}
                   >
                     <div className="flex items-center gap-3.5 px-5 py-4">
                       <div className="shrink-0 w-10 h-10 rounded-xl bg-white/25 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
@@ -717,6 +716,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
