@@ -952,6 +952,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       </div>
 
 
+
       {/* Active Trial Banner - Days 1-30 */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
         <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-amber-100 relative overflow-hidden animate-fade-in">

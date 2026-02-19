@@ -83,12 +83,12 @@ const AuthCallback: React.FC = () => {
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     localStorage.removeItem('auth_redirect');
 
-                    console.log('🔍 AuthCallback: Redirecting to:', storedRedirect || '/dashboard');
+                    console.log('🔍 AuthCallback: Redirecting to:', storedRedirect || '/');
 
                     if (storedRedirect) {
                         navigate(storedRedirect);
                     } else {
-                        navigate('/dashboard');
+                        navigate('/');
                     }
                 } else {
                     console.warn('⚠️ AuthCallback: No session found after retries, redirecting to login');

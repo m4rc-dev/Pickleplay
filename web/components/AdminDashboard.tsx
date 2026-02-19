@@ -34,7 +34,8 @@ import {
   Plus,
   Trash2,
   Copy,
-  QrCode
+  QrCode,
+  Loader2
 } from 'lucide-react';
 import QRCodeGenerator from './QRCodeGenerator';
 import {
@@ -86,7 +87,7 @@ interface AdminDashboardProps {
   currentAdminRole?: UserRole;
 }
 
-type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes';
+type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes' | 'terms';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onApprove, onReject, currentAdminRole = 'ADMIN' }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -511,6 +512,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
             <TabButton active={activeTab === 'qr-codes'} onClick={() => setActiveTab('qr-codes')} label="QR Codes" icon={<QrCode size={14} />} />
             <TabButton active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} label="Audit" icon={<Eye size={14} />} />
+            <TabButton active={activeTab === 'terms'} onClick={() => setActiveTab('terms')} label="Terms" icon={<FileText size={14} />} />
           </div>
         </div>
 
@@ -1043,6 +1045,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             </div>
           </div>
         )}
+        {activeTab === 'terms' && <TermsConditionsEditor logAdminAction={logAdminAction} />}
       </div>
 
       {/* MODAL IS NOW PORTALED TO DOCUMENT BODY TO IGNORE PARENT CONSTRAINTS */}
@@ -1239,6 +1242,330 @@ const SecurityToggle: React.FC<{
       <div className={`w-5 h-5 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0'}`} />
     </div>
   </div>
+);
+
+// ─── Terms & Conditions Rich Editor ───────────────────────────────────────────
+const TermsConditionsEditor: React.FC<{
+  logAdminAction: (action: string, targetId: string, targetName: string, details: string, eventType?: 'AUDIT' | 'SECURITY') => Promise<void>;
+}> = ({ logAdminAction }) => {
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const editorRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadTerms();
+  }, []);
+
+  const loadTerms = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('platform_content')
+        .select('*')
+        .eq('slug', 'terms-and-conditions')
+        .maybeSingle();
+
+      if (data?.content) {
+        setContent(data.content);
+        setLastSaved(data.updated_at);
+      } else {
+        // Insert default if not exists
+        setContent(DEFAULT_TERMS_CONTENT);
+      }
+    } catch (err) {
+      console.error('Failed to load terms:', err);
+      setContent(DEFAULT_TERMS_CONTENT);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Upsert into platform_content
+      const { error } = await supabase
+        .from('platform_content')
+        .upsert({
+          slug: 'terms-and-conditions',
+          title: 'Terms and Conditions',
+          content: content,
+          content_type: 'html',
+          updated_by: user?.id,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'slug' });
+
+      if (error) throw error;
+
+      setLastSaved(new Date().toISOString());
+      await logAdminAction('TERMS_UPDATE', 'terms-and-conditions', 'Terms & Conditions', 'Updated Terms & Conditions content', 'AUDIT');
+      alert('Terms & Conditions saved successfully!');
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const execCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+    // Sync content from contentEditable div
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
+    }
+  };
+
+  const handleEditorInput = () => {
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm p-20 flex items-center justify-center animate-slide-up">
+        <Loader2 size={32} className="animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-slide-up">
+      {/* Header Card */}
+      <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-10 border-b border-slate-100">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+                  <FileText size={24} className="text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Terms & Conditions</h2>
+                  <p className="text-slate-500 font-medium text-sm mt-0.5">Manage the platform's legal terms displayed to users during registration.</p>
+                </div>
+              </div>
+              {lastSaved && (
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3 ml-15">
+                  Last saved: {new Date(lastSaved).toLocaleString()}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setShowPreview(!showPreview)}
+                className={`px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 ${showPreview
+                  ? 'bg-slate-900 text-white shadow-xl'
+                  : 'bg-slate-50 border border-slate-100 text-slate-600 hover:bg-white hover:shadow-md'
+                  }`}
+              >
+                <Eye size={16} />
+                {showPreview ? 'Edit Mode' : 'Preview'}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Toolbar — only in edit mode */}
+        {!showPreview && (
+          <div className="px-10 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center gap-1.5">
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => execCommand('formatBlock', 'h1')} label="H1" />
+              <ToolbarBtn onClick={() => execCommand('formatBlock', 'h2')} label="H2" />
+              <ToolbarBtn onClick={() => execCommand('formatBlock', 'h3')} label="H3" />
+              <ToolbarBtn onClick={() => execCommand('formatBlock', 'p')} label="P" />
+            </ToolbarGroup>
+            <div className="w-px h-8 bg-slate-200 mx-1" />
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => execCommand('bold')} label="B" bold />
+              <ToolbarBtn onClick={() => execCommand('italic')} label="I" italic />
+              <ToolbarBtn onClick={() => execCommand('underline')} label="U" underline />
+              <ToolbarBtn onClick={() => execCommand('strikeThrough')} label="S" strikethrough />
+            </ToolbarGroup>
+            <div className="w-px h-8 bg-slate-200 mx-1" />
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => execCommand('insertUnorderedList')} label="• List" />
+              <ToolbarBtn onClick={() => execCommand('insertOrderedList')} label="1. List" />
+            </ToolbarGroup>
+            <div className="w-px h-8 bg-slate-200 mx-1" />
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => execCommand('justifyLeft')} label="Left" />
+              <ToolbarBtn onClick={() => execCommand('justifyCenter')} label="Center" />
+              <ToolbarBtn onClick={() => execCommand('justifyRight')} label="Right" />
+            </ToolbarGroup>
+            <div className="w-px h-8 bg-slate-200 mx-1" />
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => {
+                const url = prompt('Enter link URL:');
+                if (url) execCommand('createLink', url);
+              }} label="🔗 Link" />
+              <ToolbarBtn onClick={() => execCommand('removeFormat')} label="✕ Clear" />
+            </ToolbarGroup>
+            <div className="w-px h-8 bg-slate-200 mx-1" />
+            <ToolbarGroup>
+              <ToolbarBtn onClick={() => execCommand('insertHorizontalRule')} label="— HR" />
+              <ToolbarBtn onClick={() => {
+                execCommand('formatBlock', 'blockquote');
+              }} label="❝ Quote" />
+            </ToolbarGroup>
+          </div>
+        )}
+
+        {/* Editor / Preview Area */}
+        <div className="p-10">
+          {showPreview ? (
+            <div
+              className="prose prose-sm prose-slate max-w-none min-h-[500px]
+                prose-headings:font-black prose-headings:tracking-tight prose-headings:uppercase prose-headings:text-slate-900
+                prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-8 prose-h1:pb-3 prose-h1:border-b prose-h1:border-slate-100
+                prose-h2:text-lg prose-h2:mb-3 prose-h2:mt-6
+                prose-h3:text-base prose-h3:mb-2 prose-h3:mt-5
+                prose-p:mb-3 prose-p:text-slate-600 prose-p:leading-relaxed
+                prose-li:text-slate-600 prose-li:mb-1
+                prose-strong:text-slate-900
+                prose-ul:my-3 prose-ol:my-3
+                prose-blockquote:border-l-4 prose-blockquote:border-blue-600 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-xl
+                prose-a:text-blue-600 prose-a:font-bold"
+              dangerouslySetInnerHTML={{ __html: content }}
+            />
+          ) : (
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleEditorInput}
+              className="prose prose-sm prose-slate max-w-none min-h-[500px] outline-none rounded-3xl border border-slate-200 bg-slate-50/50 p-8 focus:ring-2 focus:ring-blue-600/20 focus:border-blue-300 transition-all
+                prose-headings:font-black prose-headings:tracking-tight prose-headings:uppercase prose-headings:text-slate-900
+                prose-h1:text-2xl prose-h1:mb-4 prose-h1:mt-8 prose-h1:pb-3 prose-h1:border-b prose-h1:border-slate-200
+                prose-h2:text-lg prose-h2:mb-3 prose-h2:mt-6
+                prose-h3:text-base prose-h3:mb-2 prose-h3:mt-5
+                prose-p:mb-3 prose-p:text-slate-600 prose-p:leading-relaxed
+                prose-li:text-slate-600 prose-li:mb-1
+                prose-strong:text-slate-900
+                prose-ul:my-3 prose-ol:my-3
+                prose-blockquote:border-l-4 prose-blockquote:border-blue-600 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-xl
+                prose-a:text-blue-600 prose-a:font-bold"
+              dangerouslySetInnerHTML={{ __html: content }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Source HTML Editor */}
+      <div className="bg-white rounded-[48px] border border-slate-200 shadow-sm overflow-hidden">
+        <details className="group">
+          <summary className="px-10 py-6 cursor-pointer flex items-center justify-between hover:bg-slate-50 transition-all">
+            <div className="flex items-center gap-3">
+              <Database size={18} className="text-slate-400" />
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Advanced: Raw HTML Source</span>
+            </div>
+            <ChevronRight size={16} className="text-slate-400 transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="px-10 pb-8">
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={16}
+              spellCheck={false}
+              className="w-full bg-slate-950 text-lime-400 font-mono text-xs p-6 rounded-2xl border border-slate-800 outline-none focus:ring-2 focus:ring-blue-600/30 resize-y leading-relaxed"
+              placeholder="<h1>Terms and Conditions</h1>..."
+            />
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">
+              Edit HTML directly. Changes sync with the visual editor on save.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+};
+
+const DEFAULT_TERMS_CONTENT = `
+<h1>Terms and Conditions</h1>
+<p><strong>Effective Date:</strong> February 18, 2026</p>
+<p>Welcome to PicklePlay Philippines. By creating an account and using our platform, you agree to the following terms and conditions.</p>
+
+<h2>1. Acceptance of Terms</h2>
+<p>By registering for and using the PicklePlay platform ("Service"), you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions ("Terms"). If you do not agree to these Terms, you may not use the Service.</p>
+
+<h2>2. Account Registration</h2>
+<p>You must provide accurate, current, and complete information during the registration process. You are responsible for safeguarding your password and for all activities that occur under your account.</p>
+
+<h2>3. User Conduct</h2>
+<p>You agree not to:</p>
+<ul>
+<li>Use the Service for any unlawful purpose or in violation of any applicable law</li>
+<li>Impersonate any person or entity, or misrepresent your affiliation</li>
+<li>Upload or transmit any harmful, offensive, or inappropriate content</li>
+<li>Attempt to gain unauthorized access to any part of the Service</li>
+<li>Interfere with or disrupt the Service or servers</li>
+</ul>
+
+<h2>4. Court Bookings & Payments</h2>
+<p>All court bookings made through the platform are subject to availability and the policies of the respective court owners. Cancellation and refund policies are determined by individual court owners.</p>
+
+<h2>5. Professional Roles</h2>
+<p>Users who apply for Coach or Court Owner roles are subject to additional verification and approval. PicklePlay reserves the right to approve or reject applications at its sole discretion.</p>
+
+<h2>6. Privacy & Data</h2>
+<p>Your use of the Service is also governed by our Privacy Policy. We collect and process personal data as described therein.</p>
+
+<h2>7. Intellectual Property</h2>
+<p>All content, trademarks, and intellectual property on the platform are owned by PicklePlay Philippines. You may not copy, reproduce, or distribute any content without prior written permission.</p>
+
+<h2>8. Limitation of Liability</h2>
+<p>PicklePlay is provided "as is" without warranties of any kind. We shall not be liable for any indirect, incidental, special, or consequential damages.</p>
+
+<h2>9. Termination</h2>
+<p>We reserve the right to suspend or terminate your account at any time for violation of these Terms or for any other reason at our sole discretion.</p>
+
+<h2>10. Changes to Terms</h2>
+<p>We may update these Terms from time to time. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
+
+<h2>11. Contact</h2>
+<p>For questions about these Terms, please contact us through the platform's support channels.</p>
+`;
+
+// Toolbar helper components
+const ToolbarGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex items-center gap-0.5">{children}</div>
+);
+
+const ToolbarBtn: React.FC<{
+  onClick: () => void;
+  label: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+}> = ({ onClick, label, bold, italic, underline: isUnderline, strikethrough }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-md transition-all active:scale-95"
+    style={{
+      fontWeight: bold ? 900 : undefined,
+      fontStyle: italic ? 'italic' : undefined,
+      textDecoration: isUnderline ? 'underline' : strikethrough ? 'line-through' : undefined
+    }}
+  >
+    {label}
+  </button>
 );
 
 export default AdminDashboard;

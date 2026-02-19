@@ -1,8 +1,8 @@
-
+﻿
 
 // This file contains the main application logic, routing, and navigation components.
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   Trophy,
   Calendar,
@@ -68,8 +68,6 @@ import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import ChatbotButton from './components/ChatbotButton';
-import MatchVerifyPage from './components/MatchVerifyPage';
-
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
 import Others from './components/Others';
@@ -91,7 +89,6 @@ import CourtCalendar from './components/court-owner/CourtCalendar';
 import LocationsList from './components/court-owner/location/LocationsList';
 import LocationDetailPage from './components/court-owner/location/LocationDetailPage';
 import LocationPolicies from './components/court-owner/LocationPolicies';
-import Achievements from './components/Achievements';
 import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
 // Fix: Import UserRole from the centralized types.ts file.
@@ -166,7 +163,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
 const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ role, themeColor }) => {
   const location = useLocation();
 
-  // Build items based on role — court owners get "Bookings" (admin) instead of "Book"
+  // Build items based on role â€” court owners get "Bookings" (admin) instead of "Book"
   const items = role === 'COURT_OWNER'
     ? [
       { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
@@ -399,7 +396,7 @@ const NavigationHandler: React.FC<{
             )}
             {role === 'PLAYER' && (
               <>
-                {/* ── PRIMARY FEATURE: Book Courts ── */}
+                {/* â”€â”€ PRIMARY FEATURE: Book Courts â”€â”€ */}
                 {isSidebarCollapsed ? (
                   <Link to="/booking" className="flex justify-center items-center p-3 rounded-2xl bg-lime-400/20 hover:bg-lime-400/30 text-lime-300 transition-all duration-300 group">
                     <div className="transition-transform duration-300 group-hover:scale-110">
@@ -431,7 +428,6 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {/* Others group (collapsible) */}
                 <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
@@ -716,7 +712,6 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
@@ -765,11 +760,8 @@ const NavigationHandler: React.FC<{
         </header>
       )}
 
-      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
-        <div className={`${role === 'guest' || isAuthPage
-          ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
-          : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
-          } transition-colors duration-300`}>
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 pb-20 md:pt-0 md:pb-0' : ''}`} style={{ backgroundColor: isAuthPage ? undefined : '#EBEBE6' }}>
+        <div className={`${role === 'guest' || isAuthPage ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '') : `${location.pathname === '/booking' || location.pathname.startsWith('/community/groups/') ? 'p-0' : location.pathname.startsWith('/court/') ? 'px-3 sm:px-4' : 'p-4'} ${location.pathname.startsWith('/community/groups/') ? '' : 'md:p-8 lg:p-14 max-w-[1920px] mx-auto'} w-full`} transition-colors duration-300`}>
           <div key={location.pathname} className="animate-route-transition">
             <Routes location={location}>
               <Route path="/" element={
@@ -806,7 +798,6 @@ const NavigationHandler: React.FC<{
               <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
               <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
               <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-              <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
               <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
               <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
 
@@ -826,14 +817,13 @@ const NavigationHandler: React.FC<{
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
-              <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>
       </main>
 
-
+      <MobileBottomNav role={role} themeColor={themeColor} />
 
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
@@ -897,9 +887,9 @@ const App: React.FC = () => {
     import('./services/backend').then(({ backend }) => {
       backend.checkConnection().then(result => {
         if (result.success) {
-          console.log('✅ System Backend Status: CONNECTED');
+          console.log('âœ… System Backend Status: CONNECTED');
         } else {
-          console.warn('❌ System Backend Status: DISCONNECTED -', result.message);
+          console.warn('âŒ System Backend Status: DISCONNECTED -', result.message);
         }
       });
     });
@@ -939,56 +929,56 @@ const App: React.FC = () => {
         ]);
 
         // --- Referral Capture Logic ---
-        console.log('🔍 App.tsx: Checking for pending referral code...');
+        console.log('ðŸ” App.tsx: Checking for pending referral code...');
         const pendingRefCode = localStorage.getItem('referral_code');
-        console.log('🔍 App.tsx: localStorage referral_code:', pendingRefCode);
-        console.log('🔍 App.tsx: Profile data:', profileRes.data);
-        console.log('🔍 App.tsx: Current referred_by_id:', profileRes.data?.referred_by_id);
+        console.log('ðŸ” App.tsx: localStorage referral_code:', pendingRefCode);
+        console.log('ðŸ” App.tsx: Profile data:', profileRes.data);
+        console.log('ðŸ” App.tsx: Current referred_by_id:', profileRes.data?.referred_by_id);
 
         if (pendingRefCode && profileRes.data && !profileRes.data.referred_by_id) {
-          console.log('🔄 Processing pending referral code:', pendingRefCode);
+          console.log('ðŸ”„ Processing pending referral code:', pendingRefCode);
 
           // 1. Resolve Referrer 
-          console.log('🔍 Looking up referrer with code:', pendingRefCode);
+          console.log('ðŸ” Looking up referrer with code:', pendingRefCode);
           const { data: referrer, error: referrerError } = await supabase
             .from('profiles')
             .select('id, full_name, referral_code')
             .eq('referral_code', pendingRefCode)
             .single();
 
-          console.log('🔍 Referrer lookup result:', { referrer, error: referrerError });
+          console.log('ðŸ” Referrer lookup result:', { referrer, error: referrerError });
 
           if (referrer && referrer.id !== session.user.id) {
-            console.log('✅ Found referrer:', referrer.id, 'Name:', referrer.full_name);
+            console.log('âœ… Found referrer:', referrer.id, 'Name:', referrer.full_name);
             // 2. Link User
-            console.log('🔄 Linking user', session.user.id, 'to referrer', referrer.id);
+            console.log('ðŸ”„ Linking user', session.user.id, 'to referrer', referrer.id);
             const { error: linkError } = await supabase
               .from('profiles')
               .update({ referred_by_id: referrer.id })
               .eq('id', session.user.id);
 
             if (!linkError) {
-              console.log('🎉 Successfully linked referral!');
-              console.log('🎉 Points should be awarded by database trigger');
+              console.log('ðŸŽ‰ Successfully linked referral!');
+              console.log('ðŸŽ‰ Points should be awarded by database trigger');
               localStorage.removeItem('referral_code');
-              console.log('✅ Removed referral_code from localStorage');
+              console.log('âœ… Removed referral_code from localStorage');
             } else {
-              console.error('❌ Failed to link referral:', linkError);
+              console.error('âŒ Failed to link referral:', linkError);
             }
           } else if (referrer && referrer.id === session.user.id) {
-            console.warn('⚠️ Self-referral detected - user tried to refer themselves');
+            console.warn('âš ï¸ Self-referral detected - user tried to refer themselves');
             localStorage.removeItem('referral_code');
           } else {
-            console.warn('⚠️ Invalid referral code - referrer not found:', pendingRefCode);
+            console.warn('âš ï¸ Invalid referral code - referrer not found:', pendingRefCode);
             localStorage.removeItem('referral_code'); // Clean up invalid code
           }
         } else {
           if (!pendingRefCode) {
-            console.log('ℹ️ No pending referral code in localStorage');
+            console.log('â„¹ï¸ No pending referral code in localStorage');
           } else if (!profileRes.data) {
-            console.log('ℹ️ No profile data available yet');
+            console.log('â„¹ï¸ No profile data available yet');
           } else if (profileRes.data.referred_by_id) {
-            console.log('ℹ️ User already has a referrer:', profileRes.data.referred_by_id);
+            console.log('â„¹ï¸ User already has a referrer:', profileRes.data.referred_by_id);
           }
         }
         // ------------------------------
@@ -1012,7 +1002,7 @@ const App: React.FC = () => {
 
           // Update profile with auth metadata if missing
           if (!profileRes.data.email || !profileRes.data.full_name || !profileRes.data.avatar_url || !profileRes.data.username) {
-            console.log('🛠️ Profile incomplete, updating with auth metadata...');
+            console.log('ðŸ› ï¸ Profile incomplete, updating with auth metadata...');
             const resolvedName = profileRes.data.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
             const resolvedEmail = profileRes.data.email || session.user.email;
             const usernameSource = profileRes.data.username || resolvedName || session.user.email?.split('@')[0] || 'player';
@@ -1034,12 +1024,12 @@ const App: React.FC = () => {
               .eq('id', session.user.id);
 
             if (!updateError) {
-              console.log('✅ Profile updated with auth metadata');
+              console.log('âœ… Profile updated with auth metadata');
               const resolvedAvatar = profileRes.data.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
               setUserName(resolvedName);
               setUserAvatar(resolvedAvatar);
             } else {
-              console.error('❌ Failed to update profile:', updateError);
+              console.error('âŒ Failed to update profile:', updateError);
             }
           }
 
@@ -1052,7 +1042,7 @@ const App: React.FC = () => {
           consolidatedRoles = [...dbRoles];
         } else if (session.user) {
           // Fallback: Create profile if missing
-          console.log('🛠️ Profile missing, creating fallback record...');
+          console.log('ðŸ› ï¸ Profile missing, creating fallback record...');
 
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
@@ -1074,14 +1064,14 @@ const App: React.FC = () => {
             .single();
 
           if (!createError && newProfile) {
-            console.log('✅ Fallback profile created successfully');
+            console.log('âœ… Fallback profile created successfully');
             setUserName(newProfile.full_name);
             setUserAvatar(newProfile.avatar_url);
             setRole('PLAYER');
             localStorage.setItem('active_role', 'PLAYER');
             consolidatedRoles = ['PLAYER'];
           } else {
-            console.error('❌ Failed to create fallback profile:', createError);
+            console.error('âŒ Failed to create fallback profile:', createError);
           }
         }
 
@@ -1449,13 +1439,6 @@ const App: React.FC = () => {
   }, [currentUserId]);
 
   const handleRoleSwitch = async (newRole: UserRole) => {
-    // Security: Only allow switching to PLAYER or roles the user is authorized for
-    if (newRole !== 'PLAYER' && !authorizedProRoles.includes(newRole)) {
-      console.error(`Unauthorized role switch attempt: ${newRole}`);
-      alert('You are not authorized for this role. Please apply and get approved first.');
-      return;
-    }
-
     setIsSwitchingRole(true);
     setRoleSwitchTarget(newRole);
 
