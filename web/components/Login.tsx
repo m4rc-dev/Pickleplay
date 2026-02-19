@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase, createSession, getSecuritySettings } from '../services/supabase';
 import {
@@ -16,8 +16,17 @@ const Login: React.FC = () => {
     const [rememberSession, setRememberSession] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [cameFromLogout, setCameFromLogout] = useState(false);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+
+    // Read the logout flag once on mount, then clear it immediately
+    useEffect(() => {
+        if (localStorage.getItem('came_from_logout')) {
+            setCameFromLogout(true);
+            localStorage.removeItem('came_from_logout');
+        }
+    }, []);
     const redirectUrl = searchParams.get('redirect') || '/';
 
     const normalizeUsername = (value: string) =>
@@ -116,33 +125,38 @@ const Login: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-100 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-            {/* ── Scattered Ball.png background decorations ── */}
-            <img src="/images/Ball.png" alt="" className="absolute top-[5%] left-[3%] w-14 h-14 opacity-[0.06] rotate-12 pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[12%] right-[8%] w-10 h-10 opacity-[0.05] -rotate-[20deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[35%] left-[7%] w-8 h-8 opacity-[0.04] rotate-45 pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[60%] right-[4%] w-12 h-12 opacity-[0.06] rotate-[30deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[15%] left-[5%] w-11 h-11 opacity-[0.05] -rotate-[15deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[8%] right-[12%] w-9 h-9 opacity-[0.04] rotate-[60deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[22%] left-[45%] w-7 h-7 opacity-[0.03] -rotate-[40deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute bottom-[30%] right-[30%] w-8 h-8 opacity-[0.04] rotate-[15deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[75%] left-[25%] w-10 h-10 opacity-[0.05] rotate-[50deg] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute top-[4%] left-[55%] w-6 h-6 opacity-[0.03] -rotate-[25deg] pointer-events-none select-none" />
+        <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+            {/* ── Chromatic gradient blobs ── */}
+            <div className="absolute -top-[20%] -left-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-br from-lime-500/20 via-green-500/15 to-emerald-500/10 blur-[7.5rem] pointer-events-none" />
+            <div className="absolute -bottom-[20%] -right-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-tl from-blue-600/20 via-blue-500/15 to-cyan-500/10 blur-[7.5rem] pointer-events-none" />
+            <div className="absolute top-[30%] left-[50%] -translate-x-1/2 w-[31.25rem] h-[31.25rem] rounded-full bg-gradient-to-r from-lime-400/10 to-blue-500/10 blur-[6.25rem] pointer-events-none" />
+
+            {/* ── Large & clear Ball.png background decorations ── */}
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-2%] left-[-3%] w-28 h-28 sm:w-36 sm:h-36 lg:w-48 lg:h-48 opacity-[0.18] rotate-12 drop-shadow-[0_8px_30px_rgba(132,204,22,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[5%] right-[-2%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] -rotate-[20deg] drop-shadow-[0_6px_25px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[30%] left-[2%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] rotate-45 drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[55%] right-[1%] w-28 h-28 sm:w-36 sm:h-36 lg:w-44 lg:h-44 opacity-[0.17] rotate-[30deg] drop-shadow-[0_8px_28px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[5%] left-[1%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] -rotate-[15deg] drop-shadow-[0_6px_25px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[-3%] right-[8%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] rotate-[60deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[18%] left-[40%] w-16 h-16 sm:w-20 sm:h-20 lg:w-28 lg:h-28 opacity-[0.12] -rotate-[40deg] drop-shadow-[0_4px_18px_rgba(132,204,22,0.10)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[25%] right-[25%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] rotate-[15deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[70%] left-[20%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] rotate-[50deg] drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
+            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-1%] left-[55%] w-14 h-14 sm:w-18 sm:h-18 lg:w-24 lg:h-24 opacity-[0.11] -rotate-[25deg] drop-shadow-[0_4px_16px_rgba(59,130,246,0.10)] pointer-events-none select-none" />
 
             {/* Back to Home — above card */}
-            <div className="w-full max-w-[900px] mb-4">
+            <div className="relative z-10 w-full max-w-[56.25rem] mb-4">
                 <Link
                     to="/"
-                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white/80 transition-colors"
                 >
                     <ArrowLeft size={14} />
-                    Back to Home
+                    {cameFromLogout ? 'Homepage' : 'Back to Home'}
                 </Link>
             </div>
 
             {/* ═══════ CENTERED CARD ═══════ */}
-            <div className="w-full max-w-[900px] bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200/60 overflow-hidden">
-                <div className="flex flex-col lg:flex-row min-h-[520px]">
+            <div className="relative z-10 w-full max-w-[56.25rem] bg-white rounded-3xl shadow-2xl shadow-black/30 border border-white/10 overflow-hidden">
+                <div className="flex flex-col lg:flex-row min-h-[32.5rem]">
 
                     {/* ── LEFT COLUMN — Pickleball photo + branding ── */}
                     <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden rounded-l-3xl">
@@ -162,7 +176,7 @@ const Login: React.FC = () => {
                                 </div>
                                 <div>
                                     <span className="text-white font-black text-base tracking-tight">PicklePlay</span>
-                                    <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest">Philippines</p>
+                                    <p className="text-white/40 text-[0.5625rem] font-bold uppercase tracking-widest">Philippines</p>
                                 </div>
                             </div>
 
@@ -180,19 +194,19 @@ const Login: React.FC = () => {
                                 </div>
                             </div>
 
-                            <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
+                            <p className="text-white/20 text-[0.625rem] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
                         </div>
                     </div>
 
                     {/* ── RIGHT COLUMN — Form ── */}
-                    <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-100">
+                    <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-200">
                         {/* Mobile logo */}
                         <div className="lg:hidden flex justify-center mb-5">
                             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-12 h-12 rounded-xl object-contain shadow-md" />
                         </div>
 
                         {/* Title */}
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight text-center lg:text-center mb-7">Login</h1>
+                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-7">Login</h1>
 
                         <form onSubmit={handleLogin} className="space-y-5">
                             {error && (
@@ -204,27 +218,27 @@ const Login: React.FC = () => {
 
                             {/* Email */}
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Email Address</label>
                                 <input
                                     type="email"
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                    className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
                                     placeholder="name@example.com"
                                 />
                             </div>
 
                             {/* Password */}
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Password</label>
                                 <div className="relative">
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 pr-12 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                                        className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 pr-12 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
                                         placeholder="••••••••"
                                     />
                                     <button
@@ -240,10 +254,10 @@ const Login: React.FC = () => {
                             {/* Remember + Forgot */}
                             <div className="flex items-center justify-between">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                                    <input type="checkbox" checked={rememberSession} onChange={(e) => setRememberSession(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600/20" />
-                                    <span className="text-xs text-slate-500 font-medium">Remember session</span>
+                                    <input type="checkbox" checked={rememberSession} onChange={(e) => setRememberSession(e.target.checked)} className="w-4 h-4 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
+                                    <span className="text-xs text-slate-700 font-semibold">Remember session</span>
                                 </label>
-                                <button type="button" className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
+                                <button type="button" className="text-[0.625rem] font-extrabold uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
                                     Forgot Password?
                                 </button>
                             </div>
@@ -252,7 +266,7 @@ const Login: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold h-[48px] rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25"
+                                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold h-12 rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25"
                             >
                                 {loading ? <Loader2 size={22} className="animate-spin" /> : 'Sign In'}
                             </button>
@@ -260,9 +274,9 @@ const Login: React.FC = () => {
 
                         {/* Divider */}
                         <div className="relative my-6">
-                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-                            <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
-                                <span className="bg-white px-4 text-slate-400">continue with</span>
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-300" /></div>
+                            <div className="relative flex justify-center text-[0.625rem] font-bold uppercase tracking-widest">
+                                <span className="bg-white px-4 text-slate-500">continue with</span>
                             </div>
                         </div>
 
@@ -270,13 +284,13 @@ const Login: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => handleSocialLogin('google')}
-                            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl py-3 transition-all active:scale-[0.97] group"
+                            className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl py-3 transition-all active:scale-[0.97] group"
                         >
                             <GoogleIcon />
                         </button>
 
                         {/* Bottom link */}
-                        <p className="mt-6 text-center text-slate-500 text-sm">
+                        <p className="mt-6 text-center text-slate-600 text-sm font-medium">
                             Don't have an account?{' '}
                             <Link to="/signup" className="text-blue-600 font-bold hover:text-blue-700 transition-colors underline underline-offset-2">
                                 Sign up
