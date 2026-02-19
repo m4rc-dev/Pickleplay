@@ -294,40 +294,15 @@ Facilitate group play and matchmaking.
 
 ---
 
-## 13. Rewards, Achievements, and Certificates
+## 13. Achievements and Certificates
 
-Gamification system to encourage engagement.
 
-### Reward Triggers:
-- ✅ Completed matches
-- ✅ Consistent attendance
-- ✅ Court usage milestones
-- ✅ **Automatic rewards every 10 hours of playtime**
-- ✅ Tournament participation
-- ✅ High ratings from opponents
 
-### Badge Categories:
-- 🏆 **Rookie Player** - First 5 matches
-- 🌟 **Active Player** - 50+ matches
-- 👥 **Community Player** - 10+ different opponents
-- ⏰ **Punctual Player** - 95%+ on-time arrival
-- 🎯 **Skilled Player** - 4.5+ average rating
-- 🔥 **Streak Master** - 7+ consecutive days playing
+### Achievements:
+- "Court Conquerer" - Book 10 courts
 
 ### Digital Certificates:
-- Professionally designed templates
-- Player name and achievement
-- Date earned
-- Unique certificate ID
-- PicklePlay signature
-- Downloadable as PDF
-- Shareable on social media
-
-### Rewards Dashboard:
-- Progress bars for next reward
-- Achievement gallery
-- Milestone timeline
-- Leaderboard rankings
+- Gain Certificate from the achievement they completed.
 
 ---
 
