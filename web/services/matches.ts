@@ -12,7 +12,6 @@ export const createMatch = async (
     startTime?: string
 ): Promise<{ data: Match | null; error: string | null }> => {
     try {
-        // Generate random 6-character alphanumeric verification code
         const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
         const { data: match, error: matchError } = await supabase
@@ -27,9 +26,10 @@ export const createMatch = async (
                 start_time: startTime
             })
             .select()
-            .single();
+            .maybeSingle();
 
         if (matchError) throw matchError;
+        if (!match) throw new Error('Match could not be created. Please try again.');
 
         // Add host to match_players
         const { error: playerError } = await supabase
@@ -50,6 +50,7 @@ export const createMatch = async (
     }
 };
 
+
 /**
  * Joins a match by verifying the code.
  */
@@ -59,14 +60,15 @@ export const verifyMatchParticipation = async (
     verificationCode: string
 ): Promise<{ success: boolean; error: string | null }> => {
     try {
-        // 1. Check if code matches
+        // 1. Fetch match — use maybeSingle() so missing rows return null instead of throwing
         const { data: match, error: fetchError } = await supabase
             .from('matches')
             .select('verification_code, status')
             .eq('id', matchId)
-            .single();
+            .maybeSingle();
 
         if (fetchError) throw fetchError;
+        if (!match) throw new Error('Match not found. The QR code may be expired or invalid.');
         if (match.verification_code !== verificationCode) throw new Error('Invalid verification code');
         if (match.status === 'Cancelled') throw new Error('Match has been cancelled');
 
