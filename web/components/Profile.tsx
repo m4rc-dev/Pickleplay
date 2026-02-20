@@ -652,6 +652,30 @@ Never share them with anyone.`;
     fetchProfile();
   }, [userId]);
 
+  // Realtime: profile points updates
+  useEffect(() => {
+    if (!profileData?.id) return;
+
+    const channel = supabase
+      .channel(`profile-points-${profileData.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${profileData.id}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (typeof updated.points === 'number') {
+          setProfileData((prev: any) => prev ? { ...prev, points: updated.points } : prev);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profileData?.id]);
+
   // Generate QR code for mobile app deep link
   useEffect(() => {
     const generateProfileQR = async () => {

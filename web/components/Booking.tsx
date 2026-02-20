@@ -9,6 +9,7 @@ import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEven
 import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
+import Toast, { ToastType } from './ui/Toast';
 
 // Always use hourly slots for simplicity
 const ALL_HOUR_SLOTS = [
@@ -196,6 +197,17 @@ const Booking: React.FC = () => {
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false,
+  });
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type, isVisible: true });
+  };
 
 
   const getUserLocation = () => {
@@ -1060,7 +1072,7 @@ const Booking: React.FC = () => {
         if (checkError) throw checkError;
 
         if (existingBooking) {
-          alert('⚠️ This time slot is already booked. Please choose another time.');
+          showToast('This time slot is already booked. Please choose another time.', 'error');
           setIsProcessing(false);
           return;
         }
@@ -1390,6 +1402,12 @@ const Booking: React.FC = () => {
 
   return (
     <div className="md:space-y-10 animate-in fade-in duration-700">
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast({ ...toast, isVisible: false })}
+      />
       {/* ──────────── MOBILE HEADER BAR ──────────── */}
       <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         {/* Search row */}
