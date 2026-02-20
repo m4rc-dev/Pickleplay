@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, LayoutGrid, List, X, Settings2, Trash2, Navigation, Target } from 'lucide-react';
+import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, LayoutGrid, List, X, Settings2, Trash2, Navigation, Target, Megaphone } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import MarketingPosterModal, { PosterData } from '../MarketingPosterModal';
 
 interface Court {
     id: string;
@@ -27,7 +28,24 @@ const Courts: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingCourt, setEditingCourt] = useState<Court | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [isPosterOpen, setIsPosterOpen] = useState(false);
+    const [posterData, setPosterData] = useState<PosterData | null>(null);
     const navigate = useNavigate();
+
+    const handlePromoteCourt = (court: Court) => {
+        setPosterData({
+            courtName: court.name,
+            address: court.address,
+            city: court.city,
+            availableSlots: court.num_courts,
+            courtType: (court as any).court_type || undefined,
+            imageUrl: (court as any).image_url || undefined,
+            amenities: Array.isArray(court.amenities) ? court.amenities : [],
+            joinLink: `${window.location.origin}/booking`,
+            date: new Date().toISOString().split('T')[0],
+        });
+        setIsPosterOpen(true);
+    };
 
     // Form state
     const [newName, setNewName] = useState('');
@@ -276,6 +294,7 @@ const Courts: React.FC = () => {
                                 court={court}
                                 onBook={() => navigate('/bookings-admin')}
                                 onSettings={() => openEditModal(court)}
+                                onPromote={() => handlePromoteCourt(court)}
                             />
                         ))
                     ) : (
@@ -297,6 +316,7 @@ const Courts: React.FC = () => {
                                                 court={court}
                                                 onBook={() => navigate('/bookings-admin')}
                                                 onSettings={() => openEditModal(court)}
+                                                onPromote={() => handlePromoteCourt(court)}
                                             />
                                         ))}
                                     </tbody>
@@ -408,8 +428,8 @@ const Courts: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
                                                 className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
                                                     }`}
                                             >
                                                 {option.label}
@@ -427,8 +447,8 @@ const Courts: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
                                                 className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
                                                     }`}
                                             >
                                                 {option.label}
@@ -612,8 +632,8 @@ const Courts: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
                                                 className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
                                                     }`}
                                             >
                                                 {option.label}
@@ -631,8 +651,8 @@ const Courts: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setNewCleaningTime(option.value)}
                                                 className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
                                                     }`}
                                             >
                                                 {option.label}
@@ -754,6 +774,15 @@ const Courts: React.FC = () => {
                     <span className="text-[10px] font-black text-slate-400">11 PM</span>
                 </div>
             </div>
+
+            {/* Marketing Poster Modal */}
+            {isPosterOpen && posterData && (
+                <MarketingPosterModal
+                    isOpen={isPosterOpen}
+                    onClose={() => setIsPosterOpen(false)}
+                    data={posterData}
+                />
+            )}
         </div>
     );
 };
@@ -921,7 +950,7 @@ const MapPreview: React.FC<{
     );
 };
 
-const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => void }> = ({ court, onBook, onSettings }) => (
+const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => void, onPromote: () => void }> = ({ court, onBook, onSettings, onPromote }) => (
     <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
         <div className="p-8 pb-4">
             <div className="flex items-center justify-between mb-6">
@@ -972,6 +1001,12 @@ const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => 
                     Book Manually
                 </button>
                 <button
+                    onClick={onPromote}
+                    className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
+                >
+                    <Megaphone size={18} />
+                </button>
+                <button
                     onClick={onSettings}
                     className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl border border-slate-100 transition-colors"
                 >
@@ -982,7 +1017,7 @@ const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => 
     </div>
 );
 
-const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () => void }> = ({ court, onBook, onSettings }) => (
+const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () => void, onPromote: () => void }> = ({ court, onBook, onSettings, onPromote }) => (
     <tr className="group hover:bg-slate-50/50 transition-colors">
         <td className="px-8 py-6">
             <div className="flex items-center gap-4">
@@ -1013,6 +1048,12 @@ const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () 
                     className="px-6 py-2 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-amber-500 transition-all shadow-lg active:scale-95"
                 >
                     Book Manually
+                </button>
+                <button
+                    onClick={onPromote}
+                    className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
+                >
+                    <Megaphone size={18} />
                 </button>
                 <button
                     onClick={onSettings}

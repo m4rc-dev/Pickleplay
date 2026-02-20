@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
-import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2 } from 'lucide-react';
+import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2, Megaphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { submitCourtReview, hasUserReviewedBooking } from '../services/reviews';
 import Receipt from './Receipt';
+import MarketingPosterModal, { PosterData } from './MarketingPosterModal';
 
 const ITEMS_PER_PAGE = 8;
 const STATUS_FILTERS = ['All', 'Confirmed', 'Pending', 'Paid', 'Cancelled'] as const;
@@ -73,6 +74,27 @@ const MyBookings: React.FC = () => {
     const [shareEmail, setShareEmail] = useState('');
     const [isSharing, setIsSharing] = useState(false);
     const [shareError, setShareError] = useState('');
+
+    // Marketing Poster State
+    const [isPosterOpen, setIsPosterOpen] = useState(false);
+    const [posterData, setPosterData] = useState<PosterData | null>(null);
+
+    const handleOpenPoster = (booking: any) => {
+        setPosterData({
+            courtName: booking.court?.name || 'Pickleball Court',
+            locationName: booking.court?.location?.name || '',
+            address: booking.court?.location?.address || '',
+            city: booking.court?.location?.city || '',
+            date: booking.date,
+            startTime: booking.start_time,
+            endTime: booking.end_time,
+            courtType: booking.court?.court_type || undefined,
+            imageUrl: booking.court?.image_url || undefined,
+            amenities: Array.isArray(booking.court?.amenities) ? booking.court.amenities : [],
+            joinLink: `${window.location.origin}/booking`,
+        });
+        setIsPosterOpen(true);
+    };
 
     // Shared Courts State
     const [sharedCourts, setSharedCourts] = useState<any[]>([]);
@@ -410,9 +432,9 @@ const MyBookings: React.FC = () => {
         const label = isPaid ? 'Paid' : b.status;
         const colors = isPaid ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
             b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-            b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
-            b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
-            'bg-slate-100 border-slate-200 text-slate-500';
+                b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                    b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
+                        'bg-slate-100 border-slate-200 text-slate-500';
         return <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colors}`}>{label}</span>;
     };
 
@@ -486,19 +508,17 @@ const MyBookings: React.FC = () => {
                                         const hasBooking = !!info;
                                         return (
                                             <button key={dateStr} onClick={() => setSelectedCalendarDate(isSelected ? null : dateStr)}
-                                                className={`relative w-full aspect-square rounded-xl text-[11px] font-black transition-all duration-200 ${
-                                                    isSelected ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-200' :
+                                                className={`relative w-full aspect-square rounded-xl text-[11px] font-black transition-all duration-200 ${isSelected ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-200' :
                                                     isToday ? 'bg-slate-900 text-white' :
-                                                    hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
-                                                    'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
-                                                }`}>
+                                                        hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
+                                                            'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
+                                                    }`}>
                                                 {day}
                                                 {hasBooking && !isSelected && (
-                                                    <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${
-                                                        info.statuses.includes('paid') ? 'bg-emerald-500' :
+                                                    <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${info.statuses.includes('paid') ? 'bg-emerald-500' :
                                                         info.statuses.includes('confirmed') ? 'bg-blue-500' :
-                                                        info.statuses.includes('pending') ? 'bg-amber-500' : 'bg-slate-400'
-                                                    }`} />
+                                                            info.statuses.includes('pending') ? 'bg-amber-500' : 'bg-slate-400'
+                                                        }`} />
                                                 )}
                                             </button>
                                         );
@@ -545,9 +565,8 @@ const MyBookings: React.FC = () => {
                                     {/* Status Dropdown */}
                                     <div className="relative">
                                         <button onClick={(e) => { e.stopPropagation(); setShowStatusDropdown(!showStatusDropdown); setShowLocationDropdown(false); }}
-                                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all duration-200 min-w-[140px] justify-between ${
-                                                activeFilter !== 'All' ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                                            }`}>
+                                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all duration-200 min-w-[140px] justify-between ${activeFilter !== 'All' ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                                }`}>
                                             <span>{activeFilter}</span>
                                             <ChevronDown size={14} className={`transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
                                         </button>
@@ -555,9 +574,8 @@ const MyBookings: React.FC = () => {
                                             <div className="absolute top-full mt-2 right-0 bg-white rounded-2xl border-2 border-slate-100 shadow-xl shadow-slate-200/50 z-50 overflow-hidden min-w-[160px]" onClick={e => e.stopPropagation()}>
                                                 {STATUS_FILTERS.map(f => (
                                                     <button key={f} onClick={() => { setActiveFilter(f); setShowStatusDropdown(false); }}
-                                                        className={`w-full px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest transition-all ${
-                                                            activeFilter === f ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                                                        }`}>{f}</button>
+                                                        className={`w-full px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest transition-all ${activeFilter === f ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                                            }`}>{f}</button>
                                                 ))}
                                             </div>
                                         )}
@@ -566,9 +584,8 @@ const MyBookings: React.FC = () => {
                                     {/* Location Dropdown */}
                                     <div className="relative">
                                         <button onClick={(e) => { e.stopPropagation(); setShowLocationDropdown(!showLocationDropdown); setShowStatusDropdown(false); }}
-                                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all duration-200 min-w-[140px] justify-between ${
-                                                selectedLocation !== 'All' ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                                            }`}>
+                                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all duration-200 min-w-[140px] justify-between ${selectedLocation !== 'All' ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                                }`}>
                                             <MapPin size={14} className="shrink-0" />
                                             <span className="truncate max-w-[100px]">{selectedLocation === 'All' ? 'Location' : selectedLocation}</span>
                                             <ChevronDown size={14} className={`transition-transform shrink-0 ${showLocationDropdown ? 'rotate-180' : ''}`} />
@@ -577,9 +594,8 @@ const MyBookings: React.FC = () => {
                                             <div className="absolute top-full mt-2 right-0 bg-white rounded-2xl border-2 border-slate-100 shadow-xl shadow-slate-200/50 z-50 overflow-hidden min-w-[200px] max-h-[240px] overflow-y-auto" onClick={e => e.stopPropagation()}>
                                                 {locationOptions.map(loc => (
                                                     <button key={loc} onClick={() => { setSelectedLocation(loc); setShowLocationDropdown(false); }}
-                                                        className={`w-full px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest transition-all ${
-                                                            selectedLocation === loc ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                                                        }`}>{loc}</button>
+                                                        className={`w-full px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest transition-all ${selectedLocation === loc ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                                            }`}>{loc}</button>
                                                 ))}
                                             </div>
                                         )}
@@ -652,6 +668,12 @@ const MyBookings: React.FC = () => {
                                                         <button onClick={() => handleOpenReview(b)}
                                                             className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50 transition-all" title="Review Court">
                                                             <Star size={14} />
+                                                        </button>
+                                                    )}
+                                                    {b.status === 'confirmed' && (
+                                                        <button onClick={() => handleOpenPoster(b)}
+                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all" title="Share Game Poster">
+                                                            <Megaphone size={14} />
                                                         </button>
                                                     )}
                                                     {b.status === 'confirmed' && (
@@ -942,13 +964,14 @@ const MyBookings: React.FC = () => {
                                     </div>
                                     <div className="space-y-5">
                                         <div>
-                                            {(() => { const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
+                                            {(() => {
+                                                const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
                                                 const label = isPaid ? 'Paid' : b.status;
                                                 const colors = isPaid ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300' :
                                                     b.status === 'confirmed' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
-                                                    b.status === 'pending' ? 'bg-amber-500/20 border-amber-400/30 text-amber-300' :
-                                                    b.status === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
-                                                    'bg-white/10 border-white/20 text-white/60';
+                                                        b.status === 'pending' ? 'bg-amber-500/20 border-amber-400/30 text-amber-300' :
+                                                            b.status === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
+                                                                'bg-white/10 border-white/20 text-white/60';
                                                 return <span className={`inline-block px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border mb-4 ${colors}`}>{label}</span>;
                                             })()}
                                             <h2 className="text-3xl xl:text-4xl font-black text-white leading-[1.1] tracking-tight uppercase">
@@ -1016,7 +1039,8 @@ const MyBookings: React.FC = () => {
                                             <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Status</label>
                                             <div className="flex items-center gap-2.5 bg-slate-50/50 border border-slate-200 rounded-xl py-3 px-4">
                                                 <Sparkles size={15} className="text-blue-600 shrink-0" />
-                                                {(() => { const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
+                                                {(() => {
+                                                    const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
                                                     const label = isPaid ? 'Paid' : b.status;
                                                     const color = isPaid ? 'text-emerald-600' : b.status === 'confirmed' ? 'text-blue-600' : b.status === 'pending' ? 'text-amber-600' : b.status === 'cancelled' ? 'text-red-500' : 'text-slate-500';
                                                     return <span className={`text-sm font-black capitalize ${color}`}>{label}</span>;
@@ -1106,8 +1130,17 @@ const MyBookings: React.FC = () => {
                     </div>
                 </div>, document.body
             )}
+            {/* Marketing Poster Modal */}
+            {isPosterOpen && posterData && (
+                <MarketingPosterModal
+                    isOpen={isPosterOpen}
+                    onClose={() => setIsPosterOpen(false)}
+                    data={posterData}
+                />
+            )}
         </>
     );
 };
+
 
 export default MyBookings;
