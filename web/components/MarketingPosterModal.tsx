@@ -317,57 +317,74 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
         setTimeout(() => setStatus('share', 'idle'), 2500);
     };
 
-    // ── Facebook: download poster first, then open FB share dialog ──
-    const handleFacebook = async () => {
-        setStatus('fb', 'loading');
-        const blob = await generatePosterBlob();
-        if (blob) downloadBlob(blob);
-        setTimeout(() => {
-            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(joinLink)}`, '_blank', 'noopener,noreferrer');
-            setStatus('fb', 'done');
-            setTimeout(() => setStatus('fb', 'idle'), 3000);
-        }, 500);
+    /**
+     * Core share helper — tries Web Share API with the poster PNG file attached.
+     * On mobile this opens the OS native share sheet with the image already loaded.
+     * If Web Share isn't supported (desktop), downloads the PNG and opens the fallback URL.
+     */
+    const shareWithPoster = async (platform: string, caption: string, fallbackUrl?: string) => {
+        setStatus(platform, 'loading');
+        try {
+            const blob = await generatePosterBlob();
+            if (!blob) throw new Error('render failed');
+            const file = new File([blob], posterFilename, { type: 'image/png' });
+            const shareData: ShareData = {
+                title: `${posterData.courtName} — PicklePlay`,
+                text: caption,
+                files: [file],
+            };
+            if (navigator.canShare && navigator.canShare(shareData)) {
+                // ✅ Mobile: native share sheet opens with poster image + caption attached
+                await navigator.share(shareData);
+                setStatus(platform, 'done');
+            } else if (navigator.share) {
+                // URL-only share (browser doesn't support file sharing)
+                await navigator.share({ title: shareData.title, text: caption, url: joinLink });
+                setStatus(platform, 'done');
+            } else {
+                // 🖥 Desktop fallback: download the image file + open the platform URL
+                downloadBlob(blob);
+                if (fallbackUrl) window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+                setStatus(platform, 'done');
+            }
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') console.error(`${platform} share failed:`, e);
+        }
+        setTimeout(() => setStatus(platform, 'idle'), 3000);
     };
 
-    // ── Messenger: download poster first, then open Messenger ──
-    const handleMessenger = async () => {
-        setStatus('msg', 'loading');
-        const blob = await generatePosterBlob();
-        if (blob) downloadBlob(blob);
-        setTimeout(() => {
-            window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(joinLink)}&app_id=966242223397117&redirect_uri=${encodeURIComponent(joinLink)}`, '_blank', 'noopener,noreferrer');
-            setStatus('msg', 'done');
-            setTimeout(() => setStatus('msg', 'idle'), 3000);
-        }, 400);
-    };
+    const handleFacebook = () => shareWithPoster(
+        'fb',
+        `🏓 ${posterData.courtName} — Come play pickleball in the Philippines!\n📍 ${[posterData.locationName, posterData.city].filter(Boolean).join(', ')}\n🔗 ${joinLink}\n#PicklePlay #Pickleball`,
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(joinLink)}`
+    );
 
-    // ── Discord: download poster + copy formatted message ──
-    const handleDiscord = async () => {
-        setStatus('discord', 'loading');
-        const blob = await generatePosterBlob();
-        if (blob) downloadBlob(blob);
-        const msg = [
+    const handleMessenger = () => shareWithPoster(
+        'msg',
+        `🏓 ${posterData.courtName} — Come play! Book here: ${joinLink}`,
+        `https://www.facebook.com/dialog/send?link=${encodeURIComponent(joinLink)}&app_id=966242223397117&redirect_uri=${encodeURIComponent(joinLink)}`
+    );
+
+    const handleDiscord = () => shareWithPoster(
+        'discord',
+        [
             `🏓 **${posterData.courtName}** — Come play pickleball!`,
             `📍 ${[posterData.locationName, posterData.city].filter(Boolean).join(', ')}`,
             posterData.date ? `📅 ${formatDate(posterData.date)}${posterData.startTime ? ` • ${formatTime(posterData.startTime)}${posterData.endTime ? ` – ${formatTime(posterData.endTime)}` : ''}` : ''}` : '',
-            joinLink ? `🔗 ${joinLink}` : '',
+            `🔗 ${joinLink}`,
             '#PicklePlay #Pickleball',
-            '*(Poster image downloaded — drag it into Discord!)*',
-        ].filter(Boolean).join('\n');
-        try { await navigator.clipboard.writeText(msg); } catch { /* silent */ }
-        setStatus('discord', 'done');
-        setTimeout(() => setStatus('discord', 'idle'), 3000);
-    };
+        ].filter(Boolean).join('\n'),
+        'https://discord.com'
+    );
 
-    // ── Instagram: download poster + copy link ──
     const handleInstagram = async () => {
-        setStatus('ig', 'loading');
-        const blob = await generatePosterBlob();
-        if (blob) downloadBlob(blob);
         try { await navigator.clipboard.writeText(joinLink); } catch { /* silent */ }
         setCopied(true);
-        setStatus('ig', 'done');
-        setTimeout(() => { setCopied(false); setStatus('ig', 'idle'); }, 3000);
+        setTimeout(() => setCopied(false), 3000);
+        shareWithPoster(
+            'ig',
+            `🏓 ${posterData.courtName} — Come play pickleball!\n📍 ${[posterData.locationName, posterData.city].filter(Boolean).join(', ')}\n🔗 ${joinLink}\n#PicklePlay #Pickleball`
+        );
     };
 
     return ReactDOM.createPortal(
@@ -553,21 +570,21 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
                             {/* Status hints */}
                             {copied && (
                                 <p className="text-[10px] font-bold text-emerald-600 text-center">
-                                    ✓ Link copied — post the saved image on Instagram!
+                                    ✓ Link copied — select Instagram from the share sheet!
                                 </p>
                             )}
                             {(shareStatus['fb'] === 'done' || shareStatus['msg'] === 'done') && (
                                 <p className="text-[10px] font-bold text-blue-600 text-center">
-                                    ✓ Poster saved — attach it to your post!
+                                    ✓ Share sheet opened with the poster image attached!
                                 </p>
                             )}
                             {shareStatus['discord'] === 'done' && (
                                 <p className="text-[10px] font-bold text-indigo-600 text-center">
-                                    ✓ Message copied + poster saved — drag image into Discord!
+                                    ✓ Share sheet opened — select Discord to send the poster!
                                 </p>
                             )}
                             <p className="text-[9px] text-slate-400 text-center font-medium leading-relaxed">
-                                � Each button saves the poster image to your downloads first
+                                📱 On mobile: the share sheet opens with the poster image + link. On desktop: the image is downloaded to attach manually.
                             </p>
                         </div>
                     </div>
