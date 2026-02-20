@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import useSEO from '../hooks/useSEO';
 import { Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -18,6 +19,11 @@ import {
 } from 'lucide-react';
 
 const Academy: React.FC = () => {
+  useSEO({
+    title: 'Pickleball Play Guide',
+    description: 'Learn pickleball rules, strategies, and skill drills with our academy guides written by Philippine coaches. Perfect for all skill levels.',
+    canonical: 'https://www.pickleplay.ph/academy',
+  });
   const [activeTab, setActiveTab] = useState<'basics' | 'rules' | 'tactics'>('basics');
 
   return (

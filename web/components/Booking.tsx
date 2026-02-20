@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield } from 'lucide-react';
@@ -147,6 +148,11 @@ interface LocationGroup {
 }
 
 const Booking: React.FC = () => {
+  useSEO({
+    title: 'Book a Pickleball Court',
+    description: 'Browse and reserve pickleball courts near you. Filter by city, skill level, and time slots on our interactive PH map.',
+    canonical: 'https://www.pickleplay.ph/booking',
+  });
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);

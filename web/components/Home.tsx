@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import useSEO from '../hooks/useSEO';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   MapPin,
@@ -159,6 +160,11 @@ const getRegion = (city: string): string => {
 };
 
 const Home: React.FC = () => {
+  useSEO({
+    title: 'PicklePlay Philippines – Book Courts & Play Pickleball',
+    description: 'Find and book pickleball courts across the Philippines. Join tournaments, track rankings, connect with players, and grow your game — all in one place.',
+    canonical: 'https://www.pickleplay.ph/',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   // Real player faces and user count from Supabase
   const [playerFaces, setPlayerFaces] = useState<string[]>([]);
@@ -1642,7 +1648,7 @@ const Home: React.FC = () => {
             <div>
               <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Legal & Policy</h4>
               <ul className="space-y-2 md:space-y-4">
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
+                <li><a href="/#/privacy" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Terms of Service</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">PH Partners Agreement</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Cookie Settings</a></li>

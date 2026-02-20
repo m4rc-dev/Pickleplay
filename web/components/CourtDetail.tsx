@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -172,6 +173,16 @@ const CourtDetail: React.FC = () => {
     const [locationConfirmed, setLocationConfirmed] = useState(false);
     const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
     const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
+
+    // ── SEO: updates title/description once court data is loaded ──
+    useSEO({
+        title: court ? `${court.name} – Book This Court` : 'Court Details',
+        description: court
+            ? `Book a slot at ${court.name} in ${court.location}. View available times, pricing, and amenities.`
+            : 'View pickleball court details and book your slot on PicklePlay Philippines.',
+        canonical: courtId ? `https://www.pickleplay.ph/court/${courtId}` : undefined,
+    });
+
 
     useEffect(() => {
         const fetchUser = async () => {

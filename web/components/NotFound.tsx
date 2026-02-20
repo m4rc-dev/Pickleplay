@@ -1,9 +1,11 @@
 
 import React from 'react';
+import useSEO from '../hooks/useSEO';
 import { Link, useNavigate } from 'react-router-dom';
 import { MoveLeft, Home, MapPinOff, ZapOff, Ghost } from 'lucide-react';
 
 const NotFound: React.FC = () => {
+  useSEO({ title: 'Page Not Found', description: 'The page you are looking for does not exist.', noIndex: true });
   const navigate = useNavigate();
 
   return (

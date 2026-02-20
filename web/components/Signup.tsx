@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import {
@@ -119,6 +120,12 @@ const GoogleIcon = () => (
 
 // ─── Main Signup ──────────────────────────────────────────────────────────────
 const Signup: React.FC = () => {
+    useSEO({
+        title: 'Sign Up – Create Your PicklePlay Account',
+        description: 'Create a free PicklePlay Philippines account. Book courts, join tournaments, find coaches, and connect with the PH pickleball community.',
+        canonical: 'https://www.pickleplay.ph/signup',
+        noIndex: true,
+    });
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -146,9 +153,10 @@ const Signup: React.FC = () => {
             if (referralCode) localStorage.setItem('referral_code', referralCode);
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
             localStorage.setItem('terms_accepted_at', new Date().toISOString());
+            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
             const callbackUrl = referralCode
-                ? `${window.location.origin}/auth/callback?ref=${referralCode}`
-                : `${window.location.origin}/auth/callback`;
+                ? `${appUrl}/auth/callback?ref=${referralCode}`
+                : `${appUrl}/auth/callback`;
             const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
             if (authError) throw authError;
         } catch (err: any) {

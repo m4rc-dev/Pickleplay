@@ -54,6 +54,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ─── OAuth Callback Redirect ────────────────────────────────────
+// Google OAuth redirects to /auth/callback, but we need it at /#/auth/callback
+// This handler converts the query params to hash params for HashRouter compatibility
+app.get('/auth/callback', (req, res) => {
+  // Extract all query parameters
+  const queryString = new URLSearchParams(req.query).toString();
+  // Redirect to hash-based route with same parameters
+  const redirectUrl = queryString ? `/#/auth/callback#${queryString}` : '/#/auth/callback';
+  res.redirect(redirectUrl);
+});
+
 // ─── News API Proxy ─────────────────────────────────────────────
 // Proxies requests to HomesPh News API, injecting the secure API key
 app.get('/api/v1/news/articles', async (req, res) => {

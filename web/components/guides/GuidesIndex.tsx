@@ -1,5 +1,6 @@
 // GuidesIndex - Main page showing all available guides
 import React, { useState, useEffect } from 'react';
+import useSEO from '../../hooks/useSEO';
 import { Link } from 'react-router-dom';
 import {
     BookOpen,
@@ -24,6 +25,11 @@ interface GuidesIndexProps {
 }
 
 const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
+    useSEO({
+        title: 'Pickleball Guides & Quizzes',
+        description: 'Learn pickleball with guides, quizzes, and tutorials written by Philippine coaches. Skill rating, rules, tactics, and equipment guides.',
+        canonical: 'https://www.pickleplay.ph/guides',
+    });
     const [guides, setGuides] = useState<Guide[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');

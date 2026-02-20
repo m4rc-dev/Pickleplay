@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Shield,
@@ -35,7 +35,13 @@ import {
   Trash2,
   Copy,
   QrCode,
-  Loader2
+  Loader2,
+  Construction,
+  Power,
+  ToggleLeft,
+  ToggleRight,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import QRCodeGenerator from './QRCodeGenerator';
 import {
@@ -53,6 +59,19 @@ import { ProfessionalApplication, Tournament } from '../types';
 // Fix: Import UserRole from the centralized types.ts file.
 import { UserRole } from '../types';
 import { INITIAL_TOURNAMENTS } from '../data/mockData';
+import {
+  getMaintenanceStatus,
+  updateMaintenanceStatus,
+  getAllFeatureAccess,
+  toggleFeatureAccess,
+  setAllFeaturesForRole,
+  buildAccessMatrix,
+  ALL_FEATURES,
+  MANAGEABLE_ROLES,
+  DEFAULT_FEATURES_PER_ROLE,
+  type MaintenanceSettings,
+  type FeatureAccess,
+} from '../services/maintenance';
 
 const GROWTH_DATA = [
   { name: 'Mon', active: 120 },
@@ -87,7 +106,7 @@ interface AdminDashboardProps {
   currentAdminRole?: UserRole;
 }
 
-type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes' | 'terms';
+type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes' | 'terms' | 'maintenance';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onApprove, onReject, currentAdminRole = 'ADMIN' }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -112,6 +131,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [platformSettings, setPlatformSettings] = useState<Record<string, any>>({});
   const [accessCodes, setAccessCodes] = useState<any[]>([]);
+
+  // Maintenance & Feature Access state
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('We are currently performing scheduled maintenance. Please check back shortly.');
+  const [maintenanceLastUpdated, setMaintenanceLastUpdated] = useState<string | null>(null);
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+  const [featureMatrix, setFeatureMatrix] = useState<Record<string, Record<string, boolean>>>({});
+  const [featureAccessLoading, setFeatureAccessLoading] = useState(false);
+  const [featureToggling, setFeatureToggling] = useState<string | null>(null);
+
+  // Tabs horizontal scroll controls
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateTabScrollState = () => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const maxScrollLeft = el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(maxScrollLeft > 2 && el.scrollLeft < maxScrollLeft - 2);
+  };
+
+  useEffect(() => {
+    // Use RAF so measurement happens after the browser has finished layout/paint
+    const raf = requestAnimationFrame(() => updateTabScrollState());
+    const el = tabsRef.current;
+    if (!el) return;
+
+    el.addEventListener('scroll', updateTabScrollState, { passive: true });
+
+    // ResizeObserver re-checks whenever the container or its children resize
+    const ro = new ResizeObserver(() => requestAnimationFrame(() => updateTabScrollState()));
+    ro.observe(el);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener('scroll', updateTabScrollState);
+      ro.disconnect();
+    };
+  }, []);
+
+  const scrollTabsBy = (delta: number) => {
+    const el = tabsRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     loadTournaments();
@@ -503,16 +569,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             </div>
           </div>
 
-          <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm overflow-x-auto scrollbar-hide no-scrollbar flex-nowrap min-w-0 max-w-full lg:max-w-none">
-            <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="Overview" />
-            <TabButton active={activeTab === 'tournaments'} onClick={() => setActiveTab('tournaments')} label="Tournaments" icon={<Trophy size={14} />} />
-            <TabButton active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} label="Apps" badge={pendingApps.length} />
-            <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Users" />
-            <TabButton active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Security" icon={<Lock size={14} />} />
-            <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
-            <TabButton active={activeTab === 'qr-codes'} onClick={() => setActiveTab('qr-codes')} label="QR Codes" icon={<QrCode size={14} />} />
-            <TabButton active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} label="Audit" icon={<Eye size={14} />} />
-            <TabButton active={activeTab === 'terms'} onClick={() => setActiveTab('terms')} label="Terms" icon={<FileText size={14} />} />
+          {/* ── Tab nav pill with scroll arrows ── */}
+          <div className="flex items-center bg-white border border-slate-200 shadow-md rounded-[28px] p-1.5 gap-1 min-w-0">
+            {/* Left arrow */}
+            <button
+              type="button"
+              aria-label="Scroll tabs left"
+              onClick={() => scrollTabsBy(-200)}
+              className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200
+                ${canScrollLeft
+                  ? 'bg-slate-950 text-white hover:bg-black shadow-lg shadow-slate-400/40 cursor-pointer hover:scale-105 active:scale-95'
+                  : 'bg-slate-200 text-slate-400 opacity-40 cursor-default'}`}
+            >
+              <ChevronLeft size={18} strokeWidth={3} />
+            </button>
+
+            {/* Scrollable tabs */}
+            <div className="relative flex-1 min-w-0 overflow-hidden">
+              {/* Left fade hint */}
+              <div className={`pointer-events-none absolute left-0 inset-y-0 w-10 z-10 bg-gradient-to-r from-white to-transparent transition-opacity duration-300 ${canScrollLeft ? 'opacity-100' : 'opacity-0'}`} />
+              {/* Right fade hint */}
+              <div className={`pointer-events-none absolute right-0 inset-y-0 w-10 z-10 bg-gradient-to-l from-white to-transparent transition-opacity duration-300 ${canScrollRight ? 'opacity-100' : 'opacity-0'}`} />
+
+              <div
+                ref={tabsRef}
+                onScroll={updateTabScrollState}
+                className="flex overflow-x-auto scrollbar-hide no-scrollbar flex-nowrap gap-0.5 scroll-smooth px-0.5"
+              >
+                <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="Overview" />
+                <TabButton active={activeTab === 'tournaments'} onClick={() => setActiveTab('tournaments')} label="Tournaments" icon={<Trophy size={14} />} />
+                <TabButton active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} label="Apps" badge={pendingApps.length} />
+                <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Users" />
+                <TabButton active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Security" icon={<Lock size={14} />} />
+                <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
+                <TabButton active={activeTab === 'qr-codes'} onClick={() => setActiveTab('qr-codes')} label="QR Codes" icon={<QrCode size={14} />} />
+                <TabButton active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} label="Audit" icon={<Eye size={14} />} />
+                <TabButton active={activeTab === 'terms'} onClick={() => setActiveTab('terms')} label="Terms" icon={<FileText size={14} />} />
+                <TabButton active={activeTab === 'maintenance'} onClick={() => setActiveTab('maintenance')} label="Website" icon={<Construction size={14} />} />
+              </div>
+            </div>
+
+            {/* Right arrow */}
+            <button
+              type="button"
+              aria-label="Scroll tabs right"
+              onClick={() => scrollTabsBy(200)}
+              className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200
+                ${canScrollRight
+                  ? 'bg-slate-950 text-white hover:bg-black shadow-lg shadow-slate-400/40 cursor-pointer hover:scale-105 active:scale-95'
+                  : 'bg-slate-200 text-slate-400 opacity-40 cursor-default'}`}
+            >
+              <ChevronRight size={18} strokeWidth={3} />
+            </button>
           </div>
         </div>
 
@@ -1046,6 +1154,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
           </div>
         )}
         {activeTab === 'terms' && <TermsConditionsEditor logAdminAction={logAdminAction} />}
+
+        {activeTab === 'maintenance' && (
+          <MaintenanceTab
+            maintenanceEnabled={maintenanceEnabled}
+            setMaintenanceEnabled={setMaintenanceEnabled}
+            maintenanceMessage={maintenanceMessage}
+            setMaintenanceMessage={setMaintenanceMessage}
+            maintenanceLastUpdated={maintenanceLastUpdated}
+            setMaintenanceLastUpdated={setMaintenanceLastUpdated}
+            maintenanceSaving={maintenanceSaving}
+            setMaintenanceSaving={setMaintenanceSaving}
+            featureMatrix={featureMatrix}
+            setFeatureMatrix={setFeatureMatrix}
+            featureAccessLoading={featureAccessLoading}
+            setFeatureAccessLoading={setFeatureAccessLoading}
+            featureToggling={featureToggling}
+            setFeatureToggling={setFeatureToggling}
+            logAdminAction={logAdminAction}
+          />
+        )}
       </div>
 
       {/* MODAL IS NOW PORTALED TO DOCUMENT BODY TO IGNORE PARENT CONSTRAINTS */}
@@ -1243,6 +1371,540 @@ const SecurityToggle: React.FC<{
     </div>
   </div>
 );
+
+// ─── Website Maintenance & Feature Access Tab ────────────────────────────────
+const MaintenanceTab: React.FC<{
+  maintenanceEnabled: boolean;
+  setMaintenanceEnabled: (v: boolean) => void;
+  maintenanceMessage: string;
+  setMaintenanceMessage: (v: string) => void;
+  maintenanceLastUpdated: string | null;
+  setMaintenanceLastUpdated: (v: string | null) => void;
+  maintenanceSaving: boolean;
+  setMaintenanceSaving: (v: boolean) => void;
+  featureMatrix: Record<string, Record<string, boolean>>;
+  setFeatureMatrix: (v: Record<string, Record<string, boolean>>) => void;
+  featureAccessLoading: boolean;
+  setFeatureAccessLoading: (v: boolean) => void;
+  featureToggling: string | null;
+  setFeatureToggling: (v: string | null) => void;
+  logAdminAction: (action: string, targetId: string, targetName: string, details: string, eventType?: 'AUDIT' | 'SECURITY') => Promise<void>;
+}> = ({
+  maintenanceEnabled, setMaintenanceEnabled,
+  maintenanceMessage, setMaintenanceMessage,
+  maintenanceLastUpdated, setMaintenanceLastUpdated,
+  maintenanceSaving, setMaintenanceSaving,
+  featureMatrix, setFeatureMatrix,
+  featureAccessLoading, setFeatureAccessLoading,
+  featureToggling, setFeatureToggling,
+  logAdminAction,
+}) => {
+  const [showConfirm, setShowConfirm] = useState(false);
+  // Staged (local) changes — not yet saved to DB
+  const [pendingMatrix, setPendingMatrix] = useState<Record<string, Record<string, boolean>> | null>(null);
+  const [featureSaving, setFeatureSaving] = useState(false);
+  const [showFeatureConfirm, setShowFeatureConfirm] = useState(false);
+
+  // The display matrix: pendingMatrix takes priority over DB matrix
+  const displayMatrix = pendingMatrix ?? featureMatrix;
+
+  const hasPendingFeatureChanges = pendingMatrix !== null;
+
+  const pendingChangeCount = (() => {
+    if (!pendingMatrix) return 0;
+    let count = 0;
+    for (const role of Object.keys(pendingMatrix)) {
+      for (const feat of Object.keys(pendingMatrix[role])) {
+        if (pendingMatrix[role][feat] !== (featureMatrix[role]?.[feat] ?? true)) count++;
+      }
+    }
+    return count;
+  })();
+
+  useEffect(() => {
+    loadMaintenanceData();
+  }, []);
+
+  const loadMaintenanceData = async () => {
+    setFeatureAccessLoading(true);
+    try {
+      const [maint, access] = await Promise.all([
+        getMaintenanceStatus(),
+        getAllFeatureAccess(),
+      ]);
+      if (maint) {
+        setMaintenanceEnabled(maint.enabled);
+        setMaintenanceMessage(maint.message || '');
+        setMaintenanceLastUpdated(maint.updated_at);
+      }
+      setFeatureMatrix(buildAccessMatrix(access));
+    } catch (err) {
+      console.error('Failed to load maintenance data:', err);
+    } finally {
+      setFeatureAccessLoading(false);
+    }
+  };
+
+  const handleSaveMaintenance = async () => {
+    setMaintenanceSaving(true);
+    try {
+      const result = await updateMaintenanceStatus(maintenanceEnabled, maintenanceMessage);
+      if (result.success) {
+        setMaintenanceLastUpdated(new Date().toISOString());
+        await logAdminAction(
+          maintenanceEnabled ? 'MAINTENANCE_ENABLED' : 'MAINTENANCE_DISABLED',
+          'system',
+          'Maintenance Mode',
+          `Maintenance ${maintenanceEnabled ? 'enabled' : 'disabled'}: "${maintenanceMessage.slice(0, 50)}..."`,
+          'SECURITY'
+        );
+      } else {
+        alert('Failed to save: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Save maintenance error:', err);
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  };
+
+  const handleToggleFeature = (role: string, feature: string) => {
+    const currentVal = displayMatrix[role]?.[feature] ?? true;
+    const newVal = !currentVal;
+    setPendingMatrix(prev => {
+      const base = prev ?? JSON.parse(JSON.stringify(featureMatrix));
+      return {
+        ...base,
+        [role]: { ...(base[role] ?? {}), [feature]: newVal },
+      };
+    });
+  };
+
+  const handleToggleAllForRole = (role: string, enable: boolean) => {
+    const roleFeatures = DEFAULT_FEATURES_PER_ROLE[role] || [];
+    setPendingMatrix(prev => {
+      const base = prev ?? JSON.parse(JSON.stringify(featureMatrix));
+      const updated = { ...base, [role]: { ...(base[role] ?? {}) } };
+      for (const f of roleFeatures) updated[role][f] = enable;
+      return updated;
+    });
+  };
+
+  const handleSaveFeatureChanges = async () => {
+    if (!pendingMatrix) return;
+    setFeatureSaving(true);
+    try {
+      // For every role that was touched, upsert ALL of its default features
+      // (not just changed ones) so the DB has a complete row-set for that role.
+      // Features in pendingMatrix use the staged value; any missing default features
+      // get their current DB value (or true if never written).
+      const rows: { role: string; feature: string; is_enabled: boolean; updated_at: string }[] = [];
+      const ts = new Date().toISOString();
+
+      for (const role of Object.keys(pendingMatrix)) {
+        const allRoleFeatures = DEFAULT_FEATURES_PER_ROLE[role] || [];
+        for (const feature of allRoleFeatures) {
+          // staged value if explicitly set, else current DB value, else default true
+          const isEnabled = pendingMatrix[role]?.[feature]
+            ?? featureMatrix[role]?.[feature]
+            ?? true;
+          rows.push({ role, feature, is_enabled: isEnabled, updated_at: ts });
+        }
+      }
+
+      const { error } = await supabase
+        .from('role_feature_access')
+        .upsert(rows, { onConflict: 'role,feature' });
+
+      if (error) { alert('Failed to save: ' + error.message); return; }
+
+      // Commit full pending state to DB mirror
+      setFeatureMatrix(prev => {
+        const next = { ...prev };
+        for (const role of Object.keys(pendingMatrix)) {
+          next[role] = { ...(prev[role] ?? {}) };
+          for (const r of rows.filter(r => r.role === role)) {
+            next[role][r.feature] = r.is_enabled;
+          }
+        }
+        return next;
+      });
+      setPendingMatrix(null);
+      await logAdminAction('FEATURE_ACCESS_BULK_SAVED', 'system', 'Feature Access', `Saved ${rows.length} feature access rows for roles: ${Object.keys(pendingMatrix).join(', ')}`, 'AUDIT');
+    } catch (err) {
+      console.error('Save feature changes error:', err);
+      alert('Unexpected error saving feature changes.');
+    } finally {
+      setFeatureSaving(false);
+    }
+  };
+
+  const handleDiscardFeatureChanges = () => setPendingMatrix(null);
+
+  // Features relevant to each role (based on default mapping, not just what's in DB)
+  const getFeaturesForRole = (roleKey: string) => {
+    const roleFeatureKeys = DEFAULT_FEATURES_PER_ROLE[roleKey] || [];
+    return ALL_FEATURES.filter(f => roleFeatureKeys.includes(f.key));
+  };
+
+  // Get feature state with default of true (enabled) if not in DB yet
+  const isFeatureOn = (roleKey: string, featureKey: string): boolean => {
+    return displayMatrix[roleKey]?.[featureKey] ?? true;
+  };
+
+  // Has the value changed from DB state?
+  const isFeaturePending = (roleKey: string, featureKey: string): boolean => {
+    if (!pendingMatrix) return false;
+    const pending = pendingMatrix[roleKey]?.[featureKey];
+    const saved = featureMatrix[roleKey]?.[featureKey] ?? true;
+    return pending !== undefined && pending !== saved;
+  };
+
+  return (
+    <div className="space-y-8 animate-slide-up">
+      {/* ── Maintenance Mode Card ── */}
+      <div className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-200 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-start gap-8">
+          <div className="flex-1">
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`p-4 rounded-2xl ${maintenanceEnabled ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'} transition-colors`}>
+                <Construction size={28} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
+                  Maintenance Mode
+                </h2>
+                <p className="text-slate-500 font-medium text-sm mt-1">
+                  When enabled, all non-admin users see a maintenance page.
+                </p>
+              </div>
+            </div>
+
+            {/* Status indicator */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                maintenanceEnabled
+                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                  : 'bg-green-50 text-green-600 border border-green-200'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${maintenanceEnabled ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
+                {maintenanceEnabled ? 'Maintenance Active' : 'Site Online'}
+              </div>
+              {maintenanceLastUpdated && (
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                  Last updated: {new Date(maintenanceLastUpdated).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {/* Toggle */}
+            <div
+              onClick={() => setMaintenanceEnabled(!maintenanceEnabled)}
+              className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-white hover:shadow-lg hover:border-slate-200 transition-all duration-300 mb-6"
+            >
+              <div className="flex items-center gap-4">
+                <Power size={20} className={maintenanceEnabled ? 'text-amber-500' : 'text-slate-400'} />
+                <div>
+                  <p className="font-black text-slate-900 uppercase tracking-tight text-sm">
+                    {maintenanceEnabled ? 'Disable Maintenance' : 'Enable Maintenance'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {maintenanceEnabled ? 'Click to bring the site back online' : 'Click to take the site offline for non-admins'}
+                  </p>
+                </div>
+              </div>
+              <div className={`w-14 h-8 rounded-full p-1.5 transition-colors ${maintenanceEnabled ? 'bg-amber-500' : 'bg-slate-200'}`}>
+                <div className={`w-5 h-5 rounded-full bg-white transition-transform shadow-sm ${maintenanceEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+              </div>
+            </div>
+
+            {/* Message editor */}
+            <div className="mb-6">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                Maintenance Message
+              </label>
+              <textarea
+                value={maintenanceMessage}
+                onChange={e => setMaintenanceMessage(e.target.value)}
+                rows={3}
+                className="w-full p-4 rounded-2xl border border-slate-200 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none"
+                placeholder="Enter a message for users during maintenance..."
+              />
+            </div>
+
+            {/* Save */}
+            <button
+              onClick={() => setShowConfirm(true)}
+              disabled={maintenanceSaving}
+              className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-300 text-white ${
+                maintenanceEnabled
+                  ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20'
+                  : 'bg-green-600 hover:bg-green-700 shadow-green-500/20'
+              }`}
+            >
+              {maintenanceSaving ? <Loader2 size={16} className="animate-spin" /> : maintenanceEnabled ? <Construction size={16} /> : <CheckCircle2 size={16} />}
+              {maintenanceSaving ? 'Saving...' : maintenanceEnabled ? 'Put on Maintenance' : 'Bring Site Online'}
+            </button>
+
+            {/* Confirm Modal — portaled to body so it covers the entire page */}
+            {showConfirm && ReactDOM.createPortal(
+              <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+                <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500">
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="absolute top-8 right-8 p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+
+                  <div className={`w-16 h-16 rounded-3xl mx-auto mb-6 flex items-center justify-center ${
+                    maintenanceEnabled ? 'bg-amber-100' : 'bg-green-100'
+                  }`}>
+                    {maintenanceEnabled
+                      ? <Construction size={32} className="text-amber-500" />
+                      : <CheckCircle2 size={32} className="text-green-600" />
+                    }
+                  </div>
+
+                  <h3 className="text-3xl font-black text-slate-950 tracking-tighter uppercase text-center mb-2">
+                    {maintenanceEnabled ? 'Put on Maintenance?' : 'Bring Site Online?'}
+                  </h3>
+                  <p className="text-slate-500 font-medium text-center mb-8 leading-relaxed text-sm">
+                    {maintenanceEnabled
+                      ? 'All non-admin users will be shown a maintenance page and cannot access any features until you disable this.'
+                      : 'The site will become fully accessible to all users again.'
+                    }
+                  </p>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowConfirm(false)}
+                      className="flex-1 px-6 py-4 rounded-2xl border-2 border-slate-200 font-black text-[11px] uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { setShowConfirm(false); handleSaveMaintenance(); }}
+                      className={`flex-1 px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 ${
+                        maintenanceEnabled
+                          ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/25'
+                          : 'bg-green-600 hover:bg-green-700 shadow-green-500/25'
+                      }`}
+                    >
+                      {maintenanceEnabled ? 'Yes, Put on Maintenance' : 'Yes, Go Live'}
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
+          </div>
+
+          {/* Preview card */}
+          <div className="lg:w-80 shrink-0">
+            <div className="rounded-[32px] overflow-hidden border border-slate-200 shadow-sm">
+              <div className={`p-6 text-center ${maintenanceEnabled ? 'bg-gradient-to-br from-slate-950 to-indigo-950' : 'bg-gradient-to-br from-green-50 to-emerald-50'}`}>
+                <div className={`w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center ${maintenanceEnabled ? 'bg-amber-400/20' : 'bg-green-100'}`}>
+                  {maintenanceEnabled
+                    ? <Construction size={28} className="text-amber-400" />
+                    : <CheckCircle2 size={28} className="text-green-600" />
+                  }
+                </div>
+                <h4 className={`text-sm font-black uppercase tracking-tight mb-2 ${maintenanceEnabled ? 'text-white' : 'text-slate-900'}`}>
+                  {maintenanceEnabled ? 'Under Maintenance' : 'Site is Live'}
+                </h4>
+                <p className={`text-xs font-medium leading-relaxed ${maintenanceEnabled ? 'text-white/60' : 'text-slate-500'}`}>
+                  {maintenanceEnabled
+                    ? (maintenanceMessage || 'Maintenance message...')
+                    : 'All users can access the platform normally.'}
+                </p>
+              </div>
+              <div className="p-4 bg-white">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
+                  Preview — How users see it
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Role-Based Feature Access Matrix ── */}
+      <div className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-200 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase flex items-center gap-3">
+              <Eye className="text-indigo-600" /> Feature Access Control
+            </h2>
+            <p className="text-slate-500 font-medium text-sm mt-1">
+              Control which features each role can access. Admin always has full access.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {featureAccessLoading && (
+              <div className="flex items-center gap-2 text-slate-400">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Loading...</span>
+              </div>
+            )}
+            {hasPendingFeatureChanges && (
+              <>
+                <button
+                  onClick={handleDiscardFeatureChanges}
+                  className="px-5 py-3 rounded-2xl border-2 border-slate-200 font-black text-[10px] uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={() => setShowFeatureConfirm(true)}
+                  disabled={featureSaving}
+                  className="relative px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/25 transition-all active:scale-95 flex items-center gap-2"
+                >
+                  {featureSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  Save Changes
+                  {pendingChangeCount > 0 && (
+                    <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-amber-400 text-slate-900 text-[9px] font-black flex items-center justify-center">
+                      {pendingChangeCount}
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Role cards */}
+        <div className="space-y-6">
+          {MANAGEABLE_ROLES.map(roleItem => {
+            const roleFeatures = getFeaturesForRole(roleItem.key);
+            if (roleFeatures.length === 0) return null;
+
+            const enabledCount = roleFeatures.filter(f => isFeatureOn(roleItem.key, f.key)).length;
+            const allEnabled = enabledCount === roleFeatures.length;
+            const noneEnabled = enabledCount === 0;
+
+            return (
+              <div key={roleItem.key} className="border border-slate-100 rounded-[32px] overflow-hidden">
+                {/* Role header */}
+                <div className="flex items-center justify-between p-6 bg-slate-50">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm">
+                      {roleItem.label.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-black text-slate-900 uppercase tracking-tight">{roleItem.label}</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                        {enabledCount} / {roleFeatures.length} features enabled
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleAllForRole(roleItem.key, true)}
+                      disabled={allEnabled}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        allEnabled ? 'bg-green-50 text-green-400 cursor-not-allowed' : 'bg-green-50 text-green-600 hover:bg-green-100'
+                      }`}
+                    >
+                      Enable All
+                    </button>
+                    <button
+                      onClick={() => handleToggleAllForRole(roleItem.key, false)}
+                      disabled={noneEnabled}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        noneEnabled ? 'bg-red-50 text-red-300 cursor-not-allowed' : 'bg-red-50 text-red-600 hover:bg-red-100'
+                      }`}
+                    >
+                      Disable All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feature toggles grid */}
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {roleFeatures.map(feat => {
+                    const isOn = isFeatureOn(roleItem.key, feat.key);
+                    const isPending = isFeaturePending(roleItem.key, feat.key);
+
+                    return (
+                      <div
+                        key={feat.key}
+                        onClick={() => handleToggleFeature(roleItem.key, feat.key)}
+                        className={`relative flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
+                          isOn
+                            ? 'bg-white border-slate-100 hover:border-green-200 hover:bg-green-50/50'
+                            : 'bg-slate-50 border-slate-100 hover:border-red-200 hover:bg-red-50/50'
+                        } ${isPending ? 'ring-2 ring-amber-400/60' : ''}`}
+                      >
+                        {isPending && (
+                          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-400" />
+                        )}
+                        <div className="flex items-center gap-3 min-w-0">
+                          {isOn
+                            ? <CheckCircle2 size={16} className="text-green-500 shrink-0" />
+                            : <XCircle size={16} className="text-slate-300 shrink-0" />
+                          }
+                          <span className={`text-xs font-bold truncate ${isOn ? 'text-slate-700' : 'text-slate-400'}`}>
+                            {feat.label}
+                          </span>
+                        </div>
+                        <div className={`w-10 h-6 rounded-full p-1 transition-colors shrink-0 ${isOn ? 'bg-green-500' : 'bg-slate-200'}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${isOn ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Feature Save Confirm Modal */}
+      {showFeatureConfirm && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500">
+            <button
+              onClick={() => setShowFeatureConfirm(false)}
+              className="absolute top-8 right-8 p-3 bg-slate-100 rounded-full text-slate-400 hover:text-slate-950 transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <div className="w-16 h-16 rounded-3xl mx-auto mb-6 flex items-center justify-center bg-indigo-100">
+              <Eye size={32} className="text-indigo-600" />
+            </div>
+            <h3 className="text-3xl font-black text-slate-950 tracking-tighter uppercase text-center mb-2">
+              Save Feature Changes?
+            </h3>
+            <p className="text-slate-500 font-medium text-center mb-2 leading-relaxed text-sm">
+              You have <span className="font-black text-indigo-600">{pendingChangeCount} unsaved change{pendingChangeCount !== 1 ? 's' : ''}</span> to feature access.
+            </p>
+            <p className="text-slate-400 font-medium text-center mb-8 text-xs">
+              Affected users will see changes within 30 seconds.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFeatureConfirm(false)}
+                className="flex-1 px-6 py-4 rounded-2xl border-2 border-slate-200 font-black text-[11px] uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowFeatureConfirm(false); handleSaveFeatureChanges(); }}
+                disabled={featureSaving}
+                className="flex-1 px-6 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] uppercase tracking-widest shadow-xl shadow-indigo-500/25 transition-all active:scale-95"
+              >
+                Yes, Save Changes
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
 
 // ─── Terms & Conditions Rich Editor ───────────────────────────────────────────
 const TermsConditionsEditor: React.FC<{

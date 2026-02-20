@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
-import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2 } from 'lucide-react';
+import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2, Megaphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { submitCourtReview, hasUserReviewedBooking } from '../services/reviews';
 import Receipt from './Receipt';
+import MarketingPosterModal, { PosterData } from './MarketingPosterModal';
 
 const ITEMS_PER_PAGE = 8;
 const STATUS_FILTERS = ['All', 'Confirmed', 'Pending', 'Paid', 'Cancelled'] as const;
@@ -73,6 +74,27 @@ const MyBookings: React.FC = () => {
     const [shareEmail, setShareEmail] = useState('');
     const [isSharing, setIsSharing] = useState(false);
     const [shareError, setShareError] = useState('');
+
+    // Marketing Poster State
+    const [isPosterOpen, setIsPosterOpen] = useState(false);
+    const [posterData, setPosterData] = useState<PosterData | null>(null);
+
+    const handleOpenPoster = (booking: any) => {
+        setPosterData({
+            courtName: booking.court?.name || 'Pickleball Court',
+            locationName: booking.court?.location?.name || '',
+            address: booking.court?.location?.address || '',
+            city: booking.court?.location?.city || '',
+            date: booking.date,
+            startTime: booking.start_time,
+            endTime: booking.end_time,
+            courtType: booking.court?.court_type || undefined,
+            imageUrl: booking.court?.image_url || undefined,
+            amenities: Array.isArray(booking.court?.amenities) ? booking.court.amenities : [],
+            joinLink: `${window.location.origin}/booking`,
+        });
+        setIsPosterOpen(true);
+    };
 
     // Shared Courts State
     const [sharedCourts, setSharedCourts] = useState<any[]>([]);
@@ -649,6 +671,12 @@ const MyBookings: React.FC = () => {
                                                         </button>
                                                     )}
                                                     {b.status === 'confirmed' && (
+                                                        <button onClick={() => handleOpenPoster(b)}
+                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all" title="Share Game Poster">
+                                                            <Megaphone size={14} />
+                                                        </button>
+                                                    )}
+                                                    {b.status === 'confirmed' && (
                                                         <button onClick={() => { setSelectedBookingForShare(b); setShareEmail(''); setShareError(''); setShowShareModal(true); }}
                                                             className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all" title="Share Court">
                                                             <Share2 size={14} />
@@ -1102,8 +1130,17 @@ const MyBookings: React.FC = () => {
                     </div>
                 </div>, document.body
             )}
+            {/* Marketing Poster Modal */}
+            {isPosterOpen && posterData && (
+                <MarketingPosterModal
+                    isOpen={isPosterOpen}
+                    onClose={() => setIsPosterOpen(false)}
+                    data={posterData}
+                />
+            )}
         </>
     );
 };
+
 
 export default MyBookings;
