@@ -48,11 +48,6 @@ const formatTime = (t?: string) => {
     return `${h}:${mStr} ${ampm}`;
 };
 
-// ─── Social Share Config ──────────────────────────────────────────────────────
-const makeFbUrl = (url: string) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-const makeMsgUrl = (url: string) => `https://www.facebook.com/dialog/send?link=${encodeURIComponent(url)}&app_id=966242223397117&redirect_uri=${encodeURIComponent(url)}`;
-const makeDiscordMsg = (c: PosterData) =>
-    `🏓 **${c.courtName}** — Come play pickleball!\n📍 ${[c.locationName, c.city].filter(Boolean).join(', ')}\n${c.date ? `📅 ${formatDate(c.date)}` : ''}${c.startTime ? ` • ${formatTime(c.startTime)}${c.endTime ? ' – ' + formatTime(c.endTime) : ''}` : ''}\n${c.joinLink ? `🔗 ${c.joinLink}` : ''}\n#PicklePlay #Pickleball`;
 
 // ─── Poster Canvas ─────────────────────────────────────────────────────────
 const Poster: React.FC<{ data: PosterData; qrDataUrl: string }> = ({ data, qrDataUrl }) => {
@@ -236,9 +231,14 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
     const [isDownloading, setIsDownloading] = useState(false);
     const [copied, setCopied] = useState(false);
     const [posterData, setPosterData] = useState<PosterData>(data);
+    const [shareStatus, setShareStatus] = useState<Record<string, 'idle' | 'loading' | 'done'>>({});
 
     // Default join link
     const joinLink = posterData.joinLink || window.location.origin + '/booking';
+    const posterFilename = `${posterData.courtName.replace(/\s+/g, '-')}-poster.png`;
+
+    const setStatus = (p: string, s: 'idle' | 'loading' | 'done') =>
+        setShareStatus(prev => ({ ...prev, [p]: s }));
 
     // Generate QR code when link changes
     useEffect(() => {
@@ -255,39 +255,119 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
 
     if (!isOpen) return null;
 
-    // ── Download PNG ──
-    const handleDownload = async () => {
-        if (!posterRef.current) return;
-        setIsDownloading(true);
+    /** Renders the visible poster to a PNG Blob (2× resolution) */
+    const generatePosterBlob = async (): Promise<Blob | null> => {
+        if (!posterRef.current) return null;
         try {
             const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true });
-            const link = document.createElement('a');
-            link.download = `${posterData.courtName.replace(/\s+/g, '-')}-poster.png`;
-            link.href = dataUrl;
-            link.click();
-        } catch (err) {
-            console.error('Download failed:', err);
+            const res = await fetch(dataUrl);
+            return await res.blob();
+        } catch (e) {
+            console.error('Poster render failed:', e);
+            return null;
+        }
+    };
+
+    /** Triggers a browser file download of the poster PNG */
+    const downloadBlob = (blob: Blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = posterFilename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+    };
+
+    // ── Download PNG ──
+    const handleDownload = async () => {
+        setIsDownloading(true);
+        try {
+            const blob = await generatePosterBlob();
+            if (blob) downloadBlob(blob);
         } finally {
             setIsDownloading(false);
         }
     };
 
-    // ── Social Handlers ──
-    const openUrl = (url: string) => window.open(url, '_blank', 'noopener,noreferrer');
-    const handleFacebook = () => openUrl(makeFbUrl(joinLink));
-    const handleMessenger = () => openUrl(makeMsgUrl(joinLink));
-    const handleDiscord = async () => {
+    // ── Native Share (Web Share API — actual image file on mobile) ──
+    const handleNativeShare = async () => {
+        setStatus('share', 'loading');
         try {
-            await navigator.clipboard.writeText(makeDiscordMsg(posterData));
-            alert('Discord message copied to clipboard! Paste it in your Discord channel.');
-        } catch { openUrl('https://discord.com'); }
+            const blob = await generatePosterBlob();
+            if (!blob) throw new Error('render failed');
+            const file = new File([blob], posterFilename, { type: 'image/png' });
+            const shareData: ShareData = {
+                title: `${posterData.courtName} — PicklePlay`,
+                text: `🏓 ${posterData.courtName} — Come play pickleball in the Philippines!\n${joinLink}`,
+                files: [file],
+            };
+            if (navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+            } else if (navigator.share) {
+                await navigator.share({ title: shareData.title, text: shareData.text, url: joinLink });
+            } else {
+                // Desktop fallback: just download
+                downloadBlob(blob);
+                alert('Poster downloaded! Attach it anywhere you want to share.');
+            }
+            setStatus('share', 'done');
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') console.error('Share failed:', e);
+        }
+        setTimeout(() => setStatus('share', 'idle'), 2500);
     };
+
+    // ── Facebook: download poster first, then open FB share dialog ──
+    const handleFacebook = async () => {
+        setStatus('fb', 'loading');
+        const blob = await generatePosterBlob();
+        if (blob) downloadBlob(blob);
+        setTimeout(() => {
+            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(joinLink)}`, '_blank', 'noopener,noreferrer');
+            setStatus('fb', 'done');
+            setTimeout(() => setStatus('fb', 'idle'), 3000);
+        }, 500);
+    };
+
+    // ── Messenger: download poster first, then open Messenger ──
+    const handleMessenger = async () => {
+        setStatus('msg', 'loading');
+        const blob = await generatePosterBlob();
+        if (blob) downloadBlob(blob);
+        setTimeout(() => {
+            window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(joinLink)}&app_id=966242223397117&redirect_uri=${encodeURIComponent(joinLink)}`, '_blank', 'noopener,noreferrer');
+            setStatus('msg', 'done');
+            setTimeout(() => setStatus('msg', 'idle'), 3000);
+        }, 400);
+    };
+
+    // ── Discord: download poster + copy formatted message ──
+    const handleDiscord = async () => {
+        setStatus('discord', 'loading');
+        const blob = await generatePosterBlob();
+        if (blob) downloadBlob(blob);
+        const msg = [
+            `🏓 **${posterData.courtName}** — Come play pickleball!`,
+            `📍 ${[posterData.locationName, posterData.city].filter(Boolean).join(', ')}`,
+            posterData.date ? `📅 ${formatDate(posterData.date)}${posterData.startTime ? ` • ${formatTime(posterData.startTime)}${posterData.endTime ? ` – ${formatTime(posterData.endTime)}` : ''}` : ''}` : '',
+            joinLink ? `🔗 ${joinLink}` : '',
+            '#PicklePlay #Pickleball',
+            '*(Poster image downloaded — drag it into Discord!)*',
+        ].filter(Boolean).join('\n');
+        try { await navigator.clipboard.writeText(msg); } catch { /* silent */ }
+        setStatus('discord', 'done');
+        setTimeout(() => setStatus('discord', 'idle'), 3000);
+    };
+
+    // ── Instagram: download poster + copy link ──
     const handleInstagram = async () => {
-        try {
-            await navigator.clipboard.writeText(joinLink);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2500);
-        } catch { /* fallback */ }
+        setStatus('ig', 'loading');
+        const blob = await generatePosterBlob();
+        if (blob) downloadBlob(blob);
+        try { await navigator.clipboard.writeText(joinLink); } catch { /* silent */ }
+        setCopied(true);
+        setStatus('ig', 'done');
+        setTimeout(() => { setCopied(false); setStatus('ig', 'idle'); }, 3000);
     };
 
     return ReactDOM.createPortal(
@@ -411,45 +491,83 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
                         {/* Share */}
                         <div className="space-y-3">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Share To</p>
+
+                            {/* Primary: native share with image attachment */}
+                            <button
+                                onClick={handleNativeShare}
+                                disabled={shareStatus['share'] === 'loading'}
+                                className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all duration-200 shadow-lg shadow-orange-100 disabled:opacity-60 flex items-center justify-center gap-2.5 active:scale-95"
+                            >
+                                {shareStatus['share'] === 'loading' ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : shareStatus['share'] === 'done' ? (
+                                    <CheckCircle size={16} />
+                                ) : (
+                                    <Share2 size={16} />
+                                )}
+                                {shareStatus['share'] === 'loading' ? 'Preparing…' : shareStatus['share'] === 'done' ? 'Shared!' : 'Share Poster'}
+                            </button>
+
+                            {/* Platform buttons — each downloads poster + opens platform */}
                             <div className="grid grid-cols-2 gap-2.5">
                                 {/* Facebook */}
                                 <SocialBtn
-                                    label="Facebook"
-                                    icon={<svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" /></svg>}
+                                    label={shareStatus['fb'] === 'loading' ? '…' : shareStatus['fb'] === 'done' ? '✓ Saved' : 'Facebook'}
+                                    icon={shareStatus['fb'] === 'loading'
+                                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        : <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" /></svg>}
                                     color="#1877F2"
                                     onClick={handleFacebook}
                                 />
                                 {/* Messenger */}
                                 <SocialBtn
-                                    label="Messenger"
-                                    icon={<svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.146 2 11.243c0 2.951 1.386 5.591 3.574 7.369V22l3.193-1.774A10.5 10.5 0 0012 20.486c5.523 0 10-4.146 10-9.243S17.523 2 12 2zm1.021 12.44l-2.55-2.72-4.979 2.72 5.479-5.817 2.612 2.72 4.917-2.72-5.479 5.817z" /></svg>}
+                                    label={shareStatus['msg'] === 'loading' ? '…' : shareStatus['msg'] === 'done' ? '✓ Saved' : 'Messenger'}
+                                    icon={shareStatus['msg'] === 'loading'
+                                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        : <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.146 2 11.243c0 2.951 1.386 5.591 3.574 7.369V22l3.193-1.774A10.5 10.5 0 0012 20.486c5.523 0 10-4.146 10-9.243S17.523 2 12 2zm1.021 12.44l-2.55-2.72-4.979 2.72 5.479-5.817 2.612 2.72 4.917-2.72-5.479 5.817z" /></svg>}
                                     color="#0084FF"
                                     onClick={handleMessenger}
                                 />
                                 {/* Discord */}
                                 <SocialBtn
-                                    label="Discord"
-                                    icon={<svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 00-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 00-5.487 0 12.36 12.36 0 00-.617-1.23A.077.077 0 008.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 00-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 00.031.055 20.03 20.03 0 005.993 2.98.078.078 0 00.084-.026c.462-.62.874-1.275 1.226-1.963.021-.04.001-.088-.041-.104a13.201 13.201 0 01-1.872-.878.075.075 0 01-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 01.078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 01.079.009c.12.098.245.195.372.288a.075.075 0 01-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 00-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 00.084.028 19.963 19.963 0 006.002-2.981.076.076 0 00.032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 00-.031-.028zM8.02 15.278c-1.182 0-2.157-1.069-2.157-2.38 0-1.312.956-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.956 2.38-2.157 2.38zm7.975 0c-1.183 0-2.157-1.069-2.157-2.38 0-1.312.955-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.946 2.38-2.157 2.38z" /></svg>}
+                                    label={shareStatus['discord'] === 'loading' ? '…' : shareStatus['discord'] === 'done' ? '✓ Copied' : 'Discord'}
+                                    icon={shareStatus['discord'] === 'loading'
+                                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        : <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 00-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 00-5.487 0 12.36 12.36 0 00-.617-1.23A.077.077 0 008.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 00-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 00.031.055 20.03 20.03 0 005.993 2.98.078.078 0 00.084-.026c.462-.62.874-1.275 1.226-1.963.021-.04.001-.088-.041-.104a13.201 13.201 0 01-1.872-.878.075.075 0 01-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 01.078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 01.079.009c.12.098.245.195.372.288a.075.075 0 01-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 00-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 00.084.028 19.963 19.963 0 006.002-2.981.076.076 0 00.032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 00-.031-.028zM8.02 15.278c-1.182 0-2.157-1.069-2.157-2.38 0-1.312.956-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.956 2.38-2.157 2.38zm7.975 0c-1.183 0-2.157-1.069-2.157-2.38 0-1.312.955-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.946 2.38-2.157 2.38z" /></svg>}
                                     color="#5865F2"
                                     onClick={handleDiscord}
                                 />
-                                {/* Instagram (copy link) */}
+                                {/* Instagram */}
                                 <SocialBtn
-                                    label={copied ? 'Copied!' : 'Instagram'}
-                                    icon={copied
-                                        ? <CheckCircle size={14} />
-                                        : <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>}
-                                    color={copied ? '#16a34a' : 'linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)'}
+                                    label={shareStatus['ig'] === 'loading' ? '…' : shareStatus['ig'] === 'done' ? '✓ Saved' : 'Instagram'}
+                                    icon={shareStatus['ig'] === 'loading'
+                                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        : shareStatus['ig'] === 'done'
+                                            ? <CheckCircle size={14} />
+                                            : <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>}
+                                    color={shareStatus['ig'] === 'done' ? '#16a34a' : 'linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)'}
                                     onClick={handleInstagram}
                                 />
                             </div>
+
+                            {/* Status hints */}
                             {copied && (
-                                <p className="text-[10px] font-bold text-emerald-600 text-center animate-pulse">
-                                    ✓ Link copied — paste it in your Instagram story or bio!
+                                <p className="text-[10px] font-bold text-emerald-600 text-center">
+                                    ✓ Link copied — post the saved image on Instagram!
+                                </p>
+                            )}
+                            {(shareStatus['fb'] === 'done' || shareStatus['msg'] === 'done') && (
+                                <p className="text-[10px] font-bold text-blue-600 text-center">
+                                    ✓ Poster saved — attach it to your post!
+                                </p>
+                            )}
+                            {shareStatus['discord'] === 'done' && (
+                                <p className="text-[10px] font-bold text-indigo-600 text-center">
+                                    ✓ Message copied + poster saved — drag image into Discord!
                                 </p>
                             )}
                             <p className="text-[9px] text-slate-400 text-center font-medium leading-relaxed">
-                                💡 For Instagram: copy the link and paste it in your story or bio
+                                � Each button saves the poster image to your downloads first
                             </p>
                         </div>
                     </div>
