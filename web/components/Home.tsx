@@ -774,10 +774,10 @@ const Home: React.FC = () => {
         </div>
 
         <div className="relative z-50 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8 animate-fade-in-up opacity-0">
             The National Network for Philippines
           </div>
-          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase">
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase animate-fade-in-up opacity-0 delay-100">
             <span className="text-5xl sm:text-6xl md:text-7xl lg:text-[10rem]">PICKLEPLAY</span> <br />
             <span className="text-lime-400 text-4xl sm:text-7xl md:text-8xl lg:text-[9rem]">PHILIPPINES</span>
           </h1>
@@ -800,10 +800,10 @@ const Home: React.FC = () => {
               {totalUsers.toLocaleString()}+ Active
             </span>
           </div>
-          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed mb-8 md:mb-12">
+          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed mb-8 md:mb-12 animate-fade-in-up opacity-0 delay-200">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
-          <div className="flex flex-wrap justify-center gap-6 animate-slide-up w-full px-4">
+          <div className="flex flex-wrap justify-center gap-6 animate-fade-in-up opacity-0 delay-300 w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
               <div className="relative flex items-center bg-white/15 border border-white/30 backdrop-blur-xl rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
                 <Search className="ml-3 md:ml-6 text-white/50" size={18} />
@@ -823,7 +823,7 @@ const Home: React.FC = () => {
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white h-11 md:h-12 px-4 md:px-10 rounded-full font-black flex items-center justify-center transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
                 >
-                  LOCATE
+                  FIND
                 </button>
               </div>
 
@@ -949,10 +949,10 @@ const Home: React.FC = () => {
       </section>
 
       {/* Featured Courts Near You Section */}
-      <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6 animate-fade-in-up opacity-0">
             <div>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
@@ -1014,7 +1014,8 @@ const Home: React.FC = () => {
                   return (
                     <div
                       key={idx}
-                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden"
+                      className={`group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden animate-fade-in-up opacity-0`}
+                      style={{ animationDelay: `${(idx + 1) * 150}ms` }}
                     >
                       {isLocation ? (
                         // Location Card Template
@@ -1039,11 +1040,11 @@ const Home: React.FC = () => {
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <svg
                                     key={star}
-                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
                                     fill="currentColor"
                                     viewBox="0 0 24 24"
                                   >
-                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" fill="currentColor" />
                                   </svg>
                                 ))}
                               </div>
@@ -1085,11 +1086,11 @@ const Home: React.FC = () => {
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <svg
                                     key={star}
-                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
                                     fill="currentColor"
                                     viewBox="0 0 24 24"
                                   >
-                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" />
+                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" fill="currentColor" />
                                   </svg>
                                 ))}
                               </div>
@@ -1165,14 +1166,14 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden">
+      <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0 delay-200">
         {/* Background decorations */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-[150px] -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] translate-y-1/2"></div>
 
         <div className="max-w-[1800px] mx-auto relative">
           {/* Section Header */}
-          <div className="mb-8 md:mb-16">
+          <div className="mb-8 md:mb-16 animate-fade-in-up opacity-0">
             <div className="flex items-center gap-2 mb-4">
               <GraduationCap className="text-lime-400" size={24} />
               <span className="text-lime-400 font-black text-sm uppercase tracking-widest">Learning Hub</span>
@@ -1193,7 +1194,7 @@ const Home: React.FC = () => {
             {/* Left Column - Guide Cards */}
             <div className="space-y-4 md:space-y-6">
               {/* Guide Card 1 - Rules */}
-              <Link to="/guides/rules" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+              <Link to="/guides/rules" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10 animate-fade-in-up opacity-0 delay-100">
                 <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb13.jpg"
@@ -1226,7 +1227,7 @@ const Home: React.FC = () => {
               </Link>
 
               {/* Guide Card 2 - Quiz */}
-              <Link to="/guides/skill-rating" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+              <Link to="/guides/skill-rating" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10 animate-fade-in-up opacity-0 delay-200">
                 <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb14.jpg"
@@ -1241,7 +1242,7 @@ const Home: React.FC = () => {
                 </div>
                 <div className="flex-1 pt-1 md:pt-2">
                   <div className="flex items-center gap-2 mb-2 md:mb-4">
-                    <span className="inline-block bg-yellow-500 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
+                    <span className="inline-block bg-blue-600 text-white px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
                       🏆 Quiz
                     </span>
                     <span className="inline-block bg-purple-500/20 text-purple-400 px-2.5 md:px-4 py-1 md:py-1.5 rounded-full text-[9px] md:text-xs font-black uppercase tracking-wider">
@@ -1259,7 +1260,7 @@ const Home: React.FC = () => {
               </Link>
 
               {/* Guide Card 3 - Equipment */}
-              <Link to="/guides/equipment" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10">
+              <Link to="/guides/equipment" className="group flex gap-3 md:gap-8 items-start hover:bg-white/5 p-3 md:p-6 rounded-2xl md:rounded-3xl transition-all border border-transparent hover:border-white/10 animate-fade-in-up opacity-0 delay-300">
                 <div className="w-24 h-20 md:w-64 md:h-44 rounded-xl md:rounded-2xl overflow-hidden flex-shrink-0 shadow-lg relative">
                   <img
                     src="/images/home-images/pb16.jpg"
@@ -1293,7 +1294,7 @@ const Home: React.FC = () => {
             </div>
 
             {/* Right Column - Video Player / Feature Card */}
-            <div className="relative">
+            <div className="relative animate-fade-in-up opacity-0 delay-400">
               <Link to="/guides/rules" className="block aspect-[4/3] rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl relative group cursor-pointer">
                 <img
                   src="/images/home-images/pb18.jpg"
@@ -1349,7 +1350,7 @@ const Home: React.FC = () => {
                   </Link>
                   <Link to="/guides/skill-rating" className="flex items-center gap-2 text-white font-black text-sm md:text-base hover:text-lime-400 transition-colors group">
                     Or take the skill quiz
-                    <Trophy size={18} className="text-yellow-400" />
+                    <Trophy size={18} className="text-blue-400" />
                   </Link>
                 </div>
               </div>
@@ -1359,13 +1360,13 @@ const Home: React.FC = () => {
       </section >
 
       {/* Tournaments Section - Real data from Supabase */}
-      <section className="py-12 md:py-32 bg-slate-50 relative overflow-hidden">
+      <section className="py-12 md:py-32 bg-slate-50 relative overflow-hidden animate-fade-in opacity-0 delay-300">
         {/* Abstract Background Accents */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[150px] -z-10"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
 
         <div className="max-w-[1800px] mx-auto px-4 md:px-24 lg:px-32">
-          <div className="mb-8 md:mb-16">
+          <div className="mb-8 md:mb-16 animate-fade-in-up opacity-0">
             <div className="max-w-2xl">
               <p className="text-[9px] md:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-2 md:mb-4">COMPETITIVE CIRCUIT / 2026</p>
               <h2 className="text-3xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
@@ -1387,7 +1388,7 @@ const Home: React.FC = () => {
                   <button
                     key={tournament.id}
                     onClick={() => setSelectedTournament(tournament)}
-                    className="group relative flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left"
+                    className="group relative flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left animate-fade-in-up opacity-0 delay-100"
                   >
                     <img
                       src={tournament.image || "/images/home-images/pb20.jpg"}
@@ -1446,11 +1447,12 @@ const Home: React.FC = () => {
                 <div key={i} className="aspect-[4/5] rounded-3xl md:rounded-[40px] bg-white/5 animate-pulse border border-white/10"></div>
               ))
             ) : tournaments.length > 0 ? (
-              tournaments.map((tournament) => (
+              tournaments.map((tournament, idx) => (
                 <button
                   key={tournament.id}
                   onClick={() => setSelectedTournament(tournament)}
-                  className="group relative aspect-[4/5] rounded-3xl md:rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left w-full"
+                  className="group relative aspect-[4/5] rounded-3xl md:rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left w-full animate-fade-in-up opacity-0"
+                  style={{ animationDelay: `${(idx + 1) * 200}ms` }}
                 >
                   <img
                     src={tournament.image || "/images/home-images/pb20.jpg"}
@@ -1504,7 +1506,7 @@ const Home: React.FC = () => {
       </section >
 
       {/* Marquee */}
-      <div className="bg-slate-950 py-3 md:py-4 border-y border-white/10 overflow-hidden relative">
+      <div className="bg-slate-950 py-3 md:py-4 border-y border-white/10 overflow-hidden relative animate-fade-in opacity-0 delay-300">
         <div className="animate-marquee whitespace-nowrap flex items-center gap-12 md:gap-24">
           {[...PARTNERS, ...PARTNERS].map((partner, i) => (
             <span key={i} className="text-white/5 font-black text-4xl md:text-6xl tracking-tighter italic select-none uppercase">{partner}</span>
@@ -1513,10 +1515,10 @@ const Home: React.FC = () => {
       </div>
 
       {/* FAQ Section */}
-      <section id="faq" className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden">
+      <section id="faq" className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0 delay-400">
         <div className="max-w-4xl mx-auto">
           {/* Section Header */}
-          <div className="text-center mb-8 md:mb-16">
+          <div className="text-center mb-8 md:mb-16 animate-fade-in-up opacity-0">
             <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase mb-3 md:mb-4">
               Frequently Asked Questions
             </h2>
@@ -1560,11 +1562,11 @@ const Home: React.FC = () => {
 
 
       {/* Final CTA */}
-      <section className="bg-slate-900 py-20 md:py-32 relative overflow-hidden">
+      <section className="bg-slate-900 py-20 md:py-32 relative overflow-hidden animate-fade-in opacity-0 delay-500">
         <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32 text-center relative z-10">
           <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-blue-600/20 blur-[120px]"></div>
           <div className="absolute bottom-0 left-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-lime-400/10 blur-[120px]"></div>
-          <div className="relative z-10 space-y-8 md:space-y-10">
+          <div className="relative z-10 space-y-8 md:space-y-10 animate-fade-in-up opacity-0">
             <h2 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">READY TO <br /><span className="text-lime-400 italic">DOMINATE PH?</span></h2>
             <div className="flex flex-col items-center gap-8 md:gap-12">
               <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-14 md:h-20 px-8 md:px-14 rounded-2xl md:rounded-[28px] font-black text-base md:text-lg uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-lime-400/20 group flex items-center gap-4">
@@ -1603,9 +1605,9 @@ const Home: React.FC = () => {
         </div>
       </section >
 
-      <footer className="py-10 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white">
+      <footer className="py-10 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white animate-fade-in opacity-0 delay-700">
         <div className="max-w-[1800px] mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-16 mb-10 md:mb-20">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-16 mb-10 md:mb-20 animate-fade-in-up opacity-0">
             {/* Brand Section */}
             <div className="space-y-3 md:space-y-6">
               <div className="flex items-center gap-2 md:gap-3 text-slate-950 font-black text-xl md:text-2xl tracking-tighter uppercase">
@@ -1763,8 +1765,8 @@ const Home: React.FC = () => {
                 {/* Skill Level */}
                 {selectedTournament.skillLevel && (
                   <div className="flex items-start gap-3 md:gap-4">
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                      <Star size={20} className="text-amber-600 md:w-6 md:h-6" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                      <Star size={20} className="text-blue-600 md:w-6 md:h-6" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Skill Level</p>

@@ -132,11 +132,11 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                 {/* Header - Hidden when printing */}
                 <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 print:hidden shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-blue-50'}`}>
                             {isConfirmed ? (
                                 <CheckCircle2 className="text-emerald-600" size={22} />
                             ) : (
-                                <Clock className="text-amber-600 animate-pulse" size={22} />
+                                <Clock className="text-blue-600 animate-pulse" size={22} />
                             )}
                         </div>
                         <div>
@@ -174,7 +174,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                 {/* Status Banner */}
                                 <div className={`mb-3 md:mb-5 p-2 md:p-3 rounded-xl border-2 text-center font-black uppercase tracking-[0.15em] text-[10px] md:text-xs ${isConfirmed
                                     ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                    : 'bg-amber-50 border-amber-100 text-amber-600'
+                                    : 'bg-blue-50 border-blue-100 text-blue-600'
                                     }`}>
                                     STATUS: {bookingData.status?.toUpperCase() || 'PENDING'}
                                 </div>
@@ -283,7 +283,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                                     {/* Confirmation/Submission Stamp */}
                                     <div className="absolute top-3 md:top-6 right-3 md:right-6 -rotate-12 pointer-events-none opacity-20">
-                                        <div className={`border-2 md:border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-amber-600 text-amber-600'} px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl`}>
+                                        <div className={`border-2 md:border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-blue-600 text-blue-600'} px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl`}>
                                             <p className="text-[8px] md:text-[10px] font-black uppercase tracking-wider md:tracking-widest text-center leading-none">
                                                 {isConfirmed ? 'Confirmed' : 'Submitted'}
                                             </p>

@@ -49,7 +49,7 @@ const FindPartners: React.FC = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showPlayerProfile, setShowPlayerProfile] = useState(false);
-  
+
   // Match request form
   const [requestForm, setRequestForm] = useState({
     proposed_date: '',
@@ -128,7 +128,7 @@ const FindPartners: React.FC = () => {
         receiver_id: selectedPlayer.id,
         ...requestForm
       });
-      
+
       setShowRequestModal(false);
       setRequestForm({
         proposed_date: '',
@@ -136,7 +136,7 @@ const FindPartners: React.FC = () => {
         game_type: 'singles',
         message: ''
       });
-      
+
       alert('Match request sent!');
     } catch (error) {
       console.error('Error sending request:', error);
@@ -201,22 +201,20 @@ const FindPartners: React.FC = () => {
           <div className="flex border-b">
             <button
               onClick={() => setActiveTab('search')}
-              className={`flex-1 px-6 py-4 font-medium transition-colors ${
-                activeTab === 'search'
+              className={`flex-1 px-6 py-4 font-medium transition-colors ${activeTab === 'search'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <Users className="inline mr-2 w-5 h-5" />
               Find Players
             </button>
             <button
               onClick={() => setActiveTab('requests')}
-              className={`flex-1 px-6 py-4 font-medium transition-colors relative ${
-                activeTab === 'requests'
+              className={`flex-1 px-6 py-4 font-medium transition-colors relative ${activeTab === 'requests'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <Clock className="inline mr-2 w-5 h-5" />
               Requests
@@ -228,11 +226,10 @@ const FindPartners: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('sent')}
-              className={`flex-1 px-6 py-4 font-medium transition-colors ${
-                activeTab === 'sent'
+              className={`flex-1 px-6 py-4 font-medium transition-colors ${activeTab === 'sent'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <Send className="inline mr-2 w-5 h-5" />
               Sent Requests
@@ -294,7 +291,7 @@ const FindPartners: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    
+
                     {player.bio && (
                       <p className="text-sm text-gray-600 mb-4 line-clamp-2">{player.bio}</p>
                     )}
@@ -348,11 +345,10 @@ const FindPartners: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-semibold text-gray-900">{request.sender?.full_name}</h3>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          request.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${request.status === 'pending' ? 'bg-blue-100 text-blue-800' :
+                            request.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                          }`}>
                           {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                         </span>
                       </div>
@@ -370,7 +366,7 @@ const FindPartners: React.FC = () => {
                       {request.message && (
                         <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">{request.message}</p>
                       )}
-                      
+
                       {request.status === 'pending' && (
                         <div className="flex gap-2 mt-4">
                           <button
@@ -422,12 +418,11 @@ const FindPartners: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-semibold text-gray-900">{request.receiver?.full_name}</h3>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          request.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                          request.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${request.status === 'pending' ? 'bg-blue-100 text-blue-800' :
+                            request.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                              request.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                                'bg-red-100 text-red-800'
+                          }`}>
                           {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                         </span>
                       </div>
@@ -445,7 +440,7 @@ const FindPartners: React.FC = () => {
                       {request.message && (
                         <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">{request.message}</p>
                       )}
-                      
+
                       {request.status === 'pending' && (
                         <button
                           onClick={() => handleCancelRequest(request.id)}
@@ -469,7 +464,7 @@ const FindPartners: React.FC = () => {
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h2 className="text-2xl font-bold mb-4">Send Match Request</h2>
             <p className="text-gray-600 mb-6">to {selectedPlayer.full_name}</p>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

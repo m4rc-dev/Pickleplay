@@ -13,8 +13,8 @@ interface ViewGroupModalProps {
   currentUserId: string | null;
 }
 
-export const ViewGroupModal: React.FC<ViewGroupModalProps> = ({ 
-  show, onClose, group, onJoinGroup, isJoining, currentUserId 
+export const ViewGroupModal: React.FC<ViewGroupModalProps> = ({
+  show, onClose, group, onJoinGroup, isJoining, currentUserId
 }) => {
   const [members, setMembers] = useState<(GroupMember & { user: any })[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
@@ -61,9 +61,8 @@ export const ViewGroupModal: React.FC<ViewGroupModalProps> = ({
               )}
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-500 font-semibold">
-              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                group.privacy === 'public' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
-              }`}>
+              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${group.privacy === 'public' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+                }`}>
                 {group.privacy}
               </span>
               <span className="flex items-center gap-1">
@@ -110,15 +109,15 @@ export const ViewGroupModal: React.FC<ViewGroupModalProps> = ({
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {members.map(member => (
                 <div key={member.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <img 
-                    src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`} 
-                    className="w-10 h-10 rounded-xl bg-white" 
+                  <img
+                    src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`}
+                    className="w-10 h-10 rounded-xl bg-white"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-black text-slate-900 text-sm truncate">{member.user?.full_name || 'Unknown'}</p>
                       {member.role === 'admin' && (
-                        <Crown size={12} className="text-amber-500 shrink-0" />
+                        <Crown size={12} className="text-blue-500 shrink-0" />
                       )}
                       {member.role === 'moderator' && (
                         <Shield size={12} className="text-indigo-500 shrink-0" />
@@ -130,7 +129,7 @@ export const ViewGroupModal: React.FC<ViewGroupModalProps> = ({
                     </p>
                   </div>
                   {member.status === 'pending' && (
-                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-amber-100 text-amber-700 shrink-0">
+                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-blue-100 text-blue-700 shrink-0">
                       Pending
                     </span>
                   )}

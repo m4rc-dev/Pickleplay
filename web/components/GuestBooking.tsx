@@ -1,9 +1,40 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel, Star, ChevronLeft, Building2 } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel, Star, ChevronLeft, Building2, CheckCircle, Activity, CreditCard, Info } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
+
+const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
+    const mapRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (mapRef.current && window.google) {
+            const map = new window.google.maps.Map(mapRef.current, {
+                center: { lat, lng },
+                zoom: 16,
+                disableDefaultUI: true,
+                gestureHandling: 'cooperative',
+                styles: [
+                    {
+                        featureType: 'poi',
+                        elementType: 'labels',
+                        stylers: [{ visibility: 'off' }]
+                    }
+                ]
+            });
+            new window.google.maps.Marker({
+                position: { lat, lng },
+                map,
+                icon: {
+                    url: '/images/PinMarker.png',
+                    scaledSize: new window.google.maps.Size(42, 60),
+                    anchor: new window.google.maps.Point(21, 60)
+                },
+            });
+        }
+    }, [lat, lng]);
+    return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden border border-slate-200" />;
+};
 
 const ALL_HOUR_SLOTS = [
     '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
@@ -56,6 +87,7 @@ const GuestBooking: React.FC = () => {
     // Hero expansion: clicking a court in the list shows the court detail + schedule in the right panel
     const [heroCourtId, setHeroCourtId] = useState<string | null>(null);
     const heroActiveCourt = heroCourtId ? (locationCourts.find(c => c.id === heroCourtId) ?? null) : null;
+    const [showCourtDetails, setShowCourtDetails] = useState(false);
 
     // Distance calculation helper (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -230,47 +262,83 @@ const GuestBooking: React.FC = () => {
     const userLocationMarkerRef = useRef<any>(null);
     const pulseCirclesRef = useRef<any[]>([]);
 
+    const smoothZoom = (targetZoom: number) => {
+        if (!googleMapRef.current || !window.google) return;
+        const map = googleMapRef.current;
+        const currentZoom = map.getZoom();
+        if (currentZoom === targetZoom) return;
+
+        const duration = 600;
+        const startTime = performance.now();
+
+        const animateZoom = (now: number) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Smooth Ease-in-out Cubic
+            const eased = progress < 0.5
+                ? 4 * progress * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+            const zoom = currentZoom + (targetZoom - currentZoom) * eased;
+            map.setZoom(zoom);
+
+            if (progress < 1) {
+                requestAnimationFrame(animateZoom);
+            }
+        };
+        requestAnimationFrame(animateZoom);
+    };
+
     const triggerPulse = (lat: number, lng: number) => {
         if (!googleMapRef.current || !window.google) return;
 
-        // Clear existing pulse circles if any
+        // Clear existing pulse circles
         pulseCirclesRef.current.forEach(c => c.setMap(null));
         pulseCirclesRef.current = [];
 
         const pulseCircle = new window.google.maps.Circle({
-            strokeColor: '#a3e635', // lime-400
+            strokeColor: '#a3e635',
             strokeOpacity: 0.8,
             strokeWeight: 2,
             fillColor: '#a3e635',
-            fillOpacity: 0.35,
+            fillOpacity: 0.4,
             map: googleMapRef.current,
             center: { lat, lng },
-            radius: 10,
+            radius: 1,
             zIndex: 1000,
         });
 
         pulseCirclesRef.current.push(pulseCircle);
 
-        let radius = 10;
-        const maxRadius = 300;
-        const step = 20;
+        const maxRadius = 280;
+        const duration = 1200;
+        const startTime = performance.now();
 
-        const interval = setInterval(() => {
-            radius += step;
+        const animatePulse = (now: number) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Smooth Ease-out Cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const currentRadius = 1 + (maxRadius - 1) * eased;
+
             if (pulseCircle.getMap()) {
-                pulseCircle.setRadius(radius);
+                pulseCircle.setRadius(currentRadius);
                 pulseCircle.setOptions({
-                    fillOpacity: 0.35 * (1 - radius / maxRadius),
-                    strokeOpacity: 0.8 * (1 - radius / maxRadius)
+                    fillOpacity: 0.4 * (1 - progress),
+                    strokeOpacity: 0.8 * (1 - progress)
                 });
             }
 
-            if (radius >= maxRadius) {
-                clearInterval(interval);
+            if (progress < 1) {
+                requestAnimationFrame(animatePulse);
+            } else {
                 pulseCircle.setMap(null);
                 pulseCirclesRef.current = pulseCirclesRef.current.filter(c => c !== pulseCircle);
             }
-        }, 25);
+        };
+        requestAnimationFrame(animatePulse);
     };
 
     // Sync search query state with URL search params
@@ -290,7 +358,7 @@ const GuestBooking: React.FC = () => {
 
         if (matchingCourt && googleMapRef.current && matchingCourt.latitude && matchingCourt.longitude) {
             googleMapRef.current.panTo({ lat: matchingCourt.latitude, lng: matchingCourt.longitude });
-            googleMapRef.current.setZoom(15);
+            smoothZoom(15);
             triggerPulse(matchingCourt.latitude, matchingCourt.longitude);
             return;
         }
@@ -309,7 +377,7 @@ const GuestBooking: React.FC = () => {
                 const { lat, lng } = data.results[0].geometry.location;
                 if (googleMapRef.current) {
                     googleMapRef.current.panTo({ lat, lng });
-                    googleMapRef.current.setZoom(14);
+                    smoothZoom(14);
                 }
             }
         } catch (err) {
@@ -390,7 +458,7 @@ const GuestBooking: React.FC = () => {
     useEffect(() => {
         if (userLocation && googleMapRef.current && !urlLat && !urlLng) {
             googleMapRef.current.panTo(userLocation);
-            googleMapRef.current.setZoom(13);
+            smoothZoom(13);
         }
     }, [userLocation]);
 
@@ -403,7 +471,7 @@ const GuestBooking: React.FC = () => {
 
             // Pan to the location with smooth animation
             googleMapRef.current.panTo({ lat, lng });
-            googleMapRef.current.setZoom(zoom);
+            smoothZoom(zoom);
 
             // Trigger pulse animation after a short delay
             setTimeout(() => {
@@ -421,96 +489,21 @@ const GuestBooking: React.FC = () => {
         }
     }, [heroActiveCourt]);
 
-    const initializeMap = () => {
-        if (!mapRef.current || !window.google) return;
-
-        // Use URL params first, then user GPS location, then default to Philippines view
-        let center: { lat: number; lng: number };
-        let zoom: number;
-
-        if (urlLat && urlLng) {
-            center = { lat: parseFloat(urlLat), lng: parseFloat(urlLng) };
-            zoom = urlZoom ? parseInt(urlZoom) : 12;
-        } else if (userLocation) {
-            center = userLocation;
-            zoom = 13;
-        } else {
-            // Default to Philippines center view
-            center = { lat: 12.8797, lng: 121.774 };
-            zoom = 6;
-        }
-
-        const map = new window.google.maps.Map(mapRef.current, {
-            center,
-            zoom,
-            mapTypeId: 'terrain',
-            styles: [
-                // Base land — natural green tint
-                { featureType: 'landscape.natural', elementType: 'geometry.fill', stylers: [{ color: '#dde8cd' }] },
-                { featureType: 'landscape.natural.terrain', elementType: 'geometry.fill', stylers: [{ color: '#c5d6a8' }] },
-                { featureType: 'landscape.natural.landcover', elementType: 'geometry.fill', stylers: [{ color: '#c8dba5' }] },
-                // Man-made landscape — soft warm gray
-                { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#e4e0d8' }] },
-                // Water — natural blue-green
-                { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a3c8e9' }] },
-                { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a7fa5' }] },
-                { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#dceaf5' }, { weight: 2 }] },
-                // Parks & green areas — lush green
-                { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#b5d48c' }] },
-                { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#4a7a2e' }] },
-                // Sports complexes — vibrant green highlight
-                { featureType: 'poi.sports_complex', elementType: 'geometry.fill', stylers: [{ color: '#a8cf6f' }] },
-                { featureType: 'poi.sports_complex', elementType: 'labels.text.fill', stylers: [{ color: '#3d6b1f' }] },
-                // Hide other POI labels for clean look
-                { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-                { featureType: 'poi.business', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                { featureType: 'poi.medical', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                { featureType: 'poi.school', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                { featureType: 'poi.government', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-                // Roads — earthy tones
-                { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#f0d9a8' }] },
-                { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c9a96e' }, { weight: 0.8 }] },
-                { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#6b5a35' }] },
-                { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#f5edd5' }] },
-                { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#d4c49e' }, { weight: 0.5 }] },
-                { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#f8f4ea' }] },
-                { featureType: 'road.local', elementType: 'geometry.stroke', stylers: [{ color: '#e0d8c4' }, { weight: 0.3 }] },
-                { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5544' }] },
-                { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#f5f0e6' }, { weight: 3 }] },
-                // Transit — muted
-                { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#dbd4c4' }] },
-                { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-                // Administrative borders — earthy brown
-                { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#b5a88a' }, { weight: 1.2 }] },
-                { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#3a3528' }] },
-                { featureType: 'administrative.province', elementType: 'labels.text.fill', stylers: [{ color: '#6b6352' }] },
-                // General labels
-                { elementType: 'labels.text.fill', stylers: [{ color: '#4a4639' }] },
-                { elementType: 'labels.text.stroke', stylers: [{ color: '#f0ebe0' }, { weight: 2.5 }] },
-            ],
-            mapTypeControl: false,
-            fullscreenControl: false,
-            streetViewControl: false,
-            panControl: false,
-            tilt: 0,
-        });
-
-        googleMapRef.current = map;
+    const updateMarkers = () => {
+        const map = googleMapRef.current;
+        if (!map || !window.google) return;
 
         markersRef.current.forEach(marker => marker.setMap(null));
         markersRef.current = [];
 
-        // Create markers for locations instead of individual courts
         locations.forEach(location => {
             if (location.latitude && location.longitude) {
-                // Count courts at this location that match the filter
                 const locationCourts = courts.filter(c => {
-                    const matchesLocation = c.location_id ? c.location_id === location.id : 
+                    const matchesLocation = c.location_id ? c.location_id === location.id :
                         c.location.toLowerCase().includes(location.name.toLowerCase());
                     return matchesLocation && (filterType === 'All' || c.type === filterType);
                 });
 
-                // Only show marker if location has courts matching the filter
                 if (locationCourts.length === 0) return;
 
                 const marker = new window.google.maps.Marker({
@@ -522,7 +515,17 @@ const GuestBooking: React.FC = () => {
                         scaledSize: new window.google.maps.Size(42, 60),
                         anchor: new window.google.maps.Point(21, 60)
                     },
+                    opacity: 0,
                 });
+
+                // Smooth marker fade-in
+                let markerOpacity = 0;
+                const animateMarker = () => {
+                    markerOpacity += 0.04;
+                    marker.setOpacity(Math.min(markerOpacity, 1));
+                    if (markerOpacity < 1) requestAnimationFrame(animateMarker);
+                };
+                animateMarker();
 
                 const infoWindow = new window.google.maps.InfoWindow({
                     content: `
@@ -551,11 +554,9 @@ const GuestBooking: React.FC = () => {
                     maxWidth: 240
                 });
 
-                // Hide close button when InfoWindow opens
                 infoWindow.addListener('domready', () => {
                     const closeBtn = document.querySelector('.gm-ui-hover-effect') as HTMLElement;
                     if (closeBtn) closeBtn.style.display = 'none';
-                    // Also remove default padding from the info window wrapper
                     const iwOuter = document.querySelector('.gm-style-iw-c') as HTMLElement;
                     if (iwOuter) {
                         iwOuter.style.padding = '0';
@@ -578,12 +579,10 @@ const GuestBooking: React.FC = () => {
                     }
                 });
 
-                // Show info window on hover
                 marker.addListener('mouseover', () => {
                     infoWindow.open(map, marker);
                 });
 
-                // Hide info window when mouse leaves
                 marker.addListener('mouseout', () => {
                     infoWindow.close();
                 });
@@ -593,11 +592,77 @@ const GuestBooking: React.FC = () => {
         });
     };
 
+    const initializeMap = () => {
+        if (!mapRef.current || !window.google) return;
+
+        let center: { lat: number; lng: number };
+        let zoomVal: number;
+
+        if (urlLat && urlLng) {
+            center = { lat: parseFloat(urlLat), lng: parseFloat(urlLng) };
+            zoomVal = urlZoom ? parseInt(urlZoom) : 12;
+        } else if (userLocation) {
+            center = userLocation;
+            zoomVal = 13;
+        } else {
+            center = { lat: 12.8797, lng: 121.774 };
+            zoomVal = 6;
+        }
+
+        const map = new window.google.maps.Map(mapRef.current, {
+            center,
+            zoom: zoomVal,
+            mapTypeId: 'terrain',
+            styles: [
+                { featureType: 'landscape.natural', elementType: 'geometry.fill', stylers: [{ color: '#dde8cd' }] },
+                { featureType: 'landscape.natural.terrain', elementType: 'geometry.fill', stylers: [{ color: '#c5d6a8' }] },
+                { featureType: 'landscape.natural.landcover', elementType: 'geometry.fill', stylers: [{ color: '#c8dba5' }] },
+                { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#e4e0d8' }] },
+                { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a3c8e9' }] },
+                { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a7fa5' }] },
+                { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#dceaf5' }, { weight: 2 }] },
+                { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#b5d48c' }] },
+                { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#4a7a2e' }] },
+                { featureType: 'poi.sports_complex', elementType: 'geometry.fill', stylers: [{ color: '#a8cf6f' }] },
+                { featureType: 'poi.sports_complex', elementType: 'labels.text.fill', stylers: [{ color: '#3d6b1f' }] },
+                { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.business', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.medical', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.school', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'poi.government', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+                { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#f0d9a8' }] },
+                { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c9a96e' }, { weight: 0.8 }] },
+                { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#6b5a35' }] },
+                { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#f5edd5' }] },
+                { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#d4c49e' }, { weight: 0.5 }] },
+                { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#f8f4ea' }] },
+                { featureType: 'road.local', elementType: 'geometry.stroke', stylers: [{ color: '#e0d8c4' }, { weight: 0.3 }] },
+                { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5544' }] },
+                { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#f5f0e6' }, { weight: 3 }] },
+                { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#dbd4c4' }] },
+                { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+                { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#b5a88a' }, { weight: 1.2 }] },
+                { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#3a3528' }] },
+                { featureType: 'administrative.province', elementType: 'labels.text.fill', stylers: [{ color: '#6b6352' }] },
+                { elementType: 'labels.text.fill', stylers: [{ color: '#4a4639' }] },
+                { elementType: 'labels.text.stroke', stylers: [{ color: '#f0ebe0' }, { weight: 2.5 }] },
+            ],
+            mapTypeControl: false,
+            fullscreenControl: false,
+            streetViewControl: false,
+            panControl: false,
+            tilt: 0,
+        });
+
+        googleMapRef.current = map;
+        updateMarkers();
+    };
+
     useEffect(() => {
         if (googleMapRef.current) {
-            initializeMap();
+            updateMarkers();
         }
-    }, [filterType]);
+    }, [filterType, locations, courts]);
 
     const handleBooking = () => {
         // Store redirect URL in localStorage for after login
@@ -618,15 +683,15 @@ const GuestBooking: React.FC = () => {
         if (!googleMapRef.current && mapRef.current && window.google) {
             initializeMap();
         }
-        
+
         // Switch to map view first
         setViewMode('map');
-        
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     if (!googleMapRef.current) return;
-                    
+
                     const userLocation = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
@@ -698,7 +763,7 @@ const GuestBooking: React.FC = () => {
                 },
                 (error) => {
                     console.error('Error getting location:', error);
-                    
+
                     // Wait a bit for map to be ready if it's still initializing
                     setTimeout(() => {
                         if (googleMapRef.current) {
@@ -753,9 +818,9 @@ const GuestBooking: React.FC = () => {
             // Only show locations that have courts matching the filter type
             const locationCourts = courts.filter(c => {
                 // Match by location_id if available, otherwise try to match by location string
-                const matchesLocation = c.location_id ? c.location_id === loc.id : 
+                const matchesLocation = c.location_id ? c.location_id === loc.id :
                     c.location.toLowerCase().includes(loc.name.toLowerCase());
-                
+
                 if (!matchesLocation) return false;
                 return filterType === 'All' || c.type === filterType;
             });
@@ -764,7 +829,7 @@ const GuestBooking: React.FC = () => {
         .map(loc => {
             // Add court count for each location
             const locationCourts = courts.filter(c => {
-                const matchesLocation = c.location_id ? c.location_id === loc.id : 
+                const matchesLocation = c.location_id ? c.location_id === loc.id :
                     c.location.toLowerCase().includes(loc.name.toLowerCase());
                 return matchesLocation && (filterType === 'All' || c.type === filterType);
             });
@@ -799,7 +864,7 @@ const GuestBooking: React.FC = () => {
                                     }}
                                     className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                                 />
-                                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-blue-600 font-bold text-xs shrink-0">
+                                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-[#1E40AF] font-bold text-xs shrink-0">
                                     Cancel
                                 </button>
                             </div>
@@ -808,33 +873,33 @@ const GuestBooking: React.FC = () => {
                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-slate-200/60 z-50 max-h-[65vh] overflow-y-auto">
                                 {/* GPS Enable Prompt */}
                                 {gpsEnabled !== true && !userCity && (
-                                  <button
-                                    type="button"
-                                    onClick={getUserLocation}
-                                    className="w-full text-left px-4 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
-                                  >
-                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                                      <Navigation size={14} className="text-blue-600" fill="currentColor" />
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-bold text-blue-700">
-                                        {gpsEnabled === false ? 'Location Blocked — Tap to Retry' : 'Enable Location'}
-                                      </p>
-                                      <p className="text-xs text-slate-400">
-                                        {gpsEnabled === false ? 'Check browser settings if it keeps failing' : 'Allow GPS to find courts near you'}
-                                      </p>
-                                    </div>
-                                  </button>
+                                    <button
+                                        type="button"
+                                        onClick={getUserLocation}
+                                        className="w-full text-left px-4 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                            <Navigation size={14} className="text-blue-600" fill="currentColor" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-[#1E40AF]">
+                                                {gpsEnabled === false ? 'Location Blocked — Tap to Retry' : 'Enable Location'}
+                                            </p>
+                                            <p className="text-xs text-slate-400">
+                                                {gpsEnabled === false ? 'Check browser settings if it keeps failing' : 'Allow GPS to find courts near you'}
+                                            </p>
+                                        </div>
+                                    </button>
                                 )}
                                 {isLoadingLocation && (
-                                  <div className="px-4 py-3.5 flex items-center gap-3 text-slate-500 border-b border-slate-100">
-                                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-sm font-medium">Getting your location...</span>
-                                  </div>
+                                    <div className="px-4 py-3.5 flex items-center gap-3 text-slate-500 border-b border-slate-100">
+                                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                        <span className="text-sm font-medium">Getting your location...</span>
+                                    </div>
                                 )}
                                 {userCity && (
                                     <>
-                                        <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                                        <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em]">Places</p>
                                         <button
                                             onClick={() => {
                                                 setSearchQuery(userCity.split(',')[0]);
@@ -850,7 +915,7 @@ const GuestBooking: React.FC = () => {
                                         </button>
                                     </>
                                 )}
-                                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em]">Courts</p>
                                 <div className="pb-4">
                                     {locations
                                         .filter(loc => {
@@ -866,69 +931,71 @@ const GuestBooking: React.FC = () => {
                                                 key={location.id}
                                                 onClick={() => {
                                                     setSearchQuery(location.name);
+                                                    setIsSearchExpanded(false);
+                                                    setViewMode('map');
                                                     if (googleMapRef.current && location.latitude && location.longitude) {
                                                         googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                                                        googleMapRef.current.setZoom(19);
+                                                        smoothZoom(19);
                                                         triggerPulse(location.latitude, location.longitude);
                                                     }
                                                     navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
-                                                    setViewMode('map');
-                                                    setIsSearchExpanded(false);
                                                 }}
-                                                className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                                                className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-none"
                                             >
                                                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
                                                     <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
-                                                    <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
+                                                    <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                                                    <p className="text-[10px] text-slate-400 truncate">{location.city}</p>
                                                 </div>
                                             </button>
                                         ))}
-                                    {locations.length === 0 && (
-                                        <div className="px-4 py-6 text-center">
-                                            <p className="text-sm text-slate-400">No locations found</p>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <button
-                            onClick={() => { setIsSearchExpanded(true); getUserLocation(); }}
-                            className="w-full flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-left hover:border-slate-300 transition-colors"
-                        >
-                            <Search size={16} className="text-slate-400 shrink-0" />
-                            <span className="text-sm text-slate-400 font-medium truncate">Search courts or places...</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsSearchExpanded(true)}
+                                className="flex-1 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-slate-400"
+                            >
+                                <Search size={16} />
+                                <span className="text-sm font-semibold">Search courts or places...</span>
+                            </button>
+                            <button
+                                onClick={handleNearMe}
+                                className="w-10 h-10 flex items-center justify-center bg-[#1E40AF] text-white rounded-2xl shadow-lg active:scale-95 transition-all"
+                            >
+                                <Navigation size={18} fill="currentColor" />
+                            </button>
+                        </div>
                     )}
                 </div>
 
-                {/* Filter pills row */}
-                {!isSearchExpanded && (
-                    <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
-                        {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
-                            <button
-                                key={type}
-                                onClick={() => setFilterType(type)}
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterType === type
-                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
-                                    : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'
-                                    }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
+                {/* Filter Row */}
+                <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                    <button
+                        onClick={handleNearMe}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-[#1E40AF] border border-blue-100 rounded-full text-[10px] font-black uppercase tracking-wider whitespace-nowrap active:scale-95"
+                    >
+                        <Navigation size={12} fill="currentColor" />
+                        Near Me
+                    </button>
+                    <div className="w-px h-4 bg-slate-200 mx-1 shrink-0" />
+                    {['All', 'Indoor', 'Outdoor'].map((type) => (
                         <button
-                            onClick={handleNearMe}
-                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all"
+                            key={type}
+                            onClick={() => setFilterType(type as any)}
+                            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${filterType === type
+                                ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-200'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
                         >
-                            <Navigation size={12} fill="currentColor" />
-                            Near Me
+                            {type}
                         </button>
-                    </div>
-                )}
+                    ))}
+                </div>
             </div>
 
             {/* ──────────── MAIN CONTAINER ──────────── */}
@@ -956,9 +1023,9 @@ const GuestBooking: React.FC = () => {
                             <button
                                 key={type}
                                 onClick={() => setFilterType(type)}
-                                className={`px-6 lg:px-8 py-2.5 lg:py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all duration-200 ${filterType === type
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                                    : 'bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                                className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${filterType === type
+                                    ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-200'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                                     }`}
                             >
                                 {type}
@@ -998,7 +1065,7 @@ const GuestBooking: React.FC = () => {
                                             );
                                             if (matchLoc && matchLoc.latitude && matchLoc.longitude) {
                                                 googleMapRef.current.panTo({ lat: matchLoc.latitude, lng: matchLoc.longitude });
-                                                googleMapRef.current.setZoom(14);
+                                                smoothZoom(14);
                                             }
                                         }
                                     }}
@@ -1025,24 +1092,24 @@ const GuestBooking: React.FC = () => {
 
                                         {/* GPS Enable Prompt */}
                                         {gpsEnabled !== true && !isLoadingLocation && !userCity && (
-                                          <button
-                                            type="button"
-                                            onClick={getUserLocation}
-                                            className="w-full text-left px-5 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
-                                          >
-                                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                                              <Navigation size={14} className="text-blue-600" fill="currentColor" />
-                                            </div>
-                                            <div>
-                                              <p className="text-sm font-bold text-blue-700">Enable Location</p>
-                                              <p className="text-xs text-slate-400">Allow GPS to find courts near you</p>
-                                            </div>
-                                          </button>
+                                            <button
+                                                type="button"
+                                                onClick={getUserLocation}
+                                                className="w-full text-left px-5 py-3.5 flex items-center gap-3 bg-blue-50/60 hover:bg-blue-50 border-b border-blue-100 transition-colors"
+                                            >
+                                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                                    <Navigation size={14} className="text-[#1E40AF]" fill="currentColor" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-[#1E40AF]">Enable Location</p>
+                                                    <p className="text-xs text-slate-400">Allow GPS to find courts near you</p>
+                                                </div>
+                                            </button>
                                         )}
 
                                         {userCity && (
                                             <>
-                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Places</p>
+                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em]">Places</p>
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -1063,7 +1130,7 @@ const GuestBooking: React.FC = () => {
 
                                         {filteredLocations.length > 0 && (
                                             <>
-                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                                                <p className="px-5 pt-3 pb-1 text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em]">Courts</p>
                                                 <div className="max-h-[320px] overflow-y-auto">
                                                     {filteredLocations.slice(0, 10).map((location) => (
                                                         <button
@@ -1074,7 +1141,7 @@ const GuestBooking: React.FC = () => {
                                                                 setShowDesktopSuggestions(false);
                                                                 if (googleMapRef.current && location.latitude && location.longitude) {
                                                                     googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                                                                    googleMapRef.current.setZoom(19);
+                                                                    smoothZoom(19);
                                                                     triggerPulse(location.latitude, location.longitude);
                                                                 }
                                                                 navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
@@ -1109,7 +1176,7 @@ const GuestBooking: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={handleNearMe}
-                                className="flex items-center gap-2 px-5 lg:px-6 py-3.5 bg-emerald-500 text-white rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-200/50 shrink-0"
+                                className="flex items-center gap-2 px-5 lg:px-6 py-3.5 bg-[#1E40AF] text-white rounded-2xl font-black text-xs uppercase tracking-[0.15em] hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 shrink-0 active:scale-[0.98]"
                             >
                                 <Navigation size={16} fill="currentColor" />
                                 <span>Near Me</span>
@@ -1117,17 +1184,17 @@ const GuestBooking: React.FC = () => {
                         </form>
 
                         {/* ─── Back button for court detail view ─── */}
-                    {heroActiveCourt && !selectedCourt && (
-                        <button
-                            onClick={() => setHeroCourtId(null)}
-                            className="hidden md:flex items-center gap-1.5 text-slate-500 text-xs font-bold hover:text-blue-600 transition-colors mb-3"
-                        >
-                            <ChevronLeft size={14} />
-                            Back to Locations
-                        </button>
-                    )}
+                        {heroActiveCourt && !selectedCourt && (
+                            <button
+                                onClick={() => setHeroCourtId(null)}
+                                className="hidden md:flex items-center gap-1.5 text-slate-500 text-xs font-bold hover:text-[#1E40AF] transition-colors mb-3"
+                            >
+                                <ChevronLeft size={14} />
+                                Back to Locations
+                            </button>
+                        )}
 
-                    {/* ─── List Container ─── */}
+                        {/* ─── List Container ─── */}
                         <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
 
                             {/* Location Detail Header */}
@@ -1180,8 +1247,8 @@ const GuestBooking: React.FC = () => {
                                                 const locStatus = selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed');
                                                 const statusStyle = locStatus === 'Active' ? 'bg-emerald-50 text-emerald-700'
                                                     : locStatus === 'Closed' ? 'bg-rose-50 text-rose-600'
-                                                    : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-600'
-                                                    : 'bg-blue-50 text-blue-600';
+                                                        : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-600'
+                                                            : 'bg-blue-50 text-blue-600';
                                                 return (
                                                     <span className={`inline-flex items-center px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold ${statusStyle}`}>
                                                         {locStatus}
@@ -1196,7 +1263,7 @@ const GuestBooking: React.FC = () => {
                                                 ))
                                             )}
                                             {selectedLocation.opening_time && selectedLocation.closing_time && (
-                                                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                                                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
                                                     <Clock size={10} />
                                                     {(() => {
                                                         const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
@@ -1214,7 +1281,7 @@ const GuestBooking: React.FC = () => {
 
                             {isLoadingLocationDetail && urlLocationId && (
                                 <div className="flex items-center justify-center py-12">
-                                    <Loader2 className="animate-spin text-blue-600" size={28} />
+                                    <Loader2 className="animate-spin text-[#1E40AF]" size={28} />
                                 </div>
                             )}
 
@@ -1241,68 +1308,74 @@ const GuestBooking: React.FC = () => {
                                         const locStatus = selectedLocation?.status || (selectedLocation?.is_active ? 'Active' : 'Closed');
                                         const isLocationAvailable = locStatus === 'Active';
                                         return locationCourts.map(court => {
-                                        const courtSt = court.status || 'Available';
-                                        const isCourtAvailable = isLocationAvailable && (courtSt === 'Available' || courtSt === 'Fully Booked');
-                                        const isFullyBooked = courtSt === 'Fully Booked';
-                                        const courtStatusLabel = !isLocationAvailable ? locStatus : courtSt !== 'Available' ? courtSt : '';
-                                        const courtStatusStyle = courtSt === 'Fully Booked' ? 'bg-orange-50 text-orange-500'
-                                            : courtSt === 'Coming Soon' ? 'bg-blue-50 text-blue-500'
-                                            : courtSt === 'Maintenance' ? 'bg-amber-50 text-amber-500'
-                                            : locStatus === 'Closed' ? 'bg-rose-50 text-rose-500'
-                                            : locStatus === 'Maintenance' ? 'bg-amber-50 text-amber-500'
-                                            : 'bg-blue-50 text-blue-500';
-                                        return (
-                                        <div key={court.id} className="w-full">
-                                        <button
-                                            onClick={() => {
-                                                if (isCourtAvailable) {
-                                                    setHeroCourtId(court.id);
-                                                    if (window.innerWidth >= 768) {
-                                                        // Desktop: show in right panel
-                                                    } else {
-                                                        navigate(`/court/${court.id}`);
-                                                    }
-                                                }
-                                            }}
-                                            disabled={!isCourtAvailable}
-                                            className={`w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 transition-all duration-200 ${isCourtAvailable ? 'hover:bg-blue-50/40 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
-                                        >
-                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
-                                                <img
-                                                    src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=200&h=200`}
-                                                    alt={court.name}
-                                                    className={`w-full h-full object-cover transition-transform duration-300 ${isCourtAvailable ? 'group-hover:scale-105' : 'grayscale'}`}
-                                                />
-                                                {!isCourtAvailable && (
-                                                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                                                        <Ban size={20} className="text-white" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 text-left min-w-0">
-                                                <p className={`font-bold text-sm tracking-tight mb-1 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-blue-600 transition-colors' : 'text-slate-400'}`}>{court.name}</p>
-                                                <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                                                    <span className="text-[11px] font-medium text-slate-400">🎾 {court.numCourts} Units</span>
-                                                    {courtStatusLabel && (
-                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${courtStatusStyle}`}>{courtStatusLabel}</span>
+                                            const courtSt = court.status || 'Available';
+                                            const isCourtAvailable = isLocationAvailable && (courtSt === 'Available' || courtSt === 'Fully Booked');
+                                            const isFullyBooked = courtSt === 'Fully Booked';
+                                            const courtStatusLabel = !isLocationAvailable ? locStatus : courtSt !== 'Available' ? courtSt : '';
+                                            const courtStatusStyle = courtSt === 'Fully Booked' ? 'bg-blue-50 text-blue-500'
+                                                : courtSt === 'Coming Soon' ? 'bg-blue-50 text-blue-500'
+                                                    : courtSt === 'Maintenance' ? 'bg-blue-50 text-blue-500'
+                                                        : locStatus === 'Closed' ? 'bg-rose-50 text-rose-500'
+                                                            : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-500'
+                                                                : 'bg-blue-50 text-blue-500';
+                                            return (
+                                                <div key={court.id} className="w-full p-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            if (isCourtAvailable) {
+                                                                setHeroCourtId(court.id);
+                                                                if (window.innerWidth < 768) {
+                                                                    setShowCourtDetails(true);
+                                                                }
+                                                            }
+                                                        }}
+                                                        disabled={!isCourtAvailable}
+                                                        className={`w-full group flex flex-col rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-200 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                                                    >
+                                                        <div className="w-full h-32 bg-slate-100 rounded-xl overflow-hidden relative">
+                                                            <img
+                                                                src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400&h=300`}
+                                                                alt={court.name}
+                                                                className={`w-full h-full object-cover transition-transform duration-700 ${isCourtAvailable ? 'group-hover:scale-110' : 'grayscale'}`}
+                                                            />
+                                                            <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                                                                <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-[#1E40AF]/90 text-white' : 'bg-emerald-600/90 text-white'}`}>
+                                                                    {court.type}
+                                                                </span>
+                                                                {courtStatusLabel && (
+                                                                    <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${courtStatusStyle}`}>{courtStatusLabel}</span>
+                                                                )}
+                                                            </div>
+                                                            {!isCourtAvailable && (
+                                                                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                                                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 border border-white/20">
+                                                                        <Ban size={20} className="text-white" />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="p-3.5 text-left">
+                                                            <p className={`font-black text-sm tracking-tight mb-0.5 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-[#1E40AF] transition-colors' : 'text-slate-400'}`}>{court.name}</p>
+                                                            <div className="flex items-center gap-2.5">
+                                                                <span className="text-[10px] font-bold text-slate-400">🎾 {court.numCourts} Units</span>
+                                                                <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
+                                                                <span className="text-[10px] font-bold text-[#a3e635] uppercase tracking-wider">Book Now</span>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                    {isFullyBooked && isLocationAvailable && (
+                                                        <div className="px-4 pb-3 -mt-1">
+                                                            <button
+                                                                onClick={() => { setHeroCourtId(court.id); setShowCourtDetails(true); }}
+                                                                className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-200/50 flex items-center justify-center gap-2"
+                                                            >
+                                                                📅 Book Future Dates
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                            {isCourtAvailable && !isFullyBooked && <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />}
-                                        </button>
-                                        {isFullyBooked && isLocationAvailable && (
-                                          <div className="px-4 pb-3 -mt-1">
-                                            <button
-                                              onClick={() => navigate(`/court/${court.id}?advance=true`)}
-                                              className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-orange-600 hover:to-amber-600 transition-all shadow-lg shadow-orange-200/50 flex items-center justify-center gap-2"
-                                            >
-                                              📅 Book Future Dates
-                                            </button>
-                                          </div>
-                                        )}
-                                        </div>
-                                        );
-                                    });
+                                            );
+                                        });
                                     })()
                                 ) : (
                                     filteredLocations.length === 0 ? (
@@ -1314,54 +1387,48 @@ const GuestBooking: React.FC = () => {
                                         const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
                                         const isAvailable = locStatus === 'Active';
                                         return (
-                                        <button
-                                            key={location.id}
-                                            onClick={() => {
-                                                if (googleMapRef.current && location.latitude && location.longitude) {
-                                                    googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                                                    googleMapRef.current.setZoom(19);
-                                                    triggerPulse(location.latitude, location.longitude);
-                                                }
-                                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
-                                            }}
-                                            className="w-full group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-blue-50/40 transition-all duration-200"
-                                        >
-                                            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0 relative">
-                                                <img
-                                                    src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=200&h=200`}
-                                                    alt={location.name}
-                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                                {!isAvailable && (
-                                                    <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                                        locStatus === 'Closed' ? 'bg-rose-500 text-white'
-                                                        : locStatus === 'Maintenance' ? 'bg-amber-500 text-white'
-                                                        : 'bg-blue-500 text-white'
-                                                    }`}>{locStatus}</div>
-                                                )}
+                                            <div key={location.id} className="w-full p-2">
+                                                <button
+                                                    onClick={() => {
+                                                        if (googleMapRef.current && location.latitude && location.longitude) {
+                                                            googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                                                            smoothZoom(19);
+                                                            triggerPulse(location.latitude, location.longitude);
+                                                        }
+                                                        navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                                    }}
+                                                    className="w-full group flex flex-col rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200"
+                                                >
+                                                    <div className="w-full h-32 bg-slate-100 rounded-xl overflow-hidden relative">
+                                                        <img
+                                                            src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=300`}
+                                                            alt={location.name}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                                        />
+                                                        {!isAvailable && (
+                                                            <div className={`absolute top-2.5 right-2.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${locStatus === 'Closed' ? 'bg-rose-500 text-white'
+                                                                : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
+                                                                    : 'bg-blue-500 text-white'
+                                                                }`}>{locStatus}</div>
+                                                        )}
+                                                        {isAvailable && (
+                                                            <div className="absolute top-2.5 left-2.5">
+                                                                <span className="bg-[#a3e635] text-slate-900 text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg shadow-lime-500/30">Available</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="p-3.5 text-left">
+                                                        <p className="font-black text-slate-900 text-sm tracking-tight mb-0.5 group-hover:text-[#1E40AF] transition-colors line-clamp-1">{location.name}</p>
+                                                        <div className="flex items-center gap-2.5">
+                                                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                                                <MapPin size={10} className="text-[#1E40AF]" /> {location.city}
+                                                            </span>
+                                                            <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
+                                                            <span className="text-[10px] font-bold text-slate-400">🎾 {location.court_count} Units</span>
+                                                        </div>
+                                                    </div>
+                                                </button>
                                             </div>
-                                            <div className="flex-1 text-left min-w-0">
-                                                <p className="font-bold text-slate-900 text-sm tracking-tight mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{location.name}</p>
-                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                                                    <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
-                                                        <MapPin size={11} className="text-blue-400" /> {location.city}
-                                                    </span>
-                                                    <span className="text-[11px] font-medium text-slate-400">
-                                                        🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
-                                                    </span>
-                                                    {isAvailable ? (
-                                                        <span className="text-[10px] font-bold text-emerald-500">● Available</span>
-                                                    ) : (
-                                                        <span className={`text-[10px] font-bold ${
-                                                            locStatus === 'Closed' ? 'text-rose-500'
-                                                            : locStatus === 'Maintenance' ? 'text-amber-500'
-                                                            : 'text-blue-500'
-                                                        }`}>● {locStatus}</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <ChevronLeft size={16} className="text-slate-300 rotate-180 shrink-0 group-hover:text-blue-400 transition-colors" />
-                                        </button>
                                         );
                                     })
                                 )}
@@ -1380,7 +1447,7 @@ const GuestBooking: React.FC = () => {
                             >
                                 {isLoading ? (
                                     <div className="h-full bg-slate-100 flex items-center justify-center">
-                                        <Loader2 className="animate-spin text-blue-600" size={40} />
+                                        <Loader2 className="animate-spin text-[#1E40AF]" size={40} />
                                     </div>
                                 ) : (
                                     <div ref={mapRef} className="h-full w-full" />
@@ -1423,7 +1490,7 @@ const GuestBooking: React.FC = () => {
                                                         <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/20 backdrop-blur-sm text-white border border-white/30">{heroActiveCourt.numCourts} {heroActiveCourt.numCourts === 1 ? 'Unit' : 'Units'}</span>
                                                     )}
                                                     {heroActiveCourt.status && heroActiveCourt.status !== 'Available' && (
-                                                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-orange-500/90 text-white">{heroActiveCourt.status}</span>
+                                                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-500/90 text-white">{heroActiveCourt.status}</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -1445,11 +1512,11 @@ const GuestBooking: React.FC = () => {
                                                     </div>
                                                 )}
                                                 {selectedLocation.opening_time && selectedLocation.closing_time && (
-                                                    <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-amber-50 rounded-xl border border-amber-100">
-                                                        <Clock size={14} className="text-amber-600 shrink-0" />
+                                                    <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-blue-50 rounded-xl border border-blue-100">
+                                                        <Clock size={14} className="text-blue-600 shrink-0" />
                                                         <div>
-                                                            <p className="text-[8px] font-black text-amber-700 uppercase tracking-widest leading-none">Hours</p>
-                                                            <p className="text-xs font-bold text-amber-900 leading-tight mt-0.5">{selectedLocation.opening_time} - {selectedLocation.closing_time}</p>
+                                                            <p className="text-[8px] font-black text-blue-700 uppercase tracking-widest leading-none">Hours</p>
+                                                            <p className="text-xs font-bold text-blue-900 leading-tight mt-0.5">{selectedLocation.opening_time} - {selectedLocation.closing_time}</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -1471,12 +1538,13 @@ const GuestBooking: React.FC = () => {
                                                         localStorage.setItem('auth_redirect', redirectUrl);
                                                         setShowLoginModal(true);
                                                     }}
-                                                    className="flex-1 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-blue-200/50 active:scale-[0.98] transition-all"
+                                                    className="flex-1 py-3.5 rounded-xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                                                 >
+                                                    <Lock size={14} />
                                                     Sign In to Book
                                                 </button>
                                                 <button
-                                                    onClick={() => navigate(`/court/${heroActiveCourt.id}`)}
+                                                    onClick={() => setShowCourtDetails(true)}
                                                     className="px-4 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-widest active:scale-[0.98] transition-all"
                                                 >
                                                     Details
@@ -1534,7 +1602,7 @@ const GuestBooking: React.FC = () => {
 
                             <div className="space-y-6 pb-6">
                                 <section>
-                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Court Type</h3>
+                                    <h3 className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em] mb-4">Court Type</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
                                             <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
@@ -1546,7 +1614,7 @@ const GuestBooking: React.FC = () => {
                                 </section>
 
                                 <section>
-                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access</h3>
+                                    <h3 className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em] mb-4">Access</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         {['Public Court', 'Private Court', 'Membership Required'].map(access => (
                                             <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
@@ -1564,7 +1632,7 @@ const GuestBooking: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={() => setShowFilters(false)}
-                                    className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-200/50"
+                                    className="flex-1 py-3 bg-[#1E40AF] text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
                                 >
                                     View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
                                 </button>
@@ -1574,65 +1642,208 @@ const GuestBooking: React.FC = () => {
                 </div>
             )}
 
+            {/* ──────────── COURT DETAIL MODAL ──────────── */}
+            {showCourtDetails && heroActiveCourt && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 sm:p-4">
+                    <div
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity duration-300"
+                        onClick={() => setShowCourtDetails(false)}
+                    />
+                    <div className="relative w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] bg-white sm:rounded-[40px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+                        {/* Header Image Section */}
+                        <div className="relative h-64 sm:h-80 shrink-0">
+                            <img
+                                src={heroActiveCourt.imageUrl || selectedLocation?.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1200'}
+                                alt={heroActiveCourt.name}
+                                className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                            <button
+                                onClick={() => setShowCourtDetails(false)}
+                                className="absolute top-6 right-6 p-3 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white rounded-2xl transition-all z-20 group"
+                            >
+                                <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
+                            </button>
+
+                            <div className="absolute bottom-10 left-8 right-8">
+                                <span className="inline-block px-3 py-1 rounded-full bg-[#a3e635] text-slate-900 text-[10px] font-black uppercase tracking-widest mb-4">
+                                    Court Detail
+                                </span>
+                                <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">{heroActiveCourt.name}</h2>
+                                <div className="flex items-center gap-2 mt-2 text-white/80">
+                                    <MapPin size={16} className="text-[#a3e635]" />
+                                    <span className="text-sm font-bold">{selectedLocation?.name}, {selectedLocation?.city}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Content Section */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="p-8 sm:p-12 space-y-12">
+                                {/* Top Stats */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-4">
+                                            <DollarSign className="text-[#1E40AF]" size={24} />
+                                        </div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Rate</p>
+                                        <p className="text-xl font-black text-slate-900">₱{heroActiveCourt.pricePerHour}<span className="text-[10px] text-slate-400">/hr</span></p>
+                                    </div>
+
+                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4">
+                                            <Activity className="text-emerald-600" size={24} />
+                                        </div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Units</p>
+                                        <p className="text-xl font-black text-slate-900">{heroActiveCourt.numCourts} Units</p>
+                                    </div>
+
+                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-4">
+                                            <Star className="text-blue-500 fill-blue-500" size={24} />
+                                        </div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Rating</p>
+                                        <p className="text-xl font-black text-slate-900">New</p>
+                                    </div>
+
+                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                                            <CreditCard className="text-indigo-600" size={24} />
+                                        </div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Type</p>
+                                        <p className="text-xl font-black text-slate-900">{heroActiveCourt.type}</p>
+                                    </div>
+                                </div>
+
+                                {/* Main Details Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                    <div className="space-y-8">
+                                        <section>
+                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                <Info size={16} />
+                                                About this Court
+                                            </h3>
+                                            <p className="text-slate-600 leading-relaxed font-medium">
+                                                This premium {heroActiveCourt.type.toLowerCase()} facility is maintained daily to ensure professional playing standards. Located at {selectedLocation?.address}, it features state-of-the-art surfacing and amenities for all skill levels.
+                                            </p>
+                                        </section>
+
+                                        <section>
+                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                <Funnel size={16} />
+                                                Available Amenities
+                                            </h3>
+                                            <div className="flex flex-wrap gap-2.5">
+                                                {Array.isArray(heroActiveCourt.amenities) && heroActiveCourt.amenities.map((a: string, i: number) => (
+                                                    <span key={i} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200/50">
+                                                        {a}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    </div>
+
+                                    <div className="space-y-8">
+                                        <section>
+                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                <MapPin size={16} />
+                                                Exact Location
+                                            </h3>
+                                            <div className="h-64 h- rounded-[32px] overflow-hidden shadow-lg border border-slate-100">
+                                                {selectedLocation?.latitude && selectedLocation?.longitude && (
+                                                    <MiniMap lat={selectedLocation.latitude} lng={selectedLocation.longitude} />
+                                                )}
+                                            </div>
+                                        </section>
+
+                                        <section>
+                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                <Clock size={16} />
+                                                Operation Hours
+                                            </h3>
+                                            <div className="p-6 bg-blue-50/50 rounded-[32px] border border-blue-100 flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                                                    <Clock className="text-blue-600" size={24} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-900">{selectedLocation?.opening_time} — {selectedLocation?.closing_time}</p>
+                                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Open Today</p>
+                                                </div>
+                                            </div>
+                                        </section>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Action */}
+                        <div className="p-8 sm:p-10 bg-slate-50 border-t border-slate-100 shrink-0">
+                            <button
+                                onClick={() => {
+                                    setShowCourtDetails(false);
+                                    let redirectUrl = `/court/${heroActiveCourt.id}`;
+                                    localStorage.setItem('auth_redirect', redirectUrl);
+                                    setShowLoginModal(true);
+                                }}
+                                className="w-full py-5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                            >
+                                <Lock size={20} />
+                                Sign In to Book Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* ──────────── LOGIN MODAL ──────────── */}
             {showLoginModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
                     <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
                         onClick={() => setShowLoginModal(false)}
                     />
-                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                         <button
                             onClick={() => setShowLoginModal(false)}
-                            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-900 transition-colors rounded-lg hover:bg-slate-100"
+                            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-900 transition-colors rounded-xl hover:bg-slate-100"
                         >
                             <X size={20} />
                         </button>
 
-                        <div className="p-6 sm:p-10 text-center">
-                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                <Lock className="text-blue-600" size={28} />
+                        <div className="p-8 sm:p-10 text-center">
+                            <div className="w-20 h-20 bg-blue-50 rounded-[24px] flex items-center justify-center mx-auto mb-8">
+                                <Lock className="text-[#1E40AF]" size={36} />
                             </div>
 
-                            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Hold On!</h2>
-                            <p className="text-slate-500 font-medium mb-8 leading-relaxed text-sm sm:text-base">
-                                You need an account to book this court. Join the community and start playing.
+                            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-4 leading-tight">Join the Pickleplay Community</h2>
+                            <p className="text-slate-500 font-medium mb-10 leading-relaxed text-sm sm:text-base">
+                                Create an account or sign in to reserve this court and start your match.
                             </p>
 
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 <button
                                     onClick={() => {
-                                        let redirectUrl = selectedCourt ? `/court/${selectedCourt.id}` : '/booking';
-                                        if (!selectedCourt) {
-                                            const params = new URLSearchParams();
-                                            if (searchQuery) params.set('q', searchQuery);
-                                            if (params.toString()) redirectUrl += '?' + params.toString();
-                                        }
+                                        let redirectUrl = heroActiveCourt ? `/court/${heroActiveCourt.id}` : '/booking';
                                         navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
                                     }}
-                                    className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg"
+                                    className="w-full py-4.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-xl shadow-slate-200"
                                 >
-                                    <LogIn size={16} /> Sign In
+                                    <LogIn size={18} /> Sign In
                                 </button>
                                 <button
                                     onClick={() => {
-                                        let redirectUrl = selectedCourt ? `/court/${selectedCourt.id}` : '/booking';
-                                        if (!selectedCourt) {
-                                            const params = new URLSearchParams();
-                                            if (searchQuery) params.set('q', searchQuery);
-                                            if (params.toString()) redirectUrl += '?' + params.toString();
-                                        }
+                                        let redirectUrl = heroActiveCourt ? `/court/${heroActiveCourt.id}` : '/booking';
                                         navigate(`/signup?redirect=${encodeURIComponent(redirectUrl)}`);
                                     }}
-                                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg shadow-blue-200/50"
+                                    className="w-full py-4.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-xl shadow-blue-200"
                                 >
-                                    <UserPlus size={16} /> Create Account
+                                    <UserPlus size={18} /> Create Account
                                 </button>
                                 <button
                                     onClick={() => setShowLoginModal(false)}
-                                    className="w-full py-3 text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
+                                    className="w-full py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
                                 >
-                                    Maybe Later
+                                    Maybe later
                                 </button>
                             </div>
                         </div>

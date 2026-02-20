@@ -48,7 +48,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
 
     const getTypeIcon = (type: string, size: number = 20) => {
         switch (type) {
-            case 'quiz': return <Trophy className="text-yellow-500" size={size} />;
+            case 'quiz': return <Trophy className="text-blue-500" size={size} />;
             case 'video': return <Play className="text-red-500" size={size} />;
             default: return <BookOpen className="text-blue-500" size={size} />;
         }
@@ -65,7 +65,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
     const getDifficultyColor = (level: string) => {
         switch (level) {
             case 'beginner': return 'bg-green-100 text-green-700';
-            case 'intermediate': return 'bg-yellow-100 text-yellow-700';
+            case 'intermediate': return 'bg-blue-100 text-blue-700';
             case 'advanced': return 'bg-red-100 text-red-700';
             default: return 'bg-gray-100 text-gray-700';
         }
@@ -170,7 +170,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
 
                     <Link
                         to="/guides/skill-rating"
-                        className="group bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all"
+                        className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all"
                     >
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
@@ -361,16 +361,16 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                             </div>
                         </Link>
 
-                        <Link to="/guides/skill-rating" className="group bg-white rounded-2xl p-5 md:p-6 border border-slate-100 hover:shadow-lg hover:border-yellow-200 transition-all">
+                        <Link to="/guides/skill-rating" className="group bg-white rounded-2xl p-5 md:p-6 border border-slate-100 hover:shadow-lg hover:border-blue-200 transition-all">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center group-hover:bg-yellow-500 transition-colors shrink-0">
-                                    <Trophy className="text-yellow-600 group-hover:text-white transition-colors" size={24} />
+                                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-500 transition-colors shrink-0">
+                                    <Trophy className="text-blue-600 group-hover:text-white transition-colors" size={24} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-bold text-slate-900 truncate">Skill Rating Quiz</h3>
                                     <p className="text-sm text-slate-500 truncate">Find your pickleball level</p>
                                 </div>
-                                <ChevronRight className="text-slate-300 group-hover:text-yellow-500 group-hover:translate-x-1 transition-all shrink-0" size={20} />
+                                <ChevronRight className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" size={20} />
                             </div>
                         </Link>
 

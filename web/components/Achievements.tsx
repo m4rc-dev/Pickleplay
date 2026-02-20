@@ -42,7 +42,7 @@ interface AchievementsProps {
 
 const ACHIEVEMENT_ICONS: Record<string, React.ReactNode> = {
   court_conqueror: <Calendar size={28} className="text-lime-400" />,
-  default: <Trophy size={28} className="text-amber-400" />,
+  default: <Trophy size={28} className="text-blue-400" />,
 };
 
 const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER' }) => {
@@ -173,7 +173,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER' }) => {
         </div>
         <div className="flex gap-4">
           <div className="flex items-center gap-3 px-8 py-4 bg-slate-950 rounded-2xl shadow-xl">
-            <Sparkles size={20} className="text-amber-400" fill="currentColor" />
+            <Sparkles size={20} className="text-blue-400" fill="currentColor" />
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Points Earned</p>
               <p className="text-2xl font-black text-white tracking-tight">{totalPoints}</p>
@@ -196,21 +196,19 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER' }) => {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
-              activeTab === 'all'
+            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'all'
                 ? 'bg-slate-950 text-white shadow-xl'
                 : 'text-slate-400 hover:text-slate-950'
-            }`}
+              }`}
           >
             ALL ACHIEVEMENTS
           </button>
           <button
             onClick={() => setActiveTab('completed')}
-            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
-              activeTab === 'completed'
+            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'completed'
                 ? 'bg-slate-950 text-white shadow-xl'
                 : 'text-slate-400 hover:text-slate-950'
-            }`}
+              }`}
           >
             COMPLETED
           </button>
@@ -292,22 +290,20 @@ const AchievementCard: React.FC<AchievementCardProps> = ({ achievement, progress
 
   return (
     <div
-      className={`group relative bg-white rounded-[48px] border overflow-hidden shadow-sm hover:shadow-2xl transition-all hover:-translate-y-2 duration-500 ${
-        isCompleted ? 'border-lime-200 ring-2 ring-lime-400/20' : 'border-slate-200'
-      }`}
+      className={`group relative bg-white rounded-[48px] border overflow-hidden shadow-sm hover:shadow-2xl transition-all hover:-translate-y-2 duration-500 ${isCompleted ? 'border-lime-200 ring-2 ring-lime-400/20' : 'border-slate-200'
+        }`}
     >
       {/* Top banner */}
       <div
-        className={`relative h-40 overflow-hidden ${
-          isCompleted
+        className={`relative h-40 overflow-hidden ${isCompleted
             ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
             : 'bg-gradient-to-br from-slate-100 via-slate-50 to-white'
-        }`}
+          }`}
       >
         {isCompleted && (
           <div className="absolute inset-0">
             <div className="absolute top-4 left-8 w-32 h-32 bg-lime-400/10 blur-[50px] rounded-full" />
-            <div className="absolute bottom-2 right-8 w-24 h-24 bg-amber-400/10 blur-[40px] rounded-full" />
+            <div className="absolute bottom-2 right-8 w-24 h-24 bg-blue-400/10 blur-[40px] rounded-full" />
           </div>
         )}
 
@@ -324,9 +320,9 @@ const AchievementCard: React.FC<AchievementCardProps> = ({ achievement, progress
         </div>
 
         {/* Reward badge */}
-        <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1.5 bg-amber-400/20 rounded-xl border border-amber-400/30">
-          <Sparkles size={12} className={isCompleted ? 'text-amber-300' : 'text-amber-500'} fill="currentColor" />
-          <span className={`text-[10px] font-black ${isCompleted ? 'text-amber-300' : 'text-amber-600'}`}>
+        <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1.5 bg-blue-400/20 rounded-xl border border-blue-400/30">
+          <Sparkles size={12} className={isCompleted ? 'text-blue-300' : 'text-blue-500'} fill="currentColor" />
+          <span className={`text-[10px] font-black ${isCompleted ? 'text-blue-300' : 'text-blue-600'}`}>
             +{achievement.reward_points} PTS
           </span>
         </div>
@@ -334,9 +330,8 @@ const AchievementCard: React.FC<AchievementCardProps> = ({ achievement, progress
         {/* Achievement icon */}
         <div className="absolute bottom-6 left-6">
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${
-              isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border border-slate-200'
-            }`}
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border border-slate-200'
+              }`}
           >
             {icon}
           </div>
@@ -364,9 +359,8 @@ const AchievementCard: React.FC<AchievementCardProps> = ({ achievement, progress
           </div>
           <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                isCompleted ? 'bg-lime-400' : 'bg-blue-500'
-              }`}
+              className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-lime-400' : 'bg-blue-500'
+                }`}
               style={{ width: `${percentage}%` }}
             />
           </div>
@@ -387,7 +381,7 @@ const AchievementCard: React.FC<AchievementCardProps> = ({ achievement, progress
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Reward</p>
             <div className="flex items-center gap-2">
-              <Zap size={14} className="text-amber-500 fill-amber-500" />
+              <Zap size={14} className="text-blue-500 fill-blue-500" />
               <span className="font-black text-slate-950 text-sm tracking-tight">{achievement.reward_points} pts</span>
             </div>
           </div>

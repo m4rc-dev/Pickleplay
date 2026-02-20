@@ -148,7 +148,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
       onClick={onClick}
       className={`flex items-center gap-3 ${isPrimaryBook ? 'p-5' : 'p-3.5'} rounded-2xl transition-all duration-300 group ${isActive
         ? isMobile ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/95 text-slate-900 shadow-lg'
-        : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/80 hover:bg-white/10 hover:text-white'}`
+        : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/95 hover:bg-white/10 hover:text-white'}`
         } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''}`}
     >
       <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'}`}>
@@ -342,8 +342,7 @@ const NavigationHandler: React.FC<{
   const onLogoutClick = async () => {
     setIsMobileMenuOpen(false);
     await handleLogout();
-    window.location.hash = '#/login';
-    window.location.reload();
+    window.location.href = '/login';
   };
 
   const toggleNotifications = () => {
@@ -369,10 +368,11 @@ const NavigationHandler: React.FC<{
   };
 
   const getThemeColor = () => {
-    if (role === 'COACH') return 'rose';
-    if (role === 'COURT_OWNER') return 'amber';
-    if (role === 'ADMIN') return 'indigo';
-    return 'slate';
+    // Unify all professional roles to use a consistent blue/lime theme
+    if (role === 'COACH') return 'blue';
+    if (role === 'COURT_OWNER') return 'blue';
+    if (role === 'ADMIN') return 'blue';
+    return 'blue';
   };
   const themeColor = getThemeColor();
 
@@ -439,7 +439,7 @@ const NavigationHandler: React.FC<{
   return (
     <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#EBEBE6' }}>
       {role !== 'guest' && !isAuthPage && (
-        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60]`} style={{ backgroundColor: '#1E40AF' }}>
+        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60] animate-slide-in-left`} style={{ backgroundColor: '#1E40AF' }}>
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="absolute -right-3 bottom-12 w-6 h-6 border rounded-full flex items-center justify-center shadow-md z-[60] transition-all hover:scale-110 active:scale-95 cursor-pointer bg-white border-slate-200 text-slate-600"
@@ -482,8 +482,8 @@ const NavigationHandler: React.FC<{
                   <Link
                     to="/booking"
                     className={`block rounded-2xl transition-all duration-300 group ${location.pathname === '/booking'
-                        ? 'bg-lime-400 shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
-                        : 'bg-gradient-to-br from-lime-400/90 to-lime-500/80 hover:from-lime-400 hover:to-lime-500 shadow-[0_6px_24px_-4px_rgba(163,230,53,0.4)] hover:shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
+                      ? 'bg-lime-400 shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
+                      : 'bg-gradient-to-br from-lime-400/90 to-lime-500/80 hover:from-lime-400 hover:to-lime-500 shadow-[0_6px_24px_-4px_rgba(163,230,53,0.4)] hover:shadow-[0_8px_32px_-4px_rgba(163,230,53,0.55)]'
                       } active:scale-95`}
                   >
                     <div className="flex items-center gap-3.5 px-5 py-4">
@@ -491,10 +491,10 @@ const NavigationHandler: React.FC<{
                         <Calendar size={22} className="text-slate-900" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-black text-[14px] uppercase tracking-widest text-slate-900 leading-none">Book Courts</p>
-                        <p className="text-[10px] font-semibold text-slate-700/80 mt-0.5">Reserve your court now</p>
+                        <p className="font-black text-[14px] uppercase tracking-widest text-slate-900 group-hover:text-white leading-none transition-colors duration-300">Book Courts</p>
+                        <p className="text-[10px] font-semibold text-slate-700/80 group-hover:text-white/80 mt-0.5 transition-colors duration-300">Reserve your court now</p>
                       </div>
-                      <ArrowRight size={16} className="text-slate-900/60 shrink-0 transition-transform duration-300 group-hover:translate-x-1" />
+                      <ArrowRight size={16} className="text-slate-900/60 group-hover:text-white/80 shrink-0 transition-all duration-300 group-hover:translate-x-1" />
                     </div>
                   </Link>
                 ))}
@@ -508,7 +508,7 @@ const NavigationHandler: React.FC<{
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
                     <button
                       onClick={() => setIsOthersOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/80' : 'text-white/60 hover:text-white/80'}`}
+                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
                       aria-expanded={isOthersOpen}
                       aria-controls="others-group"
                     >
@@ -546,8 +546,8 @@ const NavigationHandler: React.FC<{
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
             <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-              <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/60`}>Marketplace</p>
-              {feat('shop') && <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+              <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
+              <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
             </div>
           </nav>
 
@@ -558,8 +558,11 @@ const NavigationHandler: React.FC<{
                 {authorizedProRoles.length === 1 && (
                   <button onClick={async () => {
                     const nextRole: UserRole = role === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER';
-                    handleRoleSwitch(nextRole);
-                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800">
+                    await handleRoleSwitch(nextRole);
+                    // Navigation is handled via state change/Navigate in Routes or explicitly here
+                    if (nextRole === 'PLAYER') navigate('/booking');
+                    else navigate('/dashboard');
+                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
                         <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
@@ -568,7 +571,7 @@ const NavigationHandler: React.FC<{
                         <p className="text-[10px] font-black uppercase tracking-widest leading-none">
                           {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Pro Mode' : `${role.replace('_', ' ')} Mode`)}
                         </p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        <p className="text-[9px] font-bold text-blue-200 uppercase tracking-widest mt-1">
                           Switch to {role === 'PLAYER' ? authorizedProRoles[0].replace('_', ' ') : 'Player'}
                         </p>
                       </div>
@@ -581,7 +584,7 @@ const NavigationHandler: React.FC<{
                   <>
                     <button
                       onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-[#0b0e14] border-slate-800 text-white"
+                      className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
@@ -591,27 +594,28 @@ const NavigationHandler: React.FC<{
                           <p className="text-[11px] font-black uppercase tracking-widest leading-none">
                             {isSimulating ? 'Simulation Active' : (role === 'PLAYER' ? 'Player Mode' : `${role.replace('_', ' ')} Mode`)}
                           </p>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">
+                          <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1.5">
                             Switch Role
                           </p>
                         </div>
                       </div>
-                      <ChevronDown size={18} className={`text-slate-500 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={18} className={`text-white/60 transition-transform duration-300 ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Dropdown Menu */}
                     {isRoleDropdownOpen && (
-                      <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#0b0e14] border border-slate-800/50 rounded-[28px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                      <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#2563EB] border border-white/20 rounded-[28px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
                         <div className="p-2.5 space-y-1">
                           {/* Player option */}
                           <button
-                            onClick={() => {
-                              handleRoleSwitch('PLAYER');
+                            onClick={async () => {
+                              await handleRoleSwitch('PLAYER');
                               setIsRoleDropdownOpen(false);
+                              navigate('/booking');
                             }}
                             className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === 'PLAYER'
                               ? 'bg-lime-400 text-slate-900'
-                              : 'text-white/70 hover:bg-slate-800 hover:text-white'
+                              : 'text-white hover:bg-white/10 hover:text-white'
                               }`}
                           >
                             <User size={20} className={role === 'PLAYER' ? 'text-slate-900' : 'text-white/40'} />
@@ -623,13 +627,14 @@ const NavigationHandler: React.FC<{
                           {authorizedProRoles.map((proRole) => (
                             <button
                               key={proRole}
-                              onClick={() => {
-                                handleRoleSwitch(proRole);
+                              onClick={async () => {
+                                await handleRoleSwitch(proRole);
                                 setIsRoleDropdownOpen(false);
+                                navigate('/dashboard');
                               }}
                               className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === proRole
                                 ? 'bg-lime-400 text-slate-900'
-                                : 'text-white/70 hover:bg-slate-800 hover:text-white'
+                                : 'text-white hover:bg-white/10 hover:text-white'
                                 }`}
                             >
                               {proRole === 'COACH' ?
@@ -650,8 +655,10 @@ const NavigationHandler: React.FC<{
                 {authorizedProRoles.length === 0 && isSimulating && (
                   <button onClick={async () => {
                     const nextRole: UserRole = role === 'PLAYER' ? 'COACH' : 'PLAYER';
-                    handleRoleSwitch(nextRole);
-                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-slate-900 border-slate-800 text-white hover:bg-slate-800">
+                    await handleRoleSwitch(nextRole);
+                    if (nextRole === 'PLAYER') navigate('/booking');
+                    else navigate('/dashboard');
+                  }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-lime-400 text-slate-950 shadow-lg shadow-lime-900/20">
                         <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
@@ -680,9 +687,9 @@ const NavigationHandler: React.FC<{
                     <div className="flex items-center gap-2 justify-between">
                       <p className="text-sm font-black truncate leading-none capitalize text-white">{userName || role.replace('_', ' ').toLowerCase()}</p>
                       {role === 'PLAYER' && (
-                        <div className="flex items-center gap-1.5 bg-amber-500/30 px-3 py-1 rounded-full shrink-0 border border-amber-400/30">
-                          <Sparkles size={14} className="text-amber-300" fill="currentColor" />
-                          <span className="text-xs font-black text-amber-100">{userPoints}</span>
+                        <div className="flex items-center gap-1.5 bg-lime-500/30 px-3 py-1 rounded-full shrink-0 border border-lime-400/30">
+                          <Sparkles size={14} className="text-lime-300" fill="currentColor" />
+                          <span className="text-xs font-black text-lime-100">{userPoints}</span>
                         </div>
                       )}
                     </div>
@@ -824,7 +831,7 @@ const NavigationHandler: React.FC<{
 
       {/* Guest Desktop Header */}
       {role === 'guest' && !isAuthPage && (
-        <header className={`hidden md:flex fixed top-0 left-0 right-0 h-20 z-50 transition-all duration-500 ease-in-out items-center px-6 md:px-12 lg:px-24 justify-between ${headerActive ? 'bg-white/20 backdrop-blur-xl shadow-lg border-b border-white/10' : 'bg-white/10 backdrop-blur-md border-b border-white/20'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+        <header className={`hidden md:flex fixed top-0 left-0 right-0 h-20 z-50 transition-all duration-500 ease-in-out items-center px-6 md:px-12 lg:px-24 justify-between animate-fade-in opacity-0 ${headerActive ? 'bg-white/20 backdrop-blur-xl shadow-lg border-b border-white/10' : 'bg-white/10 backdrop-blur-md border-b border-white/20'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-2xl tracking-tighter transition-colors ${headerActive ? 'text-slate-950' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-14 h-14 object-contain rounded-xl" />
           </Link>
@@ -837,12 +844,12 @@ const NavigationHandler: React.FC<{
         </header>
       )}
 
-      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? '#020617' : '#EBEBE6' }}>
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? '#1E40AF' : '#EBEBE6' }}>
         <div className={`${role === 'guest' || isAuthPage
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
           : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           } transition-colors duration-300`}>
-          <div key={location.pathname} className="animate-route-transition">
+          <div key={location.pathname} className={isAuthPage ? "" : "animate-route-transition"}>
             <Routes location={location}>
               <Route path="/" element={
                 isTwoFactorPending
@@ -861,43 +868,43 @@ const NavigationHandler: React.FC<{
               <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
               <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? <FeatureUnavailable featureName="academy" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/guides" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <GuidesIndex isLoggedIn={role !== 'guest'} />} />
-              <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
-              <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
-              <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('rankings') ? <FeatureUnavailable featureName="rankings" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
-              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('dashboard') ? <FeatureUnavailable featureName="dashboard" /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FAQ /> : <Navigate to="/" />} />
-              <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
-              <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
-              <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : <CourtDetail />} />
-              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <Tournaments /> : <Navigate to="/" />} />
-              <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <FeatureUnavailable featureName="coaches" /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
-              <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
-              <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
-              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners /> : <Navigate to="/" />} />
-              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
-              <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
-              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-              <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-              <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
-              <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
+              <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
+              <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
+              <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
+              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/login" />} />
+              <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FAQ /> : <Navigate to="/login" />} />
+              <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
+              <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <CourtDetail />} />
+              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Tournaments /> : <Navigate to="/login" />} />
+              <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/login" />} />
+              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/login" />} />
+              <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/login" />} />
+              <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/login" />} />
+              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FindPartners /> : <Navigate to="/login" />} />
+              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/login" />} />
+              <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/login" />} />
+              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Teams userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/login" />} />
+              <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/login" />} />
+              <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/login" />} />
+              <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/login" />} />
 
               {/* Specialized Coach Routes */}
-              <Route path="/students" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('students') ? <FeatureUnavailable featureName="students" /> : role !== 'guest' ? <Students currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/clinics" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('clinics') ? <FeatureUnavailable featureName="clinics" /> : role !== 'guest' ? <Clinics currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/schedule" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('schedule') ? <FeatureUnavailable featureName="schedule" /> : role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/students" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Students currentUserId={currentUserId} /> : <Navigate to="/login" />} />
+              <Route path="/clinics" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Clinics currentUserId={currentUserId} /> : <Navigate to="/login" />} />
+              <Route path="/schedule" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/login" />} />
 
               {/* Specialized Court Owner Routes */}
-              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : role !== 'guest' ? <LocationsList /> : <Navigate to="/" />} />
-              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : role !== 'guest' ? <LocationDetailPage /> : <Navigate to="/" />} />
-              <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
-              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
-              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
-              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
-              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
+              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationsList /> : <Navigate to="/login" />} />
+              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationDetailPage /> : <Navigate to="/login" />} />
+              <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/login" />} />
+              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/login" />} />
+              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtCalendar /> : <Navigate to="/login" />} />
+              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <TournamentsManager /> : <Navigate to="/login" />} />
+              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Revenue /> : <Navigate to="/login" />} />
+              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/login" />} />
 
-              <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
+              <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
@@ -1673,10 +1680,6 @@ const App: React.FC = () => {
 
       setRole(newRole);
       localStorage.setItem('active_role', newRole);
-      // Small delay to ensure state update is processed before navigation
-      setTimeout(() => {
-        window.location.hash = '#/dashboard';
-      }, 100);
     } catch (err) {
       console.error('Role switch error:', err);
       alert('Failed to switch role');
@@ -1713,13 +1716,7 @@ const App: React.FC = () => {
     localStorage.removeItem('auth_redirect');
     localStorage.removeItem('active_role');
     localStorage.setItem('came_from_logout', 'true');
-    localStorage.removeItem('is_actual_admin');
-    setRole('guest');
-    setAuthorizedProRoles([]);
-    setUserName(null);
-    setUserAvatar(null);
-    setCurrentUserId(null);
-    setIsActualAdmin(false);
+    // Removed immediate state update to avoid reactive flicker before page reload
     await supabase.auth.signOut();
   };
 

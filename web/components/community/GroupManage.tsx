@@ -248,11 +248,10 @@ const GroupManage: React.FC = () => {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-5 py-4 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 ${
-                  activeTab === tab.key
+                className={`flex items-center gap-2 px-5 py-4 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === tab.key
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-slate-400 hover:text-slate-600'
-                }`}
+                  }`}
               >
                 <tab.icon size={15} /> {tab.label}
               </button>
@@ -443,13 +442,12 @@ const GroupManage: React.FC = () => {
           {activeTab === 'members' && (
             <div className="space-y-3">
               {sortedMembers.map(member => (
-                <div key={member.id} className={`flex items-center justify-between rounded-2xl p-4 border transition-all ${
-                  member.status === 'pending'
-                    ? 'bg-amber-50/50 border-amber-200/50'
+                <div key={member.id} className={`flex items-center justify-between rounded-2xl p-4 border transition-all ${member.status === 'pending'
+                    ? 'bg-blue-50/50 border-blue-200/50'
                     : member.role === 'admin'
-                    ? 'bg-amber-50/30 border-amber-200/30'
-                    : 'bg-white border-slate-100 hover:border-slate-200'
-                }`}>
+                      ? 'bg-blue-50/30 border-blue-200/30'
+                      : 'bg-white border-slate-100 hover:border-slate-200'
+                  }`}>
                   <div className="flex items-center gap-3">
                     <img
                       src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`}
@@ -459,7 +457,7 @@ const GroupManage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <p className="font-black text-slate-900 text-sm">{member.user?.full_name || 'Unknown'}</p>
                         {member.role === 'admin' && (
-                          <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                          <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                             <Crown size={10} /> Creator
                           </span>
                         )}
@@ -469,7 +467,7 @@ const GroupManage: React.FC = () => {
                           </span>
                         )}
                         {member.status === 'pending' && (
-                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                             Pending
                           </span>
                         )}

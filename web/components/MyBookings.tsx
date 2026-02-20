@@ -432,7 +432,7 @@ const MyBookings: React.FC = () => {
         const label = isPaid ? 'Paid' : b.status;
         const colors = isPaid ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
             b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                b.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                b.status === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
                     b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
                         'bg-slate-100 border-slate-200 text-slate-500';
         return <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colors}`}>{label}</span>;
@@ -509,15 +509,15 @@ const MyBookings: React.FC = () => {
                                         return (
                                             <button key={dateStr} onClick={() => setSelectedCalendarDate(isSelected ? null : dateStr)}
                                                 className={`relative w-full aspect-square rounded-xl text-[11px] font-black transition-all duration-200 ${isSelected ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-200' :
-                                                    isToday ? 'bg-slate-900 text-white' :
-                                                        hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
-                                                            'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
+                                                        isToday ? 'bg-slate-900 text-white' :
+                                                            hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
+                                                                'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
                                                     }`}>
                                                 {day}
                                                 {hasBooking && !isSelected && (
                                                     <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${info.statuses.includes('paid') ? 'bg-emerald-500' :
-                                                        info.statuses.includes('confirmed') ? 'bg-blue-500' :
-                                                            info.statuses.includes('pending') ? 'bg-amber-500' : 'bg-slate-400'
+                                                            info.statuses.includes('confirmed') ? 'bg-blue-500' :
+                                                                info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
                                                         }`} />
                                                 )}
                                             </button>
@@ -542,7 +542,7 @@ const MyBookings: React.FC = () => {
                                         <span className="text-sm font-black text-slate-900">{myBookings.filter(b => b.status === 'confirmed').length}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pending</span>
+                                        <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Pending</span>
                                         <span className="text-sm font-black text-slate-900">{myBookings.filter(b => b.status === 'pending').length}</span>
                                     </div>
                                 </div>
@@ -666,7 +666,7 @@ const MyBookings: React.FC = () => {
                                                 <div className="col-span-2 flex items-center justify-end gap-2">
                                                     {canReview(b) && (
                                                         <button onClick={() => handleOpenReview(b)}
-                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50 transition-all" title="Review Court">
+                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="Review Court">
                                                             <Star size={14} />
                                                         </button>
                                                     )}
@@ -870,11 +870,11 @@ const MyBookings: React.FC = () => {
                                 <div className="flex items-center gap-2">
                                     {[1, 2, 3, 4, 5].map((star) => (
                                         <button key={star} onClick={() => setReviewRating(star)} className="transition-all hover:scale-125 active:scale-95">
-                                            <Star size={36} className={`${star <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'} transition-colors`} />
+                                            <Star size={36} className={`${star <= reviewRating ? 'text-[#a3e635] fill-[#a3e635]' : 'text-slate-200'} transition-colors`} />
                                         </button>
                                     ))}
                                 </div>
-                                <span className="text-xs font-black text-amber-600 uppercase tracking-widest">
+                                <span className="text-xs font-black text-blue-600 uppercase tracking-widest">
                                     {reviewRating === 5 ? 'Excellent!' : reviewRating === 4 ? 'Great' : reviewRating === 3 ? 'Good' : reviewRating === 2 ? 'Fair' : 'Poor'}
                                 </span>
                             </div>
@@ -969,7 +969,7 @@ const MyBookings: React.FC = () => {
                                                 const label = isPaid ? 'Paid' : b.status;
                                                 const colors = isPaid ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300' :
                                                     b.status === 'confirmed' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
-                                                        b.status === 'pending' ? 'bg-amber-500/20 border-amber-400/30 text-amber-300' :
+                                                        b.status === 'pending' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
                                                             b.status === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
                                                                 'bg-white/10 border-white/20 text-white/60';
                                                 return <span className={`inline-block px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border mb-4 ${colors}`}>{label}</span>;
@@ -1042,7 +1042,7 @@ const MyBookings: React.FC = () => {
                                                 {(() => {
                                                     const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
                                                     const label = isPaid ? 'Paid' : b.status;
-                                                    const color = isPaid ? 'text-emerald-600' : b.status === 'confirmed' ? 'text-blue-600' : b.status === 'pending' ? 'text-amber-600' : b.status === 'cancelled' ? 'text-red-500' : 'text-slate-500';
+                                                    const color = isPaid ? 'text-emerald-600' : b.status === 'confirmed' ? 'text-blue-600' : b.status === 'pending' ? 'text-blue-600' : b.status === 'cancelled' ? 'text-red-500' : 'text-slate-500';
                                                     return <span className={`text-sm font-black capitalize ${color}`}>{label}</span>;
                                                 })()}
                                             </div>

@@ -81,7 +81,7 @@ const Academy: React.FC = () => {
               title="MASTERING THE DINK"
               difficulty="Novice"
               content="A soft shot hit from the NVZ (Kitchen line) that lands in the opponent's NVZ. Focus on a short pendulum swing from your shoulder—don't flick your wrist!"
-              icon={<Zap className="text-amber-500" />}
+              icon={<Zap className="text-lime-500" />}
             />
           </div>
         )}
@@ -129,7 +129,7 @@ const Academy: React.FC = () => {
               <PlayCircle className="absolute -bottom-10 -right-10 w-64 h-64 text-white/5" />
             </div>
 
-            <div className="bg-indigo-600 p-12 rounded-[56px] text-white shadow-2xl relative overflow-hidden">
+            <div className="bg-blue-600 p-12 rounded-[56px] text-white shadow-2xl relative overflow-hidden">
               <div className="relative z-10">
                 <span className="bg-white/20 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 inline-block">TEAM STRATEGY</span>
                 <h3 className="text-4xl font-black mb-4 tracking-tighter uppercase">STACKING & SWITCHING.</h3>

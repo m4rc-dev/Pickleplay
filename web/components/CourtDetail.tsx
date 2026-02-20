@@ -829,9 +829,9 @@ const CourtDetail: React.FC = () => {
                                 <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mb-2">Court Details</p>
                                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 tracking-tight leading-tight mb-3">{court.name}</h1>
                                 {court.status && court.status !== 'Available' && (
-                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 ${court.status === 'Fully Booked' ? 'bg-orange-50 text-orange-600 border border-orange-200'
+                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest mb-3 ${court.status === 'Fully Booked' ? 'bg-blue-50 text-blue-600 border border-blue-200'
                                         : court.status === 'Coming Soon' ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                                            : court.status === 'Maintenance' ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                                            : court.status === 'Maintenance' ? 'bg-blue-50 text-blue-600 border border-blue-200'
                                                 : ''
                                         }`}>
                                         {court.status === 'Fully Booked' ? '⏳' : court.status === 'Coming Soon' ? '🔜' : '🔧'} {court.status}
@@ -869,12 +869,12 @@ const CourtDetail: React.FC = () => {
                                 </div>
                                 <button
                                     onClick={() => setShowReviewsModal(true)}
-                                    className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100 hover:border-amber-300 hover:bg-amber-50/40 transition-all text-left group"
+                                    className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left group"
                                 >
-                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 group-hover:text-amber-600">Rating</p>
+                                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 group-hover:text-blue-600">Rating</p>
                                     <div className="flex items-center gap-1">
                                         <span className="text-lg sm:text-xl font-black text-slate-950">{averageRating > 0 ? averageRating : 'New'}</span>
-                                        <Star size={14} className={`${averageRating > 0 ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
+                                        <Star size={14} className={`${averageRating > 0 ? 'text-blue-400 fill-blue-400' : 'text-slate-300'}`} />
                                         {totalReviews > 0 && <span className="text-[9px] font-medium text-slate-400">({totalReviews})</span>}
                                     </div>
                                 </button>
@@ -914,13 +914,13 @@ const CourtDetail: React.FC = () => {
                             </div>
 
                             {/* Operation Hours */}
-                            <div className="flex items-center gap-3 p-4 bg-amber-50/80 rounded-xl border border-amber-100">
-                                <div className="p-2 bg-amber-500 text-white rounded-lg shrink-0">
+                            <div className="flex items-center gap-3 p-4 bg-blue-50/80 rounded-xl border border-blue-100">
+                                <div className="p-2 bg-blue-600 text-white rounded-lg shrink-0">
                                     <Clock size={14} />
                                 </div>
                                 <div>
-                                    <h4 className="text-xs font-bold text-amber-900 mb-0.5">Operation Hours</h4>
-                                    <p className="text-xs text-amber-700 font-bold">
+                                    <h4 className="text-xs font-bold text-blue-900 mb-0.5">Operation Hours</h4>
+                                    <p className="text-xs text-blue-700 font-bold">
                                         {(() => {
                                             const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12:00 AM' : h < 12 ? `${h.toString().padStart(2, '0')}:00 AM` : h === 12 ? '12:00 PM' : `${(h - 12).toString().padStart(2, '0')}:00 PM`; };
                                             return `${fmt(locationOpenTime)} — ${fmt(locationCloseTime)}`;
@@ -934,12 +934,12 @@ const CourtDetail: React.FC = () => {
                                 <div className="space-y-3">
                                     <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Court Policies</p>
                                     {locationPolicies.map((policy) => (
-                                        <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                        <div key={policy.id} className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                             <div className="flex items-center gap-2 mb-2">
-                                                <Shield size={14} className="text-amber-600" />
-                                                <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                                <Shield size={14} className="text-blue-600" />
+                                                <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest">{policy.title}</h4>
                                             </div>
-                                            <div className="text-xs text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                            <div className="text-xs text-blue-900 font-medium leading-relaxed whitespace-pre-wrap">
                                                 {policy.content}
                                             </div>
                                         </div>
@@ -953,8 +953,8 @@ const CourtDetail: React.FC = () => {
                     <div className="lg:sticky lg:top-8 space-y-4">
                         {court.status === 'Coming Soon' || court.status === 'Maintenance' ? (
                             <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/60 shadow-sm space-y-5">
-                                <div className={`text-center py-8 ${court.status === 'Coming Soon' ? 'text-blue-600' : 'text-amber-600'}`}>
-                                    <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-2xl ${court.status === 'Coming Soon' ? 'bg-blue-50' : 'bg-amber-50'
+                                <div className={`text-center py-8 ${court.status === 'Coming Soon' ? 'text-blue-600' : 'text-blue-600'}`}>
+                                    <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center text-2xl ${court.status === 'Coming Soon' ? 'bg-blue-50' : 'bg-blue-50'
                                         }`}>
                                         {court.status === 'Coming Soon' ? '🔜' : '🔧'}
                                     </div>
@@ -980,13 +980,13 @@ const CourtDetail: React.FC = () => {
                                     const isFutureDate = selStr > todayStr;
                                     if (!isFutureDate) return null;
                                     return (
-                                        <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
-                                            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                                        <div className="flex items-center gap-2.5 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
                                                 <span className="text-sm">📅</span>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider leading-none mb-0.5">Booking For Future Dates</p>
-                                                <p className="text-[10px] text-orange-600/80 font-medium leading-snug">
+                                                <p className="text-[10px] font-black text-blue-700 uppercase tracking-wider leading-none mb-0.5">Booking For Future Dates</p>
+                                                <p className="text-[10px] text-blue-600/80 font-medium leading-snug">
                                                     You're booking for <span className="font-bold">{selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: PH_TIMEZONE })}</span>. Make sure you pick the correct date.
                                                 </p>
                                             </div>
@@ -1042,7 +1042,7 @@ const CourtDetail: React.FC = () => {
                                                         <span className="text-[6px] font-black text-rose-400 uppercase leading-none mt-0.5">Closed</span>
                                                     )}
                                                     {isDateFullyBooked && !isDateClosed && (
-                                                        <span className="text-[6px] font-black text-orange-400 uppercase leading-none mt-0.5">Full</span>
+                                                        <span className="text-[6px] font-black text-blue-400 uppercase leading-none mt-0.5">Full</span>
                                                     )}
                                                 </button>
                                             );
@@ -1127,9 +1127,9 @@ const CourtDetail: React.FC = () => {
 
                                     {/* Daily Limit Banner */}
                                     {dailyLimitReached && (
-                                        <div className="mt-3 p-3 bg-orange-50 rounded-xl border border-orange-200 flex items-start gap-2">
-                                            <AlertCircle size={14} className="text-orange-500 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] text-orange-700 leading-relaxed font-medium">
+                                        <div className="mt-3 p-3 bg-blue-50 rounded-xl border border-blue-200 flex items-start gap-2">
+                                            <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
                                                 You've already booked <span className="font-bold">1 hour</span> at this court location today. Each player is limited to <span className="font-bold">1 booking per court location per day</span>. Choose a different location/date or cancel your existing booking.
                                             </p>
                                         </div>
@@ -1158,7 +1158,7 @@ const CourtDetail: React.FC = () => {
                                         : isCourtOwner
                                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                                             : dailyLimitReached
-                                                ? 'bg-orange-100 text-orange-500 border border-orange-200 cursor-not-allowed'
+                                                ? 'bg-blue-100 text-blue-500 border border-blue-200 cursor-not-allowed'
                                                 : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
                                         }`}
                                 >
@@ -1189,11 +1189,11 @@ const CourtDetail: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="bg-amber-50 rounded-xl p-4 border border-amber-100/80 flex gap-3">
-                            <Shield size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100/80 flex gap-3">
+                            <Shield size={16} className="text-blue-600 shrink-0 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wider mb-0.5">PicklePlay Verified</p>
-                                <p className="text-[10px] text-amber-800/60 font-medium">This venue undergoes monthly quality inspections.</p>
+                                <p className="text-[10px] font-bold text-blue-900 uppercase tracking-wider mb-0.5">PicklePlay Verified</p>
+                                <p className="text-[10px] text-blue-800/60 font-medium">This venue undergoes monthly quality inspections.</p>
                             </div>
                         </div>
                     </div>
@@ -1350,12 +1350,12 @@ const CourtDetail: React.FC = () => {
                             {locationPolicies.length > 0 && (
                                 <div className="text-left max-h-48 overflow-y-auto space-y-3">
                                     {locationPolicies.map((policy) => (
-                                        <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                        <div key={policy.id} className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                             <div className="flex items-center gap-2 mb-2">
-                                                <Shield size={12} className="text-amber-600" />
-                                                <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                                <Shield size={12} className="text-blue-600" />
+                                                <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest">{policy.title}</h4>
                                             </div>
-                                            <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                            <div className="text-[11px] text-blue-900 font-medium leading-relaxed whitespace-pre-wrap">
                                                 {policy.content}
                                             </div>
                                         </div>
@@ -1402,12 +1402,12 @@ const CourtDetail: React.FC = () => {
                         {locationPolicies.length > 0 && (
                             <div className="text-left max-h-40 overflow-y-auto space-y-2">
                                 {locationPolicies.map((policy) => (
-                                    <div key={policy.id} className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                    <div key={policy.id} className="bg-blue-50 border border-blue-200 rounded-xl p-3">
                                         <div className="flex items-center gap-1.5 mb-1.5">
-                                            <Shield size={12} className="text-amber-600" />
-                                            <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">{policy.title}</h4>
+                                            <Shield size={12} className="text-blue-600" />
+                                            <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest">{policy.title}</h4>
                                         </div>
-                                        <div className="text-[11px] text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                        <div className="text-[11px] text-blue-900 font-medium leading-relaxed whitespace-pre-wrap">
                                             {policy.content}
                                         </div>
                                     </div>
@@ -1475,7 +1475,7 @@ const CourtDetail: React.FC = () => {
                                                     <h4 className="text-sm font-bold text-slate-900">{b.court?.name}</h4>
                                                 </div>
                                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                                                    b.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                                    b.status === 'pending' ? 'bg-blue-100 text-blue-700' :
                                                         'bg-slate-200 text-slate-500'
                                                     }`}>
                                                     {b.status}
@@ -1521,7 +1521,7 @@ const CourtDetail: React.FC = () => {
                                             <Star
                                                 key={star}
                                                 size={12}
-                                                className={star <= Math.round(averageRating) ? "text-amber-400 fill-amber-400" : "text-slate-200"}
+                                                className={star <= Math.round(averageRating) ? "text-blue-400 fill-blue-400" : "text-slate-200"}
                                             />
                                         ))}
                                     </div>
@@ -1536,7 +1536,7 @@ const CourtDetail: React.FC = () => {
                         <div className="p-5 sm:p-6 max-h-[60vh] overflow-y-auto">
                             {isLoadingReviews ? (
                                 <div className="flex flex-col items-center justify-center py-10 gap-3">
-                                    <Loader2 className="animate-spin text-amber-500" size={28} />
+                                    <Loader2 className="animate-spin text-blue-600" size={28} />
                                     <p className="text-xs text-slate-400">Loading reviews...</p>
                                 </div>
                             ) : reviews.length > 0 ? (
@@ -1561,7 +1561,7 @@ const CourtDetail: React.FC = () => {
                                                 </div>
                                                 <div className="flex items-center gap-0.5 px-2 py-0.5 bg-white rounded-md border border-slate-100">
                                                     <span className="text-xs font-bold text-slate-900">{review.rating}</span>
-                                                    <Star size={10} className="text-amber-400 fill-amber-400" />
+                                                    <Star size={10} className="text-blue-400 fill-blue-400" />
                                                 </div>
                                             </div>
                                             <p className="text-sm text-slate-600 leading-relaxed">

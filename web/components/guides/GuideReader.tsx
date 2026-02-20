@@ -46,11 +46,11 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
     useEffect(() => {
         const fetchGuide = async () => {
             if (!slug) return;
-            
+
             const result = await getGuideBySlug(slug);
             if (result.success && result.data) {
                 setGuide(result.data);
-                
+
                 // Fetch user's progress if logged in
                 if (userId) {
                     const progressResult = await getUserGuideProgress(userId, result.data.id);
@@ -73,16 +73,16 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
 
     const handleNextSection = () => {
         if (!guide) return;
-        
+
         const nextSection = currentSection + 1;
         const section = guide.content[nextSection];
-        
+
         // Check if user can access the next section
         if (!isLoggedIn && section && !section.is_free) {
             setShowLoginPrompt(true);
             return;
         }
-        
+
         if (nextSection < guide.content.length) {
             setCurrentSection(nextSection);
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -98,13 +98,13 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
 
     const handleSectionClick = (index: number) => {
         if (!guide) return;
-        
+
         const section = guide.content[index];
         if (!isLoggedIn && !section.is_free) {
             setShowLoginPrompt(true);
             return;
         }
-        
+
         setCurrentSection(index);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -184,21 +184,21 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                     <p className="text-slate-500 mb-6">
                         You've reached the preview limit! Sign up for free to continue reading and track your progress.
                     </p>
-                    
+
                     <div className="space-y-3">
-                        <Link 
-                            to="/signup" 
+                        <Link
+                            to="/signup"
                             className="block w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-colors"
                         >
                             Sign Up Free
                         </Link>
-                        <Link 
-                            to="/login" 
+                        <Link
+                            to="/login"
                             className="block w-full bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-colors"
                         >
                             I Already Have an Account
                         </Link>
-                        <button 
+                        <button
                             onClick={() => setShowLoginPrompt(false)}
                             className="text-slate-400 hover:text-slate-600 text-sm font-medium"
                         >
@@ -226,7 +226,7 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                 <div className="prose prose-lg max-w-none">
                     {section.content.split('\n\n').map((paragraph, idx) => (
                         <p key={idx} className="text-slate-600 leading-relaxed mb-4 whitespace-pre-wrap text-sm md:text-base">
-                            {paragraph.split('**').map((text, i) => 
+                            {paragraph.split('**').map((text, i) =>
                                 i % 2 === 1 ? <strong key={i} className="text-slate-900">{text}</strong> : text
                             )}
                         </p>
@@ -263,11 +263,10 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                 {!isLastSection ? (
                     <button
                         onClick={handleNextSection}
-                        className={`flex items-center gap-1 md:gap-2 px-4 md:px-6 py-2.5 md:py-3 rounded-full font-bold transition-colors text-sm md:text-base ${
-                            canAccessNextSection 
-                                ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                        className={`flex items-center gap-1 md:gap-2 px-4 md:px-6 py-2.5 md:py-3 rounded-full font-bold transition-colors text-sm md:text-base ${canAccessNextSection
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
                                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
+                            }`}
                     >
                         {canAccessNextSection ? (
                             <>
@@ -306,15 +305,14 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                         <button
                             key={idx}
                             onClick={() => handleSectionClick(idx)}
-                            className={`group relative w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center transition-all ${
-                                isCurrent 
-                                    ? 'bg-blue-600 text-white' 
+                            className={`group relative w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center transition-all ${isCurrent
+                                    ? 'bg-blue-600 text-white'
                                     : isCompleted
                                         ? 'bg-lime-500 text-white'
-                                        : isAccessible 
-                                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' 
+                                        : isAccessible
+                                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                                             : 'bg-slate-100 text-slate-300'
-                            }`}
+                                }`}
                             title={s.title}
                         >
                             {isCompleted ? (
@@ -379,7 +377,7 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                         <span className="font-bold text-slate-900">{Math.round(progress)}%</span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
+                        <div
                             className="h-full bg-gradient-to-r from-blue-500 to-lime-500 rounded-full transition-all duration-500"
                             style={{ width: `${progress}%` }}
                         ></div>
@@ -406,7 +404,7 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                             <ChevronLeft size={20} />
                             <span className="font-medium text-sm hidden sm:inline">All Guides</span>
                         </Link>
-                        
+
                         <div className="flex items-center gap-2 sm:gap-4">
                             <span className="text-sm text-slate-400">
                                 {currentSection + 1} / {guide.content.length}
@@ -419,10 +417,10 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                             </button>
                         </div>
                     </div>
-                    
+
                     {/* Progress Bar */}
                     <div className="mt-4 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
+                        <div
                             className="h-full bg-gradient-to-r from-blue-500 to-lime-500 rounded-full transition-all duration-500"
                             style={{ width: `${progress}%` }}
                         ></div>
@@ -442,11 +440,11 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
                             <ChevronRight size={12} />
                             <span className="text-slate-600 truncate max-w-[150px] sm:max-w-none">{guide.title}</span>
                         </div>
-                        
+
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-4">
                             {guide.title}
                         </h1>
-                        
+
                         <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm text-slate-500">
                             <span className="flex items-center gap-1.5">
                                 <Clock size={14} />
@@ -470,20 +468,20 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
             <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 sm:py-4 px-4 z-30">
                 <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <Star className="text-yellow-400 shrink-0" size={20} />
+                        <Star className="text-blue-300 shrink-0" size={20} />
                         <p className="font-medium text-center sm:text-left text-sm sm:text-base">
                             <span className="font-bold">Sign up free</span> to unlock all sections!
                         </p>
                     </div>
                     <div className="flex gap-2 sm:gap-3">
-                        <Link 
-                            to="/login" 
+                        <Link
+                            to="/login"
                             className="px-4 sm:px-5 py-2 rounded-full font-bold text-white/90 hover:text-white transition-colors text-sm"
                         >
                             Log In
                         </Link>
-                        <Link 
-                            to="/signup" 
+                        <Link
+                            to="/signup"
                             className="bg-white text-blue-600 px-4 sm:px-5 py-2 rounded-full font-bold hover:bg-blue-50 transition-colors text-sm"
                         >
                             Sign Up Free
