@@ -1640,7 +1640,7 @@ const Home: React.FC = () => {
             <div>
               <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Legal & Policy</h4>
               <ul className="space-y-2 md:space-y-4">
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
+                <li><a href="/#/privacy" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Terms of Service</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">PH Partners Agreement</a></li>
                 <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Cookie Settings</a></li>
