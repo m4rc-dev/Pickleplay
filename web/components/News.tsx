@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import useSEO from '../hooks/useSEO';
 import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, Flame, Zap } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -243,7 +244,7 @@ const NewsSkeleton: React.FC = () => (
       <div className="h-4 bg-slate-200 rounded w-full" />
     </div>
     <div className="grid grid-cols-2 gap-4">
-      {[1,2,3,4].map(i => (
+      {[1, 2, 3, 4].map(i => (
         <div key={i} className="bg-white rounded-2xl p-4">
           <div className="aspect-[4/3] bg-slate-200 rounded-lg mb-3" />
           <div className="h-4 bg-slate-200 rounded w-full mb-2" />
@@ -256,6 +257,11 @@ const NewsSkeleton: React.FC = () => (
 
 // ─── Main News Component ────────────────────────────────────────
 const News: React.FC = () => {
+  useSEO({
+    title: 'Pickleball News Philippines',
+    description: 'Latest pickleball news, tournament results, community updates, and events from across the Philippines.',
+    canonical: 'https://www.pickleplay.ph/news',
+  });
   const [articles, setArticles] = useState<NormalizedArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -404,11 +410,10 @@ const News: React.FC = () => {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                  activeTab === tab.key
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === tab.key
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
                     : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 {tab.icon} {tab.label}
               </button>

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import useSEO from '../hooks/useSEO';
 import { Search, ShoppingBag, SlidersHorizontal, Star, Heart, ArrowRight, PlusCircle, CheckCircle2, X, Trash2, Plus, Minus } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { ProductSkeleton } from './ui/Skeleton';
@@ -74,6 +75,11 @@ interface ShopProps {
 }
 
 const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantity, onRemoveFromCart }) => {
+  useSEO({
+    title: 'Pickleball Pro Shop',
+    description: 'Shop paddles, balls, apparel, and pickleball gear curated for Philippine players. Fast delivery across the Philippines.',
+    canonical: 'https://www.pickleplay.ph/shop',
+  });
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);

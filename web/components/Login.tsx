@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase, createSession, getSecuritySettings } from '../services/supabase';
 import {
@@ -10,6 +11,12 @@ import {
 } from 'lucide-react';
 
 const Login: React.FC = () => {
+    useSEO({
+        title: 'Log In to PicklePlay',
+        description: 'Sign in to your PicklePlay Philippines account to book courts, manage bookings, and connect with the community.',
+        canonical: 'https://www.pickleplay.ph/login',
+        noIndex: true,
+    });
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);

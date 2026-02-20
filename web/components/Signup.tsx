@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import {
@@ -119,6 +120,12 @@ const GoogleIcon = () => (
 
 // ─── Main Signup ──────────────────────────────────────────────────────────────
 const Signup: React.FC = () => {
+    useSEO({
+        title: 'Sign Up – Create Your PicklePlay Account',
+        description: 'Create a free PicklePlay Philippines account. Book courts, join tournaments, find coaches, and connect with the PH pickleball community.',
+        canonical: 'https://www.pickleplay.ph/signup',
+        noIndex: true,
+    });
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -351,8 +358,8 @@ const Signup: React.FC = () => {
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
                                             className={`w-full bg-white border rounded-xl py-3 px-4 pr-10 text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all ${confirmPassword && confirmPassword !== password
-                                                    ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
-                                                    : 'border-slate-200 focus:border-blue-600 focus:ring-blue-600/10'
+                                                ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
+                                                : 'border-slate-200 focus:border-blue-600 focus:ring-blue-600/10'
                                                 }`}
                                             placeholder="••••••••"
                                         />
@@ -381,8 +388,8 @@ const Signup: React.FC = () => {
                                 type="submit"
                                 disabled={loading || !agreedToTerms}
                                 className={`w-full font-extrabold h-[48px] rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg ${agreedToTerms
-                                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
-                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                                     }`}
                             >
                                 {loading ? <Loader2 size={22} className="animate-spin" /> : 'Create Account'}
@@ -403,8 +410,8 @@ const Signup: React.FC = () => {
                             onClick={() => handleSocialLogin('google')}
                             disabled={!agreedToTerms}
                             className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group ${agreedToTerms
-                                    ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
-                                    : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
+                                ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
+                                : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
                                 }`}
                         >
                             <GoogleIcon />

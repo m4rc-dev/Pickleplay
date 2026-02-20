@@ -1,5 +1,6 @@
 
 import React from 'react';
+import useSEO from '../hooks/useSEO';
 import { Medal, Search, TrendingUp, UserPlus, Filter, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface PlayerRank {
@@ -23,6 +24,11 @@ const LEADERBOARD_DATA: PlayerRank[] = [
 ];
 
 const Rankings: React.FC = () => {
+  useSEO({
+    title: 'Pickleball Player Rankings Philippines',
+    description: 'See the top-ranked pickleball players in the Philippines. Browse leaderboards by skill level, region, and rating.',
+    canonical: 'https://www.pickleplay.ph/rankings',
+  });
   const topThree = LEADERBOARD_DATA.slice(0, 3);
   const remaining = LEADERBOARD_DATA.slice(3);
 

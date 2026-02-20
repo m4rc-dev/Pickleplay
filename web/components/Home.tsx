@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import useSEO from '../hooks/useSEO';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   MapPin,
@@ -159,6 +160,11 @@ const getRegion = (city: string): string => {
 };
 
 const Home: React.FC = () => {
+  useSEO({
+    title: 'PicklePlay Philippines – Book Courts & Play Pickleball',
+    description: 'Find and book pickleball courts across the Philippines. Join tournaments, track rankings, connect with players, and grow your game — all in one place.',
+    canonical: 'https://www.pickleplay.ph/',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   // Real player faces and user count from Supabase
   const [playerFaces, setPlayerFaces] = useState<string[]>([]);

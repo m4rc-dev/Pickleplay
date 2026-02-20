@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import useSEO from '../hooks/useSEO';
 import { Trophy, Calendar, MapPin, Users, Award, Search, Filter, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Tournament } from '../types';
 
 const Tournaments: React.FC = () => {
+    useSEO({
+        title: 'Pickleball Tournaments Philippines',
+        description: 'Join or follow pickleball tournaments across the Philippines. Register for upcoming events and track prize pools and standings.',
+        canonical: 'https://www.pickleplay.ph/tournaments',
+    });
     const [tournaments, setTournaments] = useState<(Tournament & { isJoined?: boolean })[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
