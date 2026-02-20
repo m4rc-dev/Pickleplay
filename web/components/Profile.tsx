@@ -671,7 +671,7 @@ Never share them with anyone.`;
           type: 'profile',
           userId: profileId,
           deepLink: `pickleplay://profile/${profileId}`,
-          webUrl: `${window.location.origin}/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
+          webUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/#/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
           generatedAt: new Date().toISOString()
         });
 
@@ -1685,11 +1685,11 @@ Never share them with anyone.`;
                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Your Referral Link</h3>
                     <div className="relative group">
                       <div className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-6 pr-32 font-bold text-slate-600 text-sm truncate">
-                        {`${window.location.origin}/#/signup?ref=${profileData?.referral_code || '...'}`}
+                        {`${import.meta.env.VITE_APP_URL || window.location.origin}/#/signup?ref=${profileData?.referral_code || '...'}`}
                       </div>
                       <button
                         onClick={() => {
-                          const link = `${window.location.origin}/#/signup?ref=${profileData?.referral_code}`;
+                          const link = `${import.meta.env.VITE_APP_URL || window.location.origin}/#/signup?ref=${profileData?.referral_code}`;
                           navigator.clipboard.writeText(link);
                           setProfileMessage({ type: 'success', text: 'Link copied to clipboard!' });
                           setTimeout(() => setProfileMessage(null), 3000);
