@@ -3,7 +3,7 @@ import { TrendingUp, CreditCard, Wallet, Calendar, ArrowUpRight, ArrowDownRight,
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '../../services/supabase';
 
-const COLORS = ['#F59E0B', '#1E40AF', '#CBD5E1'];
+const COLORS = ['#1E40AF', '#A3E635', '#CBD5E1'];
 
 const Revenue: React.FC = () => {
     const [revenueData, setRevenueData] = useState<any[]>([]);
@@ -113,7 +113,7 @@ const Revenue: React.FC = () => {
                     </button>
                     <button
                         onClick={handleDownloadReport}
-                        className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl active:scale-95"
+                        className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 active:scale-95"
                     >
                         <Download size={18} /> Generate Report
                     </button>
@@ -123,7 +123,7 @@ const Revenue: React.FC = () => {
             {/* Hero Financials */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="md:col-span-2 bg-slate-950 p-10 rounded-[48px] text-white shadow-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-[100px]"></div>
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px]"></div>
                     <div className="relative z-10 flex flex-col md:flex-row justify-between gap-10">
                         <div className="flex-1">
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">Monthly Revenue</span>
@@ -193,8 +193,8 @@ const Revenue: React.FC = () => {
                             <AreaChart data={revenueData}>
                                 <defs>
                                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.1} />
-                                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="#1E40AF" stopOpacity={0.1} />
+                                        <stop offset="95%" stopColor="#1E40AF" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -202,9 +202,9 @@ const Revenue: React.FC = () => {
                                 <YAxis hide />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: '900' }}
-                                    cursor={{ stroke: '#F59E0B', strokeWidth: 2 }}
+                                    cursor={{ stroke: '#1E40AF', strokeWidth: 2 }}
                                 />
-                                <Area type="monotone" dataKey="revenue" stroke="#F59E0B" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                                <Area type="monotone" dataKey="revenue" stroke="#1E40AF" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     )}
@@ -241,7 +241,7 @@ const MiniFinancial: React.FC<{ icon: React.ReactNode, label: string, value: str
 );
 
 const TransactionRow: React.FC<{ name: string, date: string, amount: string, type: 'Income' | 'Expense' }> = ({ name, date, amount, type }) => (
-    <div className="flex items-center justify-between p-6 bg-slate-50/50 rounded-3xl border border-slate-100 transition-hover hover:border-amber-200 cursor-default">
+    <div className="flex items-center justify-between p-6 bg-slate-50/50 rounded-3xl border border-slate-100 transition-hover hover:border-blue-200 cursor-default">
         <div className="flex items-center gap-5">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${type === 'Income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                 {type === 'Income' ? <ArrowUpRight size={24} /> : <ArrowDownRight size={24} />}

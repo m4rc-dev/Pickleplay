@@ -56,10 +56,10 @@ const Rankings: React.FC = () => {
         <PodiumCard player={topThree[1]} color="slate-300" rankColor="text-slate-500" medalColor="text-slate-400" />
 
         {/* Gold - Rank 1 */}
-        <PodiumCard player={topThree[0]} color="amber-300" rankColor="text-amber-600" medalColor="text-amber-500" isMain />
+        <PodiumCard player={topThree[0]} color="blue-300" rankColor="text-blue-600" medalColor="text-blue-500" isMain />
 
         {/* Bronze - Rank 3 */}
-        <PodiumCard player={topThree[2]} color="orange-300" rankColor="text-orange-700" medalColor="text-orange-600" />
+        <PodiumCard player={topThree[2]} color="lime-300" rankColor="text-lime-700" medalColor="text-lime-600" />
       </div>
 
       {/* Leaderboard Table */}
@@ -151,7 +151,7 @@ const PodiumCard: React.FC<{
         alt={player.name}
         className={`rounded-full border-4 object-cover ${isMain ? 'w-24 h-24 border-lime-400' : 'w-20 h-20 border-slate-100'}`}
       />
-      <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-2 border-white flex items-center justify-center font-black text-white text-xs ${isMain ? 'bg-amber-500' : 'bg-slate-400'}`}>
+      <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-2 border-white flex items-center justify-center font-black text-white text-xs ${isMain ? 'bg-blue-500' : 'bg-slate-400'}`}>
         {player.rank}
       </div>
     </div>

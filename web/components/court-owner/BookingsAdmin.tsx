@@ -101,7 +101,7 @@ const BookingsAdmin: React.FC = () => {
                 alert(`Failed to update booking: ${error.message}\nCode: ${error.code}\nDetails: ${error.details || 'none'}\nHint: ${error.hint || 'none'}`);
                 return;
             }
-            
+
             if (!data || data.length === 0) {
                 alert('Failed to update booking: No rows were updated. This is likely an RLS (Row Level Security) policy issue. Make sure you are the court owner.');
                 return;
@@ -242,7 +242,7 @@ const BookingsAdmin: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setIsModalOpen(true)}
-                        className="px-8 py-4 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 active:scale-95"
+                        className="px-8 py-4 bg-lime-400 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-lime-500 transition-all shadow-xl shadow-lime-900/20 active:scale-95"
                     >
                         New Booking
                     </button>
@@ -258,7 +258,7 @@ const BookingsAdmin: React.FC = () => {
                         placeholder="Search by name, ID or court..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-transparent rounded-[20px] focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-transparent rounded-[20px] focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                     />
                 </div>
                 <div className="flex gap-4">
@@ -312,7 +312,7 @@ const BookingsAdmin: React.FC = () => {
                                         <td className="px-8 py-6">
                                             <div className="space-y-1">
                                                 <p className="font-black text-slate-900 tracking-tight flex items-center gap-2 uppercase">
-                                                    <MapPin size={12} className="text-amber-500" /> {booking.courts?.name}
+                                                    <MapPin size={12} className="text-blue-600" /> {booking.courts?.name}
                                                 </p>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                                                     {new Date(booking.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {booking.start_time.slice(0, 5)} - {booking.end_time.slice(0, 5)}
@@ -323,7 +323,7 @@ const BookingsAdmin: React.FC = () => {
                                         <td className="px-8 py-6">
                                             <div className="flex justify-center">
                                                 <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${booking.status === 'confirmed' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                                                    booking.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                                                    booking.status === 'pending' ? 'bg-blue-50 border-blue-100 text-blue-600' :
                                                         'bg-rose-50 border-rose-100 text-rose-600'
                                                     }`}>
                                                     {booking.status}
@@ -376,7 +376,7 @@ const BookingsAdmin: React.FC = () => {
                                             required
                                             value={formData.court_id}
                                             onChange={(e) => setFormData({ ...formData, court_id: e.target.value })}
-                                            className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                            className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                         >
                                             <option value="">Select a court</option>
                                             {myCourts.map(court => (
@@ -392,7 +392,7 @@ const BookingsAdmin: React.FC = () => {
                                             placeholder="player@example.com"
                                             value={formData.player_email}
                                             onChange={(e) => setFormData({ ...formData, player_email: e.target.value })}
-                                            className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                            className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                         />
                                     </div>
 
@@ -404,7 +404,7 @@ const BookingsAdmin: React.FC = () => {
                                                 required
                                                 value={formData.date}
                                                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                             />
                                         </div>
                                         <div>
@@ -414,7 +414,7 @@ const BookingsAdmin: React.FC = () => {
                                                 required
                                                 value={formData.total_price}
                                                 onChange={(e) => setFormData({ ...formData, total_price: Number(e.target.value) })}
-                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                             />
                                         </div>
                                     </div>
@@ -427,7 +427,7 @@ const BookingsAdmin: React.FC = () => {
                                                 required
                                                 value={formData.start_time}
                                                 onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                             />
                                         </div>
                                         <div>
@@ -437,7 +437,7 @@ const BookingsAdmin: React.FC = () => {
                                                 required
                                                 value={formData.end_time}
                                                 onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-amber-200 outline-none transition-all font-medium"
+                                                className="w-full px-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
                                             />
                                         </div>
                                     </div>
@@ -446,7 +446,7 @@ const BookingsAdmin: React.FC = () => {
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full h-16 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/20 mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSubmitting ? 'Creating...' : 'Create Booking'}
                                 </button>

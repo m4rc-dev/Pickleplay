@@ -100,7 +100,7 @@ export const getUserConversations = async () => {
         .select('id', { count: 'exact', head: true })
         .eq('conversation_id', conv.id)
         .neq('sender_id', user.user!.id)
-        .not('id', 'in', 
+        .not('id', 'in',
           `(SELECT message_id FROM message_read_receipts WHERE user_id = '${user.user!.id}')`
         );
 

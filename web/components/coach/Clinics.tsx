@@ -173,7 +173,7 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
 
                     <button
                         onClick={() => setIsCreateModalOpen(true)}
-                        className="px-8 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 shadow-xl shadow-rose-200 active:scale-95"
+                        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2 shadow-xl shadow-blue-900/10 active:scale-95"
                     >
                         <Plus size={18} /> Create New Clinic
                     </button>
@@ -221,7 +221,7 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                 {/* Floating Action Button (Mobile) */}
                 <button
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="lg:hidden fixed bottom-24 right-6 w-16 h-16 bg-rose-600 text-white rounded-full shadow-2xl flex items-center justify-center animate-bounce z-[100]"
+                    className="lg:hidden fixed bottom-24 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center animate-bounce z-[100]"
                 >
                     <Plus size={28} />
                 </button>
@@ -241,13 +241,13 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                         <form onSubmit={handleCreateClinic} className="space-y-6">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Clinic Title</label>
-                                <input required name="title" type="text" placeholder="e.g. Pickleball Fundamentals" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                <input required name="title" type="text" placeholder="e.g. Pickleball Fundamentals" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Level</label>
-                                    <select name="level" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold">
+                                    <select name="level" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold">
                                         <option value="Intro">Intro</option>
                                         <option value="Intermediate">Intermediate</option>
                                         <option value="Advanced">Advanced</option>
@@ -255,36 +255,36 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capacity</label>
-                                    <input required name="capacity" type="number" defaultValue="8" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="capacity" type="number" defaultValue="8" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
-                                    <input required name="date" type="date" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="date" type="date" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time</label>
-                                    <input required name="time" type="text" placeholder="10:00 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="time" type="text" placeholder="10:00 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label>
-                                    <input required name="location" type="text" placeholder="e.g. Court A1" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="location" type="text" placeholder="e.g. Court A1" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Price (₱)</label>
-                                    <input required name="price" type="number" defaultValue="45" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="price" type="number" defaultValue="45" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className={`w-full py-5 ${isSubmitting ? 'bg-slate-100 text-slate-400' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-xl shadow-rose-100'} rounded-2xl font-black text-xs uppercase tracking-widest transition-all`}
+                                className={`w-full py-5 ${isSubmitting ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 hover:bg-blue-600 text-white shadow-xl shadow-blue-900/10'} rounded-2xl font-black text-xs uppercase tracking-widest transition-all`}
                             >
                                 {isSubmitting ? 'CREATING...' : 'CREATE CLINIC'}
                             </button>
@@ -311,13 +311,13 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                         <form onSubmit={handleUpdateClinic} className="space-y-6">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Clinic Title</label>
-                                <input required name="title" type="text" defaultValue={selectedClinicForEdit.title} placeholder="e.g. Pickleball Fundamentals" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                <input required name="title" type="text" defaultValue={selectedClinicForEdit.title} placeholder="e.g. Pickleball Fundamentals" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Level</label>
-                                    <select name="level" defaultValue={selectedClinicForEdit.level} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold">
+                                    <select name="level" defaultValue={selectedClinicForEdit.level} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold">
                                         <option value="Intro">Intro</option>
                                         <option value="Intermediate">Intermediate</option>
                                         <option value="Advanced">Advanced</option>
@@ -325,36 +325,36 @@ const Clinics: React.FC<ClinicsProps> = ({ currentUserId }) => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Capacity</label>
-                                    <input required name="capacity" type="number" defaultValue={selectedClinicForEdit.capacity} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="capacity" type="number" defaultValue={selectedClinicForEdit.capacity} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
-                                    <input required name="date" type="date" defaultValue={selectedClinicForEdit.date} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="date" type="date" defaultValue={selectedClinicForEdit.date} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time</label>
-                                    <input required name="time" type="text" defaultValue={selectedClinicForEdit.time} placeholder="10:00 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="time" type="text" defaultValue={selectedClinicForEdit.time} placeholder="10:00 AM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label>
-                                    <input required name="location" type="text" defaultValue={selectedClinicForEdit.location} placeholder="e.g. Court A1" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="location" type="text" defaultValue={selectedClinicForEdit.location} placeholder="e.g. Court A1" className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Price (₱)</label>
-                                    <input required name="price" type="number" defaultValue={selectedClinicForEdit.price} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-rose-500/10 font-bold" />
+                                    <input required name="price" type="number" defaultValue={selectedClinicForEdit.price} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold" />
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className={`w-full py-5 ${isSubmitting ? 'bg-slate-100 text-slate-400' : 'bg-rose-600 hover:bg-rose-700 text-white shadow-xl shadow-rose-100'} rounded-2xl font-black text-xs uppercase tracking-widest transition-all`}
+                                className={`w-full py-5 ${isSubmitting ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 hover:bg-blue-600 text-white shadow-xl shadow-blue-900/10'} rounded-2xl font-black text-xs uppercase tracking-widest transition-all`}
                             >
                                 {isSubmitting ? 'UPDATING...' : 'UPDATE CLINIC'}
                             </button>
@@ -454,11 +454,11 @@ const ClinicCard: React.FC<{ clinic: Clinic; onViewRoster: (clinic: Clinic) => v
             <div className="flex-1 flex flex-col gap-6">
                 <div className="flex items-start justify-between">
                     <div className="flex gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${clinic.level === 'Intro' ? 'bg-emerald-50 text-emerald-600' : clinic.level === 'Advanced' ? 'bg-indigo-50 text-indigo-600' : 'bg-rose-50 text-rose-600'}`}>
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${clinic.level === 'Intro' ? 'bg-emerald-50 text-emerald-600' : clinic.level === 'Advanced' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'}`}>
                             <Trophy size={28} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-tight group-hover:text-rose-600 transition-colors">{clinic.title}</h3>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-tight group-hover:text-blue-600 transition-colors">{clinic.title}</h3>
                             <div className="flex items-center gap-3 mt-1">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{clinic.level} LEVEL</span>
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
@@ -491,11 +491,11 @@ const ClinicCard: React.FC<{ clinic: Clinic; onViewRoster: (clinic: Clinic) => v
                 <div className="mt-2">
                     <div className="flex justify-between items-center mb-2">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Participants</span>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isFull ? 'text-rose-600' : 'text-slate-900'}`}>{clinic.participants} / {clinic.capacity}</span>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isFull ? 'text-blue-600' : 'text-slate-900'}`}>{clinic.participants} / {clinic.capacity}</span>
                     </div>
                     <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
                         <div
-                            className={`h-full rounded-full transition-all duration-1000 ${isFull ? 'bg-rose-500' : 'bg-rose-600'}`}
+                            className={`h-full rounded-full transition-all duration-1000 ${isFull ? 'bg-blue-500' : 'bg-blue-600'}`}
                             style={{ width: `${(clinic.participants / clinic.capacity) * 100}%` }}
                         />
                     </div>
@@ -505,13 +505,13 @@ const ClinicCard: React.FC<{ clinic: Clinic; onViewRoster: (clinic: Clinic) => v
             <div className="flex flex-row md:flex-col gap-3 md:justify-end">
                 <button
                     onClick={() => onViewRoster(clinic)}
-                    className="flex-1 md:flex-none p-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center justify-center gap-2 group/btn"
+                    className="flex-1 md:flex-none p-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center justify-center gap-2 group/btn"
                 >
                     Roster <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
                 </button>
                 <button
                     onClick={() => onEdit(clinic)}
-                    className="p-4 bg-slate-50 text-slate-400 hover:text-rose-600 rounded-2xl border border-slate-100 transition-colors"
+                    className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border border-slate-100 transition-colors"
                 >
                     Edit
                 </button>

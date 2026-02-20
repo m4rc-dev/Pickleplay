@@ -189,7 +189,7 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
                             placeholder="Search students..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl w-full md:w-64 focus:ring-2 focus:ring-rose-500 outline-none transition-all font-medium"
+                            className="pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
                         />
                     </div>
                 </div>
@@ -198,19 +198,19 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
             {/* Metrics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <MetricCard
-                    icon={<Users className="text-rose-600" size={24} />}
+                    icon={<Users className="text-blue-600" size={24} />}
                     label="Active Students"
                     value={isLoading ? '...' : students.length.toString()}
                     trend="Roster Count"
                 />
                 <MetricCard
-                    icon={<Calendar className="text-rose-600" size={24} />}
+                    icon={<Calendar className="text-blue-600" size={24} />}
                     label="Total Sessions"
                     value={isLoading ? '...' : students.reduce((acc, s) => acc + s.totalLessons, 0).toString()}
                     trend="Total History"
                 />
                 <MetricCard
-                    icon={<TrendingUp className="text-rose-600" size={24} />}
+                    icon={<TrendingUp className="text-blue-600" size={24} />}
                     label="Avg. Rating"
                     value={isLoading ? '...' : (currentUserProfile?.rating ? Number(currentUserProfile.rating).toFixed(2) : 'New')}
                     trend="Community Avg"
@@ -242,14 +242,14 @@ const Students: React.FC<StudentsProps> = ({ currentUserId }) => {
 const MetricCard: React.FC<{ icon: React.ReactNode, label: string, value: string, trend: string }> = ({ icon, label, value, trend }) => (
     <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
         <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
                 {icon}
             </div>
             <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{label}</span>
         </div>
         <div className="flex items-end justify-between">
             <span className="text-3xl font-black text-slate-900 tracking-tighter">{value}</span>
-            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider bg-rose-50 px-3 py-1 rounded-full">{trend}</span>
+            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider bg-blue-50 px-3 py-1 rounded-full">{trend}</span>
         </div>
     </div>
 );
@@ -288,14 +288,14 @@ const StudentCard: React.FC<{ student: Student }> = ({ student }) => (
         <div className="grid grid-cols-2 gap-4">
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
                 <div className="flex items-center gap-2 mb-1">
-                    <Star size={12} className="text-amber-400 fill-amber-400" />
+                    <Star size={12} className="text-blue-400 fill-blue-400" />
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">DUPR</span>
                 </div>
                 <span className="text-xl font-black text-slate-900 tracking-tighter">{student.dupr_rating.toFixed(2)}</span>
             </div>
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
                 <div className="flex items-center gap-2 mb-1">
-                    <Calendar size={12} className="text-rose-500" />
+                    <Calendar size={12} className="text-blue-500" />
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Last Session</span>
                 </div>
                 <span className="text-sm font-black text-slate-900 tracking-tighter uppercase">
@@ -305,10 +305,10 @@ const StudentCard: React.FC<{ student: Student }> = ({ student }) => (
         </div>
 
         <div className="flex items-center gap-3 mt-auto">
-            <button className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-colors shadow-lg shadow-rose-200 active:scale-95">
+            <button className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg shadow-blue-900/10 active:scale-95">
                 Schedule
             </button>
-            <button className="p-3 bg-slate-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all border border-slate-100">
+            <button className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100">
                 <MessageSquare size={18} />
             </button>
         </div>

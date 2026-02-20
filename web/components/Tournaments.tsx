@@ -207,22 +207,22 @@ const TournamentJoinCard: React.FC<{
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
                 <div className="absolute bottom-3 left-3 flex gap-1.5">
-                    <span className="bg-indigo-600 text-white px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.status}</span>
+                    <span className="bg-blue-600 text-white px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.status}</span>
                     <span className="bg-white text-slate-900 px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.skillLevel}</span>
                 </div>
             </div>
 
             {/* Content Section */}
             <div className="p-4 flex-1 flex flex-col">
-                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-3 group-hover:text-indigo-600 transition-colors line-clamp-1">{tournament.name}</h3>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-3 group-hover:text-blue-600 transition-colors line-clamp-1">{tournament.name}</h3>
 
                 <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-2 rounded-xl">
-                        <Calendar size={14} className="text-indigo-600 flex-shrink-0" />
+                        <Calendar size={14} className="text-blue-600 flex-shrink-0" />
                         <span className="text-[10px] font-bold uppercase truncate">{new Date(tournament.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-2 rounded-xl">
-                        <MapPin size={14} className="text-indigo-600 flex-shrink-0" />
+                        <MapPin size={14} className="text-blue-600 flex-shrink-0" />
                         <span className="text-[10px] font-bold uppercase truncate">{tournament.location}</span>
                     </div>
                     {tournament.prizePool && (
@@ -241,7 +241,7 @@ const TournamentJoinCard: React.FC<{
                     </div>
                     <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full rounded-full transition-all duration-700 ${isFull ? 'bg-rose-500' : 'bg-indigo-600'}`}
+                            className={`h-full rounded-full transition-all duration-700 ${isFull ? 'bg-rose-500' : 'bg-blue-600'}`}
                             style={{ width: `${Math.min(100, ((tournament.registeredCount || 0) / (tournament.maxPlayers || 32)) * 100)}%` }}
                         ></div>
                     </div>
@@ -266,7 +266,7 @@ const TournamentJoinCard: React.FC<{
                         disabled={isFull || tournament.status !== 'UPCOMING'}
                         className={`w-full h-11 rounded-xl font-black text-xs uppercase tracking-wide transition-all mt-auto ${isFull || tournament.status !== 'UPCOMING'
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg'
+                            : 'bg-slate-900 text-white hover:bg-blue-600 shadow-lg'
                             }`}
                     >
                         {isFull ? 'Sold Out' : tournament.status !== 'UPCOMING' ? 'Closed' : 'Join Tournament'}

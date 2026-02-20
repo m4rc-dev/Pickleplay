@@ -42,7 +42,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
 
     const getTypeIcon = (type: string, size: number = 20) => {
         switch (type) {
-            case 'quiz': return <Trophy className="text-yellow-500" size={size} />;
+            case 'quiz': return <Trophy className="text-blue-500" size={size} />;
             case 'video': return <Play className="text-red-500" size={size} />;
             default: return <BookOpen className="text-blue-500" size={size} />;
         }
@@ -59,7 +59,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
     const getDifficultyColor = (level: string) => {
         switch (level) {
             case 'beginner': return 'bg-green-100 text-green-700';
-            case 'intermediate': return 'bg-yellow-100 text-yellow-700';
+            case 'intermediate': return 'bg-blue-100 text-blue-700';
             case 'advanced': return 'bg-red-100 text-red-700';
             default: return 'bg-gray-100 text-gray-700';
         }
@@ -146,8 +146,8 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
 
                 {/* Quick Access Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <Link 
-                        to="/guides/rules" 
+                    <Link
+                        to="/guides/rules"
                         className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all"
                     >
                         <div className="flex items-center gap-4">
@@ -162,9 +162,9 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                         </div>
                     </Link>
 
-                    <Link 
-                        to="/guides/skill-rating" 
-                        className="group bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all"
+                    <Link
+                        to="/guides/skill-rating"
+                        className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all"
                     >
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
@@ -178,8 +178,8 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                         </div>
                     </Link>
 
-                    <Link 
-                        to="/guides/equipment" 
+                    <Link
+                        to="/guides/equipment"
                         className="group bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 hover:shadow-xl hover:scale-[1.02] transition-all sm:col-span-2 lg:col-span-1"
                     >
                         <div className="flex items-center gap-4">
@@ -213,20 +213,20 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                     {filteredGuides.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                             {filteredGuides.map((guide) => (
-                                <Link 
-                                    key={guide.id} 
+                                <Link
+                                    key={guide.id}
                                     to={guide.type === 'quiz' ? '/guides/skill-rating' : `/guides/${guide.slug}`}
                                     className="group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:shadow-xl hover:border-slate-300 transition-all"
                                 >
                                     {/* Thumbnail */}
                                     <div className="aspect-[16/10] relative overflow-hidden">
-                                        <img 
-                                            src={guide.thumbnail_url || '/images/home-images/pb1.jpg'} 
+                                        <img
+                                            src={guide.thumbnail_url || '/images/home-images/pb1.jpg'}
                                             alt={guide.title}
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
-                                        
+
                                         {/* Type Badge */}
                                         <div className="absolute top-3 left-3 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm">
                                             {getTypeIcon(guide.type, 16)}
@@ -282,8 +282,8 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                                 {searchQuery || filterType !== 'all' ? 'No matching guides' : 'No guides yet'}
                             </h3>
                             <p className="text-slate-500">
-                                {searchQuery || filterType !== 'all' 
-                                    ? 'Try adjusting your search or filter' 
+                                {searchQuery || filterType !== 'all'
+                                    ? 'Try adjusting your search or filter'
                                     : 'Check back soon for new content!'}
                             </p>
                         </div>
@@ -302,7 +302,7 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
             <section className="bg-slate-950 text-white py-16 md:py-24 px-4 md:px-8 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-lime-500/10"></div>
                 <div className="absolute top-10 right-10 w-96 h-96 bg-lime-500/10 rounded-full blur-3xl"></div>
-                
+
                 <div className="max-w-6xl mx-auto relative">
                     <div className="flex items-center gap-2 mb-4">
                         <Sparkles className="text-lime-400" size={24} />
@@ -313,10 +313,10 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                         <span className="text-lime-400">The Fun Way</span>
                     </h1>
                     <p className="text-lg md:text-xl text-white/70 max-w-2xl mb-8">
-                        Whether you're picking up a paddle for the first time or looking to level up your game, 
+                        Whether you're picking up a paddle for the first time or looking to level up your game,
                         our guides have you covered. Start your pickleball journey today!
                     </p>
-                    
+
                     <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 border border-white/20 inline-block w-full md:w-auto">
                         <div className="flex flex-col md:flex-row items-center gap-4">
                             <div className="w-12 h-12 bg-lime-500 rounded-xl flex items-center justify-center shrink-0">
@@ -326,8 +326,8 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                                 <p className="font-bold text-white">Unlock Full Access</p>
                                 <p className="text-sm text-white/60">Sign up free to access all guides, take quizzes, and track your progress!</p>
                             </div>
-                            <Link 
-                                to="/signup" 
+                            <Link
+                                to="/signup"
                                 className="bg-lime-500 hover:bg-lime-400 text-white px-6 py-3 rounded-full font-bold text-sm transition-all shrink-0 w-full md:w-auto text-center"
                             >
                                 Sign Up Free
@@ -355,16 +355,16 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                             </div>
                         </Link>
 
-                        <Link to="/guides/skill-rating" className="group bg-white rounded-2xl p-5 md:p-6 border border-slate-100 hover:shadow-lg hover:border-yellow-200 transition-all">
+                        <Link to="/guides/skill-rating" className="group bg-white rounded-2xl p-5 md:p-6 border border-slate-100 hover:shadow-lg hover:border-blue-200 transition-all">
                             <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center group-hover:bg-yellow-500 transition-colors shrink-0">
-                                    <Trophy className="text-yellow-600 group-hover:text-white transition-colors" size={24} />
+                                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-500 transition-colors shrink-0">
+                                    <Trophy className="text-blue-600 group-hover:text-white transition-colors" size={24} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-bold text-slate-900 truncate">Skill Rating Quiz</h3>
                                     <p className="text-sm text-slate-500 truncate">Find your pickleball level</p>
                                 </div>
-                                <ChevronRight className="text-slate-300 group-hover:text-yellow-500 group-hover:translate-x-1 transition-all shrink-0" size={20} />
+                                <ChevronRight className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" size={20} />
                             </div>
                         </Link>
 
@@ -394,20 +394,20 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
                     {guides.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {guides.map((guide) => (
-                                <Link 
-                                    key={guide.id} 
+                                <Link
+                                    key={guide.id}
                                     to={guide.type === 'quiz' ? '/guides/skill-rating' : `/guides/${guide.slug}`}
                                     className="group bg-white rounded-3xl overflow-hidden border border-slate-100 hover:shadow-xl hover:border-slate-200 transition-all"
                                 >
                                     {/* Thumbnail */}
                                     <div className="aspect-video relative overflow-hidden">
-                                        <img 
-                                            src={guide.thumbnail_url || '/images/home-images/pb1.jpg'} 
+                                        <img
+                                            src={guide.thumbnail_url || '/images/home-images/pb1.jpg'}
                                             alt={guide.title}
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                                        
+
                                         {/* Type Badge */}
                                         <div className="absolute top-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full">
                                             {getTypeIcon(guide.type)}
@@ -467,23 +467,23 @@ const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
             <section className="py-12 px-4 md:px-8">
                 <div className="max-w-4xl mx-auto bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-8 md:p-12 text-center text-white relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                    
+
                     <h2 className="text-2xl md:text-3xl lg:text-4xl font-black mb-4 relative">
                         Ready to Start Playing?
                     </h2>
                     <p className="text-base md:text-lg text-white/80 mb-8 max-w-xl mx-auto relative">
-                        Create a free account to unlock all guides, track your progress, 
+                        Create a free account to unlock all guides, track your progress,
                         save your skill rating, and join our community!
                     </p>
                     <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 relative">
-                        <Link 
-                            to="/signup" 
+                        <Link
+                            to="/signup"
                             className="bg-white text-blue-600 px-8 py-4 rounded-full font-black hover:bg-blue-50 transition-colors"
                         >
                             Sign Up Free
                         </Link>
-                        <Link 
-                            to="/login" 
+                        <Link
+                            to="/login"
                             className="bg-white/20 text-white px-8 py-4 rounded-full font-black hover:bg-white/30 transition-colors"
                         >
                             Log In

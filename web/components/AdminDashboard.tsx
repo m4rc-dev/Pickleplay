@@ -490,7 +490,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
       <div className="space-y-8 animate-fade-in pb-20 w-full overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 w-full">
           <div className="flex items-center gap-6 shrink-0">
-            <div className="p-4 rounded-[24px] text-white shadow-xl bg-indigo-600 shadow-indigo-100 flex-shrink-0">
+            <div className="p-4 rounded-[24px] text-white shadow-xl bg-blue-600 shadow-blue-900/10 flex-shrink-0">
               <Shield size={32} />
             </div>
             <div>
@@ -577,13 +577,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
-                  <Trophy className="text-amber-500" /> Tournament Operations
+                  <Trophy className="text-blue-500" /> Tournament Operations
                 </h2>
                 <p className="text-slate-500 font-medium text-sm">Deploy and manage regional competitive events.</p>
               </div>
               <button
                 onClick={() => setShowTournamentModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center gap-2 transition-all"
+                className="bg-blue-600 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center gap-2 transition-all"
               >
                 <PlusCircle size={20} /> DEPLOY TOURNAMENT
               </button>
@@ -593,7 +593,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
               {tournaments.map(t => (
                 <div key={t.id} className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm group hover:shadow-2xl transition-all">
                   <div className="flex justify-between items-start mb-6">
-                    <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
+                    <div className="bg-blue-50 p-4 rounded-2xl text-blue-600">
                       <Trophy size={24} />
                     </div>
                     <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${t.status === 'LIVE' ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-500'
@@ -601,7 +601,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                       {t.status}
                     </span>
                   </div>
-                  <h3 className="text-2xl font-black text-slate-950 tracking-tighter uppercase mb-2 group-hover:text-indigo-600 transition-colors">{t.name}</h3>
+                  <h3 className="text-2xl font-black text-slate-950 tracking-tighter uppercase mb-2 group-hover:text-blue-600 transition-colors">{t.name}</h3>
                   <div className="space-y-3 mb-8">
                     <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
                       <Calendar size={14} /> {t.date}
@@ -671,7 +671,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                                 href={trimmedUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 text-xs text-indigo-600 hover:text-indigo-800 font-bold transition-colors bg-indigo-50 px-3 py-1.5 rounded-lg"
+                                className="inline-flex items-center gap-2 text-xs text-blue-600 hover:text-indigo-800 font-bold transition-colors bg-blue-50 px-3 py-1.5 rounded-lg"
                               >
                                 <FileText size={14} />
                                 Document {app.documentName.split(', ').length > 1 ? `${index + 1}` : ''}
@@ -756,7 +756,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                           {user.role === 'PLAYER' ? (
                             <button
                               onClick={() => handleUpdateUserRole(user.id, 'ADMIN')}
-                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all"
+                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all"
                             >
                               Promote
                             </button>
@@ -801,7 +801,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
               <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm space-y-8">
                 <div>
                   <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
-                    <Lock className="text-indigo-600" /> Security Controls
+                    <Lock className="text-blue-600" /> Security Controls
                   </h2>
                   <p className="text-slate-500 font-medium text-sm mt-1">Configure platform-wide authentication and access policies.</p>
                 </div>
@@ -863,7 +863,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                       securityLogs.map((log, i) => (
                         <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/10 flex flex-col gap-2">
                           <div className="flex justify-between items-center">
-                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.action === 'STATUS_UPDATE' ? 'bg-rose-500 text-white' : i === 0 ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
+                            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${log.action === 'STATUS_UPDATE' ? 'bg-rose-500 text-white' : i === 0 ? 'bg-blue-500 text-white' : 'bg-blue-500 text-white'
                               }`}>
                               {log.action.replace('_', ' ')}
                             </span>
@@ -894,7 +894,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
-                  <Key className="text-amber-500" /> Utility Access Codes
+                  <Key className="text-blue-500" /> Utility Access Codes
                 </h2>
                 <p className="text-slate-500 font-medium text-sm">Generate single-use codes for instant professional onboarding.</p>
               </div>
@@ -928,13 +928,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                         <tr key={code.id} className={code.is_used ? 'opacity-50' : ''}>
                           <td className="px-8 py-6">
                             <div className="flex items-center gap-3">
-                              <span className="font-mono font-black text-lg text-indigo-600 tracking-wider bg-indigo-50 px-4 py-2 rounded-xl">
+                              <span className="font-mono font-black text-lg text-blue-600 tracking-wider bg-blue-50 px-4 py-2 rounded-xl">
                                 {code.code}
                               </span>
                               {!code.is_used && (
                                 <button
                                   onClick={() => handleCopyCode(code.code)}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                   title="Copy Code"
                                 >
                                   <Copy size={16} />
@@ -1027,7 +1027,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                           </div>
                         </td>
                         <td className="px-8 py-6">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-1 rounded">
                             {log.action}
                           </span>
                         </td>
@@ -1088,7 +1088,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     value={newTournament.name}
                     onChange={e => setNewTournament({ ...newTournament, name: e.target.value })}
                     placeholder="e.g. Metro Open 2025"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1099,7 +1099,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     value={newTournament.prizePool}
                     onChange={e => setNewTournament({ ...newTournament, prizePool: e.target.value })}
                     placeholder="₱500,000"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
                   />
                 </div>
               </div>
@@ -1112,7 +1112,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     type="date"
                     value={newTournament.date}
                     onChange={e => setNewTournament({ ...newTournament, date: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1123,7 +1123,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     value={newTournament.location}
                     onChange={e => setNewTournament({ ...newTournament, location: e.target.value })}
                     placeholder="Facility Name"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
                   />
                 </div>
               </div>
@@ -1134,7 +1134,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                   <select
                     value={newTournament.skillLevel}
                     onChange={e => setNewTournament({ ...newTournament, skillLevel: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold appearance-none"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold appearance-none"
                   >
                     <option>Newbie (2.0)</option>
                     <option>Intermediate (3.0 - 3.5)</option>
@@ -1149,7 +1149,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     type="number"
                     value={newTournament.maxPlayers}
                     onChange={e => setNewTournament({ ...newTournament, maxPlayers: parseInt(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
                   />
                 </div>
               </div>
@@ -1176,7 +1176,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 <button
                   type="submit"
                   disabled={isCreating}
-                  className="flex-[2] py-5 bg-indigo-600 text-white font-black rounded-3xl text-[10px] uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  className="flex-[2] py-5 bg-blue-600 text-white font-black rounded-3xl text-[10px] uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-blue-600 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {isCreating ? 'PROCESSING...' : (editingTournamentId ? 'SAVE CHANGES' : 'DEPLOY TOURNAMENT')}
                   {!isCreating && <Radio size={16} className="animate-pulse" />}
@@ -1238,7 +1238,7 @@ const SecurityToggle: React.FC<{
         <p className="text-[11px] text-slate-500 font-medium mt-1.5">{description}</p>
       </div>
     </div>
-    <div className={`w-14 h-8 rounded-full p-1.5 transition-colors ${enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+    <div className={`w-14 h-8 rounded-full p-1.5 transition-colors ${enabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
       <div className={`w-5 h-5 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0'}`} />
     </div>
   </div>

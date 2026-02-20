@@ -36,7 +36,8 @@ import {
   ShoppingBag,
   Star,
   QrCode,
-  Smartphone
+  Smartphone,
+  Trophy
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
@@ -56,6 +57,180 @@ interface ProfileProps {
   setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
   onRoleSwitch?: (newRole: UserRole) => void;
 }
+
+const PlayerIDCard: React.FC<{
+  profileData: any;
+  avatarUrl: string;
+  isCurrentUser: boolean;
+  onUploadClick: () => void;
+  qrCodeDataUrl: string | null;
+}> = ({ profileData, avatarUrl, isCurrentUser, onUploadClick, qrCodeDataUrl }) => {
+  const [isFlipped, setIsFlipped] = useState(false);
+
+  // Format Member Since
+  const memberSince = profileData?.created_at
+    ? new Date(profileData.created_at).getFullYear()
+    : new Date().getFullYear();
+
+  const playerId = `PP${(profileData?.id || '000000').slice(0, 8).toUpperCase()}`;
+  const skillLevel = profileData?.dupr_rating
+    ? profileData.dupr_rating >= 5.0 ? 'ELITE PRO' : profileData.dupr_rating >= 4.0 ? 'ADVANCED' : profileData.dupr_rating >= 3.0 ? 'INTERMEDIATE' : 'BEGINNER'
+    : 'INTERMEDIATE';
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-8 w-full px-4">
+      <div
+        className="relative w-full max-w-[480px] cursor-pointer group select-none"
+        style={{ perspective: '2000px' }}
+        onClick={() => setIsFlipped(!isFlipped)}
+      >
+        {/* ═══ FLIP CONTAINER ═══ */}
+        <div
+          className={`relative w-full transition-all duration-1000 preserve-3d shadow-[0_16px_50px_rgba(0,0,0,0.35)] rounded-[20px] ${isFlipped ? 'rotate-y-180' : ''}`}
+          style={{ aspectRatio: '1.55 / 1' }}
+        >
+          {/* ═══════════ FRONT ═══════════ */}
+          <div className="absolute inset-0 backface-hidden bg-slate-950 rounded-[20px] overflow-hidden border border-white/10 ring-1 ring-white/10">
+            {/* Background glow effects */}
+            <div className="absolute -top-[20%] -right-[10%] w-[70%] h-[140%] bg-blue-600/15 rounded-full blur-[80px] pointer-events-none animate-pulse" />
+            <div className="absolute -bottom-[20%] -left-[10%] w-[50%] h-[100%] bg-lime-400/10 rounded-full blur-[60px] pointer-events-none" />
+
+            {/* Ball.png background decorations */}
+            <img src="/images/Ball.png" alt="" className="absolute -top-5 -right-5 w-[35%] opacity-[0.06] pointer-events-none select-none" draggable={false} />
+            <img src="/images/Ball.png" alt="" className="absolute -bottom-3 right-[15%] w-[18%] opacity-[0.04] pointer-events-none select-none rotate-45" draggable={false} />
+            <img src="/images/Ball.png" alt="" className="absolute top-1/2 -translate-y-1/2 left-[45%] w-[42%] opacity-[0.03] pointer-events-none select-none" draggable={false} />
+
+            {/* Glass Overlay */}
+            <div className="absolute inset-0 bg-white/[0.02] backdrop-blur-[1px] rounded-[20px]" />
+
+            <div className="relative h-full flex flex-col p-[5%] z-10">
+              {/* ── Header Row ── */}
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-[2.5%]">
+                  <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay Logo" className="w-[11%] min-w-[32px] aspect-square rounded-xl object-cover shadow-lg" />
+                  <div>
+                    <span className="text-[clamp(12px,3.5vw,20px)] font-black text-white italic tracking-tighter uppercase leading-none block">PicklePlay<span className="text-lime-400">.ph</span></span>
+                    <span className="text-[clamp(5px,1.5vw,7px)] font-black text-white/30 uppercase tracking-[0.25em] mt-0.5 block">Official Player ID</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-full border border-white/10 flex-shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-lime-400 animate-pulse" />
+                  <span className="text-[clamp(5px,1.5vw,8px)] font-black text-white uppercase tracking-widest">Digital Auth</span>
+                </div>
+              </div>
+
+              {/* ── Middle Section: Avatar + Player Info ── */}
+              <div className="flex items-center gap-[4%] mt-[3%] flex-1">
+                {/* Avatar */}
+                <div className="relative group/avatar flex-shrink-0">
+                  <div className="w-[27%] min-w-[72px] aspect-square rounded-[18px] overflow-hidden border-2 border-lime-400/50 shadow-2xl bg-slate-900 ring-2 ring-white/5"
+                    style={{ width: 'clamp(72px, 22vw, 110px)' }}
+                  >
+                    <img
+                      src={avatarUrl || profileData?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profileData?.full_name}`}
+                      className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
+                      alt="Player Photo"
+                    />
+                  </div>
+                  {isCurrentUser && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onUploadClick(); }}
+                      className="absolute -bottom-1.5 -right-1.5 w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-2xl hover:bg-blue-500 transition-all border-2 border-slate-950 z-10 hover:scale-110 active:scale-95"
+                      title="Change Photo"
+                    >
+                      <Camera size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Player info */}
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[clamp(14px,4vw,24px)] font-black text-white uppercase tracking-tight leading-tight drop-shadow-md" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                    {profileData?.full_name || 'Player Name'}
+                  </h4>
+                  <div className="flex flex-col gap-0.5 mt-[4%]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[clamp(7px,2vw,11px)] font-black text-white/40 uppercase tracking-widest">ID NO.</span>
+                      <span className="text-[clamp(8px,2.2vw,12px)] font-black text-lime-400 tracking-wider">{playerId}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[clamp(7px,2vw,11px)] font-black text-white/40 uppercase tracking-widest">ISSUED</span>
+                      <span className="text-[clamp(8px,2.2vw,12px)] font-black text-white/80 tracking-wider">{memberSince}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Bottom Bar ── */}
+              <div className="flex items-end justify-between border-t border-white/10 pt-[2.5%] mt-[2%]">
+                <div className="flex flex-col">
+                  <span className="text-[clamp(5px,1.3vw,8px)] font-black text-white/30 uppercase tracking-[0.15em] mb-0.5">Skill Classification</span>
+                  <span className="text-[clamp(10px,2.8vw,14px)] font-black text-lime-400 uppercase tracking-[0.05em]">{skillLevel}</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <div className="px-2.5 h-[clamp(24px,7vw,32px)] bg-white/5 rounded-xl flex items-center gap-1.5 border border-white/10 hover:bg-white/10 transition-colors">
+                    <Star size={12} className="text-lime-400 fill-lime-400" />
+                    <span className="text-[clamp(10px,2.8vw,14px)] font-black text-white italic">{profileData?.dupr_rating?.toFixed(2) || '4.00'}</span>
+                  </div>
+                  <div className="aspect-square h-[clamp(24px,7vw,32px)] bg-blue-600/20 rounded-xl flex items-center justify-center border border-blue-500/30 group-hover:bg-lime-400/20 transition-all group-hover:border-lime-400/50">
+                    <QrCode size={15} className="text-blue-400 group-hover:text-lime-400 transition-colors" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ═══════════ BACK ═══════════ */}
+          <div className="absolute inset-0 backface-hidden rotate-y-180 bg-slate-950 rounded-[20px] overflow-hidden border border-white/10 flex flex-col items-center justify-between shadow-2xl">
+            <div className="absolute -top-10 -right-10 w-36 h-36 bg-blue-600/10 rounded-full blur-[60px] pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-lime-400/10 rounded-full blur-[60px] pointer-events-none" />
+
+            {/* Ball.png background decorations on back */}
+            <img src="/images/Ball.png" alt="" className="absolute top-[5%] left-[3%] w-[25%] opacity-[0.05] pointer-events-none select-none" draggable={false} />
+            <img src="/images/Ball.png" alt="" className="absolute bottom-[5%] right-[3%] w-[20%] opacity-[0.04] pointer-events-none select-none rotate-12" draggable={false} />
+
+            {/* Header */}
+            <div className="w-full flex justify-between items-center px-[5%] pt-[5%] relative z-10">
+              <span className="text-[clamp(6px,1.7vw,9px)] font-black text-white/25 uppercase tracking-[0.35em]">Player Validation System</span>
+              <span className="text-[clamp(6px,1.7vw,9px)] font-black text-blue-400 uppercase tracking-widest px-2 py-1 bg-blue-400/10 rounded-md border border-blue-400/20">Active v2.5</span>
+            </div>
+
+            {/* QR Center */}
+            <div className="flex flex-col items-center gap-[3%] flex-1 justify-center relative z-10 px-4">
+              <div className="bg-white p-[2.5%] rounded-2xl shadow-[0_0_50px_rgba(163,230,53,0.15)] relative group/qr">
+                {qrCodeDataUrl ? (
+                  <img src={qrCodeDataUrl} className="w-[clamp(100px,28vw,160px)] h-[clamp(100px,28vw,160px)]" alt="QR ID" />
+                ) : (
+                  <div className="w-[clamp(100px,28vw,160px)] h-[clamp(100px,28vw,160px)] bg-slate-100 animate-pulse rounded-xl" />
+                )}
+                <div className="absolute -inset-1.5 border border-lime-400/30 rounded-[20px] pointer-events-none group-hover/qr:scale-105 transition-transform" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-[clamp(10px,2.5vw,14px)] font-black text-white tracking-[0.4em] uppercase border-y border-white/5 py-2">{playerId}</p>
+                <p className="text-[clamp(6px,1.5vw,9px)] font-medium text-slate-500 uppercase tracking-widest pt-0.5">Scan to access verified match history & player stats</p>
+              </div>
+            </div>
+
+            {/* Footer with logo */}
+            <div className="w-full flex items-center justify-center gap-2 px-[5%] pb-[4%] relative z-10">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/10" />
+              <div className="flex items-center gap-1.5">
+                <img src="/images/PicklePlayLogo.jpg" alt="Logo" className="w-5 h-5 rounded-md object-cover opacity-50" />
+                <span className="text-[clamp(7px,1.8vw,10px)] font-black text-white/40 tracking-widest uppercase italic">PicklePlay<span className="text-white/20">.ph</span></span>
+              </div>
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/10" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-center gap-2 animate-bounce mt-3">
+        <p className="text-[clamp(8px,2vw,10px)] text-slate-500 font-bold uppercase tracking-[0.25em] flex items-center gap-2">
+          Tap to Flip Card <ArrowLeftRight size={13} className="text-lime-400" />
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, currentUserId, followedUsers, onFollow, posts, setPosts, onRoleSwitch }) => {
   const MAX_NAME = 40;
@@ -1232,7 +1407,7 @@ Never share them with anyone.`;
                       />
                       <button
                         onClick={() => setShowBgEditor(true)}
-                        className="absolute -bottom-0.5 -right-0.5 w-7 h-7 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                        className="absolute -bottom-0.5 -right-0.5 w-7 h-7 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
                         title="Edit with Background"
                       >
                         <ImageIcon size={12} />
@@ -1483,7 +1658,7 @@ Never share them with anyone.`;
                     />
                     <button
                       onClick={() => setShowBgEditor(true)}
-                      className="absolute -bottom-1 -right-1 w-8 h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                      className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10"
                       title="Edit with Background"
                     >
                       <ImageIcon size={14} />
@@ -1726,6 +1901,15 @@ Never share them with anyone.`;
           {activeTab === 'profile' && (
             <div className="space-y-10">
               <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-10">
+                {/* Modern Flipping ID Card */}
+                <PlayerIDCard
+                  profileData={profileData}
+                  avatarUrl={avatarUrl}
+                  isCurrentUser={isCurrentUser}
+                  onUploadClick={() => document.getElementById('avatar-upload-mobile')?.click()}
+                  qrCodeDataUrl={qrCodeDataUrl}
+                />
+
                 {/* Profile Message */}
                 {profileMessage && (
                   <div className={`flex items-center gap-3 p-4 rounded-2xl ${profileMessage.type === 'success' ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
@@ -1858,7 +2042,7 @@ Never share them with anyone.`;
                                 ? status === 'looking'
                                   ? 'bg-emerald-600 text-white border-emerald-600'
                                   : status === 'busy'
-                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    ? 'bg-blue-500 text-white border-blue-500'
                                     : 'bg-slate-900 text-white border-slate-900'
                                 : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                                 }`}
@@ -1909,7 +2093,7 @@ Never share them with anyone.`;
                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${availabilityStatus === 'looking'
                             ? 'bg-emerald-100 text-emerald-700'
                             : availabilityStatus === 'busy'
-                              ? 'bg-amber-100 text-amber-700'
+                              ? 'bg-blue-100 text-blue-700'
                               : 'bg-slate-200 text-slate-600'
                             }`}>
                             {availabilityStatus === 'looking' ? 'Looking to Play' : availabilityStatus === 'busy' ? 'Busy' : 'Offline'}
@@ -2127,7 +2311,7 @@ Never share them with anyone.`;
                 {isCurrentUser && (
                   <div className="pt-6 border-t border-slate-100 space-y-3">
                     {isProfileDirty && (
-                      <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Unsaved changes</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-blue-600">Unsaved changes</div>
                     )}
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button
@@ -2326,7 +2510,7 @@ Never share them with anyone.`;
               )}
 
               <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
-                <Shield className="text-indigo-600" /> Account Security
+                <Shield className="text-blue-600" /> Account Security
               </h3>
 
               <div className="space-y-6 border-t border-slate-100 pt-8">
@@ -2341,14 +2525,14 @@ Never share them with anyone.`;
                       }
                     </p>
                     {!hasPasswordAuth && (
-                      <p className="text-xs text-indigo-500 mt-1 font-bold">Google account detected</p>
+                      <p className="text-xs text-blue-500 mt-1 font-bold">Google account detected</p>
                     )}
                   </div>
                   <button
                     onClick={() => setShowPasswordModal(true)}
                     className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${hasPasswordAuth
                       ? 'bg-slate-900 text-white hover:bg-slate-800'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
                       }`}
                   >
                     {hasPasswordAuth ? 'Update' : 'Set Password'}
@@ -2367,7 +2551,7 @@ Never share them with anyone.`;
                     ) : (
                       <>
                         <p className="text-xs text-slate-500">Requires a password to enable 2FA verification</p>
-                        <p className="text-xs text-amber-500 mt-2">Google-only account — set a password first</p>
+                        <p className="text-xs text-blue-500 mt-2">Google-only account — set a password first</p>
                       </>
                     )}
                   </div>
@@ -2385,7 +2569,7 @@ Never share them with anyone.`;
                         }}
                         className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${twoFactorEnabled
                           ? 'bg-red-600 text-white hover:bg-red-700'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
                           }`}
                       >
                         {twoFactorEnabled ? 'Disable' : 'Enable'}
@@ -2393,7 +2577,7 @@ Never share them with anyone.`;
                     ) : (
                       <button
                         onClick={() => setShowPasswordModal(true)}
-                        className="px-5 py-2 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white hover:bg-indigo-700"
+                        className="px-5 py-2 rounded-xl font-bold text-xs transition-all bg-blue-600 text-white hover:bg-blue-700"
                       >
                         Set Password
                       </button>
@@ -2476,8 +2660,8 @@ Never share them with anyone.`;
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
               <div className="bg-white rounded-3xl p-10 max-w-md w-full shadow-2xl border border-slate-100">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-3 bg-indigo-100 rounded-2xl">
-                    <Shield size={24} className="text-indigo-600" />
+                  <div className="p-3 bg-blue-100 rounded-2xl">
+                    <Shield size={24} className="text-blue-600" />
                   </div>
                   <div>
                     <h4 className="text-2xl font-black text-slate-950">Enable 2FA</h4>
@@ -2508,7 +2692,7 @@ Never share them with anyone.`;
                     {/* Send Code Button */}
                     <button
                       onClick={handleSetup2FA}
-                      className="w-full py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
+                      className="w-full py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all"
                     >
                       Send Code to Email
                     </button>
@@ -2523,7 +2707,7 @@ Never share them with anyone.`;
                         maxLength={6}
                         value={verificationCode}
                         onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                        className="w-full bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 rounded-2xl py-4 px-4 font-black text-slate-900 text-center text-3xl tracking-[0.5em] transition-all outline-none"
+                        className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 rounded-2xl py-4 px-4 font-black text-slate-900 text-center text-3xl tracking-[0.5em] transition-all outline-none"
                         placeholder="000000"
                       />
                     </div>
@@ -2539,10 +2723,10 @@ Never share them with anyone.`;
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-300 p-5 rounded-2xl">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 p-5 rounded-2xl">
                       <div className="flex items-center gap-2 mb-3">
-                        <Shield size={18} className="text-yellow-700" />
-                        <p className="text-sm font-black text-yellow-900 uppercase tracking-wider">Backup Codes</p>
+                        <Shield size={18} className="text-blue-700" />
+                        <p className="text-sm font-black text-blue-900 uppercase tracking-wider">Backup Codes</p>
                       </div>
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         {backupCodes.map((code, idx) => (
@@ -2551,7 +2735,7 @@ Never share them with anyone.`;
                           </div>
                         ))}
                       </div>
-                      <p className="text-xs text-yellow-900 font-medium leading-relaxed">⚠️ Save these codes in a secure location. You'll need them if you lose access to your email.</p>
+                      <p className="text-xs text-blue-900 font-medium leading-relaxed">⚠️ Save these codes in a secure location. You'll need them if you lose access to your email.</p>
                     </div>
                   </div>
                 )}
@@ -2560,7 +2744,7 @@ Never share them with anyone.`;
                   {backupCodes.length > 0 && (
                     <button
                       onClick={downloadBackupCodes}
-                      className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                      className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                     >
                       <Download size={16} />
                       Download as .txt
@@ -2642,7 +2826,7 @@ Never share them with anyone.`;
                     </label>
                     <button
                       onClick={() => { setShowBgEditor(true); setShowAvatarViewer(false); }}
-                      className="flex items-center gap-2.5 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 active:scale-95"
+                      className="flex items-center gap-2.5 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 active:scale-95"
                     >
                       <ImageIcon size={16} />
                       Edit Background
@@ -2770,8 +2954,8 @@ Never share them with anyone.`;
               <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 rounded-xl">
-                      <ImageIcon size={20} className="text-indigo-600" />
+                    <div className="p-2 bg-blue-100 rounded-xl">
+                      <ImageIcon size={20} className="text-blue-600" />
                     </div>
                     <div>
                       <h4 className="text-lg font-black text-slate-950">Profile Photo Editor</h4>
@@ -2791,7 +2975,7 @@ Never share them with anyone.`;
                       <button
                         key={bg.id}
                         onClick={() => setSelectedBg(bg.id)}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all relative overflow-hidden ${selectedBg === bg.id ? 'border-indigo-500 ring-2 ring-indigo-200 scale-105' : 'border-slate-200 hover:border-slate-300'
+                        className={`w-full aspect-square rounded-xl border-2 transition-all relative overflow-hidden ${selectedBg === bg.id ? 'border-blue-500 ring-2 ring-blue-200 scale-105' : 'border-slate-200 hover:border-slate-300'
                           }`}
                         style={{ background: bg.style }}
                         title={bg.label}
@@ -2809,7 +2993,7 @@ Never share them with anyone.`;
                 {/* Step 2: Upload PNG Photo */}
                 <div className="mb-5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">2. Upload Your Photo (PNG recommended)</p>
-                  <label className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 rounded-2xl cursor-pointer transition-all border-2 border-dashed border-slate-300 hover:border-indigo-400">
+                  <label className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 rounded-2xl cursor-pointer transition-all border-2 border-dashed border-slate-300 hover:border-blue-400">
                     <Upload size={18} className="text-slate-500" />
                     <span className="text-sm font-bold text-slate-600">{bgOverlayImage ? 'Change Photo' : 'Upload Photo'}</span>
                     <input
@@ -2883,7 +3067,7 @@ Never share them with anyone.`;
                           step="0.05"
                           value={bgOverlayScale}
                           onChange={(e) => setBgOverlayScale(parseFloat(e.target.value))}
-                          className="w-full accent-indigo-600"
+                          className="w-full accent-blue-600"
                         />
                       </div>
                       <button onClick={() => setBgOverlayScale(s => Math.min(3, s + 0.1))} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
@@ -2907,7 +3091,7 @@ Never share them with anyone.`;
                   <button
                     onClick={handleBgEditorConfirm}
                     disabled={isUploadingAvatar}
-                    className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isUploadingAvatar ? <><Loader2 size={16} className="animate-spin" /> Uploading...</> : 'Apply & Save'}
                   </button>
@@ -3020,7 +3204,7 @@ Never share them with anyone.`;
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
               <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
                 <h4 className="text-xl font-black text-slate-950 mb-2 flex items-center gap-2">
-                  <Lock size={20} className="text-indigo-600" /> {hasPasswordAuth ? 'Change Password' : 'Set Password'}
+                  <Lock size={20} className="text-blue-600" /> {hasPasswordAuth ? 'Change Password' : 'Set Password'}
                 </h4>
                 {!hasPasswordAuth && (
                   <p className="text-xs text-slate-500 mb-6">Create a password so you can log in with email and enable 2FA</p>
@@ -3034,7 +3218,7 @@ Never share them with anyone.`;
                         type="password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                        className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
                         placeholder="Enter current password"
                       />
                     </div>
@@ -3046,7 +3230,7 @@ Never share them with anyone.`;
                       type="password"
                       value={newPassword}
                       onChange={(e) => handlePasswordChange(e.target.value)}
-                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
                       placeholder="Enter new password"
                     />
                     {newPassword && (
@@ -3054,13 +3238,13 @@ Never share them with anyone.`;
                         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all ${passwordStrength < 30 ? 'bg-red-500 w-1/3' :
-                              passwordStrength < 60 ? 'bg-yellow-500 w-2/3' :
+                              passwordStrength < 60 ? 'bg-blue-500 w-2/3' :
                                 'bg-emerald-500 w-full'
                               }`}
                           />
                         </div>
                         <p className={`text-xs mt-1 font-bold ${passwordStrength < 30 ? 'text-red-600' :
-                          passwordStrength < 60 ? 'text-yellow-600' :
+                          passwordStrength < 60 ? 'text-blue-600' :
                             'text-emerald-600'
                           }`}>
                           Strength: {passwordStrength < 30 ? 'Weak' : passwordStrength < 60 ? 'Fair' : 'Strong'}
@@ -3075,7 +3259,7 @@ Never share them with anyone.`;
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
                       placeholder="Confirm new password"
                     />
                     {confirmPassword && newPassword !== confirmPassword && (
@@ -3099,7 +3283,7 @@ Never share them with anyone.`;
                   </button>
                   <button
                     onClick={handleUpdatePassword}
-                    className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
+                    className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all"
                   >
                     {hasPasswordAuth ? 'Update Password' : 'Set Password'}
                   </button>
@@ -3207,8 +3391,8 @@ Never share them with anyone.`;
                     </div>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                    <p className="text-xs text-amber-800 leading-relaxed">
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                    <p className="text-xs text-blue-800 leading-relaxed">
                       <strong>💳 Payment Integration Coming Soon:</strong> Subscription activation is currently being developed.
                       You can still enjoy your free trial and grace period!
                     </p>

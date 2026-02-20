@@ -18,15 +18,15 @@ import {
     TrendingUp,
     Zap
 } from 'lucide-react';
-import { 
-    getGuideBySlug, 
-    getQuizQuestions, 
-    getSkillLevels, 
+import {
+    getGuideBySlug,
+    getQuizQuestions,
+    getSkillLevels,
     calculateSkillLevel,
     saveQuizResult,
     getLatestQuizResult,
-    Guide, 
-    QuizQuestion, 
+    Guide,
+    QuizQuestion,
     SkillLevel,
     UserQuizResult
 } from '../../services/guides';
@@ -43,7 +43,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
     const [skillLevels, setSkillLevels] = useState<SkillLevel[]>([]);
     const [loading, setLoading] = useState(true);
     const [userId, setUserId] = useState<string | null>(null);
-    
+
     // Quiz State
     const [started, setStarted] = useState(false);
     const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -78,7 +78,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
 
             if (guideResult.success && guideResult.data) {
                 setGuide(guideResult.data);
-                
+
                 const questionsResult = await getQuizQuestions(guideResult.data.id);
                 if (questionsResult.success) {
                     setQuestions(questionsResult.data);
@@ -116,7 +116,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
 
         const question = questions[currentQuestion];
         const selectedOpt = question.options.find(o => o.value === selectedOption);
-        
+
         if (!selectedOpt) return;
 
         const newAnswers = [...answers, {
@@ -141,7 +141,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
             // Calculate final result
             const score = newAnswers.reduce((sum, a) => sum + a.skill_points, 0);
             setTotalScore(score);
-            
+
             const skillLevel = calculateSkillLevel(score, skillLevels);
             setResult(skillLevel);
             setShowResult(true);
@@ -173,8 +173,8 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
             'cyan': 'from-cyan-500 to-cyan-600',
             'green': 'from-green-500 to-green-600',
             'lime': 'from-lime-500 to-lime-600',
-            'yellow': 'from-yellow-500 to-yellow-600',
-            'orange': 'from-orange-500 to-orange-600',
+            'yellow': 'from-blue-500 to-blue-600',
+            'orange': 'from-blue-600 to-blue-700',
             'rose': 'from-rose-500 to-rose-600'
         };
         return colors[color] || colors['gray'];
@@ -196,10 +196,10 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
         return (
             <div className="min-h-screen bg-slate-950 pt-20 pb-12 px-4 flex items-center justify-center">
                 <div className="bg-white w-full max-w-lg rounded-3xl p-8 md:p-10 shadow-2xl text-center">
-                    <div className="w-20 h-20 bg-yellow-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <Trophy className="text-yellow-500" size={40} />
+                    <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <Trophy className="text-blue-500" size={40} />
                     </div>
-                    
+
                     <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-3">
                         You're Doing Great! 🎉
                     </h2>
@@ -230,19 +230,19 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                     </div>
 
                     <div className="space-y-3">
-                        <Link 
-                            to="/signup" 
+                        <Link
+                            to="/signup"
                             className="block w-full bg-lime-500 text-white py-4 rounded-2xl font-black hover:bg-lime-600 transition-colors"
                         >
                             Sign Up Free & Get My Rating
                         </Link>
-                        <Link 
-                            to="/login" 
+                        <Link
+                            to="/login"
                             className="block w-full bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-colors"
                         >
                             I Already Have an Account
                         </Link>
-                        <Link 
+                        <Link
                             to="/guides"
                             className="block text-slate-400 hover:text-slate-600 text-sm font-medium pt-2"
                         >
@@ -262,7 +262,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                     {/* Celebration */}
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-full text-sm font-medium mb-4">
-                            <Sparkles className="text-yellow-400" size={16} />
+                            <Sparkles className="text-blue-400" size={16} />
                             Quiz Complete!
                         </div>
                     </div>
@@ -287,7 +287,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                                 <span className="font-bold text-slate-900">{totalScore} points</span>
                             </div>
                             <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
-                                <div 
+                                <div
                                     className={`h-full bg-gradient-to-r ${getSkillLevelColor(result.color)} transition-all duration-1000`}
                                     style={{ width: `${Math.min(100, (totalScore / 685) * 100)}%` }}
                                 ></div>
@@ -328,13 +328,13 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                         <div className="space-y-3">
                             {!isLoggedIn ? (
                                 <>
-                                    <Link 
-                                        to="/signup" 
+                                    <Link
+                                        to="/signup"
                                         className="block w-full bg-blue-600 text-white py-4 rounded-2xl font-black hover:bg-blue-700 transition-colors"
                                     >
                                         Sign Up to Save Your Rating
                                     </Link>
-                                    <button 
+                                    <button
                                         onClick={handleRetake}
                                         className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-colors"
                                     >
@@ -344,13 +344,13 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                                 </>
                             ) : (
                                 <>
-                                    <Link 
-                                        to="/profile" 
+                                    <Link
+                                        to="/profile"
                                         className="block w-full bg-blue-600 text-white py-4 rounded-2xl font-black hover:bg-blue-700 transition-colors"
                                     >
                                         View My Profile
                                     </Link>
-                                    <button 
+                                    <button
                                         onClick={handleRetake}
                                         className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-colors"
                                     >
@@ -359,8 +359,8 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                                     </button>
                                 </>
                             )}
-                            <Link 
-                                to="/guides" 
+                            <Link
+                                to="/guides"
                                 className="block text-slate-500 hover:text-slate-700 font-medium pt-2"
                             >
                                 ← Back to Guides
@@ -385,14 +385,14 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
 
                     <div className="bg-white rounded-3xl p-8 md:p-10 shadow-2xl">
                         <div className="text-center mb-8">
-                            <div className="w-20 h-20 bg-yellow-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                <Trophy className="text-yellow-500" size={40} />
+                            <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                <Trophy className="text-blue-500" size={40} />
                             </div>
                             <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-3">
                                 What's My Skill Rating?
                             </h1>
                             <p className="text-slate-500 max-w-md mx-auto">
-                                Answer 10 quick questions to discover your pickleball skill level. 
+                                Answer 10 quick questions to discover your pickleball skill level.
                                 Perfect for finding the right playing partners!
                             </p>
                         </div>
@@ -410,7 +410,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                                 <p className="text-xs text-slate-500 font-medium">Minutes</p>
                             </div>
                             <div className="text-center p-4 bg-slate-50 rounded-2xl">
-                                <Award className="mx-auto text-yellow-500 mb-2" size={24} />
+                                <Award className="mx-auto text-blue-500 mb-2" size={24} />
                                 <p className="text-2xl font-black text-slate-900">1.0-5.0+</p>
                                 <p className="text-xs text-slate-500 font-medium">Rating Scale</p>
                             </div>
@@ -475,7 +475,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                         <span>{Math.round(progress)}% Complete</span>
                     </div>
                     <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                        <div 
+                        <div
                             className="h-full bg-gradient-to-r from-lime-500 to-lime-400 rounded-full transition-all duration-500"
                             style={{ width: `${progress}%` }}
                         ></div>
@@ -494,25 +494,22 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
                             <button
                                 key={idx}
                                 onClick={() => handleSelectOption(option)}
-                                className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${
-                                    selectedOption === option.value
-                                        ? 'border-lime-500 bg-lime-50'
-                                        : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
-                                }`}
+                                className={`w-full text-left p-4 rounded-2xl border-2 transition-all ${selectedOption === option.value
+                                    ? 'border-lime-500 bg-lime-50'
+                                    : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
+                                    }`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                                        selectedOption === option.value
-                                            ? 'border-lime-500 bg-lime-500'
-                                            : 'border-slate-300'
-                                    }`}>
+                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${selectedOption === option.value
+                                        ? 'border-lime-500 bg-lime-500'
+                                        : 'border-slate-300'
+                                        }`}>
                                         {selectedOption === option.value && (
                                             <CheckCircle className="text-white" size={14} />
                                         )}
                                     </div>
-                                    <span className={`font-medium ${
-                                        selectedOption === option.value ? 'text-lime-700' : 'text-slate-700'
-                                    }`}>
+                                    <span className={`font-medium ${selectedOption === option.value ? 'text-lime-700' : 'text-slate-700'
+                                        }`}>
                                         {option.text}
                                     </span>
                                 </div>
@@ -533,7 +530,7 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
 
                 {/* Non-logged-in warning */}
                 {!isLoggedIn && currentQuestion >= FREE_QUESTIONS - 1 && (
-                    <div className="mt-4 bg-yellow-500/20 text-yellow-200 p-4 rounded-2xl text-center text-sm">
+                    <div className="mt-4 bg-blue-500/20 text-blue-200 p-4 rounded-2xl text-center text-sm">
                         <Lock className="inline mr-2" size={14} />
                         This is the last free question. Sign up to complete the quiz!
                     </div>

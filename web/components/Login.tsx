@@ -125,23 +125,39 @@ const Login: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-            {/* ── Chromatic gradient blobs ── */}
-            <div className="absolute -top-[20%] -left-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-br from-lime-500/20 via-green-500/15 to-emerald-500/10 blur-[7.5rem] pointer-events-none" />
-            <div className="absolute -bottom-[20%] -right-[15%] w-[43.75rem] h-[43.75rem] rounded-full bg-gradient-to-tl from-blue-600/20 via-blue-500/15 to-cyan-500/10 blur-[7.5rem] pointer-events-none" />
-            <div className="absolute top-[30%] left-[50%] -translate-x-1/2 w-[31.25rem] h-[31.25rem] rounded-full bg-gradient-to-r from-lime-400/10 to-blue-500/10 blur-[6.25rem] pointer-events-none" />
+        <div className="min-h-screen w-full bg-[#030712] flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+            <style>{`
+                @keyframes float {
+                    0%, 100% { transform: translateY(0) rotate(var(--rot)); }
+                    50% { transform: translateY(-30px) rotate(var(--rot)); }
+                }
+                @keyframes fadeInBlur {
+                    from { opacity: 0; filter: blur(10px); transform: scale(0.98) translateY(20px); }
+                    to { opacity: 1; filter: blur(0); transform: scale(1) translateY(0); }
+                }
+                .animate-float {
+                    animation: float var(--dur) ease-in-out infinite;
+                }
+                .animate-fade-in-blur {
+                    animation: fadeInBlur 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+            `}</style>
 
-            {/* ── Large & clear Ball.png background decorations ── */}
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-2%] left-[-3%] w-28 h-28 sm:w-36 sm:h-36 lg:w-48 lg:h-48 opacity-[0.18] rotate-12 drop-shadow-[0_8px_30px_rgba(132,204,22,0.15)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[5%] right-[-2%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] -rotate-[20deg] drop-shadow-[0_6px_25px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[30%] left-[2%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] rotate-45 drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[55%] right-[1%] w-28 h-28 sm:w-36 sm:h-36 lg:w-44 lg:h-44 opacity-[0.17] rotate-[30deg] drop-shadow-[0_8px_28px_rgba(59,130,246,0.15)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[5%] left-[1%] w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 opacity-[0.15] -rotate-[15deg] drop-shadow-[0_6px_25px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[-3%] right-[8%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] rotate-[60deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[18%] left-[40%] w-16 h-16 sm:w-20 sm:h-20 lg:w-28 lg:h-28 opacity-[0.12] -rotate-[40deg] drop-shadow-[0_4px_18px_rgba(132,204,22,0.10)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 bottom-[25%] right-[25%] w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-[0.14] rotate-[15deg] drop-shadow-[0_6px_22px_rgba(59,130,246,0.12)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[70%] left-[20%] w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 opacity-[0.14] rotate-[50deg] drop-shadow-[0_6px_22px_rgba(132,204,22,0.12)] pointer-events-none select-none" />
-            <img src="/images/Ball.png" alt="" className="absolute z-0 top-[-1%] left-[55%] w-14 h-14 sm:w-18 sm:h-18 lg:w-24 lg:h-24 opacity-[0.11] -rotate-[25deg] drop-shadow-[0_4px_16px_rgba(59,130,246,0.10)] pointer-events-none select-none" />
+            {/* ── Background Gradients ── */}
+            <div className="absolute top-[10%] left-[10%] w-[40rem] h-[40rem] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[20%] right-[15%] w-[35rem] h-[35rem] rounded-full bg-blue-600/15 blur-[100px] pointer-events-none" />
+            <div className="absolute top-[40%] right-[30%] w-[30rem] h-[30rem] rounded-full bg-indigo-500/10 blur-[130px] pointer-events-none animate-pulse" />
+
+            {/* ── Background Pickleballs (Matching Reference Image) ── */}
+            <img src="/images/Ball.png" alt="" style={{ '--dur': '12s', '--rot': '15deg' } as any} className="absolute -top-10 -left-10 w-64 h-64 opacity-[0.12] animate-float pointer-events-none select-none blur-[1px] drop-shadow-[0_0_30px_rgba(163,230,53,0.2)]" />
+            <img src="/images/Ball.png" alt="" style={{ '--dur': '15s', '--rot': '-10deg' } as any} className="absolute top-[5%] right-[20%] w-48 h-48 opacity-[0.08] animate-float pointer-events-none select-none drop-shadow-[0_0_20px_rgba(163,230,53,0.15)]" />
+            <img src="/images/Ball.png" alt="" style={{ '--dur': '18s', '--rot': '45deg' } as any} className="absolute bottom-[20%] -left-20 w-80 h-80 opacity-[0.1] animate-float pointer-events-none select-none blur-[2px] drop-shadow-[0_0_40px_rgba(163,230,53,0.18)]" />
+            <img src="/images/Ball.png" alt="" style={{ '--dur': '14s', '--rot': '-25deg' } as any} className="absolute top-[40%] -right-16 w-72 h-72 opacity-[0.09] animate-float pointer-events-none select-none blur-[1px]" />
+            <img src="/images/Ball.png" alt="" style={{ '--dur': '20s', '--rot': '30deg' } as any} className="absolute bottom-[5%] right-[5%] w-56 h-56 opacity-[0.06] animate-float pointer-events-none select-none" />
+
+            {/* ── Subtle Pattern overlay ── */}
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-[0.03] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(#ffffff05_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
 
             {/* Back to Home — above card */}
             <div className="relative z-10 w-full max-w-[56.25rem] mb-4">
@@ -155,7 +171,7 @@ const Login: React.FC = () => {
             </div>
 
             {/* ═══════ CENTERED CARD ═══════ */}
-            <div className="relative z-10 w-full max-w-[56.25rem] bg-white rounded-3xl shadow-2xl shadow-black/30 border border-white/10 overflow-hidden">
+            <div className="relative z-10 w-full max-w-[56.25rem] bg-white rounded-[32px] shadow-2xl shadow-black/50 border border-white/5 overflow-hidden animate-fade-in-blur">
                 <div className="flex flex-col lg:flex-row min-h-[32.5rem]">
 
                     {/* ── LEFT COLUMN — Pickleball photo + branding ── */}
@@ -206,31 +222,31 @@ const Login: React.FC = () => {
                         </div>
 
                         {/* Title */}
-                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-7">Login</h1>
+                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-7 animate-fade-in-up">Login</h1>
 
                         <form onSubmit={handleLogin} className="space-y-5">
                             {error && (
-                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm">
+                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm animate-fade-in">
                                     <AlertCircle size={16} className="shrink-0" />
                                     <p className="font-medium">{error}</p>
                                 </div>
                             )}
 
                             {/* Email */}
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 animate-fade-in-up animate-stagger-1">
                                 <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Email Address</label>
                                 <input
                                     type="email"
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
+                                    className="w-full bg-slate-50/50 border border-slate-200 focus:border-[#1E40AF] focus:ring-2 focus:ring-blue-100 rounded-xl py-3.5 px-4 text-slate-900 text-sm font-semibold placeholder:text-slate-400 outline-none transition-all"
                                     placeholder="name@example.com"
                                 />
                             </div>
 
                             {/* Password */}
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 animate-fade-in-up animate-stagger-2">
                                 <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Password</label>
                                 <div className="relative">
                                     <input
@@ -238,7 +254,7 @@ const Login: React.FC = () => {
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-slate-50/50 border border-slate-300 rounded-xl py-3 px-4 pr-12 text-slate-950 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 focus:bg-white transition-all"
+                                        className="w-full bg-slate-50/50 border border-slate-200 focus:border-[#1E40AF] focus:ring-2 focus:ring-blue-100 rounded-xl py-3.5 px-4 text-slate-900 text-sm font-semibold placeholder:text-slate-400 outline-none transition-all"
                                         placeholder="••••••••"
                                     />
                                     <button
@@ -252,7 +268,7 @@ const Login: React.FC = () => {
                             </div>
 
                             {/* Remember + Forgot */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between animate-fade-in-up animate-stagger-3">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input type="checkbox" checked={rememberSession} onChange={(e) => setRememberSession(e.target.checked)} className="w-4 h-4 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
                                     <span className="text-xs text-slate-700 font-semibold">Remember session</span>
@@ -266,14 +282,14 @@ const Login: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold h-12 rounded-xl uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25"
+                                className="w-full bg-[#1E40AF] hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black h-14 rounded-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-xl shadow-blue-900/20 animate-fade-in-up animate-stagger-4"
                             >
-                                {loading ? <Loader2 size={22} className="animate-spin" /> : 'Sign In'}
+                                {loading ? <Loader2 size={20} className="animate-spin" /> : 'Sign In'}
                             </button>
                         </form>
 
                         {/* Divider */}
-                        <div className="relative my-6">
+                        <div className="relative my-6 animate-fade-in delay-500">
                             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-300" /></div>
                             <div className="relative flex justify-center text-[0.625rem] font-bold uppercase tracking-widest">
                                 <span className="bg-white px-4 text-slate-500">continue with</span>
@@ -284,7 +300,7 @@ const Login: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => handleSocialLogin('google')}
-                            className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl py-3 transition-all active:scale-[0.97] group"
+                            className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl py-3 transition-all active:scale-[0.97] group animate-fade-in delay-700"
                         >
                             <GoogleIcon />
                         </button>
@@ -292,7 +308,7 @@ const Login: React.FC = () => {
                         {/* Bottom link */}
                         <p className="mt-6 text-center text-slate-600 text-sm font-medium">
                             Don't have an account?{' '}
-                            <Link to="/signup" className="text-blue-600 font-bold hover:text-blue-700 transition-colors underline underline-offset-2">
+                            <Link to="/signup" className="text-[#1E40AF] font-bold hover:text-blue-700 transition-all">
                                 Sign up
                             </Link>
                         </p>
