@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import useSEO from '../hooks/useSEO';
-import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, Flame, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface ApiArticle {
@@ -484,70 +484,21 @@ const News: React.FC = () => {
             </div>
           </div>
 
-          {/* ═══════ TAB NAVIGATION ═══════ */}
-          <div className="flex items-center gap-1 mb-6 bg-white rounded-xl p-1 shadow-sm border border-slate-100">
-            {([
-              { key: 'all', label: 'All News', icon: <Newspaper size={14} /> },
-              { key: 'featured', label: 'Featured', icon: <Flame size={14} /> },
-              { key: 'trending', label: 'Trending', icon: <TrendingUp size={14} /> },
-            ] as const).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === tab.key
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                  }`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* ═══════ MAIN LAYOUT — RESPONSIVE 2-COLUMN ═══════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-            {/* ──── LEFT / MAIN CONTENT ──── */}
-            <div className="space-y-6 min-w-0">
-
-              {/* HERO FEATURED ARTICLE */}
-              {featured && (
-                <div
-                  className="relative bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer group"
-                  onClick={() => setSelectedArticle(featured)}
-                >
-                  <div className="aspect-[16/9] w-full overflow-hidden relative">
-                    <img
-                      src={getArticleImage(featured)}
-                      alt={featured.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      onError={() => handleImageError(featured.id)}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                    {/* Live badge */}
-                    <div className="absolute top-4 left-4 flex items-center gap-2">
-                      <span className="bg-red-600 text-white px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                        <Zap size={10} /> Featured
-                      </span>
-                      <span className="bg-white/20 backdrop-blur-sm text-white px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-                        {featured.category}
-                      </span>
-                    </div>
-                    {/* Title overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
-                      <p className="text-lime-400 text-[11px] font-black uppercase tracking-wider mb-2">
-                        {formatFeaturedDate(featured.rawDate)}
-                      </p>
-                      <h2 className="text-xl md:text-2xl lg:text-3xl font-black text-white leading-tight mb-2 group-hover:text-lime-300 transition-colors">
-                        {featured.title}
-                      </h2>
-                      <p className="text-white/70 text-sm leading-relaxed line-clamp-2 hidden sm:block">
-                        {featured.excerpt}
-                      </p>
-                      <div className="flex items-center gap-4 mt-3 text-white/50 text-[10px] font-bold uppercase tracking-widest">
-                        <span className="flex items-center gap-1"><Clock size={11} /> {featured.readTime}</span>
-                        <span className="flex items-center gap-1 text-lime-400 font-black">READ STORY <ArrowRight size={11} /></span>
-                      </div>
-                    </div>
+          {/* Top Stack (Right side of mockup top) */}
+          <div className="lg:w-1/3 flex flex-col gap-6">
+            <SectionHeader title="TRENDING NEWS" icon={<Flame size={18} />} accent="HOT" />
+            <div className="space-y-6">
+              {topStack.map((article, idx) => (
+                <div key={article.id} className="flex gap-4 group cursor-pointer" onClick={() => setSelectedArticle(article)}>
+                  <div className="w-24 h-24 rounded-[20px] overflow-hidden shrink-0 border border-slate-100 shadow-sm">
+                    <img src={getArticleImage(article)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-blue-600 text-[9px] font-black uppercase tracking-widest">{article.category}</span>
+                    <h3 className="text-sm font-black text-slate-900 leading-tight line-clamp-2 uppercase group-hover:text-blue-600 transition-colors">
+                      {article.title}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">{article.date}</p>
                   </div>
                 </div>
               ))}
