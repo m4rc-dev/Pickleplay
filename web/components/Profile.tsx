@@ -42,6 +42,7 @@ import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
 import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings, createSession } from '../services/supabase';
 import { sendEmailCode, verifyCode, generateBackupCodes, saveBackupCodes } from '../services/twoFactorAuth';
+import { getReceivedRatings } from '../services/matches';
 import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
 import { PostCard } from './community';
@@ -193,6 +194,9 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     memberSince: ''
   });
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+  // Received ratings state
+  const [receivedRatings, setReceivedRatings] = useState<any[]>([]);
 
   // Password strength calculator
   const calculatePasswordStrength = (password: string) => {
@@ -555,6 +559,10 @@ Never share them with anyone.`;
           totalHours: Math.round(totalHours),
           memberSince
         });
+
+        // Fetch received ratings
+        const { data: ratings } = await getReceivedRatings(targetId);
+        setReceivedRatings(ratings || []);
       } catch (err) {
         console.error('Error loading activity stats:', err);
       } finally {
@@ -2471,7 +2479,152 @@ Never share them with anyone.`;
             </div>
           )}
 
-          {/* 2FA Setup Modal */}
+          {/* Activity & Ratings Tab */}
+          {activeTab === 'stats' && (
+            <div className="flex flex-col gap-12">
+
+              {/* ── Activity Stats ── */}
+              <div className="bg-white rounded-3xl border border-slate-200/50 shadow-sm p-8">
+                <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight mb-6">
+                  <BarChart3 className="text-blue-600" /> Activity Stats
+                </h3>
+                {isLoadingStats ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-slate-100 rounded-3xl h-28" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-3xl p-5 flex flex-col gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Sessions</p>
+                      <p className="text-4xl font-black text-blue-600">{activityStats.totalBookings}</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-3xl p-5 flex flex-col gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Courts Visited</p>
+                      <p className="text-4xl font-black text-emerald-600">{activityStats.courtsVisited}</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-3xl p-5 flex flex-col gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Hours Played</p>
+                      <p className="text-4xl font-black text-amber-600">{activityStats.totalHours}</p>
+                    </div>
+                    <div className="bg-indigo-50 rounded-3xl p-5 flex flex-col gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Member Since</p>
+                      <p className="text-4xl font-black text-indigo-600">{activityStats.memberSince || '—'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Ratings from Opponents ── */}
+              <div className="bg-white rounded-3xl border border-slate-200/50 shadow-sm p-8">
+                <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight mb-6">
+                  <Star className="text-amber-500" fill="currentColor" /> Ratings from Opponents
+                </h3>
+
+                {isLoadingStats ? (
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-24 bg-slate-100 rounded-3xl" />
+                    <div className="h-24 bg-slate-100 rounded-3xl" />
+                  </div>
+                ) : receivedRatings.length === 0 ? (
+                  <div className="text-center py-12 space-y-4">
+                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto">
+                      <Star className="text-slate-300" size={32} />
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 uppercase tracking-tight">No Ratings Yet</p>
+                      <p className="text-sm text-slate-400 mt-1">Play and verify matches to receive ratings from opponents.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Averages Grid */}
+                    {(() => {
+                      const total = receivedRatings.length;
+                      const avg = (key: string) =>
+                        (receivedRatings.reduce((s: number, r: any) => s + (r[key] || 0), 0) / total).toFixed(1);
+                      const dims = [
+                        { id: 'skill_level', label: 'Skill', color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200' },
+                        { id: 'sportsmanship', label: 'Sportsmanship', color: 'text-rose-500', bg: 'bg-rose-50', border: 'border-rose-200' },
+                        { id: 'reliability', label: 'Reliability', color: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-200' },
+                        { id: 'fair_play', label: 'Fair Play', color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+                      ];
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {dims.map(d => (
+                            <div key={d.id} className={`${d.bg} border ${d.border} rounded-2xl p-4 text-center`}>
+                              <p className={`text-2xl font-black ${d.color}`}>{avg(d.id)}</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">{d.label}</p>
+                              <div className="flex justify-center gap-0.5 mt-2">
+                                {[1, 2, 3, 4, 5].map(s => (
+                                  <Star key={s} size={10} className={parseFloat(avg(d.id)) >= s ? d.color : 'text-slate-200'} fill={parseFloat(avg(d.id)) >= s ? 'currentColor' : 'transparent'} />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Individual rating cards */}
+                    <div className="space-y-4 border-t border-slate-100 pt-6">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        {receivedRatings.length} Rating{receivedRatings.length !== 1 ? 's' : ''} Received
+                      </p>
+                      {receivedRatings.map((r: any) => {
+                        const raterName = r.rater?.full_name || r.rater?.username || 'Anonymous Player';
+                        const raterAvatar = r.rater?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${raterName}`;
+                        const overallAvg = ((r.skill_level + r.sportsmanship + r.reliability + r.fair_play) / 4).toFixed(1);
+                        const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                        return (
+                          <div key={r.id} className="bg-slate-50 rounded-3xl p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <img src={raterAvatar} alt={raterName} className="w-10 h-10 rounded-full object-cover bg-slate-200" />
+                                <div>
+                                  <p className="font-black text-slate-900 text-sm uppercase tracking-tight">{raterName}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{date}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-black text-indigo-600">{overallAvg}</p>
+                                <div className="flex gap-0.5 justify-end mt-1">
+                                  {[1, 2, 3, 4, 5].map(s => (
+                                    <Star key={s} size={10} className={parseFloat(overallAvg) >= s ? 'text-amber-400' : 'text-slate-200'} fill={parseFloat(overallAvg) >= s ? 'currentColor' : 'transparent'} />
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                              {[
+                                { label: 'Skill', val: r.skill_level, color: 'text-amber-500' },
+                                { label: 'Sports.', val: r.sportsmanship, color: 'text-rose-500' },
+                                { label: 'Reliab.', val: r.reliability, color: 'text-blue-500' },
+                                { label: 'Fair Play', val: r.fair_play, color: 'text-emerald-500' },
+                              ].map(d => (
+                                <div key={d.label} className="bg-white rounded-2xl p-3 text-center border border-slate-100">
+                                  <p className={`text-lg font-black ${d.color}`}>{d.val}</p>
+                                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-0.5">{d.label}</p>
+                                </div>
+                              ))}
+                            </div>
+                            {r.comment && (
+                              <p className="text-sm text-slate-600 font-medium leading-relaxed bg-white rounded-2xl p-4 border border-slate-100 italic">
+                                &ldquo;{r.comment}&rdquo;
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+
           {show2FASetup && ReactDOM.createPortal(
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
               <div className="bg-white rounded-3xl p-10 max-w-md w-full shadow-2xl border border-slate-100">
@@ -3227,61 +3380,6 @@ Never share them with anyone.`;
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Activity Stats Tab */}
-          {activeTab === 'stats' && (
-            <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-8">
-              <h3 className="text-base font-black text-slate-950 flex items-center gap-3 uppercase tracking-tight">
-                <BarChart3 className="text-cyan-600" /> Activity Stats
-              </h3>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 border-t border-slate-100 pt-8">
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl min-h-[120px]">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Total Bookings</p>
-                  {isLoadingStats ? (
-                    <div className="flex justify-center items-center flex-1">
-                      <div className="w-6 h-6 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : (
-                    <p className="text-3xl font-black text-slate-950">{activityStats.totalBookings}</p>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl min-h-[120px]">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Courts Visited</p>
-                  {isLoadingStats ? (
-                    <div className="flex justify-center items-center flex-1">
-                      <div className="w-6 h-6 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : (
-                    <p className="text-3xl font-black text-slate-950">{activityStats.courtsVisited}</p>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl min-h-[120px]">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Total Hours</p>
-                  {isLoadingStats ? (
-                    <div className="flex justify-center items-center flex-1">
-                      <div className="w-6 h-6 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : (
-                    <p className="text-3xl font-black text-slate-950">{activityStats.totalHours}</p>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl min-h-[120px]">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Member Since</p>
-                  {isLoadingStats ? (
-                    <div className="flex justify-center items-center flex-1">
-                      <div className="w-6 h-6 border-2 border-cyan-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : (
-                    <p className="text-lg font-black text-slate-950">{activityStats.memberSince || 'N/A'}</p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>

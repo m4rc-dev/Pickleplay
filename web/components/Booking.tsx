@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield } from 'lucide-react';
 import { Court } from '../types';
@@ -379,15 +378,15 @@ const Booking: React.FC = () => {
         setIsLoadingPolicies(true);
         const policyResult = await getLocationPolicies(urlLocationId);
         if (policyResult.data) {
-            setLocationPolicies(policyResult.data);
+          setLocationPolicies(policyResult.data);
         }
         setIsLoadingPolicies(false);
 
         // Show location entry modal
         if (!locationConfirmed || pendingLocationId !== urlLocationId) {
-            setPendingLocationId(urlLocationId);
-            setShowLocationEntryModal(true);
-            setLocationConfirmed(false);
+          setPendingLocationId(urlLocationId);
+          setShowLocationEntryModal(true);
+          setLocationConfirmed(false);
         }
 
         // Fetch courts belonging to this location
@@ -2254,11 +2253,11 @@ const Booking: React.FC = () => {
                                     className={`py-2.5 px-2.5 rounded-lg font-semibold text-xs transition-all border relative ${isUserSlot
                                       ? 'bg-emerald-50 text-emerald-600 border-emerald-300 cursor-default'
                                       : isPast ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
-                                      : isBlocked ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
-                                      : isBookedSlot ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
-                                      : selectedSlot === slot ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
-                                      : dailyLimitReached ? 'bg-orange-50/50 text-orange-300 border-orange-200 cursor-not-allowed'
-                                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'}`}
+                                        : isBlocked ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                          : isBookedSlot ? 'bg-amber-50 text-amber-400 border-amber-200 cursor-not-allowed'
+                                            : selectedSlot === slot ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200/50'
+                                              : dailyLimitReached ? 'bg-orange-50/50 text-orange-300 border-orange-200 cursor-not-allowed'
+                                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'}`}
                                   >
                                     <span className={isPast && !isUserSlot ? 'line-through' : ''}>
                                       {isUserSlot ? `Your Slot - ${userSlotStatus}` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Court Locked In' : slotToRange(slot)}
