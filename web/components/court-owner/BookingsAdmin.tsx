@@ -90,16 +90,27 @@ const BookingsAdmin: React.FC = () => {
 
     const updateBookingStatus = async (id: string, status: string) => {
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('bookings')
                 .update({ status })
-                .eq('id', id);
+                .eq('id', id)
+                .select();
 
-            if (error) throw error;
+            if (error) {
+                console.error('Supabase error details:', JSON.stringify(error));
+                alert(`Failed to update booking: ${error.message}\nCode: ${error.code}\nDetails: ${error.details || 'none'}\nHint: ${error.hint || 'none'}`);
+                return;
+            }
+            
+            if (!data || data.length === 0) {
+                alert('Failed to update booking: No rows were updated. This is likely an RLS (Row Level Security) policy issue. Make sure you are the court owner.');
+                return;
+            }
+
             fetchBookings();
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error updating booking status:', err);
-            alert('Failed to update booking.');
+            alert(`Failed to update booking: ${err?.message || err}`);
         }
     };
 

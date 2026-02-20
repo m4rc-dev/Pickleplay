@@ -236,7 +236,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                                         <div className="flex justify-between items-center">
                                             <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Rate / HR</span>
-                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">₱{bookingData.pricePerHour.toFixed(2)}</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">{bookingData.pricePerHour > 0 ? `₱${bookingData.pricePerHour.toFixed(2)}` : 'FREE'}</span>
                                         </div>
 
                                         <div className="flex justify-between items-center">
@@ -257,7 +257,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                                     </span>
                                                 </div>
                                             </div>
-                                            <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">₱{bookingData.totalPrice.toFixed(2)}</span>
+                                            <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">{bookingData.totalPrice > 0 ? `₱${bookingData.totalPrice.toFixed(2)}` : 'FREE'}</span>
                                         </div>
 
                                         {bookingData.paymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (

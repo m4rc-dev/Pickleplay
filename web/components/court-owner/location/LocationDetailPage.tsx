@@ -48,6 +48,7 @@ const LocationDetailPage: React.FC = () => {
     const [courtName, setCourtName] = useState('');
     const [courtSurface, setCourtSurface] = useState('Pro-Cushion');
     const [courtPrice, setCourtPrice] = useState(0);
+    const [isCourtFree, setIsCourtFree] = useState(false);
     const [courtCleaningTime, setCourtCleaningTime] = useState(0);
     const [courtAmenities, setCourtAmenities] = useState('');
     const [courtType, setCourtType] = useState<'Indoor' | 'Outdoor'>('Indoor');
@@ -228,6 +229,7 @@ const LocationDetailPage: React.FC = () => {
         setSurfaceSearch('');
         setIsSurfaceDropdownOpen(false);
         setCourtPrice(0);
+        setIsCourtFree(false);
         setCourtCleaningTime(location?.base_cleaning_time || 0);
         setCourtAmenities('');
         setSelectedCourtAmenities([]);
@@ -246,6 +248,14 @@ const LocationDetailPage: React.FC = () => {
 
     const handleAddCourt = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Price validation: must be free (0) or at least ₱1
+        if (!isCourtFree && courtPrice < 1) {
+            alert('Please set a price of at least ₱1, or toggle "Free" to make this court free.');
+            return;
+        }
+
+        const finalPrice = isCourtFree ? 0 : courtPrice;
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -258,7 +268,7 @@ const LocationDetailPage: React.FC = () => {
                     location_id: locationId,
                     name: courtName,
                     surface_type: courtSurface,
-                    base_price: courtPrice,
+                    base_price: finalPrice,
                     cleaning_time_minutes: courtCleaningTime,
                     court_type: courtType,
                     amenities: selectedCourtAmenities,
@@ -300,6 +310,14 @@ const LocationDetailPage: React.FC = () => {
     const handleUpdateCourt = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingCourt) return;
+
+        // Price validation: must be free (0) or at least ₱1
+        if (!isCourtFree && courtPrice < 1) {
+            alert('Please set a price of at least ₱1, or toggle "Free" to make this court free.');
+            return;
+        }
+
+        const finalPrice = isCourtFree ? 0 : courtPrice;
         setIsSubmitting(true);
         try {
             const { error } = await supabase
@@ -307,7 +325,7 @@ const LocationDetailPage: React.FC = () => {
                 .update({
                     name: courtName,
                     surface_type: courtSurface,
-                    base_price: courtPrice,
+                    base_price: finalPrice,
                     cleaning_time_minutes: courtCleaningTime,
                     court_type: courtType,
                     amenities: selectedCourtAmenities,
@@ -348,6 +366,7 @@ const LocationDetailPage: React.FC = () => {
         setCourtName(court.name);
         setCourtSurface(court.surface_type);
         setCourtPrice(court.base_price || 0);
+        setIsCourtFree((court.base_price || 0) === 0);
         setCourtCleaningTime(court.cleaning_time_minutes || 0);
         setCourtAmenities(Array.isArray(court.amenities) ? court.amenities.join(', ') : '');
         setSelectedCourtAmenities(Array.isArray(court.amenities) ? [...court.amenities] : []);
@@ -579,8 +598,34 @@ const LocationDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Price (₱/hr)</label>
-                    <input required type="number" min="0" step="0.01" value={courtPrice} onChange={e => setCourtPrice(Number(e.target.value))}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
+                            className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${
+                                isCourtFree
+                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
+                            }`}
+                        >
+                            🎉 Free
+                        </button>
+                        {!isCourtFree && (
+                            <input
+                                required
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={courtPrice}
+                                onChange={e => setCourtPrice(Number(e.target.value))}
+                                placeholder="Min ₱1"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                            />
+                        )}
+                        {isCourtFree && (
+                            <span className="text-emerald-600 font-black text-sm">This court is free to book!</span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -1312,8 +1357,14 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
                     <div>
                         <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Rate</p>
                         <div className="flex items-baseline gap-1">
-                            <span className="text-lg font-black">₱{court.base_price || 0}</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">/hr</span>
+                            {court.base_price > 0 ? (
+                                <>
+                                    <span className="text-lg font-black">₱{court.base_price}</span>
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase">/hr</span>
+                                </>
+                            ) : (
+                                <span className="text-lg font-black text-emerald-400">FREE</span>
+                            )}
                         </div>
                     </div>
                     {court.cleaning_time_minutes > 0 && (

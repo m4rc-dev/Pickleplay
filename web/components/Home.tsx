@@ -366,7 +366,7 @@ const Home: React.FC = () => {
 
   // Get user's GPS location when they focus on search
   const getUserLocation = () => {
-    if (userLocation) return; // Already have location
+    if (gpsEnabled === true && userLocation) return; // Already have location
 
     setIsLoadingLocation(true);
     if (navigator.geolocation) {
@@ -829,6 +829,27 @@ const Home: React.FC = () => {
                       <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                       <span className="text-sm font-medium">Getting your location...</span>
                     </div>
+                  )}
+
+                  {/* GPS Enable Prompt - shown when GPS not yet granted */}
+                  {gpsEnabled !== true && !userCity && (
+                    <button
+                      type="button"
+                      onClick={getUserLocation}
+                      className="w-full text-left px-6 py-4 flex items-center gap-4 bg-teal-50/60 hover:bg-teal-50 border-b border-teal-100 transition-colors"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
+                        <Navigation size={16} className="text-teal-600" fill="currentColor" />
+                      </div>
+                      <div>
+                        <p className="text-[15px] font-bold text-teal-700">
+                          {gpsEnabled === false ? 'Location Blocked — Tap to Retry' : 'Enable Location'}
+                        </p>
+                        <p className="text-[13px] text-slate-400">
+                          {gpsEnabled === false ? 'Check browser settings if it keeps failing' : 'Allow GPS to find courts near you'}
+                        </p>
+                      </div>
+                    </button>
                   )}
 
                   {/* PLACES Section - Show user's city if GPS enabled, or suggested cities if not */}
@@ -1406,7 +1427,7 @@ const Home: React.FC = () => {
               ) : (
                 <div className="w-full py-16 text-center bg-white/5 rounded-3xl border border-dashed border-white/10">
                   <Trophy className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-                  <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">No live tournaments found</p>
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Coming Soon</p>
                 </div>
               )}
             </div>
@@ -1469,7 +1490,7 @@ const Home: React.FC = () => {
             ) : (
               <div className="col-span-full py-16 md:py-20 text-center bg-white/5 rounded-3xl md:rounded-[40px] border border-dashed border-white/10">
                 <Trophy className="w-10 h-10 md:w-12 md:h-12 text-slate-700 mx-auto mb-3 md:mb-4" />
-                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs md:text-sm">No live tournaments found</p>
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs md:text-sm">Coming Soon</p>
               </div>
             )}
           </div>

@@ -14,6 +14,12 @@
             --brand-blue: #2563eb;
         }
 
+        /* Fluid root font-size: scales all rem-based values proportionally.
+           Mobile/tablet: 16px (standard). Laptop 125%: ~16.3px. Laptop 100%: ~16.9px. 4K: ~18px. */
+        html {
+            font-size: clamp(16px, calc(14px + 0.15vw), 18px);
+        }
+
         html,
         body {
             margin: 0;
@@ -134,8 +140,8 @@
 
         @keyframes slideUpFade {
             from {
-                opacity: 0;
-                transform: translateY(10px);
+                opacity: 0.4;
+                transform: translateY(6px);
             }
 
             to {
@@ -149,7 +155,7 @@
         }
 
         .animate-route-transition {
-            animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
     </style>
     <script type="importmap">
