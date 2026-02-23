@@ -31,8 +31,9 @@ import {
   X,
   Clock
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, Tournament } from '../types';
 import { supabase } from '../services/supabase';
+import { fetchTournaments as fetchTournamentsService } from '../services/tournaments';
 
 const HERO_IMAGES = [
   "/images/home-images/pb1.jpg",
@@ -197,29 +198,14 @@ const Home: React.FC = () => {
     const fetchTournaments = async () => {
       setIsTournamentsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('tournaments')
-          .select('*')
-          .order('date', { ascending: true })
-          .limit(3);
+        const data = await fetchTournamentsService({ featuredOnly: true, approvedOnly: true });
+        setTournaments(data.length > 0 ? data.slice(0, 4) : []);
 
-        if (error) throw error;
-
-        // Map Supabase snake_case to camelCase for the component
-        const mappedTournaments = (data || []).map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          date: t.date,
-          location: t.location,
-          prizePool: t.prize_pool,
-          status: t.status,
-          skillLevel: t.skill_level,
-          maxPlayers: t.max_players,
-          registeredCount: t.registered_count,
-          image: t.image_url
-        }));
-
-        setTournaments(mappedTournaments);
+        // If no featured tournaments, fallback to latest approved
+        if (data.length === 0) {
+          const fallback = await fetchTournamentsService({ approvedOnly: true });
+          setTournaments(fallback.slice(0, 3));
+        }
       } catch (err) {
         console.error('Error fetching tournaments:', err);
       } finally {
@@ -244,10 +230,10 @@ const Home: React.FC = () => {
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState<boolean | null>(null); // null = not checked, true = enabled, false = denied
   const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
-  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [isTournamentsLoading, setIsTournamentsLoading] = useState(false);
-  const [selectedTournament, setSelectedTournament] = useState<any | null>(null);
   const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
+  const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const navigate = useNavigate();
 
   // Fetch courts from Supabase for search suggestions
@@ -359,8 +345,7 @@ const Home: React.FC = () => {
           };
         });
         setLocations(locationData);
-        console.log('📍 Fetched locations:', locationData.length, 'locations');
-        console.log('📍 Sample location data:', locationData[0]);
+        // Debug logging removed: locations fetched
       } catch (err) {
         console.error('Error fetching locations:', err);
       }
@@ -718,7 +703,7 @@ const Home: React.FC = () => {
       }
     } else {
       // Fallback to courts if no locations are available (temporary)
-      console.warn('⚠️ No locations found, falling back to courts');
+      // No locations found; falling back to courts
       const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
       title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
       featuredList = allCourtsSorted.slice(0, 4);
@@ -729,8 +714,7 @@ const Home: React.FC = () => {
 
   const { title: featuredSectionTitle, featuredList } = getFeaturedData();
 
-  console.log('🏠 Featured list data:', featuredList);
-  console.log('🏠 Is using locations?', featuredList.length > 0 && featuredList[0].hasOwnProperty('court_count'));
+  // Debug logging removed: featured list data
 
   return (
     <div className="bg-white selection:bg-lime-400 selection:text-black min-h-screen">
@@ -1387,8 +1371,8 @@ const Home: React.FC = () => {
                 tournaments.map((tournament) => (
                   <button
                     key={tournament.id}
-                    onClick={() => setSelectedTournament(tournament)}
-                    className="group relative flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left animate-fade-in-up opacity-0 delay-100"
+                    onClick={() => navigate(`/tournaments/${tournament.id}`)}
+                    className="group relative flex-shrink-0 w-[280px] aspect-[4/5] rounded-3xl overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left"
                   >
                     <img
                       src={tournament.image || "/images/home-images/pb20.jpg"}
@@ -1450,9 +1434,8 @@ const Home: React.FC = () => {
               tournaments.map((tournament, idx) => (
                 <button
                   key={tournament.id}
-                  onClick={() => setSelectedTournament(tournament)}
-                  className="group relative aspect-[4/5] rounded-3xl md:rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left w-full animate-fade-in-up opacity-0"
-                  style={{ animationDelay: `${(idx + 1) * 200}ms` }}
+                  onClick={() => navigate(`/tournaments/${tournament.id}`)}
+                  className="group relative aspect-[4/5] rounded-3xl md:rounded-[40px] overflow-hidden border border-slate-200 bg-white transition-all hover:scale-[1.02] shadow-xl text-left w-full"
                 >
                   <img
                     src={tournament.image || "/images/home-images/pb20.jpg"}

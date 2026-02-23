@@ -5,6 +5,7 @@ import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clo
 import { supabase } from '../../../services/supabase';
 import { uploadCourtImage } from '../../../services/locations';
 import { Location, LocationClosure, LocationClosureReason } from '../../../types';
+import ConfirmDialog from '../../ui/ConfirmDialog';
 
 declare global {
     interface Window {
@@ -48,6 +49,29 @@ const LocationsList: React.FC = () => {
     // Master amenities modal state
     const [isMasterAmenitiesOpen, setIsMasterAmenitiesOpen] = useState(false);
     const [masterAmenities, setMasterAmenities] = useState<{ id: string; name: string }[]>([]);
+
+    // Confirm dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        variant: 'warning' | 'danger' | 'info';
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+
+    // Confirm dialog helpers
+    const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+        setConfirmDialog({ isOpen: true, title, message, onConfirm, variant });
+    };
+
+    const closeConfirm = () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    };
+
+    const handleConfirm = () => {
+        confirmDialog.onConfirm();
+        closeConfirm();
+    };
     const [newMasterAmenity, setNewMasterAmenity] = useState('');
     const [editingMasterIdx, setEditingMasterIdx] = useState<string | null>(null);
     const [editingMasterValue, setEditingMasterValue] = useState('');
@@ -468,17 +492,23 @@ const LocationsList: React.FC = () => {
     };
 
     const handleDeleteLocation = async (id: string) => {
-        if (!confirm('Are you sure? This will delete this location and ALL courts within it. This cannot be undone.')) return;
-        try {
-            const { error } = await supabase.from('locations').delete().eq('id', id);
-            if (error) throw error;
-            fetchLocations();
-            setIsEditModalOpen(false);
-            setEditingLocation(null);
-        } catch (err) {
-            console.error('Error deleting location:', err);
-            alert('Failed to delete location.');
-        }
+        showConfirm(
+            'Delete Location & All Courts?',
+            'This will permanently delete this location and ALL courts within it, along with all associated bookings, closures, and data. This is the most destructive action and cannot be undone.',
+            async () => {
+                try {
+                    const { error } = await supabase.from('locations').delete().eq('id', id);
+                    if (error) throw error;
+                    fetchLocations();
+                    setIsEditModalOpen(false);
+                    setEditingLocation(null);
+                } catch (err) {
+                    console.error('Error deleting location:', err);
+                    alert('Failed to delete location.');
+                }
+            },
+            'danger'
+        );
     };
 
     const fetchClosures = async (locationId: string) => {
@@ -1592,6 +1622,16 @@ const LocationsList: React.FC = () => {
                 </div>,
                 document.body
             )}
+
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                onConfirm={handleConfirm}
+                onCancel={closeConfirm}
+                variant={confirmDialog.variant}
+            />
         </div>
     );
 };
