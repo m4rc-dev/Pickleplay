@@ -55,8 +55,8 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose, durati
     const { icon, bg, border, shadow } = config[type];
 
     return (
-        <div className={`fixed top-8 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 transform ${isVisible ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-8 opacity-0 scale-95'}`}>
-            <div className={`${bg} backdrop-blur-xl border ${border} ${shadow} px-6 py-4 rounded-[24px] flex items-center gap-4 min-w-[320px] shadow-2xl`}>
+        <div className={`fixed top-8 right-8 z-[100] transition-all duration-300 transform ${isVisible ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-8 opacity-0 scale-95'}`}>
+            <div className={`${bg} backdrop-blur-xl border ${border} ${shadow} px-6 py-4 rounded-[24px] flex items-center gap-4 min-w-[320px] max-w-[420px] shadow-2xl`}>
                 <div className="flex-shrink-0 animate-in zoom-in duration-500">{icon}</div>
                 <p className="text-white font-bold text-sm tracking-tight flex-grow">{message}</p>
                 <button

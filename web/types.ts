@@ -219,7 +219,7 @@ export interface Tournament {
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING';
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT';
   message: string;
   actor: {
     name: string;

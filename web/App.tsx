@@ -41,7 +41,8 @@ import {
   AlertCircle,
   Shield,
   MessageCircle,
-  Users
+  Users,
+  Medal
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 
@@ -92,6 +93,7 @@ import LocationsList from './components/court-owner/location/LocationsList';
 import LocationDetailPage from './components/court-owner/location/LocationDetailPage';
 import LocationPolicies from './components/court-owner/LocationPolicies';
 import Achievements from './components/Achievements';
+import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
 import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled } from './services/maintenance';
@@ -120,10 +122,20 @@ const NotificationPanel: React.FC<{
             onClick={() => onNotificationClick(n)}
           >
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
-            <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
+            {n.type === 'ACHIEVEMENT' ? (
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <span className="text-base">🏆</span>
+              </div>
+            ) : (
+              <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
+            )}
             <div>
               <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
-                <span className="font-bold">{n.actor.name}</span> {n.message}
+                {n.type === 'ACHIEVEMENT' ? (
+                  <span className="font-bold">{n.message}</span>
+                ) : (
+                  <><span className="font-bold">{n.actor.name}</span> {n.message}</>
+                )}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
@@ -361,6 +373,8 @@ const NavigationHandler: React.FC<{
       } else {
         navigate('/my-bookings');
       }
+    } else if (notification.type === 'ACHIEVEMENT') {
+      navigate('/achievements');
     }
     // Add more navigation logic for other notification types if needed
     setIsNotificationsOpen(false); // Close panel after clicking
@@ -467,6 +481,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {pendingCount > 0 && <span className={`absolute ${isSidebarCollapsed ? 'top-1 right-2' : 'top-3 right-4'} w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse`}>{pendingCount}</span>}
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="Manage Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </div>
             )}
             {role === 'PLAYER' && (
@@ -497,6 +512,12 @@ const NavigationHandler: React.FC<{
                       <ArrowRight size={16} className="text-slate-900/60 group-hover:text-white/80 shrink-0 transition-all duration-300 group-hover:translate-x-1" />
                     </div>
                   </Link>
+                )}
+                <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/achievements" icon={<Medal size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 ))}
                 {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                 {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -787,6 +808,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               )}
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+              {role === 'ADMIN' && <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
                 <>
                   {feat('booking') && <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
@@ -794,7 +816,7 @@ const NavigationHandler: React.FC<{
                   {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/achievements" icon={<Medal size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
@@ -895,6 +917,17 @@ const NavigationHandler: React.FC<{
               <Route path="/schedule" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/login" />} />
 
               {/* Specialized Court Owner Routes */}
+              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationsList /> : <Navigate to="/" />} />
+              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationDetailPage /> : <Navigate to="/" />} />
+              <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
+              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
+              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
+              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
+
+              <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/" />} />
+              <Route path="/achievements-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AchievementsManager /> : <Navigate to="/" />} />
               <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationsList /> : <Navigate to="/login" />} />
               <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationDetailPage /> : <Navigate to="/login" />} />
               <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/login" />} />
@@ -1623,20 +1656,23 @@ const App: React.FC = () => {
         filter: `user_id=eq.${currentUserId}`
       }, async (payload) => {
         const newNotif = payload.new as any;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url')
-          .eq('id', newNotif.actor_id)
-          .single();
+        let profile = null;
+        if (newNotif.actor_id) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url')
+            .eq('id', newNotif.actor_id)
+            .single();
+          profile = data;
+        }
 
         const mappedNewNotif: Notification = {
           id: newNotif.id,
           type: newNotif.type as any,
           message: newNotif.message,
           actor: {
-            name: profile?.full_name || 'System',
-            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id}`,
+            name: profile?.full_name || newNotif.title || 'System',
+            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id || newNotif.id}`,
             id: newNotif.actor_id
           },
           timestamp: newNotif.created_at,
@@ -1645,6 +1681,30 @@ const App: React.FC = () => {
         };
 
         setNotifications(prev => [mappedNewNotif, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
+  // Realtime: Profile points updates (achievements, referrals, etc.)
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`user-points-${currentUserId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${currentUserId}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (typeof updated.points === 'number') {
+          setUserPoints(updated.points);
+        }
       })
       .subscribe();
 
