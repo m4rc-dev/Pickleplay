@@ -289,14 +289,12 @@ const Booking: React.FC = () => {
   useEffect(() => {
     setIsUserLoading(true);
     supabase.auth.getUser().then(({ data: { user } }) => {
-      console.log('User state in Booking component:', user);
       setUser(user);
       setIsUserLoading(false);
     });
 
     // Also listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user);
       setUser(session?.user || null);
       setIsUserLoading(false);
     });
@@ -775,7 +773,6 @@ const Booking: React.FC = () => {
           filter: `court_id=eq.${selectedCourt.id}`
         },
         (payload) => {
-          console.log('Booking change detected:', payload);
           // Refresh availability for all players viewing this court
           checkCourtAvailability(selectedCourt, selectedDate);
         }
@@ -1025,7 +1022,7 @@ const Booking: React.FC = () => {
       }
     });
 
-    console.log(`📍 Displaying ${markersRef.current.length} location markers on map`);
+    // Debug logging removed: marker count
   };
 
   // Re-render markers when data or filters change

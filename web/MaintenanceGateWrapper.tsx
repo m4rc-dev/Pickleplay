@@ -21,7 +21,7 @@ const MaintenanceGateWrapper: React.FC = () => {
       try {
         // 1. Check user session first
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('[MaintenanceGate] Session:', session?.user?.id ? 'logged in' : 'no session');
+        // console.log('[MaintenanceGate] Session:', session?.user?.id ? 'logged in' : 'no session');
         
         if (session?.user) {
           // Check app_metadata first (fast, no extra DB call)
@@ -42,7 +42,7 @@ const MaintenanceGateWrapper: React.FC = () => {
 
             const dbRoles: string[] = profile?.roles || [];
             const isAdminFromDB = dbRoles.some(r => r?.toUpperCase() === 'ADMIN');
-            console.log('[MaintenanceGate] Profile roles from DB:', dbRoles, 'isAdmin:', isAdminFromDB, 'error:', error);
+            // console.log('[MaintenanceGate] Profile roles from DB:', dbRoles, 'isAdmin:', isAdminFromDB, 'error:', error);
             if (mounted) setUserRole(isAdminFromDB ? 'ADMIN' : 'PLAYER');
           }
         } else {
@@ -51,7 +51,7 @@ const MaintenanceGateWrapper: React.FC = () => {
 
         // 2. Then check maintenance
         const m = await getMaintenanceStatus();
-        console.log('[MaintenanceGate] Maintenance status:', m);
+        // console.log('[MaintenanceGate] Maintenance status:', m);
         if (mounted && m) {
           setIsEnabled(m.enabled);
           setMessage(m.message || '');
@@ -93,7 +93,7 @@ const MaintenanceGateWrapper: React.FC = () => {
   }
 
   // Debug log to see what's happening
-  console.log('[MaintenanceGate] isEnabled:', isEnabled, 'userRole:', userRole);
+  // console.log('[MaintenanceGate] isEnabled:', isEnabled, 'userRole:', userRole);
 
   // If maintenance is enabled, ONLY allow ADMIN through
   // Everyone else (PLAYER, COACH, COURT_OWNER, CUSTOMER, etc.) gets blocked
@@ -102,18 +102,18 @@ const MaintenanceGateWrapper: React.FC = () => {
     
     // Only ADMIN bypasses maintenance
     if (normalizedRole === 'ADMIN') {
-      console.log('[MaintenanceGate] ADMIN detected, allowing through');
+      // console.log('[MaintenanceGate] ADMIN detected, allowing through');
       return <App />;
     }
     
     // Guests can still see login page
     if (!userRole || userRole === 'guest') {
-      console.log('[MaintenanceGate] Guest detected, allowing login page');
+      // console.log('[MaintenanceGate] Guest detected, allowing login page');
       return <App />;
     }
     
     // Everyone else is blocked
-    console.log('[MaintenanceGate] BLOCKING user with role:', userRole);
+    // console.log('[MaintenanceGate] BLOCKING user with role:', userRole);
     return <MaintenanceScreen message={message} onLogout={handleLogout} />;
   }
 

@@ -186,21 +186,31 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 800);
 
-    // Fetch Announcements (For Everyone) - handle missing table
-    const fetchAnnouncements = async () => {
-      try {
-        const { data, error } = await supabase.from('announcements')
-          .select('*')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(3);
-
-        if (!error && data) setAnnouncements(data);
-      } catch (err) {
-        // Announcements table might not exist
-      }
-    };
-    fetchAnnouncements();
+    // Announcements are not yet implemented in this environment; disable fetch to avoid 404 noise.
+    // const fetchAnnouncements = async () => {
+    //   try {
+    //     const { data, error } = await supabase.from('announcements')
+    //       .select('*')
+    //       .eq('is_active', true)
+    //       .order('created_at', { ascending: false })
+    //       .limit(3);
+    //
+    //     if (error) {
+    //       const msg = error.message || '';
+    //       const missingTable = error.code === 'PGRST116' || msg.toLowerCase().includes('could not find the table');
+    //       if (missingTable) {
+    //         return;
+    //       }
+    //       console.error('Announcements fetch failed:', error);
+    //       return;
+    //     }
+    //
+    //     if (data) setAnnouncements(data);
+    //   } catch (err) {
+    //     console.error('Announcements fetch threw:', err);
+    //   }
+    // };
+    // fetchAnnouncements();
 
     if (userRole === 'PLAYER' && currentUserId) {
       fetchPlayerLessons();
@@ -534,7 +544,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     return () => clearTimeout(timer);
   }, [userRole, currentUserId, navigate]);
 
-  console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
+  // console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
   const themeColor = 'blue';
   const pendingAppsCount = applications.filter(app => app.status === 'PENDING').length;

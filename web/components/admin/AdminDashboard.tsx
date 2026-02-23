@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import {
@@ -41,9 +41,13 @@ import {
   ToggleLeft,
   ToggleRight,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Star,
+  Users
 } from 'lucide-react';
-import QRCodeGenerator from './QRCodeGenerator';
+import QRCodeGenerator from '../QRCodeGenerator';
+import AdminTournamentDetail from './AdminTournamentDetail';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import {
   BarChart,
   Bar,
@@ -54,11 +58,12 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { supabase } from '../services/supabase';
-import { ProfessionalApplication, Tournament } from '../types';
+import { supabase } from '../../services/supabase';
+import { ProfessionalApplication, Tournament } from '../../types';
 // Fix: Import UserRole from the centralized types.ts file.
-import { UserRole } from '../types';
-import { INITIAL_TOURNAMENTS } from '../data/mockData';
+import { UserRole } from '../../types';
+import { INITIAL_TOURNAMENTS } from '../../data/mockData';
+import { approveTournament, rejectTournament, featureTournament, mapTournament } from '../../services/tournaments';
 import {
   getMaintenanceStatus,
   updateMaintenanceStatus,
@@ -71,7 +76,7 @@ import {
   DEFAULT_FEATURES_PER_ROLE,
   type MaintenanceSettings,
   type FeatureAccess,
-} from '../services/maintenance';
+} from '../../services/maintenance';
 
 const GROWTH_DATA = [
   { name: 'Mon', active: 120 },
@@ -125,6 +130,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   });
   const [isCreating, setIsCreating] = useState(false);
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
+  const [adminTournamentFilter, setAdminTournamentFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'featured'>('all');
+  const [viewTournamentId, setViewTournamentId] = useState<string | null>(null);
+  const [showAdminDetailModal, setShowAdminDetailModal] = useState(false);
 
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
@@ -140,6 +148,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [featureMatrix, setFeatureMatrix] = useState<Record<string, Record<string, boolean>>>({});
   const [featureAccessLoading, setFeatureAccessLoading] = useState(false);
   const [featureToggling, setFeatureToggling] = useState<string | null>(null);
+
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant: 'warning' | 'danger' | 'info';
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
 
   // Tabs horizontal scroll controls
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -177,6 +194,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
     const el = tabsRef.current;
     if (!el) return;
     el.scrollBy({ left: delta, behavior: 'smooth' });
+  };
+
+  // Confirm dialog helpers
+  const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({ isOpen: true, title, message, onConfirm, variant });
+  };
+
+  const closeConfirm = () => {
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+  };
+
+  const handleConfirm = () => {
+    confirmDialog.onConfirm();
+    closeConfirm();
   };
 
   useEffect(() => {
@@ -278,15 +309,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   };
 
   const handleDeleteCode = async (id: string, code: string) => {
-    if (!confirm('Revoke this access code?')) return;
-    try {
-      const { error } = await supabase.from('access_codes').delete().eq('id', id);
-      if (error) throw error;
-      setAccessCodes(prev => prev.filter(c => c.id !== id));
-      await logAdminAction('CODE_REVOKE', id, code, 'Revoked unused access code', 'AUDIT');
-    } catch (err: any) {
-      alert('Failed: ' + err.message);
-    }
+    showConfirm(
+      'Revoke Access Code?',
+      `This will permanently revoke the access code "${code}". Users will no longer be able to use this code to upgrade their role.`,
+      async () => {
+        try {
+          const { error } = await supabase.from('access_codes').delete().eq('id', id);
+          if (error) throw error;
+          setAccessCodes(prev => prev.filter(c => c.id !== id));
+          await logAdminAction('CODE_REVOKE', id, code, 'Revoked unused access code', 'AUDIT');
+        } catch (err: any) {
+          alert('Failed: ' + err.message);
+        }
+      },
+      'danger'
+    );
   };
 
   const handleCopyCode = (code: string) => {
@@ -396,19 +433,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
     }
 
     if (data) {
-      const mappedData: Tournament[] = data.map(t => ({
-        id: t.id,
-        name: t.name,
-        date: t.date,
-        location: t.location,
-        prizePool: t.prize_pool,
-        status: t.status as 'UPCOMING' | 'LIVE' | 'COMPLETED',
-        skillLevel: t.skill_level,
-        maxPlayers: t.max_players,
-        registeredCount: t.registered_count
-      }));
-      setTournaments(mappedData);
+      setTournaments(data.map(mapTournament));
     }
+  };
+
+  const handleAdminApprove = async (id: string) => {
+    try {
+      await approveTournament(id);
+      await logAdminAction('TOURNAMENT_APPROVE', id, '', 'Approved tournament');
+      loadTournaments();
+    } catch (err) {
+      alert('Failed to approve tournament');
+    }
+  };
+
+  const handleAdminReject = async (id: string) => {
+    showConfirm(
+      'Reject Tournament?',
+      'This will permanently reject this tournament submission. The tournament organizer will need to resubmit if they want to proceed. This action cannot be undone.',
+      async () => {
+        try {
+          await rejectTournament(id);
+          await logAdminAction('TOURNAMENT_REJECT', id, '', 'Rejected tournament');
+          loadTournaments();
+        } catch (err) {
+          alert('Failed to reject tournament');
+        }
+      },
+      'danger'
+    );
+  };
+
+  const handleAdminFeature = async (id: string, featured: boolean) => {
+    try {
+      await featureTournament(id, featured);
+      await logAdminAction('TOURNAMENT_FEATURE', id, '', featured ? 'Featured' : 'Unfeatured');
+      loadTournaments();
+    } catch (err) {
+      alert('Failed to update feature status');
+    }
+  };
+
+  const openAdminDetailModal = (id: string) => {
+    setViewTournamentId(id);
+    setShowAdminDetailModal(true);
+  };
+
+  const closeAdminDetailModal = () => {
+    setShowAdminDetailModal(false);
+    setViewTournamentId(null);
+  };
+
+  const handleAdminDetailActionComplete = () => {
+    loadTournaments();
   };
 
   const openEditModal = (t: Tournament) => {
@@ -520,28 +597,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
 
   const handleDeleteTournament = async () => {
     if (!editingTournamentId) return;
-    if (!confirm('Are you sure you want to delete this tournament? This action cannot be undone.')) return;
+    showConfirm(
+      'Delete Tournament?',
+      'This will permanently delete this tournament and all associated data including registrations, brackets, and results. This action cannot be undone.',
+      async () => {
+        setIsCreating(true);
+        try {
+          const { error } = await supabase
+            .from('tournaments')
+            .delete()
+            .eq('id', editingTournamentId);
 
-    setIsCreating(true);
-    try {
-      const { error } = await supabase
-        .from('tournaments')
-        .delete()
-        .eq('id', editingTournamentId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      setTournaments(prev => prev.filter(t => t.id !== editingTournamentId));
-      await logAdminAction('TOURNAMENT_DELETE', editingTournamentId, 'Tournament', 'Event terminated');
-      setShowTournamentModal(false);
-      setEditingTournamentId(null);
-      alert('Tournament deleted successfully.');
-    } catch (err: any) {
-      console.error('Delete failed:', err);
-      alert('Failed to delete tournament.');
-    } finally {
-      setIsCreating(false);
-    }
+          setTournaments(prev => prev.filter(t => t.id !== editingTournamentId));
+          await logAdminAction('TOURNAMENT_DELETE', editingTournamentId, 'Tournament', 'Event terminated');
+          setShowTournamentModal(false);
+          setEditingTournamentId(null);
+          alert('Tournament deleted successfully.');
+        } catch (err: any) {
+          console.error('Delete failed:', err);
+          alert('Failed to delete tournament.');
+        } finally {
+          setIsCreating(false);
+        }
+      },
+      'danger'
+    );
   };
 
   const pendingApps = applications.filter(a => a.status === 'PENDING');
@@ -569,7 +651,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             </div>
           </div>
 
-          {/* ── Tab nav pill with scroll arrows ── */}
+          {/* â”€â”€ Tab nav pill with scroll arrows â”€â”€ */}
           <div className="flex items-center bg-white border border-slate-200 shadow-md rounded-[28px] p-1.5 gap-1 min-w-0">
             {/* Left arrow */}
             <button
@@ -687,51 +769,148 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 tracking-tight uppercase">
                   <Trophy className="text-blue-500" /> Tournament Operations
                 </h2>
-                <p className="text-slate-500 font-medium text-sm">Deploy and manage regional competitive events.</p>
+                <p className="text-slate-500 font-medium text-sm">Approve, feature, and manage all tournament events.</p>
               </div>
-              <button
-                onClick={() => setShowTournamentModal(true)}
-                className="bg-blue-600 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center gap-2 transition-all"
-              >
-                <PlusCircle size={20} /> DEPLOY TOURNAMENT
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { value: 'pending', label: 'Pending', classes: 'bg-amber-500 text-white shadow-lg' },
+                  { value: 'approved', label: 'Approved', classes: 'bg-emerald-600 text-white shadow-lg' },
+                  { value: 'rejected', label: 'Rejected', classes: 'bg-rose-500 text-white shadow-lg' },
+                  { value: 'featured', label: 'Featured', classes: 'bg-yellow-400 text-yellow-900 shadow-lg' },
+                  { value: 'all', label: 'All', classes: 'bg-slate-900 text-white shadow-lg' },
+                ] as { value: typeof adminTournamentFilter; label: string; classes: string }[]).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAdminTournamentFilter(opt.value)}
+                    className={`px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${adminTournamentFilter === opt.value ? opt.classes : 'bg-white border border-slate-200 text-slate-400 hover:text-slate-600'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tournaments.map(t => (
+              {tournaments
+                .filter(t => {
+                  if (adminTournamentFilter === 'all') return true;
+                  if (adminTournamentFilter === 'pending') return t.isApproved !== true && t.status !== 'CANCELLED';
+                  if (adminTournamentFilter === 'approved') return t.isApproved === true;
+                  if (adminTournamentFilter === 'rejected') return t.isApproved === false && t.status === 'CANCELLED';
+                  if (adminTournamentFilter === 'featured') return t.isFeatured === true;
+                  return true;
+                })
+                .map(t => (
                 <div key={t.id} className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm group hover:shadow-2xl transition-all">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="bg-blue-50 p-4 rounded-2xl text-blue-600">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
                       <Trophy size={24} />
                     </div>
-                    <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${t.status === 'LIVE' ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-500'
-                      }`}>
-                      {t.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {t.isApproved === true && (
+                        <span className="text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center gap-1">
+                          <CheckCircle2 size={10} /> Approved
+                        </span>
+                      )}
+                      {t.isApproved === false && t.status === 'CANCELLED' && (
+                        <span className="text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest bg-rose-50 text-rose-500 border border-rose-100">
+                          Rejected
+                        </span>
+                      )}
+                      {t.isApproved !== true && t.status !== 'CANCELLED' && (
+                        <span className="text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-100 animate-pulse">
+                          Pending
+                        </span>
+                      )}
+                      {t.isFeatured && (
+                        <span className="text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest bg-yellow-50 text-yellow-600 border border-yellow-100 flex items-center gap-1">
+                          <Star size={10} /> Featured
+                        </span>
+                      )}
+                      {t.isApproved !== false && (
+                        <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${t.status === 'LIVE' ? 'bg-red-50 text-red-600 border border-red-100 animate-pulse' : 'bg-slate-100 text-slate-500'}`}>
+                          {t.status}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <h3 className="text-2xl font-black text-slate-950 tracking-tighter uppercase mb-2 group-hover:text-blue-600 transition-colors">{t.name}</h3>
-                  <div className="space-y-3 mb-8">
+
+                  {t.image && (
+                    <div className="w-full h-40 rounded-3xl overflow-hidden mb-4 border border-slate-100">
+                      <img src={t.image} alt={t.name} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+
+                  <h3 className="text-xl font-black text-slate-950 tracking-tighter uppercase mb-1 group-hover:text-indigo-600 transition-colors">{t.name}</h3>
+                  {t.format && (
+                    <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-3">
+                      {t.format.replace('_', ' ')} · {t.eventType?.replace('_', ' ') || 'singles'} · {t.category || 'open'}
+                    </p>
+                  )}
+
+                  <div className="space-y-2 mb-6">
                     <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
-                      <Calendar size={14} /> {t.date}
+                      <Calendar size={14} /> {new Date(t.date).toLocaleDateString()}
                     </p>
                     <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
                       <MapPin size={14} /> {t.location}
                     </p>
                     <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
-                      <DollarSign size={14} className="text-green-600" /> {t.prizePool}
+                      <Users size={14} /> {t.registeredCount} / {t.maxPlayers} players
                     </p>
+                    {t.prizePool && (
+                      <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
+                        <DollarSign size={14} className="text-green-600" /> {t.prizePool}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                    <div className="text-left">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Players</p>
-                      <p className="font-black text-slate-950 text-lg">{t.registeredCount} / {t.maxPlayers}</p>
+
+                  {/* Admin actions */}
+                  <div className="space-y-3 pt-4 border-t border-slate-50">
+                    {/* View Details Button */}
+                    <button
+                      onClick={() => openAdminDetailModal(t.id)}
+                      className="w-full py-3 rounded-xl font-black text-[9px] uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Eye size={14} /> View Full Details
+                    </button>
+
+                    {/* Approve / Reject row */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAdminApprove(t.id)}
+                        disabled={t.isApproved === true}
+                        className={`flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+                          t.isApproved === true ? 'bg-emerald-50 text-emerald-400 cursor-default' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg'
+                        }`}
+                      >
+                        <CheckCircle2 size={14} /> {t.isApproved === true ? 'Approved' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={() => handleAdminReject(t.id)}
+                        disabled={t.isApproved === false}
+                        className="flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <XCircle size={14} /> Reject
+                      </button>
                     </div>
+
+                    {/* Feature toggle */}
+                    <button
+                      onClick={() => handleAdminFeature(t.id, !t.isFeatured)}
+                      className={`w-full py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+                        t.isFeatured ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' : 'bg-slate-50 text-slate-400 hover:bg-yellow-50 hover:text-yellow-600'
+                      }`}
+                    >
+                      <Star size={14} /> {t.isFeatured ? 'Unfeatured' : 'Feature'}
+                    </button>
+
+                    {/* Edit */}
                     <button
                       onClick={() => openEditModal(t)}
-                      className="p-3 bg-slate-50 hover:bg-slate-950 hover:text-white rounded-xl text-slate-400 transition-all shadow-sm"
-                      title="Manage Tournament"
+                      className="w-full py-2.5 bg-slate-50 hover:bg-slate-950 hover:text-white rounded-xl text-slate-400 transition-all font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-1.5"
                     >
-                      <Settings size={20} />
+                      <Settings size={14} /> Manage
                     </button>
                   </div>
                 </div>
@@ -1227,7 +1406,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     value={newTournament.prizePool}
                     onChange={e => setNewTournament({ ...newTournament, prizePool: e.target.value })}
                     placeholder="₱500,000"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-3xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold"
                   />
                 </div>
               </div>
@@ -1286,15 +1465,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 {editingTournamentId && (
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (confirm('Permanently terminate this event? This action is irreversible.')) {
-                        const { error } = await supabase.from('tournaments').delete().eq('id', editingTournamentId);
-                        if (!error) {
-                          alert('Event terminated successfully.');
-                          setShowTournamentModal(false);
-                          loadTournaments();
-                        }
-                      }
+                    onClick={() => {
+                      showConfirm(
+                        'Terminate Event?',
+                        'This will permanently terminate this tournament event and delete all associated data. This action is irreversible and cannot be undone.',
+                        async () => {
+                          const { error } = await supabase.from('tournaments').delete().eq('id', editingTournamentId);
+                          if (!error) {
+                            alert('Event terminated successfully.');
+                            setShowTournamentModal(false);
+                            loadTournaments();
+                          }
+                        },
+                        'danger'
+                      );
                     }}
                     className="flex-1 py-5 bg-rose-50 text-rose-600 font-black rounded-3xl text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all"
                   >
@@ -1315,6 +1499,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
         </div>,
         document.body
       )}
+
+      {/* Admin Tournament Detail Modal */}
+      <AdminTournamentDetail
+        tournamentId={viewTournamentId || ''}
+        isOpen={showAdminDetailModal}
+        onClose={closeAdminDetailModal}
+        onActionComplete={handleAdminDetailActionComplete}
+      />
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={handleConfirm}
+        onCancel={closeConfirm}
+        variant={confirmDialog.variant}
+      />
     </>
   );
 };
@@ -1372,7 +1574,7 @@ const SecurityToggle: React.FC<{
   </div>
 );
 
-// ─── Website Maintenance & Feature Access Tab ────────────────────────────────
+// â”€â”€â”€ Website Maintenance & Feature Access Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const MaintenanceTab: React.FC<{
   maintenanceEnabled: boolean;
   setMaintenanceEnabled: (v: boolean) => void;
@@ -1400,7 +1602,7 @@ const MaintenanceTab: React.FC<{
   logAdminAction,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
-  // Staged (local) changes — not yet saved to DB
+  // Staged (local) changes â€” not yet saved to DB
   const [pendingMatrix, setPendingMatrix] = useState<Record<string, Record<string, boolean>> | null>(null);
   const [featureSaving, setFeatureSaving] = useState(false);
   const [showFeatureConfirm, setShowFeatureConfirm] = useState(false);
@@ -1562,7 +1764,7 @@ const MaintenanceTab: React.FC<{
 
   return (
     <div className="space-y-8 animate-slide-up">
-      {/* ── Maintenance Mode Card ── */}
+      {/* â”€â”€ Maintenance Mode Card â”€â”€ */}
       <div className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-200 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-start gap-8">
           <div className="flex-1">
@@ -1646,7 +1848,7 @@ const MaintenanceTab: React.FC<{
               {maintenanceSaving ? 'Saving...' : maintenanceEnabled ? 'Put on Maintenance' : 'Bring Site Online'}
             </button>
 
-            {/* Confirm Modal — portaled to body so it covers the entire page */}
+            {/* Confirm Modal â€” portaled to body so it covers the entire page */}
             {showConfirm && ReactDOM.createPortal(
               <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
                 <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl relative animate-in slide-in-from-bottom-8 duration-500">
@@ -1721,7 +1923,7 @@ const MaintenanceTab: React.FC<{
               </div>
               <div className="p-4 bg-white">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
-                  Preview — How users see it
+                  Preview â€” How users see it
                 </p>
               </div>
             </div>
@@ -1729,7 +1931,7 @@ const MaintenanceTab: React.FC<{
         </div>
       </div>
 
-      {/* ── Role-Based Feature Access Matrix ── */}
+      {/* â”€â”€ Role-Based Feature Access Matrix â”€â”€ */}
       <div className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-200 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
@@ -1906,7 +2108,7 @@ const MaintenanceTab: React.FC<{
   );
 };
 
-// ─── Terms & Conditions Rich Editor ───────────────────────────────────────────
+// â”€â”€â”€ Terms & Conditions Rich Editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const TermsConditionsEditor: React.FC<{
   logAdminAction: (action: string, targetId: string, targetName: string, details: string, eventType?: 'AUDIT' | 'SECURITY') => Promise<void>;
 }> = ({ logAdminAction }) => {
@@ -2043,7 +2245,7 @@ const TermsConditionsEditor: React.FC<{
           </div>
         </div>
 
-        {/* Toolbar — only in edit mode */}
+        {/* Toolbar â€” only in edit mode */}
         {!showPreview && (
           <div className="px-10 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center gap-1.5">
             <ToolbarGroup>
@@ -2061,7 +2263,7 @@ const TermsConditionsEditor: React.FC<{
             </ToolbarGroup>
             <div className="w-px h-8 bg-slate-200 mx-1" />
             <ToolbarGroup>
-              <ToolbarBtn onClick={() => execCommand('insertUnorderedList')} label="• List" />
+              <ToolbarBtn onClick={() => execCommand('insertUnorderedList')} label="â€¢ List" />
               <ToolbarBtn onClick={() => execCommand('insertOrderedList')} label="1. List" />
             </ToolbarGroup>
             <div className="w-px h-8 bg-slate-200 mx-1" />
@@ -2075,15 +2277,15 @@ const TermsConditionsEditor: React.FC<{
               <ToolbarBtn onClick={() => {
                 const url = prompt('Enter link URL:');
                 if (url) execCommand('createLink', url);
-              }} label="🔗 Link" />
-              <ToolbarBtn onClick={() => execCommand('removeFormat')} label="✕ Clear" />
+              }} label="ðŸ”— Link" />
+              <ToolbarBtn onClick={() => execCommand('removeFormat')} label="âœ• Clear" />
             </ToolbarGroup>
             <div className="w-px h-8 bg-slate-200 mx-1" />
             <ToolbarGroup>
-              <ToolbarBtn onClick={() => execCommand('insertHorizontalRule')} label="— HR" />
+              <ToolbarBtn onClick={() => execCommand('insertHorizontalRule')} label="â€” HR" />
               <ToolbarBtn onClick={() => {
                 execCommand('formatBlock', 'blockquote');
-              }} label="❝ Quote" />
+              }} label="â Quote" />
             </ToolbarGroup>
           </div>
         )}
