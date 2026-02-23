@@ -3,9 +3,9 @@ import { supabase } from './supabase';
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'match_request' | 'match_accepted' | 'match_declined' | 'new_message' | 
-        'partner_review' | 'partner_endorsement' | 'group_message' | 'group_invite' | 
-        'event_reminder' | 'booking_reminder' | 'system';
+  type: 'match_request' | 'match_accepted' | 'match_declined' | 'new_message' |
+  'partner_review' | 'partner_endorsement' | 'group_message' | 'group_invite' |
+  'event_reminder' | 'booking_reminder' | 'system';
   title: string;
   message?: string;
   related_user_id?: string;

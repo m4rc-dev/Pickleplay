@@ -119,10 +119,20 @@ const NotificationPanel: React.FC<{
             onClick={() => onNotificationClick(n)}
           >
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
-            <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
+            {n.type === 'ACHIEVEMENT' ? (
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <span className="text-base">🏆</span>
+              </div>
+            ) : (
+              <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
+            )}
             <div>
               <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
-                <span className="font-bold">{n.actor.name}</span> {n.message}
+                {n.type === 'ACHIEVEMENT' ? (
+                  <span className="font-bold">{n.message}</span>
+                ) : (
+                  <><span className="font-bold">{n.actor.name}</span> {n.message}</>
+                )}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
@@ -354,6 +364,8 @@ const NavigationHandler: React.FC<{
       } else {
         navigate('/my-bookings');
       }
+    } else if (notification.type === 'ACHIEVEMENT') {
+      navigate('/achievements');
     }
     // Add more navigation logic for other notification types if needed
     setIsNotificationsOpen(false); // Close panel after clicking
@@ -1451,20 +1463,23 @@ const App: React.FC = () => {
         filter: `user_id=eq.${currentUserId}`
       }, async (payload) => {
         const newNotif = payload.new as any;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url')
-          .eq('id', newNotif.actor_id)
-          .single();
+        let profile = null;
+        if (newNotif.actor_id) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url')
+            .eq('id', newNotif.actor_id)
+            .single();
+          profile = data;
+        }
 
         const mappedNewNotif: Notification = {
           id: newNotif.id,
           type: newNotif.type as any,
           message: newNotif.message,
           actor: {
-            name: profile?.full_name || 'System',
-            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id}`,
+            name: profile?.full_name || newNotif.title || 'System',
+            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id || newNotif.id}`,
             id: newNotif.actor_id
           },
           timestamp: newNotif.created_at,

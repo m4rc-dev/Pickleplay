@@ -74,6 +74,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [viewingCertificate, setViewingCertificate] = useState<Certificate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [userPoints, setUserPoints] = useState<number>(0);
 
   const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
     message: '',
@@ -101,10 +102,11 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
   const loadData = async (userId: string) => {
     setLoading(true);
     try {
-      const [achievementsRes, progressRes, certsRes] = await Promise.all([
+      const [achievementsRes, progressRes, certsRes, profileRes] = await Promise.all([
         supabase.from('achievements').select('*').eq('is_active', true).order('created_at', { ascending: true }),
         supabase.from('player_achievements').select('*, achievements(*)').eq('player_id', userId),
         supabase.from('certificates').select('*').eq('player_id', userId).order('claimed_at', { ascending: false }),
+        supabase.from('profiles').select('points').eq('id', userId).single(),
       ]);
 
       if (achievementsRes.error) throw achievementsRes.error;
@@ -114,6 +116,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
       setAchievements(achievementsRes.data || []);
       setPlayerAchievements(progressRes.data || []);
       setCertificates(certsRes.data || []);
+      setUserPoints(profileRes.data?.points || 0);
     } catch (err: any) {
       showToast('Error loading achievements: ' + err.message, 'error');
     } finally {
@@ -150,11 +153,36 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
 
               if (full.is_completed && payload.eventType === 'UPDATE') {
                 showToast(`Achievement Unlocked: ${full.achievements?.name}!`, 'success');
+                // Notification + points are handled by the database trigger (notify_achievement_unlocked)
               }
             }
           }
         }
       )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
+  // Realtime: profile points
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`achievements-points-${currentUserId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${currentUserId}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (typeof updated.points === 'number') {
+          setUserPoints(updated.points);
+        }
+      })
       .subscribe();
 
     return () => {
@@ -254,7 +282,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
       const bProgress = getProgressForAchievement(b.id);
       const aCompleted = aProgress?.is_completed || false;
       const bCompleted = bProgress?.is_completed || false;
-      
+
       // Uncompleted first (false < true), then by created_at
       if (aCompleted !== bCompleted) {
         return aCompleted ? 1 : -1;
@@ -271,7 +299,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
 
   const displayAchievements = activeTab === 'certificates' ? [] : filteredAchievements;
 
-  const totalPoints = playerAchievements
+  const achievementPoints = playerAchievements
     .filter((pa) => pa.is_completed)
     .reduce((sum, pa) => sum + (pa.achievements?.reward_points || 0), 0);
 
@@ -311,8 +339,8 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
             </div>
             <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Total Points</span>
           </div>
-          <p className="text-3xl font-black tracking-tight">{totalPoints}</p>
-          <p className="text-xs font-bold text-blue-100 mt-1">Earned from {completedAchievements.length} achievements</p>
+          <p className="text-3xl font-black tracking-tight">{userPoints}</p>
+          <p className="text-xs font-bold text-blue-100 mt-1">Earned {achievementPoints} pts from {completedAchievements.length} achievements</p>
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
@@ -356,29 +384,26 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
         <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'all'
-                ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
-                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
-            }`}
+            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'all'
+              ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+              : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+              }`}
           >
             <Trophy size={14} />
             All Achievements
           </button>
           <button
             onClick={() => setActiveTab('certificates')}
-            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === 'certificates'
-                ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
-                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
-            }`}
+            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'certificates'
+              ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+              : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+              }`}
           >
             <Award size={14} />
             Certificates
             {certificates.length > 0 && (
-              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
-                activeTab === 'certificates' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${activeTab === 'certificates' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'
+                }`}>
                 {certificates.length}
               </span>
             )}
@@ -506,11 +531,10 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
     <div className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden flex flex-col">
       {/* Top banner */}
       <div
-        className={`relative h-44 overflow-hidden ${
-          isCompleted
-            ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
-            : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
-        }`}
+        className={`relative h-44 overflow-hidden ${isCompleted
+          ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
+          : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
+          }`}
       >
         {isCompleted && (
           <div className="absolute inset-0">
@@ -546,9 +570,8 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
         {/* Achievement icon */}
         <div className="absolute bottom-6 left-6">
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 ${
-              isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border-2 border-slate-200'
-            }`}
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 ${isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border-2 border-slate-200'
+              }`}
           >
             {icon}
           </div>
@@ -576,9 +599,8 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
           </div>
           <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                isCompleted ? 'bg-gradient-to-r from-lime-400 to-lime-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
-              }`}
+              className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-gradient-to-r from-lime-400 to-lime-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                }`}
               style={{ width: `${percentage}%` }}
             />
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Trophy, Medal, Plus, X, Trash2, Edit2, LayoutGrid, List, Target, Zap, Search, ToggleLeft, ToggleRight, Sparkles, AlertTriangle } from 'lucide-react';
+import { Trophy, Medal, Plus, Minus, X, Trash2, Edit2, LayoutGrid, List, Target, Zap, Search, ToggleLeft, ToggleRight, Sparkles, AlertTriangle, Users, ChevronUp, ChevronDown } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface Achievement {
@@ -16,6 +16,16 @@ interface Achievement {
     created_at?: string;
 }
 
+interface PlayerProgress {
+    player_id: string;
+    full_name: string;
+    avatar_url: string | null;
+    username: string | null;
+    current_count: number;
+    is_completed: boolean;
+    has_row: boolean; // whether a player_achievements row exists
+}
+
 const AchievementsManager: React.FC = () => {
     const [achievements, setAchievements] = useState<Achievement[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +36,14 @@ const AchievementsManager: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<Achievement | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Player Progress Modal
+    const [progressAchievement, setProgressAchievement] = useState<Achievement | null>(null);
+    const [playerProgressList, setPlayerProgressList] = useState<PlayerProgress[]>([]);
+    const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+    const [progressSearch, setProgressSearch] = useState('');
+    const [updatingPlayerId, setUpdatingPlayerId] = useState<string | null>(null);
+    const [progressTab, setProgressTab] = useState<'in_progress' | 'completed'>('in_progress');
 
     // Form state
     const [formKey, setFormKey] = useState('');
@@ -163,6 +181,113 @@ const AchievementsManager: React.FC = () => {
         setFormIsActive(true);
     };
 
+    // ─── Player Progress Functions ───
+
+    const openProgressModal = async (achievement: Achievement) => {
+        setProgressAchievement(achievement);
+        setProgressSearch('');
+        setProgressTab('in_progress');
+        setIsLoadingProgress(true);
+        try {
+            // Fetch all players
+            const { data: profiles, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url, username')
+                .order('full_name', { ascending: true });
+
+            if (profilesError) throw profilesError;
+
+            // Fetch existing progress for this achievement
+            const { data: progress, error: progressError } = await supabase
+                .from('player_achievements')
+                .select('player_id, current_count, is_completed')
+                .eq('achievement_id', achievement.id);
+
+            if (progressError) throw progressError;
+
+            const progressMap = new Map(
+                (progress || []).map(p => [p.player_id, p])
+            );
+
+            const merged: PlayerProgress[] = (profiles || []).map(profile => {
+                const existing = progressMap.get(profile.id);
+                return {
+                    player_id: profile.id,
+                    full_name: profile.full_name || 'Unknown',
+                    avatar_url: profile.avatar_url,
+                    username: profile.username,
+                    current_count: existing?.current_count ?? 0,
+                    is_completed: existing?.is_completed ?? false,
+                    has_row: !!existing,
+                };
+            });
+
+            setPlayerProgressList(merged);
+        } catch (err) {
+            console.error('Error fetching player progress:', err);
+        } finally {
+            setIsLoadingProgress(false);
+        }
+    };
+
+    const updatePlayerProgress = async (playerId: string, newCount: number) => {
+        if (!progressAchievement) return;
+        setUpdatingPlayerId(playerId);
+
+        const target = progressAchievement.target_count;
+        const clampedCount = Math.max(0, Math.min(newCount, target));
+        const isNowCompleted = clampedCount >= target;
+
+        try {
+            const player = playerProgressList.find(p => p.player_id === playerId);
+
+            if (player?.has_row) {
+                // Update existing row
+                const { error } = await supabase
+                    .from('player_achievements')
+                    .update({
+                        current_count: clampedCount,
+                        is_completed: isNowCompleted,
+                        completed_at: isNowCompleted ? new Date().toISOString() : null,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('player_id', playerId)
+                    .eq('achievement_id', progressAchievement.id);
+
+                if (error) throw error;
+            } else {
+                // Insert new row
+                const { error } = await supabase
+                    .from('player_achievements')
+                    .insert({
+                        player_id: playerId,
+                        achievement_id: progressAchievement.id,
+                        current_count: clampedCount,
+                        is_completed: isNowCompleted,
+                        completed_at: isNowCompleted ? new Date().toISOString() : null,
+                    });
+
+                if (error) throw error;
+            }
+
+            // Update local state
+            setPlayerProgressList(prev =>
+                prev.map(p =>
+                    p.player_id === playerId
+                        ? { ...p, current_count: clampedCount, is_completed: isNowCompleted, has_row: true }
+                        : p
+                )
+            );
+
+            // Notification + points are handled by the database trigger (notify_achievement_unlocked)
+        } catch (err) {
+            console.error('Error updating player progress:', err);
+            alert('Failed to update progress.');
+        } finally {
+            setUpdatingPlayerId(null);
+        }
+    };
+
     const openCreateModal = () => {
         resetForm();
         setIsModalOpen(true);
@@ -274,6 +399,7 @@ const AchievementsManager: React.FC = () => {
                                 onEdit={() => handleEdit(achievement)}
                                 onDelete={() => handleDelete(achievement)}
                                 onToggleActive={() => handleToggleActive(achievement.id, achievement.is_active)}
+                                onCardClick={() => openProgressModal(achievement)}
                             />
                         ) : (
                             <AchievementAdminListRow
@@ -282,6 +408,7 @@ const AchievementsManager: React.FC = () => {
                                 onEdit={() => handleEdit(achievement)}
                                 onDelete={() => handleDelete(achievement)}
                                 onToggleActive={() => handleToggleActive(achievement.id, achievement.is_active)}
+                                onCardClick={() => openProgressModal(achievement)}
                             />
                         )
                     ))
@@ -478,6 +605,163 @@ const AchievementsManager: React.FC = () => {
                 </div>,
                 document.body
             )}
+
+            {/* Player Progress Modal */}
+            {progressAchievement && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col overflow-hidden">
+                        {/* Header */}
+                        <div className="p-8 pb-0">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{progressAchievement.name}</h2>
+                                    <p className="text-sm text-slate-400 font-medium mt-1">{progressAchievement.description}</p>
+                                </div>
+                                <button onClick={() => setProgressAchievement(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 shrink-0">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-4 mt-4 mb-6">
+                                <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2 rounded-xl">
+                                    <Target size={14} className="text-indigo-600" />
+                                    <span className="text-xs font-black text-indigo-600 uppercase">Target: {progressAchievement.target_count}</span>
+                                </div>
+                                <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-xl">
+                                    <Sparkles size={14} className="text-amber-600" />
+                                    <span className="text-xs font-black text-amber-600 uppercase">{progressAchievement.reward_points} pts</span>
+                                </div>
+                                <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl">
+                                    <Users size={14} className="text-slate-500" />
+                                    <span className="text-xs font-black text-slate-500 uppercase">{playerProgressList.filter(p => p.is_completed).length} completed</span>
+                                </div>
+                            </div>
+                            {/* Tabs */}
+                            <div className="flex gap-2 mt-4 mb-4">
+                                <button
+                                    onClick={() => setProgressTab('in_progress')}
+                                    className={`flex-1 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${progressTab === 'in_progress' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+                                >
+                                    In Progress ({playerProgressList.filter(p => !p.is_completed).length})
+                                </button>
+                                <button
+                                    onClick={() => setProgressTab('completed')}
+                                    className={`flex-1 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${progressTab === 'completed' ? 'bg-lime-600 text-white shadow-lg shadow-lime-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+                                >
+                                    Completed ({playerProgressList.filter(p => p.is_completed).length})
+                                </button>
+                            </div>
+                            {/* Search */}
+                            <div className="relative mb-4">
+                                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <input
+                                    type="text"
+                                    placeholder="Search players..."
+                                    value={progressSearch}
+                                    onChange={(e) => setProgressSearch(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 pl-14 pr-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Player List */}
+                        <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-2">
+                            {isLoadingProgress ? (
+                                Array(5).fill(0).map((_, i) => (
+                                    <div key={i} className="h-20 bg-slate-50 rounded-2xl animate-pulse" />
+                                ))
+                            ) : (() => {
+                                const filtered = playerProgressList
+                                    .filter(p => progressTab === 'completed' ? p.is_completed : !p.is_completed)
+                                    .filter(p =>
+                                        p.full_name.toLowerCase().includes(progressSearch.toLowerCase()) ||
+                                        (p.username || '').toLowerCase().includes(progressSearch.toLowerCase())
+                                    );
+
+                                if (filtered.length === 0) {
+                                    return (
+                                        <div className="py-12 text-center">
+                                            <Medal className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                            <p className="text-sm font-bold text-slate-400">
+                                                {progressSearch
+                                                    ? 'No players match your search'
+                                                    : progressTab === 'completed'
+                                                        ? 'No players have completed this achievement yet'
+                                                        : 'All players have completed this achievement!'}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return filtered.map(player => {
+                                    const pct = progressAchievement.target_count > 0
+                                        ? Math.round((player.current_count / progressAchievement.target_count) * 100)
+                                        : 0;
+                                    const isUpdating = updatingPlayerId === player.player_id;
+
+                                    return (
+                                        <div
+                                            key={player.player_id}
+                                            className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${player.is_completed
+                                                ? 'bg-lime-50 border-lime-200'
+                                                : 'bg-white border-slate-100 hover:border-slate-200'
+                                                }`}
+                                        >
+                                            {/* Avatar */}
+                                            <img
+                                                src={player.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.player_id}`}
+                                                alt={player.full_name}
+                                                className="w-10 h-10 rounded-full bg-slate-100 shrink-0"
+                                            />
+
+                                            {/* Name + Progress Bar */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="font-black text-sm text-slate-900 truncate">{player.full_name}</p>
+                                                    {player.is_completed && (
+                                                        <span className="text-[9px] font-black uppercase tracking-widest bg-lime-500 text-white px-2 py-0.5 rounded-full shrink-0">Done</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all duration-500 ${player.is_completed ? 'bg-lime-500' : 'bg-indigo-500'}`}
+                                                            style={{ width: `${Math.min(pct, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-400 tabular-nums shrink-0 w-16 text-right">
+                                                        {player.current_count}/{progressAchievement.target_count}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* +/- Buttons — only for in-progress tab */}
+                                            {!player.is_completed && (
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                        onClick={() => updatePlayerProgress(player.player_id, player.current_count - 1)}
+                                                        disabled={isUpdating || player.current_count <= 0}
+                                                        className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                                                    >
+                                                        <Minus size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => updatePlayerProgress(player.player_id, player.current_count + 1)}
+                                                        disabled={isUpdating || player.current_count >= progressAchievement.target_count}
+                                                        className="w-9 h-9 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-600 flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
@@ -489,7 +773,8 @@ const AchievementAdminCard: React.FC<{
     onEdit: () => void;
     onDelete: () => void;
     onToggleActive: () => void;
-}> = ({ achievement, onEdit, onDelete, onToggleActive }) => {
+    onCardClick: () => void;
+}> = ({ achievement, onEdit, onDelete, onToggleActive, onCardClick }) => {
     const categoryColors: Record<string, string> = {
         general: 'bg-slate-50 border-slate-100 text-slate-600',
         booking: 'bg-indigo-50 border-indigo-100 text-indigo-600',
@@ -499,7 +784,7 @@ const AchievementAdminCard: React.FC<{
     };
 
     return (
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
+        <div onClick={onCardClick} className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden cursor-pointer">
             <div className="p-8">
                 <div className="flex items-center justify-between mb-6">
                     <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
@@ -543,13 +828,19 @@ const AchievementAdminCard: React.FC<{
 
                 <div className="flex gap-2 transition-all duration-500">
                     <button
-                        onClick={onEdit}
+                        onClick={(e) => { e.stopPropagation(); onCardClick(); }}
+                        className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                    >
+                        <Users size={14} /> Players
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
                         className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
                     >
                         <Edit2 size={14} /> Edit
                     </button>
                     <button
-                        onClick={onDelete}
+                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
                         className="p-3 border border-rose-100 text-rose-500 rounded-xl hover:bg-rose-50 transition-all"
                     >
                         <Trash2 size={18} />
@@ -567,8 +858,9 @@ const AchievementAdminListRow: React.FC<{
     onEdit: () => void;
     onDelete: () => void;
     onToggleActive: () => void;
-}> = ({ achievement, onEdit, onDelete, onToggleActive }) => (
-    <div className="bg-white rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:shadow-lg transition-all">
+    onCardClick: () => void;
+}> = ({ achievement, onEdit, onDelete, onToggleActive, onCardClick }) => (
+    <div onClick={onCardClick} className="bg-white rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:shadow-lg transition-all cursor-pointer">
         <div className="flex items-center gap-6">
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                 <Medal size={20} />
@@ -598,10 +890,13 @@ const AchievementAdminListRow: React.FC<{
                 {achievement.is_active ? 'Active' : 'Inactive'}
             </div>
             <div className="flex gap-2">
-                <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); onCardClick(); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Player Progress">
+                    <Users size={18} />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
                     <Edit2 size={18} />
                 </button>
-                <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
                     <Trash2 size={18} />
                 </button>
             </div>
