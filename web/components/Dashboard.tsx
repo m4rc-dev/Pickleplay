@@ -536,7 +536,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
   console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
-  const themeColor = userRole === 'COACH' ? 'rose' : userRole === 'COURT_OWNER' ? 'amber' : userRole === 'ADMIN' ? 'indigo' : 'blue';
+  const themeColor = 'blue';
   const pendingAppsCount = applications.filter(app => app.status === 'PENDING').length;
 
   const handleBroadcastNotice = async (e: React.FormEvent) => {
@@ -846,25 +846,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'ADMIN':
         return (
           <>
-            <StatCard label="Total Users" value={totalUsers !== null ? totalUsers.toLocaleString() : '...'} change="+12%" icon={<Users className="text-indigo-600" />} color="indigo" />
-            <StatCard label="Active Sessions" value={activeSessions !== null ? activeSessions.toLocaleString() : '...'} change="+3%" icon={<Activity className="text-lime-600" />} color="lime" />
-            <StatCard label="Pending Apps" value={pendingAppsCount.toString()} change={`${pendingAppsCount > 0 ? 'Action Req.' : 'Clear'}`} icon={<BarChart4 className="text-slate-600" />} color="slate" />
+            <StatCard label="Total Users" value={totalUsers !== null ? totalUsers.toLocaleString() : '...'} change="+12%" icon={<Users className="text-indigo-600" />} color="indigo" delay="animate-stagger-1" />
+            <StatCard label="Active Sessions" value={activeSessions !== null ? activeSessions.toLocaleString() : '...'} change="+3%" icon={<Activity className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
+            <StatCard label="Pending Apps" value={pendingAppsCount.toString()} change={`${pendingAppsCount > 0 ? 'Action Req.' : 'Clear'}`} icon={<BarChart4 className="text-slate-600" />} color="slate" delay="animate-stagger-3" />
           </>
         );
       case 'COURT_OWNER':
         return (
           <>
-            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<DollarSign className="text-amber-600" />} color="amber" />
-            <StatCard label="Court Utilization" value={`${courtOwnerStats.courtUtilization}%`} change="+5%" icon={<Activity className="text-amber-600" />} color="amber" />
-            <StatCard label="Player Retention" value={`${courtOwnerStats.playerRetention}%`} change="+2%" icon={<UserCheck className="text-amber-600" />} color="amber" />
+            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<DollarSign className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
+            <StatCard label="Court Utilization" value={`${courtOwnerStats.courtUtilization}%`} change="+5%" icon={<Activity className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
+            <StatCard label="Player Retention" value={`${courtOwnerStats.playerRetention}%`} change="+2%" icon={<UserCheck className="text-blue-600" />} color="blue" delay="animate-stagger-3" />
           </>
         );
       case 'COACH':
         return (
           <>
-            <StatCard label="Session Revenue" value={`₱${coachStats.totalRevenue.toLocaleString()}`} change="+12%" icon={<DollarSign className="text-rose-600" />} color="rose" />
-            <StatCard label="Students" value={coachStats.studentsCount.toString()} change={`+${coachStats.studentsCount}`} icon={<GraduationCap className="text-rose-600" />} color="rose" />
-            <StatCard label="Clinic Completion" value={`${coachStats.clinicCompletion}%`} change="+10%" icon={<Award className="text-rose-600" />} color="rose" />
+            <StatCard label="Session Revenue" value={`₱${coachStats.totalRevenue.toLocaleString()}`} change="+12%" icon={<DollarSign className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
+            <StatCard label="Students" value={coachStats.studentsCount.toString()} change={`+${coachStats.studentsCount}`} icon={<GraduationCap className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
+            <StatCard label="Clinic Completion" value={`${coachStats.clinicCompletion}%`} change="+10%" icon={<Award className="text-blue-600" />} color="blue" delay="animate-stagger-3" />
           </>
         );
       case 'PLAYER':
@@ -877,6 +877,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               change={playerStats?.dupr_rating ? 'Live' : 'Est.'}
               icon={<Target className="text-blue-600" />}
               color="blue"
+              delay="animate-stagger-1"
             />
             <StatCard
               label="Win Rate"
@@ -884,6 +885,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               change={playerStats?.matches_played > 10 ? '+2%' : '-'}
               icon={<TrendingUp className="text-lime-600" />}
               color="lime"
+              delay="animate-stagger-2"
             />
             <StatCard
               label="Matches Played"
@@ -891,6 +893,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               change="Total"
               icon={<Activity className="text-slate-600" />}
               color="slate"
+              delay="animate-stagger-3"
             />
           </>
         );
@@ -955,43 +958,39 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       {/* Active Trial Banner - Days 1-30 */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
-        <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-amber-100 relative overflow-hidden animate-fade-in">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-blue-100 relative overflow-hidden animate-fade-in">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={20} className="text-amber-200" fill="currentColor" />
-                  <span className="text-xs font-black uppercase tracking-widest text-amber-100">Limited Time Offer</span>
+                  <Sparkles size={20} className="text-lime-400" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-lime-400">Exclusive Trial Access</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
-                  🎉 1 Month Free Trial
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight uppercase">
+                  FREE 30-DAY PILOT.
                 </h3>
-                <p className="text-amber-50 text-sm md:text-base leading-relaxed max-w-2xl">
-                  You're enjoying full access to all premium features completely free!
-                  Manage courts, track bookings, and grow your business.
+                <p className="text-blue-50 text-sm md:text-base leading-relaxed max-w-2xl">
+                  You're in the elite pilot program. Full access to court management,
+                  revenue analytics, and player retention tools—all active now.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 mt-4">
                   <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Check size={16} className="text-amber-100" />
-                    <span className="text-xs font-bold text-white">Unlimited Courts</span>
+                    <Check size={16} className="text-lime-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-widest">Unlimited Courts</span>
                   </div>
                   <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Check size={16} className="text-amber-100" />
-                    <span className="text-xs font-bold text-white">Revenue Analytics</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Check size={16} className="text-amber-100" />
-                    <span className="text-xs font-bold text-white">Priority Support</span>
+                    <Check size={16} className="text-lime-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-widest">Advanced Analytics</span>
                   </div>
                 </div>
               </div>
               <div className="shrink-0">
-                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30 text-center">
-                  <p className="text-xs font-bold text-amber-100 uppercase tracking-widest mb-1">Trial Ends In</p>
-                  <p className="text-4xl font-black text-white">{daysRemaining}</p>
-                  <p className="text-xs font-bold text-amber-100 uppercase">Days</p>
+                <div className="bg-white/20 backdrop-blur-sm px-8 py-6 rounded-[32px] border border-white/30 text-center">
+                  <p className="text-[10px] font-black text-blue-100 uppercase tracking-[0.2em] mb-2">Trial Ends In</p>
+                  <p className="text-5xl font-black text-white tracking-tighter">{daysRemaining}</p>
+                  <p className="text-[10px] font-black text-lime-400 uppercase tracking-widest mt-1">Days Left</p>
                 </div>
               </div>
             </div>
@@ -1001,45 +1000,34 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       {/* Grace Period Banner - Days 31-40 (Positive messaging!) */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && isInGracePeriod(subscription) && (
-        <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-orange-100 relative overflow-hidden animate-fade-in">
+        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-blue-100 relative overflow-hidden animate-fade-in">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={20} className="text-orange-200" fill="currentColor" />
-                  <span className="text-xs font-black uppercase tracking-widest text-orange-100">Special Grace Period</span>
+                  <Sparkles size={20} className="text-blue-300" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-blue-200">Bonus Access Period</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">
-                  🎊 Congratulations! You Still Have {calculateGraceDaysRemaining(subscription.trial_ends_at)} Days to Subscribe
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight uppercase">
+                  GRACE PERIOD ACTIVE.
                 </h3>
-                <p className="text-orange-50 text-sm md:text-base leading-relaxed max-w-2xl">
-                  <span className="font-black text-white">All features remain fully active!</span>{' '}
-                  We've extended your access as a special courtesy. Subscribe now to continue enjoying premium features without interruption.
+                <p className="text-blue-100 text-sm md:text-base leading-relaxed max-w-2xl">
+                  Your trial has ended, but we've kept your features active for another <span className="text-lime-400 font-black">{calculateGraceDaysRemaining(subscription.trial_ends_at)} days</span>.
+                  Subscribe now to prevent any interruption to your business operations.
                 </p>
-                <div className="flex flex-wrap items-center gap-4 mt-4">
-                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <CheckCircle2 size={16} className="text-orange-100" />
-                    <span className="text-xs font-bold text-white">Still Full Access</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <CheckCircle2 size={16} className="text-orange-100" />
-                    <span className="text-xs font-bold text-white">No Features Locked</span>
-                  </div>
-                </div>
               </div>
               <div className="shrink-0 space-y-3">
-                <div className="bg-white/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/30 text-center">
-                  <p className="text-xs font-bold text-orange-100 uppercase tracking-widest mb-1">Grace Period</p>
-                  <p className="text-4xl font-black text-white">{calculateGraceDaysRemaining(subscription.trial_ends_at)}</p>
-                  <p className="text-xs font-bold text-orange-100 uppercase">Days Left</p>
+                <div className="bg-white/20 backdrop-blur-sm px-8 py-6 rounded-[32px] border border-white/30 text-center">
+                  <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Days Left</p>
+                  <p className="text-4xl font-black text-white tracking-tighter">{calculateGraceDaysRemaining(subscription.trial_ends_at)}</p>
                 </div>
                 <button
                   onClick={() => navigate('/profile')}
-                  className="w-full bg-white text-orange-600 font-black px-6 py-3 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-orange-900/20 hover:scale-105 transition-all"
+                  className="w-full bg-lime-400 text-slate-900 font-black px-6 py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-lime-900/20 hover:scale-105 transition-all"
                 >
-                  Subscribe Now
+                  SUBSCRIBE NOW
                 </button>
               </div>
             </div>
@@ -1116,7 +1104,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden">
+        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden animate-fade-in-up delay-100">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
               {userRole === 'ADMIN' ? (
@@ -1178,7 +1166,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <Skeleton className="w-32 h-3 mx-auto mt-4 rounded-lg" />
                 </div>
               ) : (
-                <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
+                <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-200">
                   {/* Decorative Elements */}
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
@@ -1215,7 +1203,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
           {/* ADMIN ACTIONS Card */}
           {userRole === 'ADMIN' && !isLoading && (
-            <div className="bg-slate-800 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group border border-slate-700 animate-fade-in">
+            <div className="bg-slate-800 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden group border border-slate-700 animate-fade-in-up delay-200">
               <div className="relative z-10">
                 <h3 className="text-2xl font-black mb-2 flex items-center gap-3 text-lime-400 tracking-tighter uppercase">
                   ADMIN ACTIONS
@@ -1243,7 +1231,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <Skeleton className="w-36 h-3 mx-auto mt-4 rounded-lg" />
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in">
+            <div className="bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-300">
               {/* Decorative Elements */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
               <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
@@ -1402,7 +1390,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <button
                     key={star}
                     onClick={() => setReviewRating(star)}
-                    className={`transition-all ${reviewRating >= star ? 'text-amber-500 scale-110' : 'text-slate-200 hover:text-slate-300'}`}
+                    className={`transition-all ${reviewRating >= star ? 'text-blue-500 scale-110' : 'text-slate-200 hover:text-slate-300'}`}
                   >
                     <Star size={36} fill={reviewRating >= star ? "currentColor" : "none"} />
                   </button>
@@ -1722,13 +1710,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                               <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Court Owner Requirements:</p>
                               <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
                                 <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Valid Business Permit
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Business Permit
                                 </li>
                                 <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Facility Utility Bill
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Facility Utility Bill
                                 </li>
                                 <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-100" /> Valid Government ID
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Government ID
                                 </li>
                               </ul>
                             </div>
@@ -2070,10 +2058,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   );
 };
 
-const StatCard: React.FC<{ label: string, value: string, change: string, icon: React.ReactNode, color: string }> = ({ label, value, change, icon, color }) => (
-  <div className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm hover:border-slate-300 transition-all group relative">
+const StatCard: React.FC<{ label: string, value: string, change: string, icon: React.ReactNode, color: string, delay?: string }> = ({ label, value, change, icon, color, delay }) => (
+  <div className={`bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm hover:border-slate-300 transition-all group relative animate-fade-in-up ${delay}`}>
     <div className={`absolute top-4 right-4 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${change.startsWith('+') ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
-      {/* Fix: Corrected a JSX syntax error where a closing span tag was present without an opening tag. */}
       <span>{change}</span>
     </div>
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${color}-50 mb-4 group-hover:scale-105 transition-transform`}>

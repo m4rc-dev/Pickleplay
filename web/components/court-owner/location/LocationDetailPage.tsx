@@ -456,7 +456,7 @@ const LocationDetailPage: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
                 <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
                     placeholder="e.g. Center Court, Court A"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
             </div>
 
             {/* Court Type Selector */}
@@ -474,7 +474,7 @@ const LocationDetailPage: React.FC = () => {
                                 setIsSurfaceDropdownOpen(false);
                             }}
                             className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
-                                ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
+                                ? 'bg-white text-blue-600 shadow-lg shadow-blue-100/50'
                                 : 'text-slate-400 hover:text-slate-600'
                                 }`}
                         >
@@ -490,16 +490,14 @@ const LocationDetailPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                     {([
                         { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
-                        { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'orange', icon: '⏳' },
+                        { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
                         { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'blue', icon: '🔜' },
-                        { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
+                        { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'blue', icon: '🔧' },
                     ]).map((opt) => {
                         const isSelected = courtStatus === opt.value;
                         const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
                             emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-                            orange: { bg: 'bg-orange-50', border: 'border-orange-400', text: 'text-orange-700', ring: 'ring-orange-500/20' },
                             blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-                            amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
                         };
                         const c = colorMap[opt.color];
                         return (
@@ -507,11 +505,10 @@ const LocationDetailPage: React.FC = () => {
                                 key={opt.value}
                                 type="button"
                                 onClick={() => setCourtStatus(opt.value)}
-                                className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${
-                                    isSelected
-                                        ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
-                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                                }`}
+                                className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
+                                    ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
+                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                                    }`}
                             >
                                 <span>{opt.icon}</span> {opt.label}
                             </button>
@@ -526,7 +523,7 @@ const LocationDetailPage: React.FC = () => {
                     <div className="relative">
                         <div
                             onClick={() => setIsSurfaceDropdownOpen(!isSurfaceDropdownOpen)}
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-amber-200 transition-colors"
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors"
                         >
                             <input
                                 type="text"
@@ -559,14 +556,12 @@ const LocationDetailPage: React.FC = () => {
                                                         setSurfaceSearch('');
                                                         setIsSurfaceDropdownOpen(false);
                                                     }}
-                                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
-                                                        courtSurface === s ? 'text-amber-600 bg-amber-50/50' : 'text-slate-700'
-                                                    }`}
+                                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtSurface === s ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
+                                                        }`}
                                                 >
-                                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                                                        courtSurface === s ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
-                                                    }`}>
-                                                        {courtSurface === s && <Check size={12} className="text-amber-600" />}
+                                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtSurface === s ? 'border-blue-400 bg-blue-50' : 'border-slate-200'
+                                                        }`}>
+                                                        {courtSurface === s && <Check size={12} className="text-blue-600" />}
                                                     </span>
                                                     {s}
                                                 </button>
@@ -578,10 +573,10 @@ const LocationDetailPage: React.FC = () => {
                                                         setSurfaceSearch('');
                                                         setIsSurfaceDropdownOpen(false);
                                                     }}
-                                                    className="w-full text-left px-5 py-3 hover:bg-amber-50 transition-colors flex items-center gap-3 border-t border-slate-100"
+                                                    className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-t border-slate-100"
                                                 >
-                                                    <Plus size={14} className="text-amber-600 shrink-0" />
-                                                    <span className="font-bold text-sm text-amber-600">Use "{trimmed}"</span>
+                                                    <Plus size={14} className="text-blue-600 shrink-0" />
+                                                    <span className="font-bold text-sm text-blue-600">Use "{trimmed}"</span>
                                                 </button>
                                             )}
                                             {filtered.length === 0 && !isCustom && (
@@ -602,11 +597,10 @@ const LocationDetailPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
-                            className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${
-                                isCourtFree
-                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
-                            }`}
+                            className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
+                                ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
+                                }`}
                         >
                             🎉 Free
                         </button>
@@ -619,7 +613,7 @@ const LocationDetailPage: React.FC = () => {
                                 value={courtPrice}
                                 onChange={e => setCourtPrice(Number(e.target.value))}
                                 placeholder="Min ₱1"
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                             />
                         )}
                         {isCourtFree && (
@@ -770,7 +764,7 @@ const LocationDetailPage: React.FC = () => {
             {/* ──── Court Closures Calendar ──── */}
             <div className="space-y-4">
                 <div className="flex items-center gap-2 ml-4">
-                    <Calendar size={14} className="text-amber-500" />
+                    <Calendar size={14} className="text-blue-600" />
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Future Dates of Closure</label>
                 </div>
                 <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-4">
@@ -843,21 +837,20 @@ const LocationDetailPage: React.FC = () => {
                                                 setCourtClosureDescription('');
                                             }
                                         }}
-                                        className={`aspect-square rounded-lg text-[11px] font-bold transition-all relative ${
-                                            isPast
-                                                ? 'text-slate-200 cursor-not-allowed'
+                                        className={`aspect-square rounded-lg text-[11px] font-bold transition-all relative ${isPast
+                                            ? 'text-slate-200 cursor-not-allowed'
                                             : closure
                                                 ? closure.reason === 'Tournament'
                                                     ? 'bg-blue-500 text-white shadow-md shadow-blue-200/50'
                                                     : closure.reason === 'Holiday'
                                                         ? 'bg-rose-500 text-white shadow-md shadow-rose-200/50'
                                                         : closure.reason === 'Maintenance'
-                                                            ? 'bg-amber-500 text-white shadow-md shadow-amber-200/50'
+                                                            ? 'bg-blue-600 text-white shadow-md shadow-blue-200/50'
                                                             : 'bg-purple-500 text-white shadow-md shadow-purple-200/50'
-                                            : isSelected
-                                                ? 'bg-slate-900 text-white shadow-md'
-                                            : 'text-slate-600 hover:bg-white hover:shadow-sm'
-                                        }`}
+                                                : isSelected
+                                                    ? 'bg-slate-900 text-white shadow-md'
+                                                    : 'text-slate-600 hover:bg-white hover:shadow-sm'
+                                            }`}
                                         title={closure ? `${closure.reason}${closure.description ? ': ' + closure.description : ''}` : ''}
                                     >
                                         {day}
@@ -876,7 +869,7 @@ const LocationDetailPage: React.FC = () => {
                         {[
                             { color: 'bg-rose-500', label: 'Holiday' },
                             { color: 'bg-blue-500', label: 'Tournament' },
-                            { color: 'bg-amber-500', label: 'Maintenance' },
+                            { color: 'bg-blue-600', label: 'Maintenance' },
                             { color: 'bg-purple-500', label: 'Other' },
                         ].map(l => (
                             <div key={l.label} className="flex items-center gap-1.5">
@@ -906,14 +899,13 @@ const LocationDetailPage: React.FC = () => {
                                             key={r}
                                             type="button"
                                             onClick={() => setCourtClosureReason(r)}
-                                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                                                courtClosureReason === r
-                                                    ? r === 'Holiday' ? 'bg-rose-500 text-white shadow-md'
+                                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${courtClosureReason === r
+                                                ? r === 'Holiday' ? 'bg-rose-500 text-white shadow-md'
                                                     : r === 'Tournament' ? 'bg-blue-500 text-white shadow-md'
-                                                    : r === 'Maintenance' ? 'bg-amber-500 text-white shadow-md'
-                                                    : 'bg-purple-500 text-white shadow-md'
-                                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                            }`}
+                                                        : r === 'Maintenance' ? 'bg-blue-600 text-white shadow-md'
+                                                            : 'bg-purple-500 text-white shadow-md'
+                                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                }`}
                                         >
                                             {r}
                                         </button>
@@ -928,7 +920,7 @@ const LocationDetailPage: React.FC = () => {
                                     value={courtClosureDescription}
                                     onChange={e => setCourtClosureDescription(e.target.value)}
                                     placeholder="e.g. Barangay Tournament, Christmas Day..."
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none font-bold text-xs focus:ring-2 focus:ring-amber-500/20"
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none font-bold text-xs focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
 
@@ -961,7 +953,7 @@ const LocationDetailPage: React.FC = () => {
                                     type="button"
                                     onClick={isEdit ? handleAddCourtClosure : handleAddPendingClosure}
                                     disabled={isEdit && isSavingCourtClosure}
-                                    className="flex-[2] py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 transition-all disabled:bg-slate-200"
+                                    className="flex-[2] py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all disabled:bg-slate-200"
                                 >
                                     {isSavingCourtClosure && isEdit
                                         ? 'Saving...'
@@ -991,12 +983,11 @@ const LocationDetailPage: React.FC = () => {
                                     {activeList.map(c => (
                                         <div key={c.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-100">
                                             <div className="flex items-center gap-2 min-w-0">
-                                                <span className={`w-2 h-2 rounded-full shrink-0 ${
-                                                    c.reason === 'Holiday' ? 'bg-rose-500'
+                                                <span className={`w-2 h-2 rounded-full shrink-0 ${c.reason === 'Holiday' ? 'bg-rose-500'
                                                     : c.reason === 'Tournament' ? 'bg-blue-500'
-                                                    : c.reason === 'Maintenance' ? 'bg-amber-500'
-                                                    : 'bg-purple-500'
-                                                }`} />
+                                                        : c.reason === 'Maintenance' ? 'bg-blue-600'
+                                                            : 'bg-purple-500'
+                                                    }`} />
                                                 <div className="min-w-0">
                                                     <p className="text-[10px] font-bold text-slate-700 truncate">
                                                         {new Date(c.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1031,7 +1022,7 @@ const LocationDetailPage: React.FC = () => {
                     </button>
                 )}
                 <button type="submit" disabled={isSubmitting}
-                    className={`${isEdit ? 'flex-[2]' : 'w-full'} h-14 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95`}>
+                    className={`${isEdit ? 'flex-[2]' : 'w-full'} h-14 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95`}>
                     {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Court'}
                 </button>
             </div>
@@ -1083,7 +1074,7 @@ const LocationDetailPage: React.FC = () => {
                             <Sparkles size={16} /> Court Amenities
                         </button>
                         <button onClick={() => { resetCourtForm(); setIsAddCourtOpen(true); }}
-                            className="px-8 py-3 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 flex items-center gap-2">
+                            className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
                             <Plus size={16} /> Add Court
                         </button>
                     </div>
@@ -1101,7 +1092,7 @@ const LocationDetailPage: React.FC = () => {
                     <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatBox label="Courts" value={courts.length.toString()} sub="Registered" />
                         <StatBox label="Court Units" value={totalCourtUnits.toString()} sub="Total capacity" color="text-blue-600" />
-                        <StatBox label="Cleaning Buffer" value={location.base_cleaning_time > 0 ? `${location.base_cleaning_time}m` : 'None'} sub="Default" color="text-amber-500" />
+                        <StatBox label="Cleaning Buffer" value={location.base_cleaning_time > 0 ? `${location.base_cleaning_time}m` : 'None'} sub="Default" color="text-blue-500" />
                         <StatBox label="Status" value={location.is_active ? 'Active' : 'Inactive'} sub={location.is_active ? 'Accepting bookings' : 'Paused'} color={location.is_active ? 'text-emerald-500' : 'text-slate-400'} />
                     </div>
                 </div>
@@ -1138,11 +1129,11 @@ const LocationDetailPage: React.FC = () => {
 
                         {/* Add Court Card */}
                         <button onClick={() => { resetCourtForm(); setIsAddCourtOpen(true); }}
-                            className="bg-white rounded-[40px] border-2 border-dashed border-slate-200 hover:border-amber-400 transition-all duration-300  flex flex-col items-center justify-center gap-3 min-h-[240px] group">
-                            <div className="w-14 h-14 bg-slate-50 group-hover:bg-amber-50 rounded-2xl flex items-center justify-center transition-colors">
-                                <Plus size={24} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
+                            className="bg-white rounded-[40px] border-2 border-dashed border-slate-200 hover:border-blue-400 transition-all duration-300  flex flex-col items-center justify-center gap-3 min-h-[240px] group">
+                            <div className="w-14 h-14 bg-slate-50 group-hover:bg-blue-50 rounded-2xl flex items-center justify-center transition-colors">
+                                <Plus size={24} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                             </div>
-                            <span className="text-[10px] font-black text-slate-400 group-hover:text-amber-500 uppercase tracking-widest transition-colors">Add Court</span>
+                            <span className="text-[10px] font-black text-slate-400 group-hover:text-blue-500 uppercase tracking-widest transition-colors">Add Court</span>
                         </button>
                     </div>
                 ) : (
@@ -1151,7 +1142,7 @@ const LocationDetailPage: React.FC = () => {
                         <h3 className="text-lg font-black text-slate-400 uppercase tracking-tighter">No courts yet</h3>
                         <p className="text-slate-400 text-sm font-medium mb-5">Add your first court to this location.</p>
                         <button onClick={() => { resetCourtForm(); setIsAddCourtOpen(true); }}
-                            className="px-8 py-3 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 inline-flex items-center gap-2">
+                            className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 inline-flex items-center gap-2">
                             <Plus size={16} /> Add First Court
                         </button>
                     </div>
@@ -1316,7 +1307,7 @@ const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
             });
             new window.google.maps.Marker({
                 position: { lat, lng }, map,
-                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#f59e0b', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3 }
+                icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3 }
             });
         }
     }, [lat, lng]);
@@ -1327,9 +1318,9 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
     const courtStatus = court.status || 'Available';
     const statusConfig: Record<string, { bg: string; border: string; text: string; label: string }> = {
         'Available': { bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-600', label: 'Available' },
-        'Fully Booked': { bg: 'bg-orange-50', border: 'border-orange-100', text: 'text-orange-600', label: 'Fully Booked' },
+        'Fully Booked': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Fully Booked' },
         'Coming Soon': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Coming Soon' },
-        'Maintenance': { bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-600', label: 'Maintenance' },
+        'Maintenance': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Maintenance' },
     };
     const sc = statusConfig[courtStatus] || statusConfig['Available'];
 
@@ -1337,7 +1328,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
         <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
             <div className="p-8 pb-4">
                 <div className="flex items-center justify-between mb-5">
-                    <div className={`p-3 rounded-2xl ${courtStatus === 'Available' ? 'bg-emerald-50 text-emerald-600' : courtStatus === 'Fully Booked' ? 'bg-orange-50 text-orange-600' : courtStatus === 'Coming Soon' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
+                    <div className={`p-3 rounded-2xl ${courtStatus === 'Available' ? 'bg-emerald-50 text-emerald-600' : courtStatus === 'Fully Booked' ? 'bg-blue-50 text-blue-600' : courtStatus === 'Coming Soon' ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-blue-600'}`}>
                         <Activity size={22} />
                     </div>
                     <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${sc.bg} ${sc.border} ${sc.text}`}>
@@ -1345,7 +1336,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
                     </span>
                 </div>
 
-                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase group-hover:text-amber-500 transition-colors">{court.name}</h3>
+                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase group-hover:text-blue-500 transition-colors">{court.name}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
                     {court.num_courts} {court.num_courts === 1 ? 'Court' : 'Courts'} • {court.surface_type || 'Acrylic'}
                 </p>
@@ -1369,7 +1360,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
                     </div>
                     {court.cleaning_time_minutes > 0 && (
                         <div className="text-right">
-                            <p className="text-[8px] font-black text-amber-400 uppercase tracking-widest leading-none mb-1">Buffer</p>
+                            <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Buffer</p>
                             <span className="text-sm font-black">
                                 {court.cleaning_time_minutes >= 60
                                     ? `${Math.floor(court.cleaning_time_minutes / 60)}h${court.cleaning_time_minutes % 60 > 0 ? ` ${court.cleaning_time_minutes % 60}m` : ''}`
@@ -1390,7 +1381,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
 
                 <div className="flex gap-2">
                     <button onClick={() => navigate('/bookings-admin')}
-                        className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 transition-all active:scale-95 shadow-lg shadow-slate-200">
+                        className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95 shadow-lg shadow-slate-200">
                         Bookings
                     </button>
                     <button onClick={onEdit}

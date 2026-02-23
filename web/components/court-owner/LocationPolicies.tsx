@@ -127,9 +127,9 @@ const LocationPolicies: React.FC = () => {
         <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-20">
             {/* Header */}
             <div>
-                <p className="text-xs font-black text-amber-600 uppercase tracking-[0.4em] mb-4">COURT OWNER / 2026</p>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURT OWNER / 2026</p>
                 <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase leading-[0.85]">
-                    Court <span className="text-amber-600">Policies.</span>
+                    Court <span className="text-blue-600">Policies.</span>
                 </h1>
                 <p className="text-slate-500 font-medium mt-3 text-sm">Create and manage terms & conditions for your locations. Players will see these before booking.</p>
             </div>
@@ -146,11 +146,10 @@ const LocationPolicies: React.FC = () => {
                             <button
                                 key={loc.id}
                                 onClick={() => setSelectedLocationId(loc.id)}
-                                className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${
-                                    selectedLocationId === loc.id
-                                        ? 'bg-slate-950 text-white border-slate-950 shadow-xl shadow-slate-200/50'
-                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                                }`}
+                                className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${selectedLocationId === loc.id
+                                    ? 'bg-slate-950 text-white border-slate-950 shadow-xl shadow-slate-200/50'
+                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                                    }`}
                             >
                                 {loc.name}
                             </button>
@@ -167,7 +166,7 @@ const LocationPolicies: React.FC = () => {
                 <button
                     onClick={openAddForm}
                     disabled={!selectedLocationId}
-                    className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-amber-200/50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-900/10 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <Plus size={16} />
                     Add Policy
@@ -178,7 +177,7 @@ const LocationPolicies: React.FC = () => {
             <div className="space-y-4">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
-                        <Loader2 className="animate-spin text-amber-600" size={40} />
+                        <Loader2 className="animate-spin text-blue-600" size={40} />
                         <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Loading policies...</p>
                     </div>
                 ) : policies.length > 0 ? (
@@ -190,8 +189,8 @@ const LocationPolicies: React.FC = () => {
                             <div className="p-6 sm:p-8">
                                 <div className="flex items-start justify-between gap-4 mb-4">
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${policy.is_active ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                                            <Shield size={20} className={policy.is_active ? 'text-amber-600' : 'text-slate-400'} />
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${policy.is_active ? 'bg-blue-50' : 'bg-slate-100'}`}>
+                                            <Shield size={20} className={policy.is_active ? 'text-blue-600' : 'text-slate-400'} />
                                         </div>
                                         <div className="min-w-0">
                                             <h3 className="text-lg font-black text-slate-900 tracking-tight leading-tight">{policy.title}</h3>
@@ -249,7 +248,7 @@ const LocationPolicies: React.FC = () => {
                         </div>
                         <button
                             onClick={openAddForm}
-                            className="px-8 py-4 bg-amber-500 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-amber-600 transition-all shadow-xl shadow-amber-100"
+                            className="px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10"
                         >
                             Create Your First Policy
                         </button>
@@ -283,7 +282,7 @@ const LocationPolicies: React.FC = () => {
                                 <select
                                     value={formLocationId}
                                     onChange={(e) => setFormLocationId(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:border-amber-400 focus:bg-white transition-all text-sm"
+                                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:border-blue-400 focus:bg-white transition-all text-sm"
                                 >
                                     {locations.map(loc => (
                                         <option key={loc.id} value={loc.id}>{loc.name}</option>
@@ -300,7 +299,7 @@ const LocationPolicies: React.FC = () => {
                                 value={formTitle}
                                 onChange={(e) => setFormTitle(e.target.value)}
                                 placeholder="e.g. Late Arrival Policy, Cancellation Policy, House Rules..."
-                                className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:border-amber-400 focus:bg-white transition-all text-sm placeholder:text-slate-300"
+                                className="w-full px-5 py-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:border-blue-400 focus:bg-white transition-all text-sm placeholder:text-slate-300"
                             />
                         </div>
 
@@ -311,7 +310,7 @@ const LocationPolicies: React.FC = () => {
                                 value={formContent}
                                 onChange={(e) => setFormContent(e.target.value)}
                                 placeholder={"Write your policy rules here...\n\nExample:\n• Reservation time starts at the booked schedule regardless of arrival time.\n• A 10-minute grace period is allowed for check-in.\n• Failure to arrive within 10 minutes may result in cancellation and forfeiture of payment.\n• Extensions are subject to court availability and additional charges."}
-                                className="w-full h-48 px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-[24px] font-medium text-slate-700 outline-none focus:border-amber-400 focus:bg-white transition-all resize-none text-sm leading-relaxed placeholder:text-slate-300"
+                                className="w-full h-48 px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-[24px] font-medium text-slate-700 outline-none focus:border-blue-400 focus:bg-white transition-all resize-none text-sm leading-relaxed placeholder:text-slate-300"
                             />
                         </div>
 
@@ -319,12 +318,12 @@ const LocationPolicies: React.FC = () => {
                         {formContent.trim() && (
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Preview</label>
-                                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5">
+                                <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5">
                                     <div className="flex items-center gap-2 mb-3">
-                                        <Shield size={14} className="text-amber-600" />
-                                        <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest">{formTitle || 'Policy Title'}</h4>
+                                        <Shield size={14} className="text-blue-600" />
+                                        <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest">{formTitle || 'Policy Title'}</h4>
                                     </div>
-                                    <div className="text-xs text-amber-900 font-medium leading-relaxed whitespace-pre-wrap">
+                                    <div className="text-xs text-blue-900 font-medium leading-relaxed whitespace-pre-wrap">
                                         {formContent}
                                     </div>
                                 </div>
@@ -342,7 +341,7 @@ const LocationPolicies: React.FC = () => {
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving || !formTitle.trim() || !formContent.trim()}
-                                className="flex-1 py-4 bg-slate-950 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-amber-600 disabled:opacity-40 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200"
+                                className="flex-1 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-slate-900 disabled:opacity-40 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/10"
                             >
                                 {isSaving ? <Loader2 className="animate-spin" size={16} /> : (
                                     <>

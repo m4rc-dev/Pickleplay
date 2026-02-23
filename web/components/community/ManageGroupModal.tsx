@@ -13,8 +13,8 @@ interface ManageGroupModalProps {
   onGroupDeleted: (groupId: string) => void;
 }
 
-export const ManageGroupModal: React.FC<ManageGroupModalProps> = ({ 
-  show, onClose, group, onGroupUpdated, onGroupDeleted 
+export const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
+  show, onClose, group, onGroupUpdated, onGroupDeleted
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'members'>('info');
   const [isEditing, setIsEditing] = useState(false);
@@ -161,11 +161,10 @@ export const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`flex items-center gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 ${
-                activeTab === tab.key 
-                  ? 'border-indigo-600 text-indigo-600' 
+              className={`flex items-center gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === tab.key
+                  ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}
+                }`}
             >
               <tab.icon size={16} /> {tab.label}
             </button>
@@ -279,15 +278,15 @@ export const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
             {members.map(member => (
               <div key={member.id} className="flex items-center justify-between border border-slate-100 rounded-2xl p-4">
                 <div className="flex items-center gap-3">
-                  <img 
-                    src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`} 
-                    className="w-10 h-10 rounded-xl bg-slate-100" 
+                  <img
+                    src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`}
+                    className="w-10 h-10 rounded-xl bg-slate-100"
                   />
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-black text-slate-900 text-sm">{member.user?.full_name || 'Unknown'}</p>
                       {member.role === 'admin' && (
-                        <Crown size={14} className="text-amber-500" />
+                        <Crown size={14} className="text-blue-500" />
                       )}
                       {member.role === 'moderator' && (
                         <Shield size={14} className="text-indigo-500" />

@@ -61,7 +61,7 @@ interface AchievementsProps {
 const ACHIEVEMENT_ICONS: Record<string, React.ReactNode> = {
   welcome_player: <Sparkles size={28} className="text-sky-400" />,
   court_conqueror: <Calendar size={28} className="text-lime-400" />,
-  default: <Trophy size={28} className="text-amber-400" />,
+  default: <Trophy size={28} className="text-blue-400" />,
 };
 
 const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed = false }) => {
@@ -347,6 +347,12 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
           <div className="flex items-center justify-between mb-3">
             <div className="w-10 h-10 bg-lime-100 rounded-xl flex items-center justify-center">
               <Trophy size={18} className="text-lime-600" />
+        <div className="flex gap-4">
+          <div className="flex items-center gap-3 px-8 py-4 bg-slate-950 rounded-2xl shadow-xl">
+            <Sparkles size={20} className="text-blue-400" fill="currentColor" />
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Points Earned</p>
+              <p className="text-2xl font-black text-white tracking-tight">{totalPoints}</p>
             </div>
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Completed</span>
           </div>
@@ -387,6 +393,9 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
             className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'all'
               ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
               : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'all'
+                ? 'bg-slate-950 text-white shadow-xl'
+                : 'text-slate-400 hover:text-slate-950'
               }`}
           >
             <Trophy size={14} />
@@ -397,6 +406,10 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
             className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'certificates'
               ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
               : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+            onClick={() => setActiveTab('completed')}
+            className={`px-8 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'completed'
+                ? 'bg-slate-950 text-white shadow-xl'
+                : 'text-slate-400 hover:text-slate-950'
               }`}
           >
             <Award size={14} />
@@ -534,12 +547,21 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
         className={`relative h-44 overflow-hidden ${isCompleted
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
           : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
+    <div
+      className={`group relative bg-white rounded-[48px] border overflow-hidden shadow-sm hover:shadow-2xl transition-all hover:-translate-y-2 duration-500 ${isCompleted ? 'border-lime-200 ring-2 ring-lime-400/20' : 'border-slate-200'
+        }`}
+    >
+      {/* Top banner */}
+      <div
+        className={`relative h-40 overflow-hidden ${isCompleted
+            ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
+            : 'bg-gradient-to-br from-slate-100 via-slate-50 to-white'
           }`}
       >
         {isCompleted && (
           <div className="absolute inset-0">
             <div className="absolute top-4 left-8 w-32 h-32 bg-lime-400/10 blur-[50px] rounded-full" />
-            <div className="absolute bottom-2 right-8 w-24 h-24 bg-amber-400/10 blur-[40px] rounded-full" />
+            <div className="absolute bottom-2 right-8 w-24 h-24 bg-blue-400/10 blur-[40px] rounded-full" />
           </div>
         )}
 
@@ -563,6 +585,9 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
         <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1.5 bg-amber-400/20 rounded-xl border border-amber-400/30 backdrop-blur-sm">
           <Sparkles size={12} className={isCompleted ? 'text-amber-300' : 'text-amber-500'} fill="currentColor" />
           <span className={`text-[10px] font-black ${isCompleted ? 'text-amber-300' : 'text-amber-600'}`}>
+        <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1.5 bg-blue-400/20 rounded-xl border border-blue-400/30">
+          <Sparkles size={12} className={isCompleted ? 'text-blue-300' : 'text-blue-500'} fill="currentColor" />
+          <span className={`text-[10px] font-black ${isCompleted ? 'text-blue-300' : 'text-blue-600'}`}>
             +{achievement.reward_points} PTS
           </span>
         </div>
@@ -571,6 +596,7 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
         <div className="absolute bottom-6 left-6">
           <div
             className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 ${isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border-2 border-slate-200'
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border border-slate-200'
               }`}
           >
             {icon}
@@ -600,6 +626,7 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
           <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-gradient-to-r from-lime-400 to-lime-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
+              className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-lime-400' : 'bg-blue-500'
                 }`}
               style={{ width: `${percentage}%` }}
             />
@@ -623,6 +650,8 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
             <div className="flex items-center gap-2">
               <Zap size={12} className="text-amber-500 fill-amber-500" />
               <span className="font-black text-slate-950 text-xs tracking-tight">{achievement.reward_points} pts</span>
+              <Zap size={14} className="text-blue-500 fill-blue-500" />
+              <span className="font-black text-slate-950 text-sm tracking-tight">{achievement.reward_points} pts</span>
             </div>
           </div>
         </div>

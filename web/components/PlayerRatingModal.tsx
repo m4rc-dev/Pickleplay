@@ -32,7 +32,7 @@ const PlayerRatingModal: React.FC<PlayerRatingModalProps> = ({
     const [error, setError] = useState<string>('');
 
     const dimensions = [
-        { id: 'skill_level', label: 'Skill Level', icon: <Zap size={18} />, color: 'text-amber-500', desc: 'How well did they play?' },
+        { id: 'skill_level', label: 'Skill Level', icon: <Zap size={18} />, color: 'text-blue-500', desc: 'How well did they play?' },
         { id: 'sportsmanship', label: 'Sportsmanship', icon: <Smile size={18} />, color: 'text-rose-500', desc: 'Were they respectful and positive?' },
         { id: 'reliability', label: 'Reliability', icon: <Shield size={18} />, color: 'text-blue-500', desc: 'Did they show up on time?' },
         { id: 'fair_play', label: 'Fair Play', icon: <Award size={18} />, color: 'text-emerald-500', desc: 'Did they call lines fairly?' }

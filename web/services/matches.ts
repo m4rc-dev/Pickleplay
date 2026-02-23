@@ -197,3 +197,28 @@ export const getPendingRatings = async (userId: string): Promise<{ data: Match[]
         return { data: null, error: err.message };
     }
 };
+
+/**
+ * Fetches all ratings received by a specific user, including rater profile info.
+ */
+export const getReceivedRatings = async (userId: string): Promise<{
+    data: (PlayerRating & { rater: { full_name: string | null; username: string | null; avatar_url: string | null } })[] | null;
+    error: string | null;
+}> => {
+    try {
+        const { data, error } = await supabase
+            .from('player_ratings')
+            .select(`
+                *,
+                rater:profiles!player_ratings_rater_id_fkey(full_name, username, avatar_url)
+            `)
+            .eq('ratee_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { data: data as any, error: null };
+    } catch (err: any) {
+        console.error('Error fetching received ratings:', err);
+        return { data: null, error: err.message };
+    }
+};

@@ -204,7 +204,7 @@ const TournamentsManager: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 ml-2"
+                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/10 ml-2"
                     >
                         Create Tournament
                     </button>
@@ -254,7 +254,7 @@ const TournamentsManager: React.FC = () => {
                                     value={name}
                                     onChange={e => setName(e.target.value)}
                                     placeholder="e.g. Summer Open 2024"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                 />
                             </div>
 
@@ -266,7 +266,7 @@ const TournamentsManager: React.FC = () => {
                                         type="datetime-local"
                                         value={date}
                                         onChange={e => setDate(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -277,7 +277,7 @@ const TournamentsManager: React.FC = () => {
                                         value={location}
                                         onChange={e => setLocation(e.target.value)}
                                         placeholder="e.g. BGC Center"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                     />
                                 </div>
                             </div>
@@ -290,7 +290,7 @@ const TournamentsManager: React.FC = () => {
                                         value={prizePool}
                                         onChange={e => setPrizePool(e.target.value)}
                                         placeholder="e.g. ₱50,000"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -300,7 +300,7 @@ const TournamentsManager: React.FC = () => {
                                         type="number"
                                         value={maxPlayers}
                                         onChange={e => setMaxPlayers(Number(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                     />
                                 </div>
                             </div>
@@ -310,7 +310,7 @@ const TournamentsManager: React.FC = () => {
                                 <select
                                     value={skillLevel}
                                     onChange={e => setSkillLevel(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-indigo-500/10 font-bold text-sm appearance-none"
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm appearance-none"
                                 >
                                     <option>All Levels</option>
                                     <option>Beginner (2.0-3.0)</option>
@@ -350,7 +350,7 @@ const TournamentsManager: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200 mt-8 disabled:bg-slate-200"
+                                className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 mt-8 disabled:bg-slate-200"
                             >
                                 {isSubmitting ? 'Creating...' : 'Launch Tournament'}
                             </button>
@@ -367,10 +367,10 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
     <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
         <div className="p-8">
             <div className="flex items-center justify-between mb-6">
-                <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
+                <div className="p-3 rounded-2xl bg-blue-50 text-blue-600">
                     <Trophy size={24} />
                 </div>
-                <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${tournament.status === 'UPCOMING' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' :
+                <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${tournament.status === 'UPCOMING' ? 'bg-blue-50 border-blue-100 text-blue-600' :
                     tournament.status === 'LIVE' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
                         'bg-slate-50 border-slate-100 text-slate-600'
                     }`}>
@@ -384,7 +384,7 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
                 </div>
             )}
 
-            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-4 group-hover:text-indigo-600 transition-colors">{tournament.name}</h3>
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-4 group-hover:text-blue-600 transition-colors">{tournament.name}</h3>
 
             <div className="space-y-3 mb-8">
                 <div className="flex items-center gap-3 text-slate-400">
@@ -400,7 +400,7 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
                     <span className="text-xs font-bold uppercase">{tournament.registeredCount} / {tournament.maxPlayers} Players</span>
                 </div>
                 {tournament.prizePool && (
-                    <div className="flex items-center gap-3 text-indigo-600">
+                    <div className="flex items-center gap-3 text-blue-600">
                         <Award size={16} />
                         <span className="text-xs font-black uppercase">Prize: {tournament.prizePool}</span>
                     </div>
@@ -422,7 +422,7 @@ const TournamentCard: React.FC<{ tournament: Tournament, onDelete: () => void }>
 const TournamentListRow: React.FC<{ tournament: Tournament, onDelete: () => void }> = ({ tournament, onDelete }) => (
     <div className="bg-white rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:shadow-lg transition-all">
         <div className="flex items-center gap-6">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 overflow-hidden">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 overflow-hidden">
                 {tournament.image ? (
                     <img src={tournament.image} alt={tournament.name} className="w-full h-full object-cover" />
                 ) : (
@@ -442,14 +442,14 @@ const TournamentListRow: React.FC<{ tournament: Tournament, onDelete: () => void
                 <p className="text-[10px] font-black text-slate-900">{tournament.registeredCount} / {tournament.maxPlayers}</p>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Players</p>
             </div>
-            <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tournament.status === 'UPCOMING' ? 'bg-indigo-50 text-indigo-600' :
+            <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tournament.status === 'UPCOMING' ? 'bg-blue-50 text-blue-600' :
                 tournament.status === 'LIVE' ? 'bg-emerald-50 text-emerald-600' :
                     'bg-slate-50 text-slate-600'
                 }`}>
                 {tournament.status}
             </div>
             <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
                     <Edit2 size={18} />
                 </button>
                 <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">

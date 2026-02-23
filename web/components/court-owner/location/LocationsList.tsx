@@ -716,13 +716,13 @@ const LocationsList: React.FC = () => {
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 px-1">Location Image</label>
                     <div className="relative group">
-                        <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${formImagePreview ? 'border-amber-200 shadow-xl' : 'border-slate-100 hover:border-amber-300 hover:bg-amber-50/30'}`}>
+                        <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${formImagePreview ? 'border-blue-200 shadow-xl' : 'border-slate-100 hover:border-blue-300 hover:bg-blue-50/30'}`}>
                             {formImagePreview ? (
                                 <>
                                     <img src={formImagePreview} alt="Preview" className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
                                         <div className="bg-white/90 p-4 rounded-2xl shadow-xl flex items-center gap-2 scale-90 group-hover:scale-100 transition-transform">
-                                            <Camera size={20} className="text-amber-500" />
+                                            <Camera size={20} className="text-blue-500" />
                                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">Change Photo</span>
                                         </div>
                                     </div>
@@ -730,9 +730,9 @@ const LocationsList: React.FC = () => {
                             ) : (
                                 <div className="text-center p-4">
                                     <div className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-slate-50 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                                        <Image size={24} className="text-slate-200 group-hover:text-amber-400 transition-colors" />
+                                        <Image size={24} className="text-slate-200 group-hover:text-blue-400 transition-colors" />
                                     </div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Click to upload <span className="text-amber-500 text-[10px]">location image</span></p>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Click to upload <span className="text-blue-500 text-[10px]">location image</span></p>
                                 </div>
                             )}
                             <input
@@ -764,7 +764,7 @@ const LocationsList: React.FC = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Venue Name</label>
                     <input required type="text" value={formName} onChange={e => setFormName(e.target.value)}
                         placeholder="e.g. Manila Sports Complex"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -774,7 +774,7 @@ const LocationsList: React.FC = () => {
                         <div className="relative">
                             <div
                                 onClick={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-amber-200 transition-colors"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors"
                             >
                                 <input
                                     type="text"
@@ -786,7 +786,7 @@ const LocationsList: React.FC = () => {
                                     readOnly={false}
                                 />
                                 {isLoadingRegions ? (
-                                    <Loader2 size={16} className="text-amber-500 animate-spin shrink-0" />
+                                    <Loader2 size={16} className="text-blue-500 animate-spin shrink-0" />
                                 ) : (
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isRegionDropdownOpen ? 'rotate-180' : ''}`} />
                                 )}
@@ -803,9 +803,9 @@ const LocationsList: React.FC = () => {
                                                     setRegionSearch('');
                                                     setIsRegionDropdownOpen(false);
                                                 }}
-                                                className={`w-full text-left px-5 py-3 hover:bg-amber-50 transition-colors font-bold text-sm flex items-center gap-3 ${formRegion === r.name ? 'text-amber-600 bg-amber-50/50' : 'text-slate-700'}`}
+                                                className={`w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors font-bold text-sm flex items-center gap-3 ${formRegion === r.name ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}
                                             >
-                                                {formRegion === r.name && <Check size={14} className="text-amber-500 shrink-0" />}
+                                                {formRegion === r.name && <Check size={14} className="text-blue-500 shrink-0" />}
                                                 {r.name}
                                             </button>
                                         ))}
@@ -825,7 +825,7 @@ const LocationsList: React.FC = () => {
                         <div className="relative">
                             <div
                                 onClick={() => { if (selectedRegionCode) setIsCityDropdownOpen(!isCityDropdownOpen); }}
-                                className={`w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 flex items-center justify-between transition-colors ${selectedRegionCode ? 'cursor-pointer hover:border-amber-200' : 'opacity-50 cursor-not-allowed'}`}
+                                className={`w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 flex items-center justify-between transition-colors ${selectedRegionCode ? 'cursor-pointer hover:border-blue-200' : 'opacity-50 cursor-not-allowed'}`}
                             >
                                 <input
                                     type="text"
@@ -837,7 +837,7 @@ const LocationsList: React.FC = () => {
                                     disabled={!selectedRegionCode}
                                 />
                                 {isLoadingCities ? (
-                                    <Loader2 size={16} className="text-amber-500 animate-spin shrink-0" />
+                                    <Loader2 size={16} className="text-blue-500 animate-spin shrink-0" />
                                 ) : (
                                     <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isCityDropdownOpen ? 'rotate-180' : ''}`} />
                                 )}
@@ -854,9 +854,9 @@ const LocationsList: React.FC = () => {
                                                     setCitySearch('');
                                                     setIsCityDropdownOpen(false);
                                                 }}
-                                                className={`w-full text-left px-5 py-3 hover:bg-amber-50 transition-colors font-bold text-sm flex items-center gap-3 ${formCity === c.name ? 'text-amber-600 bg-amber-50/50' : 'text-slate-700'}`}
+                                                className={`w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors font-bold text-sm flex items-center gap-3 ${formCity === c.name ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}
                                             >
-                                                {formCity === c.name && <Check size={14} className="text-amber-500 shrink-0" />}
+                                                {formCity === c.name && <Check size={14} className="text-blue-500 shrink-0" />}
                                                 {c.name}
                                             </button>
                                         ))}
@@ -874,7 +874,7 @@ const LocationsList: React.FC = () => {
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Phone</label>
                         <input type="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)}
                             placeholder="09XX XXX XXXX"
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
                     </div>
                 </div>
 
@@ -884,7 +884,7 @@ const LocationsList: React.FC = () => {
                     <div className="relative">
                         <div
                             onClick={() => { if (selectedCityCode) setIsBarangayDropdownOpen(!isBarangayDropdownOpen); }}
-                            className={`w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 flex items-center justify-between transition-colors ${selectedCityCode ? 'cursor-pointer hover:border-amber-200' : 'opacity-50 cursor-not-allowed'}`}
+                            className={`w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 flex items-center justify-between transition-colors ${selectedCityCode ? 'cursor-pointer hover:border-blue-200' : 'opacity-50 cursor-not-allowed'}`}
                         >
                             <input
                                 type="text"
@@ -896,7 +896,7 @@ const LocationsList: React.FC = () => {
                                 disabled={!selectedCityCode}
                             />
                             {isLoadingBarangays ? (
-                                <Loader2 size={16} className="text-amber-500 animate-spin shrink-0" />
+                                <Loader2 size={16} className="text-blue-500 animate-spin shrink-0" />
                             ) : (
                                 <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isBarangayDropdownOpen ? 'rotate-180' : ''}`} />
                             )}
@@ -912,9 +912,9 @@ const LocationsList: React.FC = () => {
                                                 setBarangaySearch('');
                                                 setIsBarangayDropdownOpen(false);
                                             }}
-                                            className={`w-full text-left px-5 py-3 hover:bg-amber-50 transition-colors font-bold text-sm flex items-center gap-3 ${formBarangay === b.name ? 'text-amber-600 bg-amber-50/50' : 'text-slate-700'}`}
+                                            className={`w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors font-bold text-sm flex items-center gap-3 ${formBarangay === b.name ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}
                                         >
-                                            {formBarangay === b.name && <Check size={14} className="text-amber-500 shrink-0" />}
+                                            {formBarangay === b.name && <Check size={14} className="text-blue-500 shrink-0" />}
                                             {b.name}
                                         </button>
                                     ))}
@@ -938,7 +938,7 @@ const LocationsList: React.FC = () => {
                                 type="button"
                                 onClick={() => setFormCourtType(type as any)}
                                 className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${formCourtType === type
-                                    ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
+                                    ? 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
                                     : 'text-slate-400 hover:text-slate-600'
                                     }`}
                             >
@@ -957,14 +957,13 @@ const LocationsList: React.FC = () => {
                                 key={s}
                                 type="button"
                                 onClick={() => setFormStatus(s)}
-                                className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${
-                                    formStatus === s
-                                        ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
+                                className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${formStatus === s
+                                    ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
                                         : s === 'Closed' ? 'bg-white text-rose-500 shadow-lg shadow-rose-100/50'
-                                        : s === 'Maintenance' ? 'bg-white text-amber-500 shadow-lg shadow-amber-100/50'
-                                        : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
-                                        : 'text-slate-400 hover:text-slate-600'
-                                }`}
+                                            : s === 'Maintenance' ? 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
+                                                : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
+                                    : 'text-slate-400 hover:text-slate-600'
+                                    }`}
                             >
                                 {s}
                             </button>
@@ -981,7 +980,7 @@ const LocationsList: React.FC = () => {
                             <select
                                 value={formOpeningTime}
                                 onChange={e => setFormOpeningTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm appearance-none cursor-pointer"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm appearance-none cursor-pointer"
                             >
                                 {Array.from({ length: 24 }, (_, i) => {
                                     const h = i.toString().padStart(2, '0');
@@ -996,7 +995,7 @@ const LocationsList: React.FC = () => {
                             <select
                                 value={formClosingTime}
                                 onChange={e => setFormClosingTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm appearance-none cursor-pointer"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm appearance-none cursor-pointer"
                             >
                                 {Array.from({ length: 24 }, (_, i) => {
                                     const h = i.toString().padStart(2, '0');
@@ -1016,10 +1015,10 @@ const LocationsList: React.FC = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Street Address</label>
                     <input required type="text" value={formAddress} onChange={e => setFormAddress(e.target.value)}
                         placeholder="e.g. 123 Rizal Street"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
                     {(formAddress || formBarangay || formCity || formRegion) && (
                         <p className="text-[9px] text-slate-400 ml-4 mt-1">
-                            <span className="font-black text-amber-500">Full Address: </span>
+                            <span className="font-black text-blue-500">Full Address: </span>
                             {[formAddress, formBarangay, formCity, formRegion].filter(Boolean).join(', ')}
                         </p>
                     )}
@@ -1030,7 +1029,7 @@ const LocationsList: React.FC = () => {
                     <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)}
                         placeholder="Brief description of your venue..."
                         rows={3}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-amber-500/10 font-bold text-sm resize-none" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm resize-none" />
                 </div>
 
 
@@ -1128,7 +1127,7 @@ const LocationsList: React.FC = () => {
                 <div className="flex-1 space-y-4">
                     <div className="flex justify-between items-center ml-4">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
-                        {isGeocoding && <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>}
+                        {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
                     </div>
                     <div className="h-64 lg:h-[380px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
                         <MapPreview
@@ -1160,7 +1159,7 @@ const LocationsList: React.FC = () => {
                 {isEdit && (
                     <div className="mt-6 space-y-4">
                         <div className="flex items-center gap-2 ml-4">
-                            <Calendar size={14} className="text-amber-500" />
+                            <Calendar size={14} className="text-blue-500" />
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Schedule Closures</label>
                         </div>
                         <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-4">
@@ -1229,21 +1228,20 @@ const LocationsList: React.FC = () => {
                                                         setClosureDescription('');
                                                     }
                                                 }}
-                                                className={`aspect-square rounded-lg text-[11px] font-bold transition-all relative ${
-                                                    isPast
-                                                        ? 'text-slate-200 cursor-not-allowed'
+                                                className={`aspect-square rounded-lg text-[11px] font-bold transition-all relative ${isPast
+                                                    ? 'text-slate-200 cursor-not-allowed'
                                                     : closure
                                                         ? closure.reason === 'Tournament'
                                                             ? 'bg-blue-500 text-white shadow-md shadow-blue-200/50'
                                                             : closure.reason === 'Holiday'
                                                                 ? 'bg-rose-500 text-white shadow-md shadow-rose-200/50'
                                                                 : closure.reason === 'Maintenance'
-                                                                    ? 'bg-amber-500 text-white shadow-md shadow-amber-200/50'
+                                                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-900/10/50'
                                                                     : 'bg-purple-500 text-white shadow-md shadow-purple-200/50'
-                                                    : isSelected
-                                                        ? 'bg-slate-900 text-white shadow-md'
-                                                    : 'text-slate-600 hover:bg-white hover:shadow-sm'
-                                                }`}
+                                                        : isSelected
+                                                            ? 'bg-slate-900 text-white shadow-md'
+                                                            : 'text-slate-600 hover:bg-white hover:shadow-sm'
+                                                    }`}
                                                 title={closure ? `${closure.reason}${closure.description ? ': ' + closure.description : ''}` : ''}
                                             >
                                                 {day}
@@ -1262,7 +1260,7 @@ const LocationsList: React.FC = () => {
                                 {[
                                     { color: 'bg-rose-500', label: 'Holiday' },
                                     { color: 'bg-blue-500', label: 'Tournament' },
-                                    { color: 'bg-amber-500', label: 'Maintenance' },
+                                    { color: 'bg-blue-600', label: 'Maintenance' },
                                     { color: 'bg-purple-500', label: 'Other' },
                                 ].map(l => (
                                     <div key={l.label} className="flex items-center gap-1.5">
@@ -1292,14 +1290,13 @@ const LocationsList: React.FC = () => {
                                                     key={r}
                                                     type="button"
                                                     onClick={() => setClosureReason(r)}
-                                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                                                        closureReason === r
-                                                            ? r === 'Holiday' ? 'bg-rose-500 text-white shadow-md'
+                                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${closureReason === r
+                                                        ? r === 'Holiday' ? 'bg-rose-500 text-white shadow-md'
                                                             : r === 'Tournament' ? 'bg-blue-500 text-white shadow-md'
-                                                            : r === 'Maintenance' ? 'bg-amber-500 text-white shadow-md'
-                                                            : 'bg-purple-500 text-white shadow-md'
-                                                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                                    }`}
+                                                                : r === 'Maintenance' ? 'bg-blue-600 text-white shadow-md'
+                                                                    : 'bg-purple-500 text-white shadow-md'
+                                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                        }`}
                                                 >
                                                     {r}
                                                 </button>
@@ -1314,7 +1311,7 @@ const LocationsList: React.FC = () => {
                                             value={closureDescription}
                                             onChange={e => setClosureDescription(e.target.value)}
                                             placeholder="e.g. Christmas Day, Barangay Tournament..."
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none font-bold text-xs focus:ring-2 focus:ring-amber-500/20"
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none font-bold text-xs focus:ring-2 focus:ring-blue-500/20"
                                         />
                                     </div>
 
@@ -1335,7 +1332,7 @@ const LocationsList: React.FC = () => {
                                             type="button"
                                             onClick={handleAddClosure}
                                             disabled={isSavingClosure}
-                                            className="flex-[2] py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 transition-all disabled:bg-slate-200"
+                                            className="flex-[2] py-2.5 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all disabled:bg-slate-200"
                                         >
                                             {isSavingClosure ? 'Saving...' : closures.find(c => c.date === selectedClosureDate) ? 'Update Closure' : 'Set as Closed'}
                                         </button>
@@ -1351,12 +1348,11 @@ const LocationsList: React.FC = () => {
                                         {closures.map(c => (
                                             <div key={c.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-100">
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                                                        c.reason === 'Holiday' ? 'bg-rose-500'
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${c.reason === 'Holiday' ? 'bg-rose-500'
                                                         : c.reason === 'Tournament' ? 'bg-blue-500'
-                                                        : c.reason === 'Maintenance' ? 'bg-amber-500'
-                                                        : 'bg-purple-500'
-                                                    }`} />
+                                                            : c.reason === 'Maintenance' ? 'bg-blue-600'
+                                                                : 'bg-purple-500'
+                                                        }`} />
                                                     <div className="min-w-0">
                                                         <p className="text-[10px] font-bold text-slate-700 truncate">
                                                             {new Date(c.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1385,7 +1381,7 @@ const LocationsList: React.FC = () => {
                         </button>
                     )}
                     <button type="submit" disabled={isSubmitting}
-                        className={`${isEdit ? 'flex-[2]' : 'w-full'} h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-amber-500 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95`}>
+                        className={`${isEdit ? 'flex-[2]' : 'w-full'} h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95`}>
                         {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Location'}
                     </button>
                 </div>
@@ -1417,7 +1413,7 @@ const LocationsList: React.FC = () => {
                         <Sparkles size={16} /> Amenities
                     </button>
                     <button onClick={() => { resetForm(); setIsAddModalOpen(true); }}
-                        className="px-8 py-3 bg-amber-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 flex items-center gap-2">
+                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/10 flex items-center gap-2">
                         <Plus size={16} /> Add Location
                     </button>
                 </div>
@@ -1463,7 +1459,7 @@ const LocationsList: React.FC = () => {
                     <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">No locations found</h3>
                     <p className="text-slate-400 text-sm font-medium mb-6">Add your first location to start managing courts.</p>
                     <button onClick={() => { resetForm(); setIsAddModalOpen(true); }}
-                        className="px-8 py-4 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-200 inline-flex items-center gap-2">
+                        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/10 inline-flex items-center gap-2">
                         <Plus size={16} /> Add Your First Location
                     </button>
                 </div>
@@ -1626,11 +1622,11 @@ const LocationCard: React.FC<{
             <div onClick={onView}
                 className="bg-white rounded-[28px] border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 p-6 flex items-center justify-between cursor-pointer group">
                 <div className="flex items-center gap-5 flex-1 min-w-0">
-                    <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center shrink-0">
-                        <MapPin size={24} className="text-amber-500" />
+                    <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+                        <MapPin size={24} className="text-blue-500" />
                     </div>
                     <div className="min-w-0">
-                        <h3 className="text-base font-black text-slate-900 tracking-tight uppercase truncate group-hover:text-amber-500 transition-colors">{location.name}</h3>
+                        <h3 className="text-base font-black text-slate-900 tracking-tight uppercase truncate group-hover:text-blue-500 transition-colors">{location.name}</h3>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{location.address}, {location.city}</p>
                     </div>
                 </div>
@@ -1645,24 +1641,23 @@ const LocationCard: React.FC<{
                             <span className="text-[10px] font-bold">{location.base_cleaning_time}m</span>
                         </div>
                     )}
-                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                        (location.status || (location.is_active ? 'Active' : 'Closed')) === 'Active'
-                            ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${(location.status || (location.is_active ? 'Active' : 'Closed')) === 'Active'
+                        ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                         : (location.status) === 'Closed'
                             ? 'bg-rose-50 border-rose-100 text-rose-600'
-                        : (location.status) === 'Maintenance'
-                            ? 'bg-amber-50 border-amber-100 text-amber-600'
-                        : (location.status) === 'Coming Soon'
-                            ? 'bg-blue-50 border-blue-100 text-blue-600'
-                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                            : (location.status) === 'Maintenance'
+                                ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                : (location.status) === 'Coming Soon'
+                                    ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                    : 'bg-slate-50 border-slate-200 text-slate-400'
                         }`}>
                         {location.status || (location.is_active ? 'Active' : 'Closed')}
                     </span>
                     <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-amber-500 border border-slate-200 hover:border-amber-200 rounded-xl transition-all">
+                        className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-500 border border-slate-200 hover:border-blue-200 rounded-xl transition-all">
                         Edit
                     </button>
-                    <ChevronRight size={18} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
+                    <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                 </div>
             </div>
         );
@@ -1684,16 +1679,15 @@ const LocationCard: React.FC<{
                     <MiniMapPreview lat={location.latitude} lng={location.longitude} />
                 ) : null}
                 <div className="absolute top-4 right-4 flex gap-2">
-                    <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-sm ${
-                        (location.status || (location.is_active ? 'Active' : 'Closed')) === 'Active'
-                            ? 'bg-emerald-50/90 border-emerald-100 text-emerald-600'
+                    <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-sm ${(location.status || (location.is_active ? 'Active' : 'Closed')) === 'Active'
+                        ? 'bg-emerald-50/90 border-emerald-100 text-emerald-600'
                         : (location.status) === 'Closed'
                             ? 'bg-rose-50/90 border-rose-100 text-rose-600'
-                        : (location.status) === 'Maintenance'
-                            ? 'bg-amber-50/90 border-amber-100 text-amber-600'
-                        : (location.status) === 'Coming Soon'
-                            ? 'bg-blue-50/90 border-blue-100 text-blue-600'
-                            : 'bg-slate-50/90 border-slate-200 text-slate-400'
+                            : (location.status) === 'Maintenance'
+                                ? 'bg-blue-50/90 border-blue-100 text-blue-600'
+                                : (location.status) === 'Coming Soon'
+                                    ? 'bg-blue-50/90 border-blue-100 text-blue-600'
+                                    : 'bg-slate-50/90 border-slate-200 text-slate-400'
                         }`}>
                         {location.status || (location.is_active ? 'Active' : 'Closed')}
                     </span>
@@ -1708,7 +1702,7 @@ const LocationCard: React.FC<{
 
             {/* Content */}
             <div className="p-7">
-                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase mb-1 group-hover:text-amber-500 transition-colors truncate">{location.name}</h3>
+                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase mb-1 group-hover:text-blue-500 transition-colors truncate">{location.name}</h3>
                 <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold mb-4">
                     <MapPin size={12} className="shrink-0" />
                     <span className="truncate">{location.address}, {location.city}</span>
@@ -1749,7 +1743,7 @@ const LocationCard: React.FC<{
                 {/* Actions */}
                 <div className="flex gap-2">
                     <button onClick={(e) => { e.stopPropagation(); onView(); }}
-                        className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-500 transition-all active:scale-95 shadow-lg shadow-slate-200 flex items-center justify-center gap-2">
+                        className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95 shadow-lg shadow-slate-200 flex items-center justify-center gap-2">
                         Manage <ChevronRight size={14} />
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -1789,7 +1783,7 @@ const MiniMapPreview: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) =>
                 icon: {
                     path: window.google.maps.SymbolPath.CIRCLE,
                     scale: 10,
-                    fillColor: '#f59e0b',
+                    fillColor: '#3b82f6',
                     fillOpacity: 1,
                     strokeColor: '#ffffff',
                     strokeWeight: 3,
@@ -1906,7 +1900,7 @@ const MapPreview: React.FC<{
                     position: coords,
                     map: googleMapRef.current,
                     draggable: true,
-                    icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: '#f59e0b', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3 }
+                    icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3 }
                 });
                 markerRef.current.addListener('dragend', () => {
                     const p = markerRef.current.getPosition();

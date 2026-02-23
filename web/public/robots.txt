@@ -1,0 +1,35 @@
+# PicklePlay Philippines — robots.txt
+# https://www.pickleplay.ph
+
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /news
+Allow: /academy
+Allow: /guides
+Allow: /rankings
+Allow: /booking
+Allow: /faq
+
+# Disallow private/auth/admin routes
+Disallow: /login
+Disallow: /signup
+Disallow: /verify-2fa
+Disallow: /auth/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /my-bookings
+Disallow: /messages
+Disallow: /bookings-admin
+Disallow: /revenue
+Disallow: /court-policies
+Disallow: /court-calendar
+Disallow: /tournaments-admin
+Disallow: /locations
+Disallow: /students
+Disallow: /clinics
+Disallow: /schedule
+Disallow: /others
+
+Sitemap: https://www.pickleplay.ph/sitemap.xml

@@ -23,7 +23,7 @@ interface RatingDimension {
 }
 
 const DIMENSIONS: RatingDimension[] = [
-    { id: 'skill_level', label: 'Skill Level', icon: <Zap size={18} />, color: 'text-amber-500', desc: 'How well did they play?' },
+    { id: 'skill_level', label: 'Skill Level', icon: <Zap size={18} />, color: 'text-blue-500', desc: 'How well did they play?' },
     { id: 'sportsmanship', label: 'Sportsmanship', icon: <Smile size={18} />, color: 'text-rose-500', desc: 'Respectful & positive?' },
     { id: 'reliability', label: 'Reliability', icon: <Shield size={18} />, color: 'text-blue-500', desc: 'Showed up & stayed?' },
     { id: 'fair_play', label: 'Fair Play', icon: <Award size={18} />, color: 'text-emerald-500', desc: 'Called lines fairly?' },
@@ -211,10 +211,10 @@ const MatchVerification: React.FC<MatchVerificationProps> = ({ userId, onClose, 
                 {/* Header */}
                 <div className="p-8 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl ${mode === 'host' ? 'bg-amber-100 text-amber-600' :
-                                mode === 'rating' ? 'bg-indigo-100 text-indigo-600' :
-                                    mode === 'done' ? 'bg-emerald-100 text-emerald-600' :
-                                        'bg-blue-100 text-blue-600'
+                        <div className={`p-3 rounded-2xl ${mode === 'host' ? 'bg-lime-100 text-lime-600' :
+                            mode === 'rating' ? 'bg-indigo-100 text-indigo-600' :
+                                mode === 'done' ? 'bg-emerald-100 text-emerald-600' :
+                                    'bg-blue-100 text-blue-600'
                             }`}>
                             {mode === 'rating' || mode === 'done' ? <Star size={24} fill="currentColor" /> : <QrCode size={24} />}
                         </div>
@@ -242,25 +242,25 @@ const MatchVerification: React.FC<MatchVerificationProps> = ({ userId, onClose, 
                             <button
                                 onClick={handleCreateMatch}
                                 disabled={isCreating}
-                                className="w-full p-8 bg-amber-50 border-2 border-amber-100 rounded-[32px] text-left group hover:border-amber-400 transition-all"
+                                className="w-full p-8 bg-lime-50 border-2 border-lime-100 rounded-[32px] text-left group hover:border-lime-400 transition-all"
                             >
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-white text-amber-600 rounded-2xl shadow-sm group-hover:bg-amber-600 group-hover:text-white transition-all">
+                                    <div className="p-3 bg-white text-lime-600 rounded-2xl shadow-sm group-hover:bg-lime-600 group-hover:text-white transition-all">
                                         {isCreating ? <RefreshCw size={24} className="animate-spin" /> : <QrCode size={24} />}
                                     </div>
-                                    <div className="flex bg-white rounded-xl p-1 border border-amber-200">
+                                    <div className="flex bg-white rounded-xl p-1 border border-lime-200">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setMatchType('Singles'); }}
-                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${matchType === 'Singles' ? 'bg-amber-600 text-white' : 'text-amber-600 hover:bg-amber-50'}`}
+                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${matchType === 'Singles' ? 'bg-lime-600 text-white' : 'text-lime-600 hover:bg-lime-50'}`}
                                         >Singles</button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setMatchType('Doubles'); }}
-                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${matchType === 'Doubles' ? 'bg-amber-600 text-white' : 'text-amber-600 hover:bg-amber-50'}`}
+                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${matchType === 'Doubles' ? 'bg-lime-600 text-white' : 'text-lime-600 hover:bg-lime-50'}`}
                                         >Doubles</button>
                                     </div>
                                 </div>
-                                <h4 className="font-black text-amber-900 text-lg uppercase tracking-tight">I Hosted the Match</h4>
-                                <p className="text-xs text-amber-700/70 font-bold uppercase tracking-widest mt-1">Generate a QR code for your opponents to scan</p>
+                                <h4 className="font-black text-lime-900 text-lg uppercase tracking-tight">I Hosted the Match</h4>
+                                <p className="text-xs text-lime-700/70 font-bold uppercase tracking-widest mt-1">Generate a QR code for your opponents to scan</p>
                             </button>
 
                             <div className="relative my-2">
@@ -378,8 +378,8 @@ const MatchVerification: React.FC<MatchVerificationProps> = ({ userId, onClose, 
                                                     key={star}
                                                     onClick={() => handleRatingChange(dim.id, star)}
                                                     className={`flex-1 py-4 rounded-2xl border-2 transition-all flex items-center justify-center ${(ratings as any)[dim.id] >= star
-                                                            ? `${dim.color.replace('text', 'bg').replace('-500', '-50')} ${dim.color.replace('text', 'border')} shadow-lg`
-                                                            : 'border-slate-100 hover:border-slate-200'
+                                                        ? `${dim.color.replace('text', 'bg').replace('-500', '-50')} ${dim.color.replace('text', 'border')} shadow-lg`
+                                                        : 'border-slate-100 hover:border-slate-200'
                                                         }`}
                                                 >
                                                     <Star

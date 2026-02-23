@@ -331,7 +331,7 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
                                         <div className="flex items-center gap-2 mt-1">
                                             {coach.rating ? (
                                                 <>
-                                                    <div className="flex text-amber-500"><Star size={14} fill="currentColor" /></div>
+                                                    <div className="flex text-blue-500"><Star size={14} fill="currentColor" /></div>
                                                     <span className="text-sm font-black text-slate-900">{coach.rating.toFixed(1)}</span>
                                                 </>
                                             ) : (
@@ -439,7 +439,7 @@ const Coaches: React.FC<CoachesProps> = ({ currentUserId }) => {
 
                                         <div className="flex-1 space-y-6">
                                             <div className="flex items-start gap-4">
-                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${clinic.level === 'Intro' ? 'bg-emerald-50 text-emerald-600' : clinic.level === 'Advanced' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${clinic.level === 'Intro' ? 'bg-emerald-50 text-emerald-600' : clinic.level === 'Advanced' ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-blue-600'}`}>
                                                     <Trophy size={28} />
                                                 </div>
                                                 <div>

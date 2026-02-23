@@ -155,7 +155,7 @@ const EventModal: React.FC<{
                         <select
                             value={formData.court_id}
                             onChange={(e) => setFormData(prev => ({ ...prev, court_id: e.target.value }))}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium"
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium"
                             required
                         >
                             <option value="">Choose a court...</option>
@@ -198,7 +198,7 @@ const EventModal: React.FC<{
                             value={formData.title}
                             onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                             placeholder="e.g., Monthly Maintenance, VIP Booking..."
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium"
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium"
                             required
                         />
                     </div>
@@ -213,7 +213,7 @@ const EventModal: React.FC<{
                             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                             placeholder="Add any notes about this event..."
                             rows={2}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium resize-none"
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium resize-none"
                         />
                     </div>
 
@@ -227,7 +227,7 @@ const EventModal: React.FC<{
                                 type="date"
                                 value={formData.date}
                                 onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium text-sm"
+                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
                                 required
                             />
                         </div>
@@ -239,7 +239,7 @@ const EventModal: React.FC<{
                                 type="time"
                                 value={formData.start_time}
                                 onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium text-sm"
+                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
                                 required
                             />
                         </div>
@@ -251,27 +251,27 @@ const EventModal: React.FC<{
                                 type="time"
                                 value={formData.end_time}
                                 onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all font-medium text-sm"
+                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
                                 required
                             />
                         </div>
                     </div>
 
                     {/* Block Bookings Toggle */}
-                    <div className="flex items-center justify-between p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-2xl border border-blue-100">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-amber-100 rounded-xl">
-                                <AlertCircle size={18} className="text-amber-600" />
+                            <div className="p-2 bg-blue-100 rounded-xl">
+                                <AlertCircle size={18} className="text-blue-600" />
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-amber-900">Block Player Bookings</p>
-                                <p className="text-xs text-amber-700">Prevents players from booking during this time</p>
+                                <p className="text-sm font-bold text-blue-900">Block Player Bookings</p>
+                                <p className="text-xs text-blue-700">Prevents players from booking during this time</p>
                             </div>
                         </div>
                         <button
                             type="button"
                             onClick={() => setFormData(prev => ({ ...prev, blocks_bookings: !prev.blocks_bookings }))}
-                            className={`w-12 h-7 rounded-full transition-all relative ${formData.blocks_bookings ? 'bg-amber-500' : 'bg-slate-300'
+                            className={`w-12 h-7 rounded-full transition-all relative ${formData.blocks_bookings ? 'bg-blue-600' : 'bg-slate-300'
                                 }`}
                         >
                             <div className={`w-5 h-5 bg-white rounded-full absolute top-1 transition-all shadow-md ${formData.blocks_bookings ? 'right-1' : 'left-1'
@@ -291,7 +291,7 @@ const EventModal: React.FC<{
                         <button
                             type="submit"
                             disabled={isSubmitting || !formData.court_id || !formData.title}
-                            className="flex-1 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest bg-amber-500 text-white hover:bg-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-200"
+                            className="flex-1 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/10"
                         >
                             {isSubmitting ? 'Saving...' : (editingEvent ? 'Update Event' : 'Create Event')}
                         </button>
@@ -480,7 +480,7 @@ const CourtCalendar: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-1">Court Management</p>
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Court Management</p>
                     <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase">
                         Event Calendar
                     </h1>
@@ -491,7 +491,7 @@ const CourtCalendar: React.FC = () => {
                         setEditingEvent(null);
                         setIsModalOpen(true);
                     }}
-                    className="flex items-center gap-2 px-6 py-4 bg-amber-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-200 active:scale-95"
+                    className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-900/10 active:scale-95"
                 >
                     <Plus size={18} /> Block Time
                 </button>
@@ -562,7 +562,7 @@ const CourtCalendar: React.FC = () => {
                         </div>
                         <button
                             onClick={goToToday}
-                            className="px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-200 transition-colors"
+                            className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-200 transition-colors"
                         >
                             Today
                         </button>
@@ -573,7 +573,7 @@ const CourtCalendar: React.FC = () => {
                         <select
                             value={selectedCourt}
                             onChange={(e) => setSelectedCourt(e.target.value)}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                         >
                             <option value="all">All Courts</option>
                             {courts.map(court => (
@@ -585,14 +585,14 @@ const CourtCalendar: React.FC = () => {
                         <div className="flex items-center bg-slate-100 rounded-xl p-1">
                             <button
                                 onClick={() => setViewMode('month')}
-                                className={`p-2 rounded-lg transition-all ${viewMode === 'month' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-400 hover:text-slate-600'
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'month' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
                                     }`}
                             >
                                 <LayoutGrid size={18} />
                             </button>
                             <button
                                 onClick={() => setViewMode('week')}
-                                className={`p-2 rounded-lg transition-all ${viewMode === 'week' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-400 hover:text-slate-600'
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'week' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'
                                     }`}
                             >
                                 <List size={18} />
@@ -604,7 +604,7 @@ const CourtCalendar: React.FC = () => {
                 {/* Calendar Grid */}
                 {isLoading ? (
                     <div className="p-12 flex items-center justify-center">
-                        <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : viewMode === 'month' ? (
                     <div className="p-4">
@@ -624,14 +624,14 @@ const CourtCalendar: React.FC = () => {
                                     key={idx}
                                     className={`min-h-[100px] md:min-h-[120px] p-2 rounded-2xl border transition-all ${day
                                         ? isToday(day)
-                                            ? 'bg-amber-50 border-amber-200'
+                                            ? 'bg-blue-50 border-blue-200'
                                             : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
                                         : 'bg-transparent border-transparent'
                                         }`}
                                 >
                                     {day && (
                                         <>
-                                            <div className={`text-sm font-black mb-1 ${isToday(day) ? 'text-amber-600' : 'text-slate-900'
+                                            <div className={`text-sm font-black mb-1 ${isToday(day) ? 'text-blue-600' : 'text-slate-900'
                                                 }`}>
                                                 {day}
                                             </div>
@@ -672,7 +672,7 @@ const CourtCalendar: React.FC = () => {
                                 <p className="text-sm text-slate-500 mb-4">Create your first event to block time on your courts.</p>
                                 <button
                                     onClick={() => setIsModalOpen(true)}
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all"
+                                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all"
                                 >
                                     <Plus size={16} /> Create Event
                                 </button>
@@ -694,7 +694,7 @@ const CourtCalendar: React.FC = () => {
                                                     {event.event_type.replace('_', ' ')}
                                                 </span>
                                                 {event.blocks_bookings && (
-                                                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-[9px] font-bold uppercase">
+                                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md text-[9px] font-bold uppercase">
                                                         Blocks Bookings
                                                     </span>
                                                 )}

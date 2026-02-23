@@ -854,7 +854,7 @@ const QRCodeGenerator: React.FC = () => {
 
             {/* ── Background ── */}
             <CollapsibleSection
-              icon={<Palette size={18} className="text-orange-500" />}
+              icon={<Palette size={18} className="text-blue-500" />}
               title="Pattern Background Color"
               subtitle="Set the background color behind your QR code pattern."
               open={openSections.background} onToggle={() => toggleSection('background')}
@@ -978,7 +978,7 @@ const QRCodeGenerator: React.FC = () => {
 
             {/* ── Quick Themes ── */}
             <CollapsibleSection
-              icon={<Sparkles size={18} className="text-amber-500" />}
+              icon={<Sparkles size={18} className="text-blue-500" />}
               title="Quick Themes"
               subtitle="Apply a complete color theme in one click."
               open={openSections.themes} onToggle={() => toggleSection('themes')}
