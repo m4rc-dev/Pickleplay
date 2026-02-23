@@ -512,12 +512,6 @@ const NavigationHandler: React.FC<{
                       <ArrowRight size={16} className="text-slate-900/60 group-hover:text-white/80 shrink-0 transition-all duration-300 group-hover:translate-x-1" />
                     </div>
                   </Link>
-                )}
-                <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/teams" icon={<UsersRound size={22} />} label="My Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/achievements" icon={<Medal size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 ))}
                 {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                 {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
