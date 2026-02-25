@@ -958,7 +958,7 @@ const NavigationHandler: React.FC<{
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
-              <Route path="/p/:username/:bookingId" element={<PosterPage />} />
+              <Route path="/p/:slug/:bookingId" element={<PosterPage />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

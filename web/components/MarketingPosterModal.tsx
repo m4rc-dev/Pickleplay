@@ -25,9 +25,12 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
     // The link embedded in the QR code (typically the booking/court page)
     const qrLink = posterData.joinLink || window.location.origin + '/booking';
 
-    // The link shared to social media (the public poster page, with readable username)
+    // The link shared to social media (the public poster page, with readable friendly slug)
+    const slug = posterData.sharerUsername
+        ? `${posterData.sharerUsername}-invites-you-to-play`
+        : 'you-are-invited-to-play';
     const shareLink = posterData.bookingId
-        ? `${window.location.origin}/p/${posterData.sharerUsername || 'player'}/${posterData.bookingId}`
+        ? `${window.location.origin}/p/${slug}/${posterData.bookingId}`
         : qrLink;
 
     // Generate QR code when link changes

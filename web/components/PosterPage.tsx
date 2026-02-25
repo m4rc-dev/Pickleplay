@@ -7,7 +7,9 @@ import useSEO from '../hooks/useSEO';
 import QRCode from 'qrcode';
 
 const PosterPage: React.FC = () => {
-    const { username, bookingId } = useParams<{ username: string; bookingId: string }>();
+    const { slug, bookingId } = useParams<{ slug: string; bookingId: string }>();
+    // Extract the sharer's username from slug: "tzuyu-invites-you-to-play" → "tzuyu"
+    const username = slug?.split('-invites-you-to-play')[0] || slug || '';
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
