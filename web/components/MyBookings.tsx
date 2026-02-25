@@ -36,6 +36,7 @@ const MyBookings: React.FC = () => {
     const [myBookings, setMyBookings] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [userFullName, setUserFullName] = useState<string>('');
+    const [userUsername, setUserUsername] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const navigate = useNavigate();
 
@@ -91,7 +92,9 @@ const MyBookings: React.FC = () => {
             courtType: booking.court?.court_type || undefined,
             imageUrl: booking.court?.image_url || undefined,
             amenities: Array.isArray(booking.court?.amenities) ? booking.court.amenities : [],
-            joinLink: `${window.location.origin}/booking`,
+            joinLink: `${window.location.origin}/court/${booking.court?.id}`,
+            bookingId: booking.id,
+            sharerUsername: userUsername || 'player',
         });
         setIsPosterOpen(true);
     };
@@ -139,6 +142,7 @@ const MyBookings: React.FC = () => {
 
                 if (profile) {
                     setUserFullName(profile.full_name || profile.username || 'User');
+                    setUserUsername(profile.username || '');
                 }
             } catch (pErr) {
                 console.warn('Error fetching profile:', pErr);
@@ -509,15 +513,15 @@ const MyBookings: React.FC = () => {
                                         return (
                                             <button key={dateStr} onClick={() => setSelectedCalendarDate(isSelected ? null : dateStr)}
                                                 className={`relative w-full aspect-square rounded-xl text-[11px] font-black transition-all duration-200 ${isSelected ? 'bg-blue-600 text-white scale-110 shadow-lg shadow-blue-200' :
-                                                        isToday ? 'bg-slate-900 text-white' :
-                                                            hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
-                                                                'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
+                                                    isToday ? 'bg-slate-900 text-white' :
+                                                        hasBooking ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
+                                                            'text-slate-400 hover:bg-slate-50 hover:text-slate-700'
                                                     }`}>
                                                 {day}
                                                 {hasBooking && !isSelected && (
                                                     <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${info.statuses.includes('paid') ? 'bg-emerald-500' :
-                                                            info.statuses.includes('confirmed') ? 'bg-blue-500' :
-                                                                info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
+                                                        info.statuses.includes('confirmed') ? 'bg-blue-500' :
+                                                            info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
                                                         }`} />
                                                 )}
                                             </button>
@@ -629,12 +633,12 @@ const MyBookings: React.FC = () => {
                                     <>
                                         <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 border-b border-slate-100 bg-slate-50/50">
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Ref</div>
-                                            <div className="col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Court & Location</div>
+                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Court & Location</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Time</div>
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Amount</div>
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</div>
-                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
+                                            <div className="col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
                                         </div>
 
                                         {paginatedBookings.map((b, idx) => (
@@ -642,7 +646,7 @@ const MyBookings: React.FC = () => {
                                                 <div className="col-span-1">
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide">#{b.id.slice(0, 7)}</p>
                                                 </div>
-                                                <div className="col-span-3 flex items-center gap-3">
+                                                <div className="col-span-2 flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
                                                         <MapPin size={14} className="text-blue-600" />
                                                     </div>
@@ -653,7 +657,7 @@ const MyBookings: React.FC = () => {
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
                                                     <CalendarIcon size={14} className="text-slate-300 shrink-0" />
-                                                    <p className="text-xs font-black text-slate-700">{new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                                    <p className="text-xs font-black text-slate-700 whitespace-nowrap">{new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
                                                     <Clock size={14} className="text-slate-300 shrink-0" />
@@ -663,31 +667,31 @@ const MyBookings: React.FC = () => {
                                                     {b.total_price > 0 ? <p className="text-sm font-black text-slate-900">₱{b.total_price}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
                                                 </div>
                                                 <div className="col-span-1">{getStatusBadge(b)}</div>
-                                                <div className="col-span-2 flex items-center justify-end gap-2">
+                                                <div className="col-span-3 flex items-center justify-end gap-1.5">
                                                     {canReview(b) && (
                                                         <button onClick={() => handleOpenReview(b)}
-                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="Review Court">
+                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="Review Court">
                                                             <Star size={14} />
                                                         </button>
                                                     )}
                                                     {b.status === 'confirmed' && (
                                                         <button onClick={() => handleOpenPoster(b)}
-                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all" title="Share Game Poster">
+                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all" title="Share Game Poster">
                                                             <Megaphone size={14} />
                                                         </button>
                                                     )}
                                                     {b.status === 'confirmed' && (
                                                         <button onClick={() => { setSelectedBookingForShare(b); setShareEmail(''); setShareError(''); setShowShareModal(true); }}
-                                                            className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all" title="Share Court">
+                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all" title="Share Court">
                                                             <Share2 size={14} />
                                                         </button>
                                                     )}
                                                     <button onClick={() => handleOpenReceipt(b)}
-                                                        className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Receipt">
+                                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Receipt">
                                                         <FileText size={14} />
                                                     </button>
                                                     <button onClick={() => { setSelectedBookingForDetail(b); setShowDetailModal(true); }}
-                                                        className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">
+                                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">
                                                         <Info size={14} />
                                                     </button>
                                                 </div>

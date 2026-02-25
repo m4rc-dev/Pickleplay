@@ -69,6 +69,7 @@ import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import ChatbotButton from './components/ChatbotButton';
 import MatchVerifyPage from './components/MatchVerifyPage';
+import PosterPage from './components/PosterPage';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
@@ -301,6 +302,7 @@ const NavigationHandler: React.FC<{
   const location = useLocation();
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
+  const isPosterPage = location.pathname.startsWith('/p/');
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
 
@@ -438,7 +440,7 @@ const NavigationHandler: React.FC<{
 
   return (
     <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#EBEBE6' }}>
-      {role !== 'guest' && !isAuthPage && (
+      {role !== 'guest' && !isAuthPage && !isPosterPage && (
         <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60] animate-slide-in-left`} style={{ backgroundColor: '#1E40AF' }}>
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -722,7 +724,7 @@ const NavigationHandler: React.FC<{
       )}
 
       {/* Mobile Top Header */}
-      {!isAuthPage && (
+      {!isAuthPage && !isPosterPage && (
         <header className={`md:hidden fixed top-0 left-0 right-0 h-16 flex items-center justify-between px-6 z-50 transition-all duration-500 ease-in-out ${headerActive || role !== 'guest' ? 'bg-white/20 backdrop-blur-xl border-b border-white/20 shadow-lg' : 'bg-transparent'} ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}>
           <Link to="/" className={`flex items-center gap-2 font-black text-xl tracking-tighter ${headerActive || role !== 'guest' ? 'text-slate-900' : 'text-white'}`}>
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 object-contain rounded-lg" />
@@ -905,6 +907,7 @@ const NavigationHandler: React.FC<{
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/login" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
+              <Route path="/p/:username/:bookingId" element={<PosterPage />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
