@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { CourtEvent, CourtEventType } from '../../types';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import {
     createCourtEvent,
     getOwnerEvents,
@@ -314,6 +315,29 @@ const CourtCalendar: React.FC = () => {
     const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
     const [selectedCourt, setSelectedCourt] = useState<string>('all');
 
+    // Confirm dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        variant: 'warning' | 'danger' | 'info';
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+
+    // Confirm dialog helpers
+    const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+        setConfirmDialog({ isOpen: true, title, message, onConfirm, variant });
+    };
+
+    const closeConfirm = () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    };
+
+    const handleConfirm = () => {
+        confirmDialog.onConfirm();
+        closeConfirm();
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -352,20 +376,10 @@ const CourtCalendar: React.FC = () => {
                     end_datetime: eventData.end_datetime,
                     event_type: eventData.event_type,
                     blocks_bookings: eventData.blocks_bookings,
-                    color: eventData.color
                 });
             } else {
                 // Create new event
-                await createCourtEvent(
-                    eventData.court_id!,
-                    eventData.title!,
-                    eventData.description,
-                    eventData.start_datetime!,
-                    eventData.end_datetime!,
-                    eventData.event_type!,
-                    eventData.blocks_bookings!,
-                    eventData.color
-                );
+                await createCourtEvent(eventData);
             }
             fetchData();
             setEditingEvent(null);
@@ -375,21 +389,26 @@ const CourtCalendar: React.FC = () => {
     };
 
     const handleDeleteEvent = async (eventId: string) => {
-        if (!confirm('Are you sure you want to delete this event?')) return;
-
-        try {
-            const result = await deleteCourtEvent(eventId);
-            if (result.error) {
-                console.error('Delete error:', result.error);
-                alert('Failed to delete event: ' + (result.error as Error).message);
-                return;
-            }
-            // Refresh the events list
-            fetchData();
-        } catch (err) {
-            console.error('Error deleting event:', err);
-            alert('Failed to delete event');
-        }
+        showConfirm(
+            'Delete Event?',
+            'This will permanently delete this calendar event. Affected time slots will become available for booking again. This action cannot be undone.',
+            async () => {
+                try {
+                    const result = await deleteCourtEvent(eventId);
+                    if (result.error) {
+                        console.error('Delete error:', result.error);
+                        alert('Failed to delete event: ' + (result.error as Error).message);
+                        return;
+                    }
+                    // Refresh the events list
+                    fetchData();
+                } catch (err) {
+                    console.error('Error deleting event:', err);
+                    alert('Failed to delete event');
+                }
+            },
+            'danger'
+        );
     };
 
     const handleEditEvent = (event: CourtEvent) => {
@@ -743,6 +762,16 @@ const CourtCalendar: React.FC = () => {
                 onSave={handleSaveEvent}
                 courts={courts}
                 editingEvent={editingEvent}
+            />
+
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                onConfirm={handleConfirm}
+                onCancel={closeConfirm}
+                variant={confirmDialog.variant}
             />
         </div>
     );

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, LayoutGrid, List, X, Settings2, Trash2, Navigation, Target, Megaphone } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import MarketingPosterModal, { PosterData } from '../MarketingPosterModal';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface Court {
     id: string;
@@ -31,6 +32,29 @@ const Courts: React.FC = () => {
     const [isPosterOpen, setIsPosterOpen] = useState(false);
     const [posterData, setPosterData] = useState<PosterData | null>(null);
     const navigate = useNavigate();
+
+    // Confirm dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        variant: 'warning' | 'danger' | 'info';
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+
+    // Confirm dialog helpers
+    const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+        setConfirmDialog({ isOpen: true, title, message, onConfirm, variant });
+    };
+
+    const closeConfirm = () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    };
+
+    const handleConfirm = () => {
+        confirmDialog.onConfirm();
+        closeConfirm();
+    };
 
     const handlePromoteCourt = (court: Court) => {
         setPosterData({
@@ -205,22 +229,27 @@ const Courts: React.FC = () => {
     };
 
     const handleDeleteCourt = async (id: string) => {
-        if (!confirm('Are you sure you want to remove this court? This cannot be undone.')) return;
+        showConfirm(
+            'Remove Court?',
+            'This will permanently remove this court from your listings. All associated bookings and data will be preserved but the court will no longer accept new bookings. This action cannot be undone.',
+            async () => {
+                try {
+                    const { error } = await supabase
+                        .from('courts')
+                        .delete()
+                        .eq('id', id);
 
-        try {
-            const { error } = await supabase
-                .from('courts')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-            fetchCourts();
-            setIsEditModalOpen(false);
-            setEditingCourt(null);
-        } catch (err) {
-            console.error('Error deleting court:', err);
-            alert('Failed to delete court.');
-        }
+                    if (error) throw error;
+                    fetchCourts();
+                    setIsEditModalOpen(false);
+                    setEditingCourt(null);
+                } catch (err) {
+                    console.error('Error deleting court:', err);
+                    alert('Failed to delete court.');
+                }
+            },
+            'danger'
+        );
     };
 
     const openEditModal = (court: Court) => {
@@ -242,6 +271,7 @@ const Courts: React.FC = () => {
     };
 
     return (
+        <>
         <div className="space-y-10 animate-in fade-in duration-700">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -784,6 +814,17 @@ const Courts: React.FC = () => {
                 />
             )}
         </div>
+
+        {/* Confirm Dialog */}
+        <ConfirmDialog
+            isOpen={confirmDialog.isOpen}
+            title={confirmDialog.title}
+            message={confirmDialog.message}
+            onConfirm={handleConfirm}
+            onCancel={closeConfirm}
+            variant={confirmDialog.variant}
+        />
+        </>
     );
 };
 

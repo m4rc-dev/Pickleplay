@@ -10,6 +10,7 @@ import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEven
 import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
+import Toast, { ToastType } from './ui/Toast';
 
 // Always use hourly slots for simplicity
 const ALL_HOUR_SLOTS = [
@@ -203,6 +204,17 @@ const Booking: React.FC = () => {
   const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
   const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false,
+  });
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type, isVisible: true });
+  };
+
 
   const getUserLocation = () => {
     if (userLocation) return;
@@ -277,14 +289,12 @@ const Booking: React.FC = () => {
   useEffect(() => {
     setIsUserLoading(true);
     supabase.auth.getUser().then(({ data: { user } }) => {
-      console.log('User state in Booking component:', user);
       setUser(user);
       setIsUserLoading(false);
     });
 
     // Also listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user);
       setUser(session?.user || null);
       setIsUserLoading(false);
     });
@@ -763,7 +773,6 @@ const Booking: React.FC = () => {
           filter: `court_id=eq.${selectedCourt.id}`
         },
         (payload) => {
-          console.log('Booking change detected:', payload);
           // Refresh availability for all players viewing this court
           checkCourtAvailability(selectedCourt, selectedDate);
         }
@@ -1013,7 +1022,7 @@ const Booking: React.FC = () => {
       }
     });
 
-    console.log(`📍 Displaying ${markersRef.current.length} location markers on map`);
+    // Debug logging removed: marker count
   };
 
   // Re-render markers when data or filters change
@@ -1112,7 +1121,7 @@ const Booking: React.FC = () => {
         if (checkError) throw checkError;
 
         if (existingBooking) {
-          alert('⚠️ This time slot is already booked. Please choose another time.');
+          showToast('This time slot is already booked. Please choose another time.', 'error');
           setIsProcessing(false);
           return;
         }
@@ -1453,6 +1462,12 @@ const Booking: React.FC = () => {
 
   return (
     <div className="md:space-y-10 animate-in fade-in duration-700">
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast({ ...toast, isVisible: false })}
+      />
       {/* ──────────── MOBILE HEADER BAR ──────────── */}
       <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         {/* Search row */}

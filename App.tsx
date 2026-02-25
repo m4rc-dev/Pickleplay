@@ -771,7 +771,9 @@ const NavigationHandler: React.FC<{
                     ? <Home />
                     : role === 'PLAYER'
                       ? <Navigate to="/booking" replace />
-                      : <Navigate to="/dashboard" replace />
+                      : role === 'ADMIN'
+                        ? <Navigate to="/admin" replace />
+                        : <Navigate to="/dashboard" replace />
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
@@ -1460,7 +1462,13 @@ const App: React.FC = () => {
       localStorage.setItem('active_role', newRole);
       // Small delay to ensure state update is processed before navigation
       setTimeout(() => {
-        window.location.hash = '#/dashboard';
+        if (newRole === 'ADMIN') {
+          window.location.hash = '#/admin';
+        } else if (newRole === 'PLAYER') {
+          window.location.hash = '#/booking';
+        } else {
+          window.location.hash = '#/dashboard';
+        }
       }, 100);
     } catch (err) {
       console.error('Role switch error:', err);

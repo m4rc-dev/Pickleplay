@@ -204,22 +204,116 @@ export interface SocialPost {
   isEdited?: boolean;
 }
 
+export type TournamentFormat = 'round_robin' | 'single_elim' | 'double_elim';
+export type TournamentEventType = 'singles' | 'doubles' | 'mixed_doubles';
+export type TournamentCategory = 'beginner' | 'intermediate' | 'advanced' | 'open';
+export type TournamentStatus = 'UPCOMING' | 'LIVE' | 'COMPLETED' | 'CANCELLED';
+export type TournamentMatchStatus = 'scheduled' | 'live' | 'completed' | 'forfeited' | 'bye';
+export type TournamentRegStatus = 'pending' | 'confirmed' | 'waitlisted' | 'withdrawn' | 'rejected';
+
 export interface Tournament {
   id: string;
   name: string;
   date: string;
   location: string;
   prizePool: string;
-  status: 'UPCOMING' | 'LIVE' | 'COMPLETED';
+  status: TournamentStatus;
   skillLevel: string;
   maxPlayers: number;
   registeredCount: number;
   image?: string;
+  // Phase 1 additions
+  organizerId?: string;
+  courtId?: string;
+  locationId?: string;
+  description?: string;
+  format?: TournamentFormat;
+  eventType?: TournamentEventType;
+  category?: TournamentCategory;
+  startTime?: string;
+  checkInTime?: string;
+  registrationDeadline?: string;
+  numCourts?: number;
+  isApproved?: boolean;
+  isFeatured?: boolean;
+  rules?: string;
+  prizes?: string;
+  sponsorBannerUrl?: string;
+  announcement?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Registration mode
+  registrationMode?: 'player' | 'squad' | 'both';
+  squadRequirements?: SquadRequirements;
+  allowSoloFallback?: boolean;
+}
+
+export interface SquadRequirements {
+  minSize?: number;
+  ratingMin?: number;
+  ratingMax?: number;
+  regions?: string[];
+  membership?: 'any' | 'active' | 'premium';
+}
+
+export interface TournamentTeam {
+  id: string;
+  tournamentId: string;
+  player1Id: string;
+  player2Id?: string;
+  teamName?: string;
+  seed?: number;
+  registeredAt?: string;
+  // Joined data
+  player1?: { full_name: string; avatar_url?: string };
+  player2?: { full_name: string; avatar_url?: string };
+}
+
+export interface TournamentRound {
+  id: string;
+  tournamentId: string;
+  roundNumber: number;
+  roundName?: string;
+  createdAt?: string;
+  matches?: TournamentMatch[];
+}
+
+export interface TournamentMatch {
+  id: string;
+  tournamentId: string;
+  roundId: string;
+  matchNumber: number;
+  courtNumber?: number;
+  participantAId?: string;
+  participantBId?: string;
+  scoreA?: number;
+  scoreB?: number;
+  winnerId?: string;
+  matchTime?: string;
+  status: TournamentMatchStatus;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Joined data for display
+  participantA?: { id: string; name: string; avatar?: string };
+  participantB?: { id: string; name: string; avatar?: string };
+}
+
+export interface TournamentRegistration {
+  id?: string;
+  tournamentId: string;
+  playerId: string;
+  teamId?: string;
+  checkedIn?: boolean;
+  status?: TournamentRegStatus;
+  registeredAt?: string;
+  // Joined
+  player?: { id: string; full_name: string; avatar_url?: string };
 }
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING';
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT';
   message: string;
   actor: {
     name: string;

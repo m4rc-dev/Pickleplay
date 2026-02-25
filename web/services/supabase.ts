@@ -20,7 +20,6 @@ export const testSupabaseConnection = async () => {
             return { success: false, message: `${error.code}: ${error.message}` };
         }
 
-        console.log('Supabase Connection: SUCCESS ✅ (Status:', status, ')');
         return { success: true, message: 'Connected to Supabase' };
     } catch (err: any) {
         console.error('Supabase Conn Fatal:', err.message);
