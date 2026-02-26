@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
 import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
+import { sendInvitation, searchPlayerForInvite } from '../services/invitations';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
 import Toast, { ToastType } from './ui/Toast';
@@ -196,6 +197,13 @@ const Booking: React.FC = () => {
   const heroActiveCourt = heroCourtId ? (locationCourts.find(c => c.id === heroCourtId) ?? null) : null;
   // Map of slot time -> booking status for slots booked by the CURRENT user on this court+date
   const [userBookedSlots, setUserBookedSlots] = useState<Map<string, string>>(new Map());
+
+  // Post-booking invite state
+  const [postBookInviteQuery, setPostBookInviteQuery] = useState('');
+  const [postBookAllPlayers, setPostBookAllPlayers] = useState<any[]>([]);
+  const [postBookLoadingPlayers, setPostBookLoadingPlayers] = useState(false);
+  const [postBookInviteSendingId, setPostBookInviteSendingId] = useState<string | null>(null);
+  const [postBookInviteSent, setPostBookInviteSent] = useState<string[]>([]);
 
   // Location entry confirmation & policies
   const [showLocationEntryModal, setShowLocationEntryModal] = useState(false);
@@ -1272,6 +1280,19 @@ const Booking: React.FC = () => {
         // Show success modal first
         setShowSuccessModal(true);
         setIsBooked(true);
+
+        // Load all players for the invite list
+        setPostBookLoadingPlayers(true);
+        setPostBookInviteSent([]);
+        setPostBookInviteQuery('');
+        const { data: allProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url')
+          .neq('id', user.id)
+          .order('full_name', { ascending: true })
+          .limit(100);
+        setPostBookAllPlayers(allProfiles ?? []);
+        setPostBookLoadingPlayers(false);
 
         // Clear slot selection immediately
         setSelectedSlot(null);
@@ -2640,11 +2661,109 @@ const Booking: React.FC = () => {
                     </div>
                   )}
 
+                  {/* ── Invite Players Section ── */}
+                  <div className="bg-violet-50/60 border border-violet-100 rounded-2xl p-4 mb-4 text-left">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <UserPlus size={16} className="text-violet-600" />
+                        <span className="text-[11px] font-black text-violet-800 uppercase tracking-widest">Invite Players</span>
+                      </div>
+                      {postBookInviteSent.length > 0 && (
+                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                          <CheckCircle2 size={12} /> {postBookInviteSent.length} sent
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Search filter */}
+                    <div className="flex items-center gap-2 bg-white border border-violet-200 rounded-xl px-3 py-2 mb-3 focus-within:border-violet-400 transition-all">
+                      <Search size={14} className="text-violet-400 shrink-0" />
+                      <input
+                        type="text"
+                        value={postBookInviteQuery}
+                        onChange={e => setPostBookInviteQuery(e.target.value)}
+                        placeholder="Search by name or username..."
+                        className="flex-1 bg-transparent outline-none text-sm font-bold text-slate-700 placeholder:text-slate-300"
+                      />
+                      {postBookInviteQuery && (
+                        <button onClick={() => setPostBookInviteQuery('')} className="text-slate-300 hover:text-slate-500 transition-colors">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Player list */}
+                    <div className="max-h-[200px] overflow-y-auto space-y-1">
+                      {postBookLoadingPlayers ? (
+                        <div className="flex items-center justify-center py-6 gap-2">
+                          <Loader2 size={16} className="animate-spin text-violet-400" />
+                          <span className="text-xs font-bold text-slate-400">Loading players...</span>
+                        </div>
+                      ) : (() => {
+                        const q = postBookInviteQuery.toLowerCase().trim();
+                        const filtered = postBookAllPlayers.filter(p => {
+                          if (!q) return true;
+                          return (p.full_name || '').toLowerCase().includes(q) ||
+                            (p.username || '').toLowerCase().includes(q);
+                        });
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="text-center py-4">
+                              <p className="text-xs font-bold text-slate-400">No players found</p>
+                            </div>
+                          );
+                        }
+                        return filtered.map(player => (
+                          <div key={player.id} className="flex items-center justify-between bg-white border border-violet-50 rounded-xl px-3 py-2.5 hover:border-violet-200 transition-all">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {player.avatar_url ? (
+                                <img src={player.avatar_url} className="w-8 h-8 rounded-lg object-cover border border-violet-100 shrink-0" alt="" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                                  <UserPlus size={14} className="text-violet-500" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-slate-900 truncate">{player.full_name || player.username || 'Unknown'}</p>
+                                {player.username && <p className="text-[10px] text-slate-400 font-bold truncate">@{player.username}</p>}
+                              </div>
+                            </div>
+                            {postBookInviteSent.includes(player.id) ? (
+                              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 shrink-0 ml-2">
+                                <CheckCircle2 size={12} /> Sent
+                              </span>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  if (!receiptData?.id) return;
+                                  setPostBookInviteSendingId(player.id);
+                                  const result = await sendInvitation({
+                                    bookingId: receiptData.id,
+                                    inviteeId: player.id,
+                                  });
+                                  setPostBookInviteSendingId(null);
+                                  if (result.success) {
+                                    setPostBookInviteSent(prev => [...prev, player.id]);
+                                  }
+                                }}
+                                disabled={postBookInviteSendingId === player.id}
+                                className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-violet-700 disabled:opacity-50 transition-all flex items-center gap-1 shrink-0 ml-2"
+                              >
+                                {postBookInviteSendingId === player.id ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Invite
+                              </button>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
                   <div className="space-y-3">
                     <button
                       onClick={() => {
                         setShowSuccessModal(false);
                         setShowReceipt(true);
+                        setPostBookInviteQuery(''); setPostBookAllPlayers([]); setPostBookInviteSent([]);
                       }}
                       className="w-full py-3.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
                     >
@@ -2657,6 +2776,7 @@ const Booking: React.FC = () => {
                         setSelectedSlot(null);
                         setSelectedCourt(null);
                         setSelectedLocation(null);
+                        setPostBookInviteQuery(''); setPostBookAllPlayers([]); setPostBookInviteSent([]);
                         navigate('/booking');
                       }}
                       className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg"

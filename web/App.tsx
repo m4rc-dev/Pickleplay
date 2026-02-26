@@ -108,6 +108,16 @@ const NotificationPanel: React.FC<{
   onClose: () => void,
   onNotificationClick: (notification: Notification) => void
 }> = ({ notifications, onClose, onNotificationClick }) => {
+  const getNotifIcon = (type: string) => {
+    if (type === 'ACHIEVEMENT') return <span className="text-base">🏆</span>;
+    if (type === 'player_invitation') return <span className="text-base">🎾</span>;
+    if (type === 'invitation_accepted') return <span className="text-base">✅</span>;
+    if (type === 'invitation_declined') return <span className="text-base">❌</span>;
+    return null;
+  };
+  const isSystemNotif = (type: string) =>
+    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined'].includes(type);
+
   return (
     <div className="absolute left-full ml-6 bottom-0 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-left-4 fade-in duration-300 z-[100]">
       <div className="flex justify-between items-center mb-4">
@@ -122,22 +132,29 @@ const NotificationPanel: React.FC<{
             onClick={() => onNotificationClick(n)}
           >
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
-            {n.type === 'ACHIEVEMENT' ? (
-              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <span className="text-base">🏆</span>
+            {isSystemNotif(n.type) ? (
+              <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                {getNotifIcon(n.type)}
               </div>
             ) : (
               <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
             )}
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
-                {n.type === 'ACHIEVEMENT' ? (
-                  <span className="font-bold">{n.message}</span>
+                {isSystemNotif(n.type) ? (
+                  <>
+                    <span className="font-bold">{n.actor.name}</span>
+                    {' '}
+                    <span>{n.message}</span>
+                  </>
                 ) : (
                   <><span className="font-bold">{n.actor.name}</span> {n.message}</>
                 )}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+              {(n.type === 'player_invitation') && (
+                <span className="inline-block mt-1.5 px-2 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Tap to respond</span>
+              )}
             </div>
           </div>
         )) : (
@@ -366,8 +383,10 @@ const NavigationHandler: React.FC<{
   };
 
   const handleNotificationClick = (notification: Notification) => {
-    if (notification.type === 'BOOKING' && notification.bookingId) {
-      // Court owners go to bookings admin, players go to my bookings
+    const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
+    if (invitationTypes.includes(notification.type as string)) {
+      navigate('/my-bookings?tab=invitations');
+    } else if (notification.type === 'BOOKING' && notification.bookingId) {
       if (role === 'COURT_OWNER' || role === 'ADMIN') {
         navigate('/bookings-admin');
       } else {
@@ -376,9 +395,8 @@ const NavigationHandler: React.FC<{
     } else if (notification.type === 'ACHIEVEMENT') {
       navigate('/achievements');
     }
-    // Add more navigation logic for other notification types if needed
-    setIsNotificationsOpen(false); // Close panel after clicking
-    handleMarkNotificationsRead(); // Mark all as read when interacting
+    setIsNotificationsOpen(false);
+    handleMarkNotificationsRead();
   };
 
   const getThemeColor = () => {

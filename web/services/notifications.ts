@@ -5,7 +5,8 @@ export interface Notification {
   user_id: string;
   type: 'match_request' | 'match_accepted' | 'match_declined' | 'new_message' |
   'partner_review' | 'partner_endorsement' | 'group_message' | 'group_invite' |
-  'event_reminder' | 'booking_reminder' | 'system';
+  'event_reminder' | 'booking_reminder' | 'system' | 'ACHIEVEMENT' |
+  'player_invitation' | 'invitation_accepted' | 'invitation_declined';
   title: string;
   message?: string;
   related_user_id?: string;
@@ -14,6 +15,7 @@ export interface Notification {
   related_message_id?: string;
   related_group_id?: string;
   related_event_id?: string;
+  booking_id?: string;
   action_url?: string;
   is_read: boolean;
   read_at?: string;
