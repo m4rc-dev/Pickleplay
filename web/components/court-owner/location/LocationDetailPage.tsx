@@ -5,6 +5,7 @@ import { Building2, MapPin, ChevronLeft, Plus, Clock, Settings2, Trash2, X, Targ
 import { supabase } from '../../../services/supabase';
 import { uploadCourtImage } from '../../../services/locations';
 import { Location, CourtClosure, CourtClosureReason } from '../../../types';
+import ConfirmDialog from '../../ui/ConfirmDialog';
 
 declare global {
     interface Window {
@@ -83,6 +84,29 @@ const LocationDetailPage: React.FC = () => {
     const [isSavingCourtClosure, setIsSavingCourtClosure] = useState(false);
     // For Add Court — store closures locally until court is created
     const [pendingCourtClosures, setPendingCourtClosures] = useState<{ date: string; reason: CourtClosureReason; description: string }[]>([]);
+
+    // Confirm dialog state
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        variant: 'warning' | 'danger' | 'info';
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+
+    // Confirm dialog helpers
+    const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+        setConfirmDialog({ isOpen: true, title, message, onConfirm, variant });
+    };
+
+    const closeConfirm = () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    };
+
+    const handleConfirm = () => {
+        confirmDialog.onConfirm();
+        closeConfirm();
+    };
 
     useEffect(() => {
         if (locationId) fetchLocationData();
@@ -348,17 +372,23 @@ const LocationDetailPage: React.FC = () => {
     };
 
     const handleDeleteCourt = async (id: string) => {
-        if (!confirm('Are you sure you want to remove this court? This cannot be undone.')) return;
-        try {
-            const { error } = await supabase.from('courts').delete().eq('id', id);
-            if (error) throw error;
-            setIsEditCourtOpen(false);
-            setEditingCourt(null);
-            fetchLocationData();
-        } catch (err) {
-            console.error('Error deleting court:', err);
-            alert('Failed to delete court.');
-        }
+        showConfirm(
+            'Remove Court?',
+            'This will permanently remove this court from this location. All associated bookings and data will be preserved but the court will no longer accept new bookings. This action cannot be undone.',
+            async () => {
+                try {
+                    const { error } = await supabase.from('courts').delete().eq('id', id);
+                    if (error) throw error;
+                    setIsEditCourtOpen(false);
+                    setEditingCourt(null);
+                    fetchLocationData();
+                } catch (err) {
+                    console.error('Error deleting court:', err);
+                    alert('Failed to delete court.');
+                }
+            },
+            'danger'
+        );
     };
 
     const openEditCourt = (court: CourtItem) => {
@@ -1052,6 +1082,7 @@ const LocationDetailPage: React.FC = () => {
     }
 
     return (
+        <>
         <div className="space-y-8 animate-in fade-in duration-700">
             {/* Back Button & Header */}
             <div>
@@ -1284,6 +1315,17 @@ const LocationDetailPage: React.FC = () => {
             )}
 
         </div>
+
+        {/* Confirm Dialog */}
+        <ConfirmDialog
+            isOpen={confirmDialog.isOpen}
+            title={confirmDialog.title}
+            message={confirmDialog.message}
+            onConfirm={handleConfirm}
+            onCancel={closeConfirm}
+            variant={confirmDialog.variant}
+        />
+        </>
     );
 };
 

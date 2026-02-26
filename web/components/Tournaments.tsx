@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import useSEO from '../hooks/useSEO';
-import { Trophy, Calendar, MapPin, Users, Award, Search, Filter, CheckCircle2 } from 'lucide-react';
+import { Trophy, Calendar, MapPin, Users, Award, Search, Filter, CheckCircle2, Swords, Shield, Star, Users2, Clock, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { Tournament } from '../types';
+import { Tournament, TournamentCategory } from '../types';
+import { fetchTournaments as fetchTournamentsService, registerPlayer, withdrawRegistration } from '../services/tournaments';
 
 const Tournaments: React.FC = () => {
-    useSEO({
-        title: 'Pickleball Tournaments Philippines',
-        description: 'Join or follow pickleball tournaments across the Philippines. Register for upcoming events and track prize pools and standings.',
-        canonical: 'https://www.pickleplay.ph/tournaments',
-    });
-    const [tournaments, setTournaments] = useState<(Tournament & { isJoined?: boolean })[]>([]);
+    const navigate = useNavigate();
+    const [tournaments, setTournaments] = useState<(Tournament & { isJoined?: boolean; registrationStatus?: string })[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState('All');
+    const [categoryFilter, setCategoryFilter] = useState<TournamentCategory | 'all'>('all');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
     useEffect(() => {
@@ -22,50 +20,39 @@ const Tournaments: React.FC = () => {
             if (session?.user) {
                 setCurrentUserId(session.user.id);
             }
-            fetchTournaments(session?.user?.id);
+            loadTournaments(session?.user?.id);
         };
         init();
     }, []);
 
-    const fetchTournaments = async (userId?: string) => {
+    const loadTournaments = async (userId?: string) => {
         setIsLoading(true);
         try {
-            // Fetch tournaments
-            const { data: tourneyData, error: tourneyError } = await supabase
-                .from('tournaments')
-                .select('*')
-                .order('date', { ascending: true });
+            const data = await fetchTournamentsService({ approvedOnly: true });
 
-            if (tourneyError) throw tourneyError;
-
-            // If user is logged in, fetch their registrations
-            let registrations: Set<string> = new Set();
+            // If user is logged in, fetch their registrations with status
+            const registrationsMap = new Map<string, string>(); // tournament_id -> status
             if (userId) {
                 const { data: regData } = await supabase
                     .from('tournament_registrations')
-                    .select('tournament_id')
+                    .select('tournament_id, status')
                     .eq('player_id', userId);
 
                 if (regData) {
-                    registrations = new Set(regData.map(r => r.tournament_id));
+                    regData.forEach(r => registrationsMap.set(r.tournament_id, r.status));
                 }
             }
 
-            const mappedData = (tourneyData || []).map((t: any) => ({
-                id: t.id,
-                name: t.name,
-                date: t.date,
-                location: t.location,
-                prizePool: t.prize_pool,
-                status: t.status,
-                skillLevel: t.skill_level,
-                maxPlayers: t.max_players,
-                registeredCount: t.registered_count,
-                image: t.image_url,
-                isJoined: registrations.has(t.id)
-            }));
+            const mapped = data.map(t => {
+                const status = registrationsMap.get(t.id);
+                return {
+                    ...t,
+                    isJoined: status === 'confirmed',
+                    registrationStatus: status || undefined
+                };
+            });
 
-            setTournaments(mappedData);
+            setTournaments(mapped);
         } catch (err) {
             console.error('Error fetching tournaments:', err);
         } finally {
@@ -78,40 +65,20 @@ const Tournaments: React.FC = () => {
             alert('Please login to join tournaments.');
             return;
         }
-
         try {
-            const { error } = await supabase
-                .from('tournament_registrations')
-                .insert({
-                    tournament_id: tournamentId,
-                    player_id: currentUserId
-                });
-
-            if (error) throw error;
-
-            // Re-fetch to update counts and state
-            fetchTournaments(currentUserId);
+            await registerPlayer(tournamentId, currentUserId);
+            loadTournaments(currentUserId);
         } catch (err: any) {
-            console.error('Error joining tournament:', err);
             alert(err.message || 'Failed to join tournament');
         }
     };
 
     const handleLeaveTournament = async (tournamentId: string) => {
         if (!currentUserId || !confirm('Are you sure you want to leave this tournament?')) return;
-
         try {
-            const { error } = await supabase
-                .from('tournament_registrations')
-                .delete()
-                .eq('tournament_id', tournamentId)
-                .eq('player_id', currentUserId);
-
-            if (error) throw error;
-
-            fetchTournaments(currentUserId);
+            await withdrawRegistration(tournamentId, currentUserId);
+            loadTournaments(currentUserId);
         } catch (err) {
-            console.error('Error leaving tournament:', err);
             alert('Failed to leave tournament');
         }
     };
@@ -120,8 +87,11 @@ const Tournaments: React.FC = () => {
         const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             t.location.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesFilter = filter === 'All' || t.status === filter.toUpperCase();
-        return matchesSearch && matchesFilter;
+        const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
+        return matchesSearch && matchesFilter && matchesCategory;
     });
+
+    const hasActiveFilters = filter !== 'All' || categoryFilter !== 'all' || searchQuery.trim().length > 0;
 
     return (
         <div className="space-y-12 animate-in fade-in duration-700">
@@ -140,33 +110,70 @@ const Tournaments: React.FC = () => {
             </div>
 
             {/* Filters Bar updated to match screenshot style */}
-            <div className="flex flex-col md:flex-row gap-6 items-center justify-between z-40">
-                <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-                    {['All', 'Upcoming', 'Live', 'Completed'].map((f) => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f)}
-                            className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap ${filter === f
-                                ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
-                                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
-                                }`}
-                        >
-                            {f}
-                        </button>
-                    ))}
+            <div className="flex flex-col gap-3 z-40">
+                <div className="flex flex-col md:flex-row gap-4 md:items-center">
+                    <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                        {['All', 'Upcoming', 'Live', 'Completed'].map((f) => (
+                            <button
+                                key={f}
+                                onClick={() => setFilter(f)}
+                                className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap ${filter === f
+                                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-200'
+                                    : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+                                    }`}
+                            >
+                                {f}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="relative flex-1 w-full max-w-md">
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search tournaments or venues..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-16 pr-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                        />
+                    </div>
                 </div>
 
-                <div className="relative flex-1 w-full max-w-md">
-                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input
-                        type="text"
-                        placeholder="Search tournaments or venues..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-16 pr-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                    />
+                <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex gap-2 flex-wrap">
+                        {([{ value: 'all', label: 'All Categories' }, { value: 'beginner', label: 'Beginner' }, { value: 'intermediate', label: 'Intermediate' }, { value: 'advanced', label: 'Advanced' }, { value: 'open', label: 'Open' }] as { value: TournamentCategory | 'all'; label: string }[]).map(c => (
+                            <button
+                                key={c.value}
+                                onClick={() => setCategoryFilter(c.value)}
+                                className={`px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                    categoryFilter === c.value
+                                        ? 'bg-slate-900 text-white shadow-md'
+                                        : 'bg-white border border-slate-100 text-slate-400 hover:text-slate-600'
+                                }`}
+                            >
+                                {c.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {hasActiveFilters && (
+                        <button
+                            onClick={() => { setFilter('All'); setCategoryFilter('all'); setSearchQuery(''); }}
+                            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
+                        >
+                            Clear Filters
+                        </button>
+                    )}
                 </div>
+
+                {hasActiveFilters && (
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                        Filters applied: {filter !== 'All' ? filter : 'Status: Any'} · {categoryFilter !== 'all' ? `Category: ${categoryFilter}` : 'Category: Any'}{searchQuery ? ' · Search active' : ''}
+                    </p>
+                )}
             </div>
+
+            {/* Category Filter moved into bar above */}
 
             {/* Tournaments Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -181,6 +188,7 @@ const Tournaments: React.FC = () => {
                             tournament={tournament}
                             onJoin={() => handleJoinTournament(tournament.id)}
                             onLeave={() => handleLeaveTournament(tournament.id)}
+                            onClick={() => navigate(`/tournaments/${tournament.id}`)}
                         />
                     ))
                 ) : (
@@ -196,14 +204,19 @@ const Tournaments: React.FC = () => {
 };
 
 const TournamentJoinCard: React.FC<{
-    tournament: Tournament & { isJoined?: boolean },
+    tournament: Tournament & { isJoined?: boolean; registrationStatus?: string },
     onJoin: () => void,
-    onLeave: () => void
-}> = ({ tournament, onJoin, onLeave }) => {
+    onLeave: () => void,
+    onClick: () => void
+}> = ({ tournament, onJoin, onLeave, onClick }) => {
     const isFull = (tournament.registeredCount || 0) >= (tournament.maxPlayers || 0);
+    const regMode = tournament.registrationMode || 'player';
+    const isSquadOnly = regMode === 'squad';
+    const deadlinePassed = tournament.registrationDeadline ? (new Date() > new Date(tournament.registrationDeadline)) : false;
+    const isSquadBlocked = (regMode === 'squad') && !(tournament.allowSoloFallback);
 
     return (
-        <div className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden flex flex-col">
+        <div onClick={onClick} className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden flex flex-col cursor-pointer">
             {/* Image Section */}
             <div className="h-44 relative overflow-hidden bg-slate-100">
                 <img
@@ -215,6 +228,21 @@ const TournamentJoinCard: React.FC<{
                 <div className="absolute bottom-3 left-3 flex gap-1.5">
                     <span className="bg-blue-600 text-white px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.status}</span>
                     <span className="bg-white text-slate-900 px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">{tournament.skillLevel}</span>
+                    {tournament.isFeatured && (
+                        <span className="bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider flex items-center gap-0.5">
+                            <Star size={8} /> Featured
+                        </span>
+                    )}
+                </div>
+                <div className="absolute top-3 right-3 flex flex-col gap-2 items-end">
+                    {tournament.format && (
+                        <span className="bg-white/90 backdrop-blur-sm text-slate-700 px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider">
+                            {tournament.format.replace('_', ' ')}
+                        </span>
+                    )}
+                    <span className={`px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-wider ${isSquadOnly ? 'bg-slate-900 text-white' : 'bg-white/90 text-slate-700 border border-slate-200'}`}>
+                        {regMode === 'both' ? 'Players + Squads' : regMode === 'squad' ? 'Squads Only' : 'Players'}
+                    </span>
                 </div>
             </div>
 
@@ -254,13 +282,47 @@ const TournamentJoinCard: React.FC<{
                 </div>
 
                 {/* Action Button */}
-                {tournament.isJoined ? (
+                {tournament.registrationStatus === 'pending' ? (
+                    <div className="flex gap-2 mt-auto">
+                        <div className="flex-[3] flex items-center justify-center gap-2 bg-amber-50 text-amber-700 h-11 rounded-xl border border-amber-100 font-black text-xs uppercase tracking-wide">
+                            <Clock size={16} /> Pending Approval
+                        </div>
+                        <button
+                            onClick={e => { e.stopPropagation(); onLeave(); }}
+                            className="flex-1 bg-rose-50 text-rose-500 hover:bg-rose-100 h-11 rounded-xl transition-all flex items-center justify-center font-black text-[9px] uppercase tracking-wide"
+                        >
+                            Withdraw
+                        </button>
+                    </div>
+                ) : tournament.registrationStatus === 'rejected' ? (
+                    <div className="flex gap-2 mt-auto">
+                        <div className="flex-[3] flex items-center justify-center gap-2 bg-rose-50 text-rose-600 h-11 rounded-xl border border-rose-100 font-black text-xs uppercase tracking-wide">
+                            <X size={16} /> Not Approved
+                        </div>
+                        <button
+                            onClick={e => { e.stopPropagation(); onJoin(); }}
+                            disabled={isFull || tournament.status !== 'UPCOMING' || deadlinePassed || isSquadBlocked}
+                            className={`flex-1 h-11 rounded-xl transition-all flex items-center justify-center font-black text-[9px] uppercase tracking-wide ${isFull || tournament.status !== 'UPCOMING' || deadlinePassed || isSquadBlocked
+                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-900 text-white hover:bg-indigo-600'
+                            }`}
+                        >
+                            {isFull
+                                ? 'Sold Out'
+                                : (tournament.status !== 'UPCOMING' || deadlinePassed)
+                                    ? 'Closed'
+                                    : isSquadBlocked
+                                        ? 'Need a Squad'
+                                        : 'Reapply'}
+                        </button>
+                    </div>
+                ) : tournament.isJoined ? (
                     <div className="flex gap-2 mt-auto">
                         <div className="flex-[3] flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 h-11 rounded-xl border border-emerald-100 font-black text-xs uppercase tracking-wide">
                             <CheckCircle2 size={16} /> Registered
                         </div>
                         <button
-                            onClick={onLeave}
+                            onClick={e => { e.stopPropagation(); onLeave(); }}
                             className="flex-1 bg-rose-50 text-rose-500 hover:bg-rose-100 h-11 rounded-xl transition-all flex items-center justify-center font-black text-[9px] uppercase tracking-wide"
                         >
                             Leave
@@ -268,14 +330,20 @@ const TournamentJoinCard: React.FC<{
                     </div>
                 ) : (
                     <button
-                        onClick={onJoin}
-                        disabled={isFull || tournament.status !== 'UPCOMING'}
-                        className={`w-full h-11 rounded-xl font-black text-xs uppercase tracking-wide transition-all mt-auto ${isFull || tournament.status !== 'UPCOMING'
+                        onClick={e => { e.stopPropagation(); onJoin(); }}
+                        disabled={isFull || tournament.status !== 'UPCOMING' || deadlinePassed || isSquadBlocked}
+                        className={`w-full h-11 rounded-xl font-black text-xs uppercase tracking-wide transition-all mt-auto ${isFull || tournament.status !== 'UPCOMING' || deadlinePassed || isSquadBlocked
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                             : 'bg-slate-900 text-white hover:bg-blue-600 shadow-lg'
                             }`}
                     >
-                        {isFull ? 'Sold Out' : tournament.status !== 'UPCOMING' ? 'Closed' : 'Join Tournament'}
+                        {isFull
+                            ? 'Sold Out'
+                            : (tournament.status !== 'UPCOMING' || deadlinePassed)
+                                ? 'Closed'
+                                : isSquadBlocked
+                                    ? 'Need a Squad'
+                                    : 'Join Tournament'}
                     </button>
                 )}
             </div>

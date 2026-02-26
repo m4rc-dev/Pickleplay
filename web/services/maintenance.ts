@@ -123,12 +123,42 @@ export const getEnabledFeaturesForRole = async (role: UserRole): Promise<Set<str
     const enabled = new Set(
       data.filter((d: any) => d.is_enabled).map((d: any) => d.feature as string)
     );
-    console.log(`[Features] Loaded for ${role}:`, [...enabled]);
+    // Debug logging removed: feature flags per role
     return enabled;
   } catch (e) {
     console.warn('Unexpected error in getEnabledFeaturesForRole:', e);
     return new Set();
   }
+};
+
+/**
+ * Upsert any missing default feature rows for the given role so newly-added
+ * features (like 'achievements') become available without a manual DB migration.
+ * Existing rows (admin-toggled on/off) are NOT overwritten.
+ */
+export const ensureDefaultFeatures = async (role: string): Promise<void> => {
+  const defaults = DEFAULT_FEATURES_PER_ROLE[role];
+  if (!defaults || defaults.length === 0) return;
+
+  // Find which rows already exist
+  const { data: existing } = await supabase
+    .from('role_feature_access')
+    .select('feature')
+    .eq('role', role);
+
+  const existingSet = new Set((existing || []).map((r: any) => r.feature as string));
+  const missing = defaults.filter((f) => !existingSet.has(f));
+
+  if (missing.length === 0) return;
+
+  const rows = missing.map((feature) => ({
+    role,
+    feature,
+    is_enabled: true,
+    updated_at: new Date().toISOString(),
+  }));
+
+  await supabase.from('role_feature_access').upsert(rows, { onConflict: 'role,feature' });
 };
 
 /**
@@ -212,6 +242,7 @@ export const ALL_FEATURES: { key: string; label: string }[] = [
   { key: 'booking', label: 'Book Courts' },
   { key: 'messages', label: 'Messages' },
   { key: 'tournaments', label: 'Tournaments' },
+  { key: 'achievements', label: 'Achievements' },
   { key: 'guides', label: 'Guides & Quizzes' },
   { key: 'teams', label: 'Squads / Teams' },
   { key: 'partners', label: 'Find Partners' },
@@ -243,8 +274,8 @@ export const MANAGEABLE_ROLES: { key: UserRole; label: string }[] = [
 
 /** Default features per role (mirrors the migration seed data) */
 export const DEFAULT_FEATURES_PER_ROLE: Record<string, string[]> = {
-  PLAYER: ['booking', 'messages', 'tournaments', 'guides', 'teams', 'partners', 'coaches', 'community', 'dashboard', 'news', 'shop', 'profile', 'rankings', 'academy'],
-  COACH: ['dashboard', 'students', 'clinics', 'schedule', 'teams', 'news', 'shop', 'profile', 'tournaments', 'community'],
+  PLAYER: ['booking', 'messages', 'tournaments', 'achievements', 'guides', 'teams', 'partners', 'coaches', 'community', 'dashboard', 'news', 'shop', 'profile', 'rankings', 'academy'],
+  COACH: ['dashboard', 'students', 'clinics', 'schedule', 'teams', 'news', 'shop', 'profile', 'tournaments', 'community', 'achievements'],
   COURT_OWNER: ['dashboard', 'locations', 'bookings-admin', 'court-calendar', 'tournaments-admin', 'revenue', 'court-policies', 'news', 'shop', 'profile', 'teams'],
   CUSTOMER: ['booking', 'dashboard', 'news', 'shop', 'profile', 'tournaments', 'community'],
 };

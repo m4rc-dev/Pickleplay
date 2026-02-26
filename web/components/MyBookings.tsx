@@ -45,6 +45,7 @@ const MyBookings: React.FC = () => {
     const [myBookings, setMyBookings] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [userFullName, setUserFullName] = useState<string>('');
+    const [userUsername, setUserUsername] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -126,7 +127,9 @@ const MyBookings: React.FC = () => {
             courtType: booking.court?.court_type || undefined,
             imageUrl: booking.court?.image_url || undefined,
             amenities: Array.isArray(booking.court?.amenities) ? booking.court.amenities : [],
-            joinLink: `${window.location.origin}/booking`,
+            joinLink: `${window.location.origin}/court/${booking.court?.id}`,
+            bookingId: booking.id,
+            sharerUsername: userUsername || 'player',
         });
         setIsPosterOpen(true);
     };
@@ -200,6 +203,7 @@ const MyBookings: React.FC = () => {
 
                 if (profile) {
                     setUserFullName(profile.full_name || profile.username || 'User');
+                    setUserUsername(profile.username || '');
                 }
             } catch (pErr) {
                 console.warn('Error fetching profile:', pErr);
@@ -770,12 +774,12 @@ const MyBookings: React.FC = () => {
                                     <>
                                         <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-[30px]">
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Ref</div>
-                                            <div className="col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Court & Location</div>
+                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Court & Location</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Time</div>
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Amount</div>
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</div>
-                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
+                                            <div className="col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
                                         </div>
 
                                         {paginatedBookings.map((b, idx) => (
@@ -783,7 +787,7 @@ const MyBookings: React.FC = () => {
                                                 <div className="col-span-1">
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide">#{b.id.slice(0, 7)}</p>
                                                 </div>
-                                                <div className="col-span-3 flex items-center gap-3">
+                                                <div className="col-span-2 flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
                                                         <MapPin size={14} className="text-blue-600" />
                                                     </div>
@@ -794,7 +798,7 @@ const MyBookings: React.FC = () => {
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
                                                     <CalendarIcon size={14} className="text-slate-300 shrink-0" />
-                                                    <p className="text-xs font-black text-slate-700">{new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                                    <p className="text-xs font-black text-slate-700 whitespace-nowrap">{new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
                                                     <Clock size={14} className="text-slate-300 shrink-0" />
