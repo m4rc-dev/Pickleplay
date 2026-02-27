@@ -25,3 +25,5 @@ migrations
 *.njsproj
 *.sln
 *.sw?
+
+backup_database
