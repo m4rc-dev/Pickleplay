@@ -16,6 +16,9 @@ export interface Squad {
   created_at: string;
   updated_at: string;
   is_member?: boolean;
+  slug?: string;
+  require_approval?: boolean;
+  invite_code?: string;
 }
 
 export interface SquadMember {

@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Trophy, Users, Megaphone, GitBranch, CheckCircle2, Clock,
   UserCheck, UserX, Shuffle, Plus, Loader2, Radio, BarChart3,
-  Settings2, Zap, Star, ChevronUp, ChevronDown, SlidersHorizontal
+  Settings2, Zap, Star, ChevronUp, ChevronDown, SlidersHorizontal, RotateCcw
 } from 'lucide-react';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import {
@@ -18,6 +18,7 @@ import type { Tournament, TournamentRegistration, TournamentTeam } from '../../t
 import TournamentBracket from '../tournaments/TournamentBracket';
 import PlayerApprovalCard from '../tournaments/PlayerApprovalCard';
 import MatchScoreModal from '../tournaments/MatchScoreModal';
+import MarketingPosterModal, { PosterData } from '../MarketingPosterModal';
 import { supabase } from '../../services/supabase';
 
 type HubTab = 'overview' | 'participants' | 'teams' | 'bracket' | 'announcements';
@@ -63,17 +64,15 @@ function buildMockHubData() {
     { id: 'mr-2', tournamentId: 'mock-hub-1', playerId: 'pm-sarah',  teamId: 'mt-1', checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-10T09:05:00Z' },
     { id: 'mr-3', tournamentId: 'mock-hub-1', playerId: 'pm-marcus', teamId: 'mt-2', checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-11T10:00:00Z' },
     { id: 'mr-4', tournamentId: 'mock-hub-1', playerId: 'pm-emily',  teamId: 'mt-2', checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-11T10:05:00Z' },
-    { id: 'mr-5', tournamentId: 'mock-hub-1', playerId: 'pm-david',  teamId: 'mt-3', checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-12T11:00:00Z' },
-    { id: 'mr-6', tournamentId: 'mock-hub-1', playerId: 'pm-lisa',   teamId: 'mt-3', checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-12T11:05:00Z' },
-    { id: 'mr-7', tournamentId: 'mock-hub-1', playerId: 'pm-tom',    teamId: 'mt-4', checkedIn: false, status: 'confirmed', registeredAt: '2026-07-13T14:00:00Z' },
-    { id: 'mr-8', tournamentId: 'mock-hub-1', playerId: 'pm-jenna',  teamId: 'mt-4', checkedIn: false, status: 'confirmed', registeredAt: '2026-07-13T14:05:00Z' },
+    { id: 'mr-5', tournamentId: 'mock-hub-1', playerId: 'pm-david',  checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-12T11:00:00Z' },
+    { id: 'mr-6', tournamentId: 'mock-hub-1', playerId: 'pm-lisa',   checkedIn: true,  status: 'confirmed', registeredAt: '2026-07-12T11:05:00Z' },
+    { id: 'mr-7', tournamentId: 'mock-hub-1', playerId: 'pm-tom',    checkedIn: false, status: 'confirmed', registeredAt: '2026-07-13T14:00:00Z' },
+    { id: 'mr-8', tournamentId: 'mock-hub-1', playerId: 'pm-jenna',  checkedIn: false, status: 'confirmed', registeredAt: '2026-07-13T14:05:00Z' },
   ];
 
   const teams: import('../../types').TournamentTeam[] = [
     { id: 'mt-1', tournamentId: 'mock-hub-1', player1Id: 'pm-alex',   player2Id: 'pm-sarah',  teamName: 'Alex & Sarah',   seed: 1 },
     { id: 'mt-2', tournamentId: 'mock-hub-1', player1Id: 'pm-marcus', player2Id: 'pm-emily',  teamName: 'Marcus & Emily', seed: 2 },
-    { id: 'mt-3', tournamentId: 'mock-hub-1', player1Id: 'pm-david',  player2Id: 'pm-lisa',   teamName: 'David & Lisa',   seed: 3 },
-    { id: 'mt-4', tournamentId: 'mock-hub-1', player1Id: 'pm-tom',    player2Id: 'pm-jenna',  teamName: 'Tom & Jenna',    seed: 4 },
   ];
 
   const makePlayer = (id: string, username: string, fullName: string, dupr: number, rating: number): import('../../services/tournaments').PlayerApprovalDetails => ({
@@ -148,6 +147,10 @@ function buildMockHubData() {
 const TournamentHub: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Read initial tab from URL parameter, default to 'participants' for management
+  const initialTab = (searchParams.get('tab') as HubTab) || 'participants';
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
@@ -156,13 +159,17 @@ const TournamentHub: React.FC = () => {
   const [teams, setTeams] = useState<TournamentTeam[]>([]);
   const [nameMap, setNameMap] = useState<Map<string, { name: string; avatar?: string }>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<HubTab>('overview');
+  const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [announcementText, setAnnouncementText] = useState('');
   const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
 
   // Match scoring
   const [scoringMatch, setScoringMatch] = useState<import('../../types').TournamentMatch | null>(null);
+  const [showPoster, setShowPoster] = useState(false);
+
+  // Mock bracket rounds (managed locally for interactive demo)
+  const [mockRounds, setMockRounds] = useState<import('../../types').TournamentRound[] | null>(null);
 
   // Seeding
   type SeedPlayer = { playerId: string; name: string; avatar?: string; duprRating?: number | null };
@@ -200,6 +207,12 @@ const TournamentHub: React.FC = () => {
     confirmDialog.onConfirm();
     closeConfirm();
   };
+
+  // Sync activeTab with URL parameter changes
+  useEffect(() => {
+    const tabFromUrl = (searchParams.get('tab') as HubTab) || 'participants';
+    setActiveTab(tabFromUrl);
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     if (!tournamentId) return;
@@ -264,8 +277,13 @@ const TournamentHub: React.FC = () => {
       async () => {
         setIsProcessing('status');
         try {
-          await updateTournamentStatus(tournament.id, status);
-          await load();
+          if (tournamentId?.startsWith('mock-')) {
+            await new Promise(resolve => setTimeout(resolve, 400));
+            setTournament(prev => prev ? { ...prev, status } : null);
+          } else {
+            await updateTournamentStatus(tournament.id, status);
+            await load();
+          }
         } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsProcessing(null); }
       },
       'info'
@@ -275,8 +293,14 @@ const TournamentHub: React.FC = () => {
   const handleCheckIn = async (playerId: string, current: boolean) => {
     setIsProcessing(`ci-${playerId}`);
     try {
-      await checkInParticipant(tournamentId!, playerId, !current);
-      setRegistrations(prev => prev.map(r => r.playerId === playerId ? { ...r, checkedIn: !current } : r));
+      // Mock mode: just update state locally
+      if (tournamentId?.startsWith('mock-')) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setRegistrations(prev => prev.map(r => r.playerId === playerId ? { ...r, checkedIn: !current } : r));
+      } else {
+        await checkInParticipant(tournamentId!, playerId, !current);
+        setRegistrations(prev => prev.map(r => r.playerId === playerId ? { ...r, checkedIn: !current } : r));
+      }
     } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsProcessing(null); }
   };
 
@@ -287,8 +311,13 @@ const TournamentHub: React.FC = () => {
       async () => {
         setIsProcessing('ci-all');
         try {
-          await checkInAll(tournamentId!);
-          setRegistrations(prev => prev.map(r => ({ ...r, checkedIn: true })));
+          if (tournamentId?.startsWith('mock-')) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            setRegistrations(prev => prev.map(r => ({ ...r, checkedIn: true })));
+          } else {
+            await checkInAll(tournamentId!);
+            setRegistrations(prev => prev.map(r => ({ ...r, checkedIn: true })));
+          }
         } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsProcessing(null); }
       },
       'info'
@@ -302,9 +331,14 @@ const TournamentHub: React.FC = () => {
       async () => {
         setIsProcessing(`rm-${playerId}`);
         try {
-          await removeRegistrantByAdmin(tournamentId!, playerId);
-          setRegistrations(prev => prev.filter(r => r.playerId !== playerId));
-          await load();
+          if (tournamentId?.startsWith('mock-')) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            setRegistrations(prev => prev.filter(r => r.playerId !== playerId));
+          } else {
+            await removeRegistrantByAdmin(tournamentId!, playerId);
+            setRegistrations(prev => prev.filter(r => r.playerId !== playerId));
+            await load();
+          }
         } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsProcessing(null); }
       },
       'danger'
@@ -320,14 +354,39 @@ const TournamentHub: React.FC = () => {
       async () => {
         setIsProcessing('autopair');
         try {
-          const shuffled = [...unassigned].sort(() => Math.random() - 0.5);
-          for (let i = 0; i + 1 < shuffled.length; i += 2) {
-            const p1 = shuffled[i].playerId, p2 = shuffled[i + 1].playerId;
-            const n1 = nameMap.get(p1)?.name?.split(' ')[0] || 'P1';
-            const n2 = nameMap.get(p2)?.name?.split(' ')[0] || 'P2';
-            await createTeamByOwner(tournamentId!, p1, p2, `${n1} & ${n2}`);
+          if (tournamentId?.startsWith('mock-')) {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            const shuffled = [...unassigned].sort(() => Math.random() - 0.5);
+            const newTeams: import('../../types').TournamentTeam[] = [];
+            for (let i = 0; i + 1 < shuffled.length; i += 2) {
+              const p1 = shuffled[i].playerId, p2 = shuffled[i + 1].playerId;
+              const n1 = nameMap.get(p1)?.name?.split(' ')[0] || 'P1';
+              const n2 = nameMap.get(p2)?.name?.split(' ')[0] || 'P2';
+              const newTeam: import('../../types').TournamentTeam = {
+                id: `mt-auto-${Date.now()}-${i}`,
+                tournamentId: tournamentId!,
+                player1Id: p1,
+                player2Id: p2,
+                teamName: `${n1} & ${n2}`,
+                seed: teams.length + newTeams.length + 1,
+              };
+              newTeams.push(newTeam);
+            }
+            setTeams(prev => [...prev, ...newTeams]);
+            setRegistrations(prev => prev.map(r => {
+              const team = newTeams.find(t => t.player1Id === r.playerId || t.player2Id === r.playerId);
+              return team ? { ...r, teamId: team.id } : r;
+            }));
+          } else {
+            const shuffled = [...unassigned].sort(() => Math.random() - 0.5);
+            for (let i = 0; i + 1 < shuffled.length; i += 2) {
+              const p1 = shuffled[i].playerId, p2 = shuffled[i + 1].playerId;
+              const n1 = nameMap.get(p1)?.name?.split(' ')[0] || 'P1';
+              const n2 = nameMap.get(p2)?.name?.split(' ')[0] || 'P2';
+              await createTeamByOwner(tournamentId!, p1, p2, `${n1} & ${n2}`);
+            }
+            await load();
           }
-          await load();
         } catch (err: any) { alert(err.message || 'Auto-pair failed'); } finally { setIsProcessing(null); }
       },
       'info'
@@ -341,9 +400,28 @@ const TournamentHub: React.FC = () => {
       `${nameMap.get(selectedP1)?.name?.split(' ')[0] || 'P1'} & ${nameMap.get(selectedP2)?.name?.split(' ')[0] || 'P2'}`;
     setIsCreatingTeam(true);
     try {
-      await createTeamByOwner(tournamentId!, selectedP1, selectedP2, name);
-      setSelectedP1(null); setSelectedP2(null); setTeamName('');
-      await load();
+      if (tournamentId?.startsWith('mock-')) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const newTeam: import('../../types').TournamentTeam = {
+          id: `mt-${Date.now()}`,
+          tournamentId: tournamentId!,
+          player1Id: selectedP1,
+          player2Id: selectedP2,
+          teamName: name,
+          seed: teams.length + 1,
+        };
+        setTeams(prev => [...prev, newTeam]);
+        setRegistrations(prev => prev.map(r => 
+          r.playerId === selectedP1 || r.playerId === selectedP2 
+            ? { ...r, teamId: newTeam.id } 
+            : r
+        ));
+        setSelectedP1(null); setSelectedP2(null); setTeamName('');
+      } else {
+        await createTeamByOwner(tournamentId!, selectedP1, selectedP2, name);
+        setSelectedP1(null); setSelectedP2(null); setTeamName('');
+        await load();
+      }
     } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsCreatingTeam(false); }
   };
 
@@ -351,8 +429,14 @@ const TournamentHub: React.FC = () => {
     if (!announcementText.trim()) return;
     setIsPostingAnnouncement(true);
     try {
-      await postAnnouncement(tournamentId!, announcementText.trim());
-      await load();
+      if (tournamentId?.startsWith('mock-')) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        setTournament(prev => prev ? { ...prev, announcement: announcementText.trim() } : null);
+        alert('✓ Announcement posted (demo mode)');
+      } else {
+        await postAnnouncement(tournamentId!, announcementText.trim());
+        await load();
+      }
     } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsPostingAnnouncement(false); }
   };
 
@@ -366,23 +450,111 @@ const TournamentHub: React.FC = () => {
       async () => {
         setIsProcessing('bracket');
         try {
-          await generateBracket(tournamentId!, customOrder);
-          await load();
+          if (tournamentId?.startsWith('mock-')) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            // Build bracket from current registrations
+            const players = customOrder || registrations.map(r => r.playerId);
+            const numRounds = Math.ceil(Math.log2(players.length));
+            const rounds: import('../../types').TournamentRound[] = [];
+            // Round 1: pair players
+            const r1Matches: import('../../types').TournamentMatch[] = [];
+            for (let i = 0; i + 1 < players.length; i += 2) {
+              r1Matches.push({
+                id: `mock-gen-m${i / 2 + 1}`, tournamentId: tournamentId!, roundId: 'mock-gen-r1',
+                matchNumber: i / 2 + 1, participantAId: players[i], participantBId: players[i + 1],
+                status: 'scheduled',
+              });
+            }
+            // Odd player auto-advances to next round
+            if (players.length % 2 === 1) {
+              r1Matches.push({
+                id: `mock-gen-adv-${Date.now()}`, tournamentId: tournamentId!, roundId: 'mock-gen-r1',
+                matchNumber: r1Matches.length + 1, participantAId: players[players.length - 1],
+                status: 'bye', winnerId: players[players.length - 1],
+              });
+            }
+            rounds.push({
+              id: 'mock-gen-r1', tournamentId: tournamentId!, roundNumber: 1,
+              roundName: numRounds <= 1 ? 'Finals' : numRounds === 2 ? 'Semifinals' : numRounds === 3 ? 'Quarterfinals' : `Round 1`,
+              matches: r1Matches,
+            });
+            // Subsequent rounds: empty matches waiting for winners
+            const roundNames = ['', 'Finals', 'Semifinals', 'Quarterfinals'];
+            for (let r = 2; r <= numRounds; r++) {
+              const matchCount = Math.ceil(players.length / Math.pow(2, r));
+              const rMatches: import('../../types').TournamentMatch[] = [];
+              for (let m = 0; m < matchCount; m++) {
+                rMatches.push({
+                  id: `mock-gen-r${r}-m${m + 1}`, tournamentId: tournamentId!, roundId: `mock-gen-r${r}`,
+                  matchNumber: m + 1, status: 'scheduled',
+                });
+              }
+              rounds.push({
+                id: `mock-gen-r${r}`, tournamentId: tournamentId!, roundNumber: r,
+                roundName: r === numRounds ? 'Finals' : r === numRounds - 1 ? 'Semifinals' : `Round ${r}`,
+                matches: rMatches,
+              });
+            }
+            setMockRounds(rounds);
+          } else {
+            await generateBracket(tournamentId!, customOrder);
+            await load();
+          }
         } catch (err: any) { alert(err.message || 'Failed'); } finally { setIsProcessing(null); }
       },
       'warning'
     );
   };
 
+  /** Handle scoring a match in mock mode — updates local state and advances winner */
+  const handleMockScore = (matchId: string, scoreA: number, scoreB: number, winnerId: string) => {
+    if (!mockRounds) return;
+    const newRounds = mockRounds.map(round => ({
+      ...round,
+      matches: (round.matches || []).map(m =>
+        m.id === matchId ? { ...m, scoreA, scoreB, winnerId, status: 'completed' as const } : m
+      ),
+    }));
+
+    // Find which round/match was scored to advance winner to next round
+    for (let ri = 0; ri < newRounds.length - 1; ri++) {
+      const round = newRounds[ri];
+      const nextRound = newRounds[ri + 1];
+      const scoredIdx = (round.matches || []).findIndex(m => m.id === matchId);
+      if (scoredIdx === -1) continue;
+      // Determine which slot in the next round this feeds into
+      const nextMatchIdx = Math.floor(scoredIdx / 2);
+      const isTopSlot = scoredIdx % 2 === 0;
+      if (nextRound.matches && nextRound.matches[nextMatchIdx]) {
+        const nextMatch = { ...nextRound.matches[nextMatchIdx] };
+        if (isTopSlot) {
+          nextMatch.participantAId = winnerId;
+        } else {
+          nextMatch.participantBId = winnerId;
+        }
+        // Next match stays scheduled – court owner uses "Go Live" button manually
+        nextRound.matches = nextRound.matches.map((m, i) => i === nextMatchIdx ? nextMatch : m);
+      }
+      break;
+    }
+    setMockRounds(newRounds);
+  };
+
   const handleLoadSeeding = async () => {
     if (seedingLoaded) { setShowSeeding(s => !s); return; }
     try {
-      const players = await fetchRegistrationsWithRatings(tournamentId!);
-      // Sort by DUPR descending by default
-      const sorted = [...players].sort((a, b) => (b.duprRating ?? 0) - (a.duprRating ?? 0));
-      setSeedingPlayers(sorted);
-      setSeedingLoaded(true);
-      setShowSeeding(true);
+      if (tournamentId?.startsWith('mock-')) {
+        // Mock data already loaded in buildMockHubData
+        setSeedingLoaded(true);
+        setShowSeeding(true);
+      } else {
+        const players = await fetchRegistrationsWithRatings(tournamentId!);
+        // Sort by DUPR descending by default
+        const sorted = [...players].sort((a, b) => (b.duprRating ?? 0) - (a.duprRating ?? 0));
+        setSeedingPlayers(sorted);
+        setSeedingLoaded(true);
+        setShowSeeding(true);
+      }
     } catch (err: any) { alert('Failed to load player ratings'); }
   };
 
@@ -403,17 +575,38 @@ const TournamentHub: React.FC = () => {
   const handleApprove = async (playerId: string) => {
     if (!currentUserId) return;
     try {
-      await approveRegistration(tournamentId!, playerId, currentUserId);
-      await load();
+      if (tournamentId?.startsWith('mock-')) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const approved = pendingRegistrations.find(p => p.playerId === playerId);
+        if (approved) {
+          setPendingRegistrations(prev => prev.filter(p => p.playerId !== playerId));
+          setRegistrations(prev => [...prev, {
+            id: `mr-approved-${Date.now()}`,
+            tournamentId: tournamentId!,
+            playerId,
+            checkedIn: false,
+            status: 'confirmed',
+            registeredAt: new Date().toISOString(),
+          }]);
+        }
+      } else {
+        await approveRegistration(tournamentId!, playerId, currentUserId);
+        await load();
+      }
     } catch (err: any) { alert(err.message || 'Failed to approve'); }
   };
 
   const handleReject = async (playerId: string, reason?: string) => {
     if (!currentUserId) return;
     try {
-      await rejectRegistration(tournamentId!, playerId, currentUserId);
-      const pending = await getPendingRegistrationsDetailed(tournamentId!);
-      setPendingRegistrations(pending);
+      if (tournamentId?.startsWith('mock-')) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setPendingRegistrations(prev => prev.filter(p => p.playerId !== playerId));
+      } else {
+        await rejectRegistration(tournamentId!, playerId, currentUserId);
+        const pending = await getPendingRegistrationsDetailed(tournamentId!);
+        setPendingRegistrations(pending);
+      }
     } catch (err: any) { alert(err.message || 'Failed to reject'); }
   };
 
@@ -520,6 +713,39 @@ const TournamentHub: React.FC = () => {
             </div>
           </div>
 
+          {tournamentId?.startsWith('mock-') && (
+            <button
+              onClick={() => {
+                const mock = buildMockHubData();
+                setTournament(mock.tournament);
+                setRegistrations(mock.registrations);
+                setTeams(mock.teams);
+                setPendingRegistrations(mock.pendingRegistrations);
+                setNameMap(mock.nameMap);
+                setSeedingPlayers(mock.seedingPlayers);
+                setSeedingLoaded(true);
+                setChampion(null);
+                setAnnouncementText('');
+                setMockRounds(null);
+              }}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all font-black text-[9px] uppercase tracking-widest border border-amber-200"
+              title="Reset mock data to original state"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          )}
+
+          {/* Make Poster button */}
+          <button
+            onClick={() => setShowPoster(true)}
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all font-black text-[9px] uppercase tracking-widest border border-indigo-200"
+            title="Generate a marketing poster for this tournament"
+          >
+            <Megaphone size={14} />
+            Make Poster
+          </button>
+
           <div className="shrink-0 p-2.5 rounded-xl bg-indigo-50 text-indigo-500">
             <Settings2 size={20} />
           </div>
@@ -532,7 +758,10 @@ const TournamentHub: React.FC = () => {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  navigate(`/tournaments-admin/manage/${tournamentId}?tab=${tab.key}`, { replace: true });
+                }}
                 className={`flex items-center gap-2 px-5 py-3.5 font-black text-[10px] uppercase tracking-widest border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'border-indigo-600 text-indigo-600'
@@ -605,8 +834,8 @@ const TournamentHub: React.FC = () => {
               </div>
             </div>
 
-            {/* Champion card — shown when tournament is completed */}
-            {tournament.status === 'COMPLETED' && champion && (
+            {/* Champion card — shown when tournament is completed or mock finals is won */}
+            {(tournament.status === 'COMPLETED' || (tournamentId?.startsWith('mock-') && champion)) && champion && (
               <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-3xl p-6 flex items-center gap-5 shadow-sm">
                 <div className="w-16 h-16 rounded-2xl bg-yellow-100 flex items-center justify-center shrink-0">
                   {champion.avatar
@@ -893,21 +1122,99 @@ const TournamentHub: React.FC = () => {
                 </div>
               </div>
             )}
-            {tournament.status === 'LIVE' && (
+            {(tournament.status === 'LIVE' || (tournamentId?.startsWith('mock-') && mockRounds)) && (
               <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3">
                 <Radio size={13} className="text-emerald-500 animate-pulse" />
-                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Live — click any scheduled match to enter scores</p>
+                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                  {tournamentId?.startsWith('mock-') ? 'Interactive demo — click any match to enter scores' : 'Live — click any scheduled match to enter scores'}
+                </p>
               </div>
             )}
             <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
               <TournamentBracket
                 tournamentId={tournamentId!}
                 format={tournament.format||'single_elim'}
+                externalRounds={tournamentId?.startsWith('mock-') && mockRounds ? mockRounds : undefined}
+                externalNames={tournamentId?.startsWith('mock-') && mockRounds ? nameMap : undefined}
                 onMatchClick={(match) => {
-                  if (match.status === 'scheduled' || match.status === 'live') {
+                  if ((match.status === 'live' || match.status === 'scheduled') && match.participantAId && match.participantBId) {
                     setScoringMatch(match);
                   }
                 }}
+                onSetLive={tournamentId?.startsWith('mock-') && mockRounds ? (match) => {
+                  if (match.status !== 'scheduled' || !match.participantAId || !match.participantBId) return;
+                  setMockRounds(prev => (prev || []).map(round => ({
+                    ...round,
+                    matches: (round.matches || []).map(m =>
+                      m.id === match.id ? { ...m, status: 'live' as const } : m
+                    ),
+                  })));
+                } : undefined}
+                onAutoAdvance={tournamentId?.startsWith('mock-') && mockRounds ? (match) => {
+                  if (!match.participantAId || match.participantBId) return;
+                  const winnerId = match.participantAId;
+                  // Mark as bye with winner
+                  const newRounds = (mockRounds || []).map(round => ({
+                    ...round,
+                    matches: (round.matches || []).map(m =>
+                      m.id === match.id ? { ...m, status: 'bye' as const, winnerId } : m
+                    ),
+                  }));
+                  // Advance winner to next round
+                  for (let ri = 0; ri < newRounds.length - 1; ri++) {
+                    const round = newRounds[ri];
+                    const nextRound = newRounds[ri + 1];
+                    const scoredIdx = (round.matches || []).findIndex(m => m.id === match.id);
+                    if (scoredIdx === -1) continue;
+                    const nextMatchIdx = Math.floor(scoredIdx / 2);
+                    const isTopSlot = scoredIdx % 2 === 0;
+                    if (nextRound.matches && nextRound.matches[nextMatchIdx]) {
+                      const nextMatch = { ...nextRound.matches[nextMatchIdx] };
+                      if (isTopSlot) nextMatch.participantAId = winnerId;
+                      else nextMatch.participantBId = winnerId;
+                      nextRound.matches = nextRound.matches.map((m, i) => i === nextMatchIdx ? nextMatch : m);
+                    }
+                    break;
+                  }
+                  setMockRounds(newRounds);
+                } : undefined}
+                onDeclareWinner={tournamentId?.startsWith('mock-') && mockRounds ? (match, winnerId) => {
+                  if (!match.participantAId || !match.participantBId) return;
+                  const scoreA = winnerId === match.participantAId ? 11 : 0;
+                  const scoreB = winnerId === match.participantBId ? 11 : 0;
+                  // Mark match completed with winner
+                  const newRounds = (mockRounds || []).map(round => ({
+                    ...round,
+                    matches: (round.matches || []).map(m =>
+                      m.id === match.id ? { ...m, scoreA, scoreB, winnerId, status: 'completed' as const } : m
+                    ),
+                  }));
+                  // Advance winner to next round
+                  let isFinals = false;
+                  for (let ri = 0; ri < newRounds.length - 1; ri++) {
+                    const round = newRounds[ri];
+                    const nextRound = newRounds[ri + 1];
+                    const scoredIdx = (round.matches || []).findIndex(m => m.id === match.id);
+                    if (scoredIdx === -1) continue;
+                    const nextMatchIdx = Math.floor(scoredIdx / 2);
+                    const isTopSlot = scoredIdx % 2 === 0;
+                    if (nextRound.matches && nextRound.matches[nextMatchIdx]) {
+                      const nextMatch = { ...nextRound.matches[nextMatchIdx] };
+                      if (isTopSlot) nextMatch.participantAId = winnerId;
+                      else nextMatch.participantBId = winnerId;
+                      nextRound.matches = nextRound.matches.map((m, i) => i === nextMatchIdx ? nextMatch : m);
+                    }
+                    break;
+                  }
+                  // Detect Finals: match is in the last round
+                  const lastRound = newRounds[newRounds.length - 1];
+                  if (lastRound?.matches?.some(m => m.id === match.id)) {
+                    isFinals = true;
+                    const winnerInfo = nameMap.get(winnerId);
+                    setChampion({ id: winnerId, name: winnerInfo?.name || 'Champion', avatar: winnerInfo?.avatar });
+                  }
+                  setMockRounds(newRounds);
+                } : undefined}
               />
             </div>
           </div>
@@ -953,13 +1260,40 @@ const TournamentHub: React.FC = () => {
       </div>
     </div>
 
+    {/* Marketing Poster Modal */}
+    {tournament && (
+      <MarketingPosterModal
+        isOpen={showPoster}
+        onClose={() => setShowPoster(false)}
+        data={{
+          courtName: tournament.name,
+          locationName: tournament.location,
+          date: tournament.date,
+          startTime: tournament.startTime,
+          skillLevel: tournament.skillLevel,
+          availableSlots: tournament.maxPlayers - tournament.registeredCount,
+          imageUrl: tournament.sponsorBannerUrl || tournament.image,
+          joinLink: `${window.location.origin}/tournaments/${tournament.id}`,
+          amenities: [
+            tournament.format ? tournament.format.replace('_', ' ').toUpperCase() : '',
+            tournament.eventType || '',
+            tournament.prizePool ? `Prize: ${tournament.prizePool}` : '',
+          ].filter(Boolean),
+        } as PosterData}
+      />
+    )}
+
     {/* Match Score Modal */}
     {scoringMatch && (
       <MatchScoreModal
         match={scoringMatch}
         isOpen={!!scoringMatch}
         onClose={() => setScoringMatch(null)}
-        onScored={() => { setScoringMatch(null); load(); }}
+        onScored={() => {
+          setScoringMatch(null);
+          if (!tournamentId?.startsWith('mock-')) load();
+        }}
+        onMockScore={tournamentId?.startsWith('mock-') ? handleMockScore : undefined}
         participantNames={Object.fromEntries(
           [...nameMap.entries()].map(([id, v]) => [id, v.name])
         )}

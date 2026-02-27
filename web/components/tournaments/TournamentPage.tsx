@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Trophy, Calendar, MapPin, Users, Award, Clock, Shield, Swords,
   ChevronRight, CheckCircle2, Star, Megaphone, UserPlus, UserMinus, Settings2,
-  AlertTriangle, Phone, FileText, BadgeCheck, X
+  AlertTriangle, Phone, FileText, BadgeCheck, X, Search
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import {
-  fetchTournamentById, fetchRegistrations, registerPlayer, withdrawRegistration,
+  fetchTournamentById, fetchRegistrations, fetchRegistrationsWithRatings, registerPlayer, withdrawRegistration,
   getPlayerRegistration, evaluateSquadEligibility, approveRegistration,
   rejectRegistration, getPendingRegistrationsDetailed, checkRegistrationConflicts,
   fetchTournamentChampion,
@@ -41,6 +41,8 @@ const TournamentPage: React.FC = () => {
   const [conflicts, setConflicts] = useState<TournamentConflict[]>([]);
   const [showConflictsDialog, setShowConflictsDialog] = useState(false);
   const [applicationMessage, setApplicationMessage] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [playerRatings, setPlayerRatings] = useState<Map<string, number | null>>(new Map());
   const [champion, setChampion] = useState<{ id: string; name: string; avatar?: string } | null>(null);
   const [squadNames, setSquadNames] = useState<Map<string, string>>(new Map());
 
@@ -92,6 +94,14 @@ const TournamentPage: React.FC = () => {
 
       setTournament(t);
       setRegistrations(regs);
+
+      // Fetch player ratings
+      try {
+        const ratingData = await fetchRegistrationsWithRatings(tournamentId);
+        const ratingsMap = new Map<string, number | null>();
+        ratingData.forEach(r => ratingsMap.set(r.playerId, r.duprRating));
+        setPlayerRatings(ratingsMap);
+      } catch (e) { /* ratings are optional */ }
 
       if (userId && t) {
         const { data: profile } = await supabase
@@ -530,6 +540,7 @@ const TournamentPage: React.FC = () => {
                 <TournamentBracket
                   tournamentId={tournamentId}
                   format={tournament.format || 'single_elim'}
+                  currentUserId={currentUserId}
                 />
               </div>
             )}
@@ -562,19 +573,56 @@ const TournamentPage: React.FC = () => {
                   </div>
                 )}
 
+                {/* Summary bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-2">
+                    <Users size={14} className="text-blue-600" />
+                    <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">
+                      {registrations.length} / {tournament?.maxPlayers || '∞'} Players
+                    </span>
+                  </div>
+                  {registrations.filter(r => r.checkedIn).length > 0 && (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-2">
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                      <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                        {registrations.filter(r => r.checkedIn).length} Checked In
+                      </span>
+                    </div>
+                  )}
+                  {currentUserId && registrations.some(r => r.playerId === currentUserId) && (
+                    <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-2">
+                      <BadgeCheck size={14} className="text-indigo-600" />
+                      <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">You're In!</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Search participants */}
+                {registrations.length > 5 && (
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search players..."
+                      value={participantSearch}
+                      onChange={e => setParticipantSearch(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3 pl-11 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-700"
+                    />
+                  </div>
+                )}
+
                 {regMode === 'squad' || regMode === 'both' ? (
                   <div className="space-y-2">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Squads</h4>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Teams / Squads</h4>
                     {(() => {
                       const squadRegs = registrations.filter(r => (r as any).squadId);
                       if (squadRegs.length === 0) {
                         return (
                           <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-400 font-bold">
-                            No squad registrations yet.
+                            No squad registrations yet. Squad roster details will be visible once teams register.
                           </div>
                         );
                       }
-                      // Group by squadId
                       const grouped = new Map<string, typeof squadRegs>();
                       squadRegs.forEach(r => {
                         const sid = (r as any).squadId as string;
@@ -604,28 +652,76 @@ const TournamentPage: React.FC = () => {
                   <div className="text-center py-16">
                     <Users className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                     <p className="font-black text-slate-300 uppercase text-sm">No participants yet</p>
+                    <p className="text-xs text-slate-300 mt-1">Be the first to register!</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Players</h4>
-                    {registrations.map((reg, i) => (
-                      <div key={reg.id} className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100">
-                        <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-black text-xs">
-                          {i + 1}
-                        </span>
-                        <div className="flex-1">
-                          <p className="font-bold text-sm text-slate-900">{reg.player?.full_name || `${reg.playerId.slice(0, 8)}...`}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">
-                            Registered {new Date(reg.registeredAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {reg.checkedIn && (
-                          <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest border border-emerald-100">
-                            Checked In
-                          </span>
-                        )}
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Players {participantSearch && `matching "${participantSearch}"`}
+                    </h4>
+                    {registrations
+                      .filter(reg => {
+                        if (!participantSearch.trim()) return true;
+                        const name = reg.player?.full_name || '';
+                        return name.toLowerCase().includes(participantSearch.toLowerCase());
+                      })
+                      .map((reg, i) => {
+                        const isYou = currentUserId && reg.playerId === currentUserId;
+                        const rating = playerRatings.get(reg.playerId);
+                        return (
+                          <div key={reg.id} className={`flex items-center gap-4 rounded-2xl p-4 transition-colors ${
+                            isYou ? 'bg-indigo-50 border-2 border-indigo-200' : 'bg-white border border-slate-100'
+                          }`}>
+                            {reg.player?.avatar_url ? (
+                              <img src={reg.player.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
+                            ) : (
+                              <span className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xs ${
+                                isYou ? 'bg-indigo-200 text-indigo-700' : 'bg-blue-100 text-blue-600'
+                              }`}>
+                                {(reg.player?.full_name || '?')[0].toUpperCase()}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-sm text-slate-900 truncate">
+                                  {reg.player?.full_name || `Player ${reg.playerId.slice(0, 6)}...`}
+                                </p>
+                                {isYou && (
+                                  <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[8px] font-black uppercase tracking-widest shrink-0">
+                                    You
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                {rating !== undefined && rating !== null && (
+                                  <span className="text-[10px] font-black text-amber-600">
+                                    ⭐ {rating.toFixed(1)} DUPR
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  Joined {new Date(reg.registeredAt || '').toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {reg.checkedIn && (
+                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest border border-emerald-100 flex items-center gap-1">
+                                  <CheckCircle2 size={10} /> Checked In
+                                </span>
+                              )}
+                              <span className="text-[10px] font-black text-slate-300">#{i + 1}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {registrations.filter(reg => {
+                      if (!participantSearch.trim()) return true;
+                      return (reg.player?.full_name || '').toLowerCase().includes(participantSearch.toLowerCase());
+                    }).length === 0 && participantSearch && (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-slate-400 font-bold">No players matching "{participantSearch}"</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
