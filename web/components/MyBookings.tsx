@@ -1,11 +1,20 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
-import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2, Megaphone } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CalendarIcon, Clock, Loader2, Calendar, MapPin, Star, X, Send, FileText, Search, ChevronLeft, ChevronRight, Info, Globe, Layers, ChevronDown, Sparkles, Share2, Users, UserPlus, Trash2, Megaphone, CheckCircle, XCircle, Mail, Bell } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { submitCourtReview, hasUserReviewedBooking } from '../services/reviews';
 import Receipt from './Receipt';
 import MarketingPosterModal, { PosterData } from './MarketingPosterModal';
+import {
+    sendInvitation,
+    getReceivedInvitations,
+    getSentInvitations,
+    respondToInvitation,
+    cancelInvitation,
+    searchPlayerForInvite,
+    PlayerInvitation,
+} from '../services/invitations';
 
 const ITEMS_PER_PAGE = 8;
 const STATUS_FILTERS = ['All', 'Confirmed', 'Pending', 'Paid', 'Cancelled'] as const;
@@ -39,9 +48,13 @@ const MyBookings: React.FC = () => {
     const [userUsername, setUserUsername] = useState<string>('');
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
-    // Tab: My Bookings vs Shared Courts
-    const [activeTab, setActiveTab] = useState<'bookings' | 'shared'>('bookings');
+    const [activeTab, setActiveTab] = useState<'bookings' | 'shared' | 'invitations'>(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'invitations' || tab === 'shared') return tab;
+        return 'bookings';
+    });
 
     // Filters
     const [searchQuery, setSearchQuery] = useState('');
@@ -76,9 +89,31 @@ const MyBookings: React.FC = () => {
     const [isSharing, setIsSharing] = useState(false);
     const [shareError, setShareError] = useState('');
 
+    // Actions dropdown (per-row)
+    const [openActionsMenuId, setOpenActionsMenuId] = useState<string | null>(null);
+
     // Marketing Poster State
     const [isPosterOpen, setIsPosterOpen] = useState(false);
     const [posterData, setPosterData] = useState<PosterData | null>(null);
+
+    // ── Invite Player State ──
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [selectedBookingForInvite, setSelectedBookingForInvite] = useState<any | null>(null);
+    const [inviteSearchQuery, setInviteSearchQuery] = useState('');
+    const [inviteSearchResult, setInviteSearchResult] = useState<any | null>(null);
+    const [inviteSearching, setInviteSearching] = useState(false);
+    const [inviteSearchError, setInviteSearchError] = useState('');
+    const [inviteMessage, setInviteMessage] = useState('');
+    const [isSendingInvite, setIsSendingInvite] = useState(false);
+    const [inviteSendError, setInviteSendError] = useState('');
+    const [inviteSendSuccess, setInviteSendSuccess] = useState(false);
+
+    // ── Invitations Tab State ──
+    const [receivedInvitations, setReceivedInvitations] = useState<PlayerInvitation[]>([]);
+    const [sentInvitations, setSentInvitations] = useState<PlayerInvitation[]>([]);
+    const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
+    const [respondingId, setRespondingId] = useState<string | null>(null);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
 
     const handleOpenPoster = (booking: any) => {
         setPosterData({
@@ -111,17 +146,43 @@ const MyBookings: React.FC = () => {
     useEffect(() => {
         if (activeTab === 'shared') {
             fetchSharedCourts();
+        } else if (activeTab === 'invitations') {
+            fetchInvitations();
         }
     }, [activeTab]);
 
+    // If the page loaded directly with ?tab=invitations (from a notification deep-link),
+    // also fetch right away since activeTab is already set and the effect above won't re-fire.
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'invitations') fetchInvitations();
+        if (tab === 'shared') fetchSharedCourts();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Realtime subscription: refresh invitations whenever player_invitations changes
+    useEffect(() => {
+        if (!currentUserId) return;
+        const channel = supabase
+            .channel(`my-invitations-${currentUserId}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'player_invitations',
+            }, () => {
+                fetchInvitations();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Close dropdowns when clicking outside
     useEffect(() => {
-        const handleClick = () => { setShowStatusDropdown(false); setShowLocationDropdown(false); };
-        if (showStatusDropdown || showLocationDropdown) {
+        const handleClick = () => { setShowStatusDropdown(false); setShowLocationDropdown(false); setOpenActionsMenuId(null); };
+        if (showStatusDropdown || showLocationDropdown || openActionsMenuId) {
             document.addEventListener('click', handleClick);
             return () => document.removeEventListener('click', handleClick);
         }
-    }, [showStatusDropdown, showLocationDropdown]);
+    }, [showStatusDropdown, showLocationDropdown, openActionsMenuId]);
 
     const fetchMyBookings = async () => {
         setIsLoading(true);
@@ -431,6 +492,77 @@ const MyBookings: React.FC = () => {
         }
     };
 
+    // ── Invitation handlers ──
+    const fetchInvitations = useCallback(async () => {
+        setIsLoadingInvitations(true);
+        try {
+            const [received, sent] = await Promise.all([getReceivedInvitations(), getSentInvitations()]);
+            setReceivedInvitations(received);
+            setSentInvitations(sent);
+        } catch (err) {
+            console.error('Error fetching invitations:', err);
+        } finally {
+            setIsLoadingInvitations(false);
+        }
+    }, []);
+
+    const handleSearchInvitee = async () => {
+        if (!inviteSearchQuery.trim()) return;
+        setInviteSearching(true);
+        setInviteSearchError('');
+        setInviteSearchResult(null);
+        const result = await searchPlayerForInvite(inviteSearchQuery.trim());
+        if (!result) setInviteSearchError('No player found with that username or email.');
+        else setInviteSearchResult(result);
+        setInviteSearching(false);
+    };
+
+    const handleSendInvite = async () => {
+        if (!selectedBookingForInvite || !inviteSearchResult) return;
+        setIsSendingInvite(true);
+        setInviteSendError('');
+        const result = await sendInvitation({
+            bookingId: selectedBookingForInvite.id,
+            inviteeId: inviteSearchResult.id,
+            inviteeUsername: inviteSearchResult.username ?? undefined,
+            message: inviteMessage.trim() || undefined,
+        });
+        if (result.success) {
+            setInviteSendSuccess(true);
+        } else {
+            setInviteSendError(result.error ?? 'Failed to send invitation.');
+        }
+        setIsSendingInvite(false);
+    };
+
+    const handleOpenInviteModal = (booking: any) => {
+        setSelectedBookingForInvite(booking);
+        setInviteSearchQuery('');
+        setInviteSearchResult(null);
+        setInviteSearchError('');
+        setInviteMessage('');
+        setInviteSendError('');
+        setInviteSendSuccess(false);
+        setShowInviteModal(true);
+    };
+
+    const handleRespondInvitation = async (invitationId: string, status: 'accepted' | 'declined') => {
+        setRespondingId(invitationId);
+        const result = await respondToInvitation(invitationId, status);
+        if (!result.success) alert(result.error ?? 'Failed to respond.');
+        await fetchInvitations();
+        setRespondingId(null);
+    };
+
+    const handleCancelInvitation = async (invitationId: string) => {
+        if (!confirm('Cancel this invitation?')) return;
+        setCancellingId(invitationId);
+        const result = await cancelInvitation(invitationId);
+        if (!result.success) alert(result.error ?? 'Failed to cancel.');
+        await fetchInvitations();
+        setCancellingId(null);
+    };
+
     const getStatusBadge = (b: any) => {
         const isPaid = b.payment_status === 'paid';
         const label = isPaid ? 'Paid' : b.status;
@@ -468,8 +600,8 @@ const MyBookings: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Tabs: My Bookings | Shared Courts */}
-                <div className="flex gap-2">
+                {/* Tabs: My Bookings | Shared Courts | Invitations */}
+                <div className="flex gap-2 flex-wrap">
                     <button onClick={() => setActiveTab('bookings')}
                         className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2 ${activeTab === 'bookings' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400 border-2 border-slate-100 hover:border-slate-300 hover:text-slate-700'}`}>
                         <CalendarIcon size={16} /> My Bookings
@@ -479,9 +611,18 @@ const MyBookings: React.FC = () => {
                         <Users size={16} /> Shared Courts
                         {sharedCourts.length > 0 && <span className="ml-1 px-2 py-0.5 bg-blue-600 text-white text-[9px] font-black rounded-lg">{sharedCourts.length}</span>}
                     </button>
+                    <button onClick={() => setActiveTab('invitations')}
+                        className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2 ${activeTab === 'invitations' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-400 border-2 border-slate-100 hover:border-slate-300 hover:text-slate-700'}`}>
+                        <Bell size={16} /> Invitations
+                        {receivedInvitations.filter(i => i.status === 'pending').length > 0 && (
+                            <span className="ml-1 px-2 py-0.5 bg-red-500 text-white text-[9px] font-black rounded-lg">
+                                {receivedInvitations.filter(i => i.status === 'pending').length}
+                            </span>
+                        )}
+                    </button>
                 </div>
 
-                {activeTab === 'bookings' ? (
+                {activeTab === 'bookings' && (
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         {/* ── Calendar Sidebar ── */}
                         <div className="lg:col-span-1">
@@ -623,7 +764,7 @@ const MyBookings: React.FC = () => {
                             </div>
 
                             {/* Bookings List */}
-                            <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-lg shadow-slate-100/50 overflow-hidden">
+                            <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-lg shadow-slate-100/50">
                                 {isLoading ? (
                                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                                         <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -631,7 +772,7 @@ const MyBookings: React.FC = () => {
                                     </div>
                                 ) : paginatedBookings.length > 0 ? (
                                     <>
-                                        <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 border-b border-slate-100 bg-slate-50/50">
+                                        <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-[30px]">
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Ref</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Court & Location</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</div>
@@ -667,33 +808,55 @@ const MyBookings: React.FC = () => {
                                                     {b.total_price > 0 ? <p className="text-sm font-black text-slate-900">₱{b.total_price}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
                                                 </div>
                                                 <div className="col-span-1">{getStatusBadge(b)}</div>
-                                                <div className="col-span-3 flex items-center justify-end gap-1.5">
-                                                    {canReview(b) && (
-                                                        <button onClick={() => handleOpenReview(b)}
-                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="Review Court">
-                                                            <Star size={14} />
+                                                <div className="col-span-2 flex items-center justify-end">
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setOpenActionsMenuId(openActionsMenuId === b.id ? null : b.id); }}
+                                                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-all text-[10px] font-black uppercase tracking-widest"
+                                                            title="Actions"
+                                                        >
+                                                            Actions <ChevronDown size={11} className={`transition-transform ${openActionsMenuId === b.id ? 'rotate-180' : ''}`} />
                                                         </button>
-                                                    )}
-                                                    {b.status === 'confirmed' && (
-                                                        <button onClick={() => handleOpenPoster(b)}
-                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-orange-300 hover:text-orange-500 hover:bg-orange-50 transition-all" title="Share Game Poster">
-                                                            <Megaphone size={14} />
-                                                        </button>
-                                                    )}
-                                                    {b.status === 'confirmed' && (
-                                                        <button onClick={() => { setSelectedBookingForShare(b); setShareEmail(''); setShareError(''); setShowShareModal(true); }}
-                                                            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all" title="Share Court">
-                                                            <Share2 size={14} />
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => handleOpenReceipt(b)}
-                                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Receipt">
-                                                        <FileText size={14} />
-                                                    </button>
-                                                    <button onClick={() => { setSelectedBookingForDetail(b); setShowDetailModal(true); }}
-                                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">
-                                                        <Info size={14} />
-                                                    </button>
+                                                        {openActionsMenuId === b.id && (
+                                                            <div
+                                                                className="absolute top-full mt-2 right-0 z-50 bg-white rounded-2xl border-2 border-slate-100 shadow-2xl shadow-slate-200/60 overflow-hidden min-w-[180px] animate-in zoom-in-95 fade-in duration-150"
+                                                                onClick={e => e.stopPropagation()}
+                                                            >
+                                                                {canReview(b) && (
+                                                                    <button onClick={() => { handleOpenReview(b); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-yellow-50 hover:text-yellow-600 transition-all border-b border-slate-50">
+                                                                        <Star size={14} className="shrink-0" /> Leave a Review
+                                                                    </button>
+                                                                )}
+                                                                {(b.status === 'confirmed' || b.status === 'pending') && (
+                                                                    <button onClick={() => { handleOpenInviteModal(b); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-violet-50 hover:text-violet-700 transition-all border-b border-slate-50">
+                                                                        <UserPlus size={14} className="shrink-0" /> Invite Player
+                                                                    </button>
+                                                                )}
+                                                                {b.status === 'confirmed' && (
+                                                                    <button onClick={() => { setSelectedBookingForShare(b); setShareEmail(''); setShareError(''); setShowShareModal(true); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all border-b border-slate-50">
+                                                                        <Share2 size={14} className="shrink-0" /> Share Court
+                                                                    </button>
+                                                                )}
+                                                                {b.status === 'confirmed' && (
+                                                                    <button onClick={() => { handleOpenPoster(b); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-orange-50 hover:text-orange-600 transition-all border-b border-slate-50">
+                                                                        <Megaphone size={14} className="shrink-0" /> Share Poster
+                                                                    </button>
+                                                                )}
+                                                                <button onClick={() => { handleOpenReceipt(b); setOpenActionsMenuId(null); }}
+                                                                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all border-b border-slate-50">
+                                                                    <FileText size={14} className="shrink-0" /> View Receipt
+                                                                </button>
+                                                                <button onClick={() => { setSelectedBookingForDetail(b); setShowDetailModal(true); setOpenActionsMenuId(null); }}
+                                                                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                                                                    <Info size={14} className="shrink-0" /> View Details
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -752,8 +915,9 @@ const MyBookings: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                ) : (
-                    /* ── Shared Courts Tab ── */
+                )}
+
+                {activeTab === 'shared' && (
                     <div className="space-y-6">
                         {isLoadingShared ? (
                             <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -847,6 +1011,161 @@ const MyBookings: React.FC = () => {
                                             <Share2 size={40} className="text-slate-200 mx-auto mb-4" />
                                             <p className="text-sm font-black text-slate-400 uppercase tracking-widest">You haven't shared any courts yet</p>
                                             <p className="text-xs text-slate-400 mt-1">Share your confirmed bookings with other players.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'invitations' && (
+                    <div className="space-y-6">
+                        {isLoadingInvitations ? (
+                            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                <Loader2 className="animate-spin text-blue-600" size={48} />
+                                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Loading invitations...</p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Received Invitations */}
+                                <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-lg shadow-slate-100/50 overflow-hidden flex flex-col min-h-[300px]">
+                                    <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/50">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <Mail size={16} className="text-violet-600" /> Received Invitations
+                                            {receivedInvitations.filter(i => i.status === 'pending').length > 0 && (
+                                                <span className="ml-1 px-2 py-0.5 bg-red-500 text-white text-[9px] font-black rounded-lg">
+                                                    {receivedInvitations.filter(i => i.status === 'pending').length} pending
+                                                </span>
+                                            )}
+                                        </h3>
+                                    </div>
+                                    {receivedInvitations.length > 0 ? receivedInvitations.map((inv) => {
+                                        const bk = inv.booking as any;
+                                        const court = bk?.court;
+                                        const isPending = inv.status === 'pending';
+                                        return (
+                                            <div key={inv.id} className="px-8 py-5 border-b border-slate-50 hover:bg-violet-50/20 transition-all">
+                                                <div className="flex items-center justify-between gap-4 flex-wrap">
+                                                    <div className="flex items-center gap-4">
+                                                        {inv.inviter?.avatar_url ? (
+                                                            <img src={inv.inviter.avatar_url} className="w-11 h-11 rounded-2xl object-cover border border-slate-200 shrink-0" alt="" />
+                                                        ) : (
+                                                            <div className="w-11 h-11 rounded-2xl bg-violet-50 flex items-center justify-center border border-violet-100 shrink-0">
+                                                                <UserPlus size={18} className="text-violet-600" />
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                                                {inv.inviter?.full_name || inv.inviter?.username || 'Unknown'}
+                                                                <span className="text-slate-400 font-bold normal-case"> invited you</span>
+                                                            </p>
+                                                            {court && <p className="text-[10px] font-bold text-slate-500">{court.name} — {court.location?.name || court.location?.city}</p>}
+                                                            {bk?.date && (
+                                                                <p className="text-[10px] font-bold text-blue-500 mt-0.5">
+                                                                    {new Date(bk.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                    {bk.start_time && <> • {bk.start_time.slice(0, 5)}</>}
+                                                                </p>
+                                                            )}
+                                                            {inv.message && <p className="text-[10px] italic text-slate-400 mt-1">"{inv.message}"</p>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        {isPending ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleRespondInvitation(inv.id, 'accepted')}
+                                                                    disabled={respondingId === inv.id}
+                                                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                                                                >
+                                                                    {respondingId === inv.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Accept
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRespondInvitation(inv.id, 'declined')}
+                                                                    disabled={respondingId === inv.id}
+                                                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-50 disabled:opacity-50 transition-all"
+                                                                >
+                                                                    {respondingId === inv.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Decline
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${inv.status === 'accepted' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+                                                                inv.status === 'declined' ? 'bg-red-50 border-red-200 text-red-500' :
+                                                                    'bg-slate-100 border-slate-200 text-slate-500'
+                                                                }`}>{inv.status}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[200px]">
+                                            <Bell size={40} className="text-slate-200 mx-auto mb-4" />
+                                            <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No invitations received yet</p>
+                                            <p className="text-xs text-slate-400 mt-1">When a player invites you to their court, it shows here.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Sent Invitations */}
+                                <div className="bg-white rounded-[32px] border-2 border-slate-100 shadow-lg shadow-slate-100/50 overflow-hidden flex flex-col min-h-[300px]">
+                                    <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/50">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                            <Send size={16} className="text-blue-600" /> Sent Invitations
+                                        </h3>
+                                    </div>
+                                    {sentInvitations.length > 0 ? sentInvitations.map((inv) => {
+                                        const bk = inv.booking as any;
+                                        const court = bk?.court;
+                                        return (
+                                            <div key={inv.id} className="px-8 py-5 border-b border-slate-50 hover:bg-blue-50/20 transition-all">
+                                                <div className="flex items-center justify-between gap-4 flex-wrap">
+                                                    <div className="flex items-center gap-4">
+                                                        {inv.invitee?.avatar_url ? (
+                                                            <img src={inv.invitee.avatar_url} className="w-11 h-11 rounded-2xl object-cover border border-slate-200 shrink-0" alt="" />
+                                                        ) : (
+                                                            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0">
+                                                                <UserPlus size={18} className="text-blue-600" />
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                                                {inv.invitee?.full_name || inv.invitee?.username || inv.invitee_username || inv.invitee_email || 'Unknown'}
+                                                            </p>
+                                                            {court && <p className="text-[10px] font-bold text-slate-500">{court.name} — {court.location?.name || court.location?.city}</p>}
+                                                            {bk?.date && (
+                                                                <p className="text-[10px] font-bold text-blue-500 mt-0.5">
+                                                                    {new Date(bk.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                    {bk.start_time && <> • {bk.start_time.slice(0, 5)}</>}
+                                                                </p>
+                                                            )}
+                                                            {inv.message && <p className="text-[10px] italic text-slate-400 mt-1">"{inv.message}"</p>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${inv.status === 'accepted' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+                                                            inv.status === 'declined' ? 'bg-red-50 border-red-200 text-red-500' :
+                                                                inv.status === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                                                                    'bg-slate-100 border-slate-200 text-slate-400'
+                                                            }`}>{inv.status}</span>
+                                                        {inv.status === 'pending' && (
+                                                            <button
+                                                                onClick={() => handleCancelInvitation(inv.id)}
+                                                                disabled={cancellingId === inv.id}
+                                                                className="p-2 rounded-xl bg-white border border-red-200 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-all" title="Cancel invitation"
+                                                            >
+                                                                {cancellingId === inv.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[200px]">
+                                            <UserPlus size={40} className="text-slate-200 mx-auto mb-4" />
+                                            <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No invitations sent yet</p>
+                                            <p className="text-xs text-slate-400 mt-1">Click the invite button on a confirmed booking to invite players.</p>
                                         </div>
                                     )}
                                 </div>
@@ -1141,6 +1460,109 @@ const MyBookings: React.FC = () => {
                     onClose={() => setIsPosterOpen(false)}
                     data={posterData}
                 />
+            )}
+
+            {/* ═══ INVITE PLAYER MODAL ═══ */}
+            {showInviteModal && selectedBookingForInvite && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300"
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowInviteModal(false); }}>
+                    <div className="relative w-full max-w-md bg-white rounded-[48px] shadow-3xl p-10 space-y-6 animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tight leading-none mb-2">Invite Player</h3>
+                                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                                    {selectedBookingForInvite.court?.name} • {new Date(selectedBookingForInvite.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowInviteModal(false)} className="p-2 text-slate-400 hover:text-slate-950 transition-colors"><X size={24} /></button>
+                        </div>
+
+                        {inviteSendSuccess ? (
+                            <div className="text-center py-8 space-y-4">
+                                <div className="w-16 h-16 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto border-2 border-emerald-100">
+                                    <CheckCircle size={32} className="text-emerald-500" />
+                                </div>
+                                <div>
+                                    <p className="text-lg font-black text-slate-900 uppercase tracking-tight">Invitation Sent!</p>
+                                    <p className="text-xs text-slate-500 mt-1">{inviteSearchResult?.full_name || inviteSearchResult?.username} has been invited.</p>
+                                </div>
+                                <button onClick={() => setShowInviteModal(false)}
+                                    className="px-8 py-3 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-blue-600 transition-all">
+                                    Done
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {/* Search */}
+                                <div className="space-y-2">
+                                    <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Search by Username or Email</label>
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 focus-within:border-violet-300 focus-within:ring-4 focus-within:ring-violet-500/10 transition-all">
+                                            <Search size={16} className="text-slate-400 shrink-0" />
+                                            <input
+                                                type="text"
+                                                value={inviteSearchQuery}
+                                                onChange={e => { setInviteSearchQuery(e.target.value); setInviteSearchResult(null); setInviteSearchError(''); }}
+                                                onKeyDown={e => e.key === 'Enter' && handleSearchInvitee()}
+                                                placeholder="username or email..."
+                                                className="flex-1 bg-transparent outline-none text-sm font-bold text-slate-700 placeholder:text-slate-300"
+                                            />
+                                        </div>
+                                        <button onClick={handleSearchInvitee} disabled={inviteSearching || !inviteSearchQuery.trim()}
+                                            className="px-4 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-blue-600 disabled:opacity-40 transition-all">
+                                            {inviteSearching ? <Loader2 size={14} className="animate-spin" /> : 'Find'}
+                                        </button>
+                                    </div>
+                                    {inviteSearchError && <p className="text-xs font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl">{inviteSearchError}</p>}
+                                </div>
+
+                                {/* Player preview */}
+                                {inviteSearchResult && (
+                                    <div className="flex items-center gap-3 p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                                        {inviteSearchResult.avatar_url ? (
+                                            <img src={inviteSearchResult.avatar_url} className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0" alt="" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+                                                <UserPlus size={16} className="text-violet-600" />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900">{inviteSearchResult.full_name || inviteSearchResult.username}</p>
+                                            {inviteSearchResult.username && <p className="text-[10px] text-slate-500 font-bold">@{inviteSearchResult.username}</p>}
+                                        </div>
+                                        <CheckCircle size={18} className="text-emerald-500 ml-auto" />
+                                    </div>
+                                )}
+
+                                {/* Optional message */}
+                                {inviteSearchResult && (
+                                    <div className="space-y-2">
+                                        <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Message (Optional)</label>
+                                        <textarea
+                                            value={inviteMessage}
+                                            onChange={e => setInviteMessage(e.target.value)}
+                                            placeholder="Add a personal message..."
+                                            maxLength={200}
+                                            rows={2}
+                                            className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:border-violet-400 focus:bg-white transition-all resize-none text-sm"
+                                        />
+                                    </div>
+                                )}
+
+                                {inviteSendError && <p className="text-xs font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl">{inviteSendError}</p>}
+
+                                <div className="flex gap-3">
+                                    <button onClick={() => setShowInviteModal(false)}
+                                        className="flex-1 py-4 bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-100 transition-all">Cancel</button>
+                                    <button onClick={handleSendInvite} disabled={isSendingInvite || !inviteSearchResult}
+                                        className="flex-1 py-4 bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-violet-700 disabled:opacity-40 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-xl shadow-violet-200">
+                                        {isSendingInvite ? <Loader2 className="animate-spin" size={16} /> : <><UserPlus size={16} /> Send Invite</>}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>, document.body
             )}
         </>
     );

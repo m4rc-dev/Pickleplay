@@ -614,11 +614,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         .from('bookings')
         .select(`
           *,
-          court:courts(name, image_url, address, city)
+          court:courts(
+            name, 
+            image_url,
+            location:locations(address, city)
+          )
         `)
         .eq('player_id', currentUserId)
         .eq('status', 'confirmed')
-        .order('booking_date', { ascending: false })
+        .order('date', { ascending: false })
         .limit(5);
 
       if (error) throw error;
@@ -626,7 +630,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       // Filter by time locally and check for reviews
       const now = new Date();
       const completedBookings = (bookings || []).filter(b => {
-        const bookingEnd = new Date(`${b.booking_date}T${b.end_time}`);
+        const bookingEnd = new Date(`${b.date}T${b.end_time}`);
         return bookingEnd < now;
       });
 
@@ -1351,7 +1355,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       )}
                       <div>
                         <p className="font-black text-slate-900 uppercase tracking-tight text-sm">{booking.court?.name || 'Pickleball Court'}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">{booking.booking_date} • {booking.start_time}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">{booking.date} • {booking.start_time}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -1447,7 +1451,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 <Building2 size={32} className="text-blue-600" />
               </div>
               <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Rate {selectedCourtForReview?.court?.name}</h3>
-              <p className="text-slate-500 font-medium text-sm mt-2">How was your game on {selectedCourtForReview?.booking_date}?</p>
+              <p className="text-slate-500 font-medium text-sm mt-2">How was your game on {selectedCourtForReview?.date}?</p>
             </div>
 
             <div className="space-y-8">

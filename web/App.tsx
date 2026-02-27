@@ -42,7 +42,10 @@ import {
   Shield,
   MessageCircle,
   Users,
-  Medal
+  Medal,
+  UserPlus,
+  UserMinus,
+  MessageSquare
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 
@@ -70,6 +73,8 @@ import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
 import MatchVerifyPage from './components/MatchVerifyPage';
 import PosterPage from './components/PosterPage';
+import TermsOfService from './components/TermsOfService';
+import PrivacyPolicy from './components/PrivacyPolicy';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
@@ -98,7 +103,7 @@ import Achievements from './components/Achievements';
 import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
-import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures } from './services/maintenance';
+import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures, DEFAULT_FEATURES_PER_ROLE } from './services/maintenance';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import FeatureUnavailable from './components/FeatureUnavailable';
 // Fix: Import UserRole from the centralized types.ts file.
@@ -110,6 +115,22 @@ const NotificationPanel: React.FC<{
   onClose: () => void,
   onNotificationClick: (notification: Notification) => void
 }> = ({ notifications, onClose, onNotificationClick }) => {
+  const getNotifIcon = (type: string) => {
+    if (type === 'ACHIEVEMENT') return <span className="text-base">🏆</span>;
+    if (type === 'player_invitation') return <span className="text-base">🎾</span>;
+    if (type === 'invitation_accepted') return <span className="text-base">✅</span>;
+    if (type === 'invitation_declined') return <span className="text-base">❌</span>;
+    if (type === 'squad_join_request') return <UsersRound size={16} className="text-blue-600" />;
+    if (type === 'squad_member_joined') return <UserPlus size={16} className="text-green-600" />;
+    if (type === 'squad_member_left') return <UserMinus size={16} className="text-amber-600" />;
+    if (type === 'squad_event_created') return <Calendar size={16} className="text-violet-600" />;
+    if (type === 'squad_message') return <MessageSquare size={16} className="text-blue-600" />;
+    return null;
+  };
+  const isSystemNotif = (type: string) =>
+    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined', 
+     'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'].includes(type);
+
   return (
     <div className="absolute left-full ml-6 bottom-0 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-left-4 fade-in duration-300 z-[100]">
       <div className="flex justify-between items-center mb-4">
@@ -124,22 +145,29 @@ const NotificationPanel: React.FC<{
             onClick={() => onNotificationClick(n)}
           >
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
-            {n.type === 'ACHIEVEMENT' ? (
-              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <span className="text-base">🏆</span>
+            {isSystemNotif(n.type) ? (
+              <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                {getNotifIcon(n.type)}
               </div>
             ) : (
               <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
             )}
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
-                {n.type === 'ACHIEVEMENT' ? (
-                  <span className="font-bold">{n.message}</span>
+                {isSystemNotif(n.type) ? (
+                  <>
+                    <span className="font-bold">{n.actor.name}</span>
+                    {' '}
+                    <span>{n.message}</span>
+                  </>
                 ) : (
                   <><span className="font-bold">{n.actor.name}</span> {n.message}</>
                 )}
               </p>
               <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+              {(n.type === 'player_invitation') && (
+                <span className="inline-block mt-1.5 px-2 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Tap to respond</span>
+              )}
             </div>
           </div>
         )) : (
@@ -370,8 +398,14 @@ const NavigationHandler: React.FC<{
   };
 
   const handleNotificationClick = (notification: Notification) => {
-    if (notification.type === 'BOOKING' && notification.bookingId) {
-      // Court owners go to bookings admin, players go to my bookings
+    const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
+    const squadTypes = ['squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'];
+    
+    if (invitationTypes.includes(notification.type as string)) {
+      navigate('/my-bookings?tab=invitations');
+    } else if (squadTypes.includes(notification.type as string) && notification.action_url) {
+      navigate(notification.action_url);
+    } else if (notification.type === 'BOOKING' && notification.bookingId) {
       if (role === 'COURT_OWNER' || role === 'ADMIN') {
         navigate('/bookings-admin');
       } else {
@@ -380,9 +414,8 @@ const NavigationHandler: React.FC<{
     } else if (notification.type === 'ACHIEVEMENT') {
       navigate('/achievements');
     }
-    // Add more navigation logic for other notification types if needed
-    setIsNotificationsOpen(false); // Close panel after clicking
-    handleMarkNotificationsRead(); // Mark all as read when interacting
+    setIsNotificationsOpen(false);
+    handleMarkNotificationsRead();
   };
 
   const getThemeColor = () => {
@@ -892,7 +925,10 @@ const NavigationHandler: React.FC<{
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
           : (
             location.pathname.startsWith('/tournaments-admin/manage/') ||
-              location.pathname.startsWith('/tournaments/')
+              location.pathname.startsWith('/tournaments/') ||
+              (location.pathname.startsWith('/teams/') && location.pathname !== '/teams') ||
+              location.pathname === '/terms' ||
+              location.pathname === '/policy'
               ? '' // full-bleed — these pages manage their own layout
               : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           )
@@ -926,7 +962,7 @@ const NavigationHandler: React.FC<{
               <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
               <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : <CourtDetail />} />
-              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <Tournaments /> : <Navigate to="/" />} />
+              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <Tournaments userRole={role} /> : <Navigate to="/" />} />
               <Route path="/tournaments/:id" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <TournamentPage /> : <Navigate to="/" />} />
               <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <FeatureUnavailable featureName="coaches" /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
@@ -935,8 +971,9 @@ const NavigationHandler: React.FC<{
               <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners /> : <Navigate to="/" />} />
               <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
               <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
-              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-              <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to="/" />} />
+              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to={`/login?redirect=${encodeURIComponent('/teams')}`} replace />} />
+              <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />} />
+              <Route path="/teams/:squadId/invite/:inviteCode" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />} />
               <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
               <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
               <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
@@ -952,14 +989,17 @@ const NavigationHandler: React.FC<{
               <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
               <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
               <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : role !== 'guest' ? <TournamentsManager /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <TournamentHub /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : role !== 'guest' ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : (role === 'COURT_OWNER' || role === 'ADMIN') ? <TournamentHub /> : <Navigate to="/" />} />
               <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
-              <Route path="/p/:slug/:bookingId" element={<PosterPage />} />
+              <Route path="/p/:username/:bookingId" element={<PosterPage />} />
+              <Route path="/achievements-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AchievementsManager /> : <Navigate to="/login" />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/policy" element={<PrivacyPolicy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
@@ -1114,48 +1154,16 @@ const App: React.FC = () => {
       const metaActiveRole: UserRole = (session.user.app_metadata?.active_role as UserRole) || 'PLAYER';
       const metaIsAdminFlag = session.user.app_metadata?.is_admin === true;
 
-      const [profileRolesRes, maintenanceResult] = await Promise.all([
-        supabase.from('profiles').select('roles, active_role').eq('id', session.user.id).single(),
-        getMaintenanceStatus()
-      ]);
-
-      const dbRolesEarly: UserRole[] = profileRolesRes.data?.roles || [];
-      const dbActiveRole = (profileRolesRes.data?.active_role as UserRole) || metaActiveRole || 'PLAYER';
-      const isAdmin = hasAdminRole(dbRolesEarly) || hasAdminRole(metaRoles)
-        || (dbActiveRole?.toUpperCase?.() === 'ADMIN') || (metaActiveRole?.toUpperCase?.() === 'ADMIN') || metaIsAdminFlag;
-
-      if (isAdmin) { localStorage.setItem('is_actual_admin', 'true'); setIsActualAdmin(true); }
-      else { localStorage.removeItem('is_actual_admin'); }
-
-      if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); }
-      setMaintenanceChecked(true);
-      setRole(dbActiveRole);
-      localStorage.setItem('active_role', dbActiveRole);
-
-      await ensureDefaultFeatures(dbActiveRole); // seed any missing feature rows (e.g. achievements)
-      const features = await getEnabledFeaturesForRole(dbActiveRole);
-      // console.log('[Features] syncUserSession loaded', dbActiveRole, [...features]);
-      setEnabledFeatures(features);
-      setFeaturesLoaded(true);
-
-      // Initial state from session auth metadata
-      const userRolesMeta = session.user.app_metadata?.roles as UserRole[] || [];
-      const activeRoleMeta = session.user.app_metadata?.active_role as UserRole || 'PLAYER';
-
-      // Set initial state immediately to allow login
-      setRole(activeRoleMeta);
-      localStorage.setItem('active_role', activeRoleMeta);
-      setAuthorizedProRoles(userRolesMeta.filter(r => r === 'COACH' || r === 'COURT_OWNER'));
-
       try {
-        // Parallel fetch for profile and professional applications
-        const [profileRes, appsRes] = await Promise.all([
+        // Single parallel fetch: profile (full), approved apps, and maintenance status
+        const [profileRes, appsRes, maintenanceResult] = await Promise.all([
           supabase.from('profiles').select('full_name, username, active_role, roles, avatar_url, referred_by_id, email, points').eq('id', session.user.id).single(),
           supabase.from('professional_applications')
             .select('requested_role')
             .eq('profile_id', session.user.id)
             .eq('status', 'APPROVED')
-            .in('requested_role', ['COACH', 'COURT_OWNER'])
+            .in('requested_role', ['COACH', 'COURT_OWNER']),
+          getMaintenanceStatus()
         ]);
 
         // --- Referral Capture Logic ---
@@ -1261,11 +1269,6 @@ const App: React.FC = () => {
             }
           }
 
-          const activeFromDB = profileRes.data.active_role as UserRole;
-          if (activeFromDB) {
-            setRole(activeFromDB);
-            localStorage.setItem('active_role', activeFromDB);
-          }
           dbRoles = (profileRes.data.roles as UserRole[]) || ['PLAYER'];
           consolidatedRoles = [...dbRoles];
         } else if (session.user) {
@@ -1293,8 +1296,6 @@ const App: React.FC = () => {
             console.log('✅ Fallback profile created successfully');
             setUserName(newProfile.full_name);
             setUserAvatar(newProfile.avatar_url);
-            setRole('PLAYER');
-            localStorage.setItem('active_role', 'PLAYER');
             consolidatedRoles = ['PLAYER'];
           } else {
             console.error('❌ Failed to create fallback profile:', createError);
@@ -1329,8 +1330,30 @@ const App: React.FC = () => {
         const proRolesOnly = consolidatedRoles.filter(r => r === 'COACH' || r === 'COURT_OWNER' || r === 'ADMIN');
         setAuthorizedProRoles(proRolesOnly);
 
+        // Determine active role with complete data
+        const dbActiveRole = (profileRes.data?.active_role as UserRole) || metaActiveRole || 'PLAYER';
+        const isAdmin = hasAdminRole(consolidatedRoles) || hasAdminRole(metaRoles)
+          || (dbActiveRole?.toUpperCase?.() === 'ADMIN') || (metaActiveRole?.toUpperCase?.() === 'ADMIN') || metaIsAdminFlag;
+
+        if (isAdmin) { localStorage.setItem('is_actual_admin', 'true'); setIsActualAdmin(true); }
+        else { localStorage.removeItem('is_actual_admin'); }
+
+        if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); }
+        setMaintenanceChecked(true);
+        
+        setRole(dbActiveRole);
+        localStorage.setItem('active_role', dbActiveRole);
+
+        await ensureDefaultFeatures(dbActiveRole);
+        const features = await getEnabledFeaturesForRole(dbActiveRole);
+        setEnabledFeatures(features);
+        setFeaturesLoaded(true);
+
       } catch (err) {
         console.error('Error syncing user data:', err);
+        // Fallback to allow app to load even if sync fails
+        setMaintenanceChecked(true);
+        setFeaturesLoaded(true);
       }
     };
 
@@ -1759,16 +1782,12 @@ const App: React.FC = () => {
 
       setRole(newRole);
       localStorage.setItem('active_role', newRole);
-      // Small delay to ensure state update is processed before navigation
-      setTimeout(() => {
-        if (newRole === 'ADMIN') {
-          window.location.hash = '#/admin';
-        } else if (newRole === 'PLAYER') {
-          window.location.hash = '#/booking';
-        } else {
-          window.location.hash = '#/dashboard';
-        }
-      }, 100);
+
+      // Re-load features for the new role so guards update immediately
+      await ensureDefaultFeatures(newRole);
+      const features = await getEnabledFeaturesForRole(newRole);
+      setEnabledFeatures(features);
+      setFeaturesLoaded(true);
     } catch (err) {
       console.error('Role switch error:', err);
       alert('Failed to switch role');

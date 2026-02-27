@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Calendar, MapPin, Users, Award, Plus, X, Trash2, Edit2, LayoutGrid, List, Swords, GitBranch, Eye, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Trophy, Calendar, MapPin, Users, Award, Plus, X, Trash2, Edit2, LayoutGrid, List, Swords, GitBranch, Eye, CheckCircle2, Clock, AlertCircle, TestTube2 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { Tournament } from '../../types';
 import { fetchTournaments as fetchTournamentsService, deleteTournament, generateBracket, postAnnouncement, updateTournamentStatus, mapTournament, fetchRounds } from '../../services/tournaments';
@@ -83,7 +83,7 @@ const MOCK_TOURNAMENTS: Tournament[] = [
     },
 ];
 
-const TournamentsManager: React.FC = () => {
+const TournamentsManager: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -91,6 +91,8 @@ const TournamentsManager: React.FC = () => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [roundCounts, setRoundCounts] = useState<Record<string, number>>({});
+    const [showMockData, setShowMockData] = useState(false);
+    const isAdmin = userRole === 'ADMIN';
     const navigate = useNavigate();
 
     // Confirm dialog state
@@ -240,6 +242,19 @@ const TournamentsManager: React.FC = () => {
                     >
                         <List size={20} />
                     </button>
+                    {isAdmin && (
+                        <button
+                            onClick={() => setShowMockData(!showMockData)}
+                            className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ml-2 flex items-center gap-2 ${
+                                showMockData 
+                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200' 
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                        >
+                            <TestTube2 size={16} />
+                            {showMockData ? 'Hide Demo' : 'Show Demo'}
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsCreateModalOpen(true)}
                         className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 ml-2"
@@ -250,10 +265,23 @@ const TournamentsManager: React.FC = () => {
             </div>
 
             {/* Tournaments Visual Board */}
-            {isLoading === false && tournaments.length === 0 && (
+            {isLoading === false && tournaments.length === 0 && isAdmin && showMockData && (
                 <div className="flex items-center gap-3 px-5 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-xs font-bold">
-                    <Clock size={14} className="shrink-0" />
-                    Showing sample tournaments — create your first real event to get started.
+                    <TestTube2 size={14} className="shrink-0" />
+                    Admin preview — showing demo tournaments. Only you can see these.
+                </div>
+            )}
+            {isLoading === false && tournaments.length === 0 && !(isAdmin && showMockData) && (
+                <div className="text-center py-32">
+                    <Trophy className="w-24 h-24 text-slate-200 mx-auto mb-6" />
+                    <h3 className="text-2xl font-black text-slate-300 uppercase tracking-tighter mb-2">No Tournaments Yet</h3>
+                    <p className="text-slate-400 font-medium mb-6">Create your first tournament to get started.</p>
+                    <button
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 mx-auto"
+                    >
+                        Create Tournament
+                    </button>
                 </div>
             )}
             <div className={viewMode === 'grid' ? "grid grid-cols-1 lg:grid-cols-2 gap-8" : "space-y-4"}>
@@ -261,7 +289,7 @@ const TournamentsManager: React.FC = () => {
                     Array(3).fill(0).map((_, i) => (
                         <div key={i} className={`bg-white rounded-[40px] border border-slate-100 animate-pulse ${viewMode === 'grid' ? 'h-64' : 'h-24'}`}></div>
                     ))
-                ) : (tournaments.length > 0 ? tournaments : MOCK_TOURNAMENTS).map((tournament) => (
+                ) : (tournaments.length > 0 ? tournaments : (isAdmin && showMockData ? MOCK_TOURNAMENTS : [])).map((tournament) => (
                         viewMode === 'grid' ? (
                             <TournamentCard
                                 key={tournament.id}
@@ -272,7 +300,7 @@ const TournamentsManager: React.FC = () => {
                                 onGenerateBracket={() => handleGenerateBracket(tournament.id)}
                                 onStatusChange={handleStatusChange}
                                 approvalBadge={approvalBadge(tournament)}
-                                onManageHub={tournament.isApproved === true ? () => navigate(`/tournaments-admin/manage/${tournament.id}`) : undefined}
+                                onManageHub={tournament.isApproved === true ? () => navigate(`/tournaments-admin/manage/${tournament.id}?tab=participants`) : undefined}
                                 roundsCount={roundCounts[tournament.id]}
                             />
                         ) : (

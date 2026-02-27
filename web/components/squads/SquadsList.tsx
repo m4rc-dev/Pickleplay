@@ -4,11 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { UserRole } from '../../types';
 import Toast, { ToastType } from '../ui/Toast';
+import { SquadsListSkeleton } from './SquadsListSkeleton';
+
+const DEFAULT_SQUAD_BANNER = 'https://images.unsplash.com/photo-1617883861744-5a4d5c632f72?auto=format&fit=crop&w=1200&q=80';
 import {
   UsersRound, Search, Plus, Zap, Shield, ShieldCheck,
   ArrowRight, X, Crown, Lock, Trophy, MapPin,
   MessageCircle, CalendarDays, LogOut, Settings,
-  Upload, ImageIcon, Loader2
+  Upload, ImageIcon, Loader2, MessageSquare
 } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +32,9 @@ interface Squad {
   avg_rating: number;
   created_by: string;
   is_member?: boolean;
+  slug?: string;
+  require_approval?: boolean;
+  invite_code?: string;
 }
 
 interface SquadMember {
@@ -52,16 +58,33 @@ export const SquadsList: React.FC<SquadsListProps> = ({
 }) => {
   const navigate = useNavigate();
   const [squads, setSquads] = useState<Squad[]>([]);
-  const [activeTab, setActiveTab] = useState<'discover' | 'my-squads'>('discover');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [joiningSquadId, setJoiningSquadId] = useState<string | null>(null);
   const [leavingSquadId, setLeavingSquadId] = useState<string | null>(null);
-  // One-squad-per-player: track the user's current squad
+  // Track user's squad membership count for 5-squad limit
   const [userSquad, setUserSquad] = useState<{ squad: Squad; role: string } | null>(null);
+  const [userSquadCount, setUserSquadCount] = useState(0);
   const [leavingMySquad, setLeavingMySquad] = useState(false);
-  const isFirstRender = useRef(true);
+  const [squadUnreadCounts, setSquadUnreadCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  const [skelExiting, setSkelExiting] = useState(false);
+  const [showContent, setShowContent] = useState(false);
+
+  // Cross-fade: skeleton exits while content fades in simultaneously
+  useEffect(() => {
+    if (!isLoading) {
+      setSkelExiting(true);
+      const t1 = setTimeout(() => setShowContent(true), 200);
+      const t2 = setTimeout(() => setShowSkeleton(false), 450);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    } else {
+      setShowSkeleton(true);
+      setSkelExiting(false);
+      setShowContent(false);
+    }
+  }, [isLoading]);
 
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -84,19 +107,40 @@ export const SquadsList: React.FC<SquadsListProps> = ({
     message: '', type: 'info', isVisible: false,
   });
 
+  // Terms & Conditions acceptance gate
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
+
   const isAdmin = userRole === 'ADMIN';
   const themeColor = isAdmin ? 'indigo' : 'blue';
+
+  // Helper to generate a URL-friendly slug from squad name
+  const generateSlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 60);
+  };
+
+  // Generate a random invite code
+  const generateInviteCode = (): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  };
 
   // ── Init ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Check terms acceptance from localStorage
+    const accepted = localStorage.getItem('pp_squad_terms_accepted');
+    if (accepted === 'true') setHasAcceptedTerms(true);
+    
     getCurrentUser().then(uid => loadSquads(uid));
   }, []);
-
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
-    loadSquads(currentUserId);
-  }, [activeTab, searchQuery]);
 
   const getCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -139,7 +183,8 @@ export const SquadsList: React.FC<SquadsListProps> = ({
         is_member: userMemberships.includes(t.id),
       }));
 
-      // Track the single squad the user belongs to
+      // Track user's squad count and first squad for "My Squads" tab
+      setUserSquadCount(userMemberships.length);
       if (userId && userMemberships.length > 0) {
         const mySquadRow = mapped.find(s => s.is_member);
         if (mySquadRow) {
@@ -149,12 +194,41 @@ export const SquadsList: React.FC<SquadsListProps> = ({
         } else { setUserSquad(null); }
       } else { setUserSquad(null); }
 
-      setSquads(activeTab === 'my-squads' ? mapped.filter(s => s.is_member) : mapped);
+      setSquads(mapped);
+      
+      // Load unread message counts for user's squads
+      if (userId && userMemberships.length > 0) {
+        await loadUnreadCounts(userMemberships);
+      }
     } catch (err: any) {
       console.error('Error loading squads:', err);
       showToast('Failed to load squads: ' + err.message, 'error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadUnreadCounts = async (squadIds: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const counts: Record<string, number> = {};
+      
+      for (const squadId of squadIds) {
+        const { data, error } = await supabase.rpc('get_squad_unread_count', {
+          p_user_id: user.id,
+          p_squad_id: squadId
+        });
+        
+        if (!error && data !== null) {
+          counts[squadId] = data;
+        }
+      }
+      
+      setSquadUnreadCounts(counts);
+    } catch (err) {
+      console.error('Error loading unread counts:', err);
     }
   };
 
@@ -231,6 +305,26 @@ export const SquadsList: React.FC<SquadsListProps> = ({
         ...(formData.rules     ? { rules:     formData.rules }      : {}),
       };
 
+      // Generate slug and invite code for new squads
+      if (!editingSquadId) {
+        const baseSlug = generateSlug(formData.name);
+        const suffix = Date.now().toString(36).slice(-4);
+        payload.slug = `${baseSlug}-${suffix}`;
+
+        // Private squads always get an invite code
+        if (formData.isPrivate) {
+          payload.invite_code = generateInviteCode();
+          payload.require_approval = true; // Private squads always require approval
+        }
+      }
+
+      // Update slug when name changes on edit
+      if (editingSquadId) {
+        const baseSlug = generateSlug(formData.name);
+        const suffix = editingSquadId.slice(0, 4);
+        payload.slug = `${baseSlug}-${suffix}`;
+      }
+
       let result;
       if (editingSquadId) {
         result = await supabase.from('squads').update(payload).eq('id', editingSquadId).select().single();
@@ -273,16 +367,59 @@ export const SquadsList: React.FC<SquadsListProps> = ({
 
   const joinSquad = async (squadId: string) => {
     if (!currentUserId) { showToast('Please login to join squads', 'error'); return; }
-    if (userSquad) { showToast('You\'re already in a squad. Leave your current squad first.', 'error'); return; }
+    
+    // Check squad limit (max 5 squads per user)
+    try {
+      const { count } = await supabase
+        .from('squad_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUserId);
+      
+      if (count && count >= 5) {
+        showToast('You can only join up to 5 squads. Leave a squad first.', 'error');
+        setJoiningSquadId(null);
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking squad count:', err);
+    }
+
     setJoiningSquadId(squadId);
     try {
+      // Check if squad requires approval
+      const { data: squadData } = await supabase.from('squads')
+        .select('require_approval, is_private, slug')
+        .eq('id', squadId)
+        .single();
+
+      if (squadData?.is_private) {
+        // Redirect to squad detail page for invite code entry
+        const slug = squadData.slug || squadId;
+        navigate(`/teams/${slug}`);
+        return;
+      }
+
+      if (squadData?.require_approval) {
+        // Send a join request instead of directly joining
+        const { error } = await supabase.from('squad_join_requests').upsert(
+          { squad_id: squadId, user_id: currentUserId, status: 'pending' },
+          { onConflict: 'squad_id,user_id' }
+        );
+        if (error) throw error;
+        showToast('Join request sent! Waiting for approval.', 'success');
+        setJoiningSquadId(null);
+        return;
+      }
+
       const { error } = await supabase.from('squad_members').upsert(
         { squad_id: squadId, user_id: currentUserId, role: 'MEMBER' },
         { onConflict: 'squad_id,user_id', ignoreDuplicates: true }
       );
       if (error) throw error;
-      await loadSquads();
       showToast('You joined the squad!', 'success');
+      // Redirect to squad chat after joining
+      const slug = squadData?.slug || squadId;
+      navigate(`/teams/${slug}`);
     } catch (err: any) {
       showToast(err.message || 'Failed to join squad', 'error');
     } finally {
@@ -350,138 +487,259 @@ export const SquadsList: React.FC<SquadsListProps> = ({
   // ── Filtered display ──────────────────────────────────────────────────────
 
   const displayed = squads.filter(s =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+    !s.is_member && ( // Exclude user's squads (shown in "Your Squads" section)
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Terms & Conditions Gate - show once before accessing squads
+  if (!hasAcceptedTerms) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-4">
+        <div className="bg-white rounded-[40px] border border-slate-100 p-10 max-w-2xl w-full shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+              <Shield size={24} className="text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Squad Guidelines</h2>
+              <p className="text-sm text-slate-400 font-bold">Please review before continuing</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-3xl p-7 mb-6 space-y-4 text-base text-slate-600 leading-relaxed max-h-80 overflow-y-auto">
+            <p className="font-bold text-slate-800">By accessing squads on PicklePlay, you agree to:</p>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong>Respectful Communication:</strong> No harassment, hate speech, or bullying. Treat all members with respect.</li>
+              <li><strong>Privacy Protection:</strong> Do not share personal information (phone numbers, addresses, financial data) of yourself or others in public squad chats.</li>
+              <li><strong>No Spam or Solicitation:</strong> Squad chats are for squad-related discussions. No advertising or spam.</li>
+              <li><strong>Appropriate Content:</strong> Keep all content appropriate for all ages. No NSFW or offensive material.</li>
+              <li><strong>Accountability:</strong> Follow squad rules set by the squad leader. Violations may result in removal.</li>
+              <li><strong>Fair Play:</strong> Report scores honestly and play by the rules.</li>
+              <li><strong>Data Usage:</strong> Your squad activity (messages, events, membership) is stored per our privacy policy.</li>
+            </ul>
+            <p className="text-xs text-slate-400 mt-4">Violation of these guidelines may result in squad removal or account suspension.</p>
+          </div>
+
+          <button
+            onClick={() => {
+              setHasAcceptedTerms(true);
+              localStorage.setItem('pp_squad_terms_accepted', 'true');
+            }}
+            className="w-full h-14 rounded-3xl bg-slate-950 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-widest transition-all shadow-lg"
+          >
+            I Agree — Continue to Squads
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      {/* Hero Section */}
+      <div className="space-y-6">
         <div>
           <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.4em] mb-3">
-            PICKLEPLAY / SQUAD NETWORK
+            PICKLEPLAY / SQUADS
           </p>
           <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter leading-[1] uppercase mb-3">
-            FIND YOUR <br />
-            <span className={`${isAdmin ? 'text-indigo-600' : 'text-blue-600'}`}>SQUAD.</span>
+            PLAY WITH <br />
+            <span className={`${isAdmin ? 'text-indigo-600' : 'text-blue-600'}`}>YOUR TEAM.</span>
           </h1>
           <p className="text-slate-500 text-base max-w-md leading-relaxed">
-            Join a crew, build a dynasty, or found your own legend. The pickleball circuit starts here.
+            A squad is a group of players who play together. Join one to chat, set up games, and track your wins.
           </p>
         </div>
 
-        <button
-          onClick={() => { setEditingSquadId(null); setShowCreateModal(true); }}
-          className={`flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all hover:scale-[1.02] whitespace-nowrap ${
-            isAdmin
-              ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-100'
-              : 'bg-lime-400 hover:bg-lime-300 text-slate-950 shadow-lime-100'
-          }`}
-        >
-          <Plus size={18} />
-          {isAdmin ? 'Deploy Squad' : 'Found a Team'}
-        </button>
-      </div>
-
-      {/* Tabs + Search */}
-      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
-        <div className="flex gap-3">
-          {(['discover', 'my-squads'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap ${
-                activeTab === tab
-                  ? `${isAdmin ? 'bg-indigo-600' : 'bg-blue-600'} text-white shadow-xl`
-                  : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              {tab === 'discover' ? 'All Squads' : userSquad ? 'My Squad ●' : 'My Squad'}
-            </button>
-          ))}
+        {/* Two Primary Action Buttons */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <button
+            onClick={() => { setEditingSquadId(null); setShowCreateModal(true); }}
+            className={`flex-1 h-16 rounded-2xl font-black text-lg uppercase tracking-wider transition-all hover:scale-[1.02] flex items-center justify-center gap-3 shadow-xl ${
+              isAdmin
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-100'
+                : 'bg-lime-400 hover:bg-lime-300 text-slate-950 shadow-lime-100'
+            }`}
+          >
+            <Plus size={24} />
+            {isAdmin ? 'DEPLOY SQUAD' : 'CREATE A SQUAD'}
+          </button>
+          <button
+            onClick={() => document.getElementById('browse-section')?.scrollIntoView({ behavior: 'smooth' })}
+            className="flex-1 h-16 rounded-2xl font-black text-lg uppercase tracking-wider transition-all hover:scale-[1.02] flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white shadow-xl"
+          >
+            <Search size={24} />
+            BROWSE SQUADS
+          </button>
         </div>
 
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search squads, tags..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-14 pr-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-          />
-        </div>
-      </div>
-
-      {/* My Squad HQ — detailed view */}
-      {activeTab === 'my-squads' ? (
-        isLoading ? (
-          <div className="bg-white rounded-[40px] border border-slate-100 h-96 animate-pulse" />
-        ) : userSquad ? (
-          <MySquadHQ
-            squad={userSquad.squad}
-            role={userSquad.role}
-            isOwner={userSquad.role === 'OWNER'}
-            isAdmin={isAdmin}
-            onOpen={() => navigate(`/teams/${userSquad.squad.id}`)}
-            onEdit={() => openEditModal(userSquad.squad)}
-            onLeave={leaveMySquad}
-            isLeaving={leavingMySquad}
-            onViewMembers={() => viewMembers(userSquad.squad)}
-          />
-        ) : (
-          <div className="py-24 text-center space-y-5">
-            <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mx-auto">
-              <UsersRound className="text-slate-300 w-10 h-10" />
+        {/* Squad Count Indicator */}
+        {currentUserId && userSquadCount > 0 && (
+          <div className={`inline-flex items-center gap-3 px-6 py-4 rounded-2xl font-black text-sm shadow-lg border-2 ${
+            userSquadCount >= 5
+              ? 'bg-red-50 text-red-700 border-red-300'
+              : userSquadCount >= 4
+              ? 'bg-amber-50 text-amber-700 border-amber-300'
+              : 'bg-blue-50 text-blue-700 border-blue-200'
+          }`}>
+            <UsersRound size={20} className="flex-shrink-0" />
+            <div>
+              <div className="uppercase tracking-wider">YOUR SQUADS: {userSquadCount}/5</div>
+              {userSquadCount >= 5 && (
+                <div className="text-[10px] font-bold mt-0.5 opacity-80">Maximum reached - Leave a squad to join another</div>
+              )}
+              {userSquadCount === 4 && (
+                <div className="text-[10px] font-bold mt-0.5 opacity-80">1 more squad available</div>
+              )}
             </div>
-            <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">No Squad Yet</h3>
-            <p className="text-slate-400 font-medium max-w-sm mx-auto">You haven't joined or created a squad yet.</p>
-            <button onClick={() => setActiveTab('discover')}
-              className="text-blue-600 font-black text-xs uppercase tracking-widest hover:underline">
-              Browse All Squads →
-            </button>
-          </div>
-        )
-      ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {isLoading ? (
-          Array(6).fill(0).map((_, i) => (
-            <div key={i} className="bg-white rounded-[40px] border border-slate-100 h-[520px] animate-pulse" />
-          ))
-        ) : displayed.length > 0 ? (
-          displayed.map(squad => (
-            <SquadCard
-              key={squad.id}
-              squad={squad}
-              onJoin={() => joinSquad(squad.id)}
-              onLeave={() => leaveSquad(squad.id)}
-              onManage={() => openEditModal(squad)}
-              onViewMembers={() => viewMembers(squad)}
-              isJoining={joiningSquadId === squad.id}
-              isLeaving={leavingSquadId === squad.id}
-              themeColor={themeColor}
-              currentUserId={currentUserId}
-              userAlreadyInSquad={!!userSquad}
-            />
-          ))
-        ) : (
-          <div className="col-span-full py-32 text-center space-y-4">
-            <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mx-auto">
-              <UsersRound className="text-slate-300 w-10 h-10" />
-            </div>
-            <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">No Squads Found</h3>
-            <p className="text-slate-400 font-medium max-w-sm mx-auto">
-              Try adjusting your search or be the first to found a dynasty.
-            </p>
           </div>
         )}
       </div>
+
+      {/* Your Squads Section */}
+      {userSquad && (
+        <div className="space-y-6">
+          <h2 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
+            YOUR SQUADS ({userSquadCount})
+          </h2>
+          
+          <div className="relative">
+            {showSkeleton && (
+              <div className={`transition-all duration-300 ease-in${
+                skelExiting ? ' opacity-0 -translate-y-3 pointer-events-none' : ' opacity-100 translate-y-0'
+              }${showContent ? ' absolute inset-x-0 top-0' : ''}`}>
+                <SquadsListSkeleton variant="my-squad" />
+              </div>
+            )}
+            {showContent && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both">
+              <div className="bg-white rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-100 shadow-sm hover:shadow-lg transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center overflow-hidden">
+                    {userSquad.squad.image_url ? (
+                      <img src={userSquad.squad.image_url} alt={userSquad.squad.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <UsersRound className="text-white" size={28} />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-950 mb-1">{userSquad.squad.name}</h3>
+                    <p className="text-sm text-slate-500">{userSquad.squad.members_count} members</p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => navigate(`/teams/${userSquad.squad.slug || userSquad.squad.id}`)}
+                    className="px-6 py-3 bg-lime-400 hover:bg-lime-300 text-slate-950 font-black text-sm rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <MessageCircle size={16} />
+                    OPEN CHAT
+                  </button>
+                  {userSquad.role !== 'OWNER' && (
+                    <button
+                      onClick={leaveMySquad}
+                      disabled={leavingMySquad}
+                      className="px-6 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-sm rounded-xl border border-rose-100 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {leavingMySquad ? (
+                        <div className="w-4 h-4 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <><LogOut size={16} /> LEAVE</>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        </div>
       )}
+
+      {/* Browse Squads Section */}
+      <div id="browse-section" className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-2xl font-black text-slate-950 uppercase tracking-tight">
+            JOIN A SQUAD
+          </h2>
+          
+          <div className="relative max-w-md w-full">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name, location..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-14 pr-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="relative">
+          {showSkeleton && (
+            <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 transition-all duration-300 ease-in${
+              skelExiting ? ' opacity-0 -translate-y-3 pointer-events-none' : ' opacity-100 translate-y-0'
+            }${showContent ? ' absolute inset-x-0 top-0' : ''}`}>
+              <SquadsListSkeleton variant="cards" />
+            </div>
+          )}
+          {showContent && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {displayed.length > 0 ? (
+                displayed.map((squad, idx) => (
+                  <div
+                    key={squad.id}
+                    className="animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both h-full"
+                    style={{ animationDelay: `${idx * 60}ms` }}
+                  >
+                    <SquadCard
+                      squad={squad}
+                      onJoin={() => joinSquad(squad.id)}
+                      onLeave={() => leaveSquad(squad.id)}
+                      onManage={() => openEditModal(squad)}
+                      onViewMembers={() => viewMembers(squad)}
+                      isJoining={joiningSquadId === squad.id}
+                      isLeaving={leavingSquadId === squad.id}
+                      themeColor={themeColor}
+                      currentUserId={currentUserId}
+                      userAlreadyInSquad={userSquadCount >= 5}
+                      unreadCount={squadUnreadCounts[squad.id] || 0}
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-32 text-center space-y-4">
+                  <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mx-auto">
+                    <UsersRound className="text-slate-300 w-10 h-10" />
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-300 uppercase tracking-tighter">
+                    {searchQuery ? 'No Squads Found' : 'No Squads Available'}
+                  </h3>
+                  <p className="text-slate-400 font-medium max-w-sm mx-auto mb-6">
+                    {searchQuery ? 'Try a different search term' : 'Be the first to create a squad'}
+                  </p>
+                  {!searchQuery && (
+                    <button
+                      onClick={() => { setEditingSquadId(null); setShowCreateModal(true); }}
+                      className="px-8 py-4 bg-lime-400 hover:bg-lime-300 text-slate-950 font-black text-sm rounded-2xl uppercase tracking-wider transition-all inline-flex items-center gap-2"
+                    >
+                      <Plus size={16} />
+                      CREATE FIRST SQUAD
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Create / Edit Modal */}
       {showCreateModal && ReactDOM.createPortal(
@@ -495,14 +753,14 @@ export const SquadsList: React.FC<SquadsListProps> = ({
 
             <div className="mb-8 text-center">
               <h2 className="text-3xl font-black text-slate-950 tracking-tighter mb-2 uppercase">
-                {editingSquadId ? 'Manage Squad' : isAdmin ? 'Deploy Squad' : 'Found a Dynasty'}
+                {editingSquadId ? 'Manage Squad' : isAdmin ? 'Deploy Squad' : 'Create Your Squad'}
               </h2>
               <p className="text-slate-500 font-medium text-sm">
                 {editingSquadId
                   ? 'Update your squad details.'
                   : isAdmin
                   ? 'Initialize an official platform squad.'
-                  : 'Define your team identity and attract top players.'}
+                  : 'Set up your team so other players can find and join you.'}
               </p>
             </div>
 
@@ -713,7 +971,7 @@ export const SquadsList: React.FC<SquadsListProps> = ({
                     : 'bg-lime-400 hover:bg-lime-300 text-slate-950'
                 }`}
               >
-                {editingSquadId ? 'Update Squad' : isAdmin ? 'Deploy Squadron' : 'Found Team'}
+                {editingSquadId ? 'Update Squad' : isAdmin ? 'Deploy Squadron' : 'Create Team'}
               </button>
             </form>
           </div>
@@ -787,20 +1045,21 @@ interface SquadCardProps {
   themeColor: string;
   currentUserId: string | null;
   userAlreadyInSquad: boolean;
+  unreadCount: number;
 }
 
 const SquadCard: React.FC<SquadCardProps> = ({
-  squad, onJoin, onLeave, onManage, onViewMembers, isJoining, isLeaving, themeColor, currentUserId, userAlreadyInSquad,
+  squad, onJoin, onLeave, onManage, onViewMembers, isJoining, isLeaving, themeColor, currentUserId, userAlreadyInSquad, unreadCount,
 }) => {
   const isCreator = currentUserId === squad.created_by;
   const isMember = squad.is_member;
 
   return (
-    <div className="group relative bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500">
+    <div className="group relative bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 flex flex-col h-full">
       {/* Image */}
-      <div className="aspect-[16/10] relative overflow-hidden">
+      <div className="aspect-[16/10] relative overflow-hidden flex-shrink-0">
         <img
-          src={squad.image_url || 'https://images.unsplash.com/photo-1552820728-8ac41f1ce891?auto=format&fit=crop&q=80&w=800'}
+          src={squad.image_url || DEFAULT_SQUAD_BANNER}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-90"
           alt={squad.name}
         />
@@ -834,16 +1093,22 @@ const SquadCard: React.FC<SquadCardProps> = ({
         )}
 
         {/* Name over image */}
-        <div className="absolute bottom-5 left-6 right-6">
-          <h3 className="text-2xl font-black text-white tracking-tighter leading-tight uppercase line-clamp-1">
+        <div className="absolute bottom-5 left-6 right-6 flex items-center justify-between">
+          <h3 className="text-2xl font-black text-white tracking-tighter leading-tight uppercase line-clamp-1 flex-1">
             {squad.name}
           </h3>
+          {isMember && unreadCount > 0 && (
+            <div className="ml-3 flex items-center gap-1.5 px-2.5 py-1 bg-red-500 rounded-full border-2 border-white shadow-lg animate-pulse">
+              <MessageSquare size={12} className="text-white" />
+              <span className="text-white text-xs font-black">{unreadCount > 99 ? '99+' : unreadCount}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Body */}
-      <div className="p-7 space-y-5">
-        <p className="text-slate-500 text-sm leading-relaxed line-clamp-2">{squad.description}</p>
+      <div className="p-7 space-y-5 flex-1 flex flex-col">
+        <p className="text-slate-500 text-sm leading-relaxed line-clamp-2 min-h-[2.5rem]">{squad.description}</p>
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
@@ -855,7 +1120,7 @@ const SquadCard: React.FC<SquadCardProps> = ({
             </div>
           </div>
           <div onClick={onViewMembers} className="p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-100 cursor-pointer transition-colors">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Roster</p>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Members</p>
             <div className="flex items-center gap-2">
               <UsersRound size={14} className={themeColor === 'indigo' ? 'text-indigo-600' : 'text-blue-600'} />
               <span className="font-black text-slate-950 text-xl">{squad.members_count}</span>
@@ -864,29 +1129,32 @@ const SquadCard: React.FC<SquadCardProps> = ({
         </div>
 
         {/* Tags */}
-        {squad.tags && squad.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {squad.tags.map(tag => (
-              <span
-                key={tag}
-                className={`px-3 py-1 text-[9px] font-black rounded-lg uppercase tracking-widest ${
-                  tag === 'OFFICIAL' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2 min-h-[2rem]">
+          {squad.tags && squad.tags.length > 0 && (
+            <>
+              {squad.tags.map(tag => (
+                <span
+                  key={tag}
+                  className={`px-3 py-1 text-[9px] font-black rounded-lg uppercase tracking-widest ${
+                    tag === 'OFFICIAL' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {tag}
+                </span>
+              ))}
+            </>
+          )}
+        </div>
 
         {/* CTA */}
+        <div className="mt-auto">
         {isMember ? (
           <div className="flex gap-3">
             <button
               onClick={onViewMembers}
               className="flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2 bg-slate-950 hover:bg-slate-800 text-white shadow-lg shadow-slate-200"
             >
-              Roster <ArrowRight size={15} />
+              Members <ArrowRight size={15} />
             </button>
             {!isCreator && (
               <button
@@ -906,7 +1174,7 @@ const SquadCard: React.FC<SquadCardProps> = ({
             <button
               onClick={onJoin}
               disabled={isJoining || userAlreadyInSquad}
-              title={userAlreadyInSquad ? 'Leave your current squad first' : ''}
+              title={userAlreadyInSquad ? 'You can only join up to 5 squads' : ''}
               className={`w-full h-14 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-3 ${
                 isJoining
                   ? 'bg-blue-600 text-white cursor-wait'
@@ -920,16 +1188,17 @@ const SquadCard: React.FC<SquadCardProps> = ({
               {isJoining ? (
                 <><span>Joining...</span><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /></>
               ) : userAlreadyInSquad ? (
-                'Already in a Squad'
+                'Squad Limit Reached'
               ) : (
-                <>Enter the Squad <ArrowRight size={16} /></>
+                <>Join Squad <ArrowRight size={16} /></>
               )}
             </button>
             {userAlreadyInSquad && (
-              <p className="text-[9px] text-slate-400 font-bold text-center mt-2">Leave your current squad first</p>
+              <p className="text-[9px] text-slate-400 font-bold text-center mt-2">Leave a squad first (max 5 squads)</p>
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -942,6 +1211,7 @@ interface MySquadHQProps {
   role: string;
   isOwner: boolean;
   isAdmin: boolean;
+  unreadCount: number;
   onOpen: () => void;
   onEdit: () => void;
   onLeave: () => void;
@@ -950,7 +1220,7 @@ interface MySquadHQProps {
 }
 
 const MySquadHQ: React.FC<MySquadHQProps> = ({
-  squad, role, isOwner, isAdmin, onOpen, onEdit, onLeave, isLeaving, onViewMembers,
+  squad, role, isOwner, isAdmin, unreadCount, onOpen, onEdit, onLeave, isLeaving, onViewMembers,
 }) => {
   const winRate =
     squad.wins + squad.losses > 0
@@ -978,7 +1248,7 @@ const MySquadHQ: React.FC<MySquadHQProps> = ({
       {/* ── Hero Banner ──────────────────────────────────────────────────── */}
       <div className="relative aspect-[21/8] overflow-hidden">
         <img
-          src={squad.image_url || 'https://images.unsplash.com/photo-1593341646782-e0b495cff86d?w=1600&q=80'}
+          src={squad.image_url || DEFAULT_SQUAD_BANNER}
           className="w-full h-full object-cover"
           alt={squad.name}
         />
@@ -1008,6 +1278,12 @@ const MySquadHQ: React.FC<MySquadHQProps> = ({
 
           <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase leading-none mb-2">
             {squad.name}
+            {unreadCount > 0 && (
+              <span className="ml-4 inline-flex items-center px-3 py-1 rounded-full bg-red-500 text-white text-sm font-black shadow-lg animate-pulse">
+                <MessageSquare size={14} className="mr-1" />
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </h2>
 
           {squad.description && (
@@ -1061,7 +1337,7 @@ const MySquadHQ: React.FC<MySquadHQProps> = ({
             className="flex items-center gap-2 h-14 px-6 rounded-2xl font-black text-xs uppercase tracking-[0.15em] bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all"
           >
             <UsersRound size={16} />
-            Roster
+            Members
           </button>
 
           {/* Edit – owner / admin only */}

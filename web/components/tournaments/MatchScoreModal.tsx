@@ -10,9 +10,11 @@ interface Props {
   onClose: () => void;
   onScored: () => void;
   participantNames?: Record<string, string>;
+  /** When provided, bypasses DB and calls this with score data instead. */
+  onMockScore?: (matchId: string, scoreA: number, scoreB: number, winnerId: string) => void;
 }
 
-const MatchScoreModal: React.FC<Props> = ({ match, isOpen, onClose, onScored, participantNames = {} }) => {
+const MatchScoreModal: React.FC<Props> = ({ match, isOpen, onClose, onScored, participantNames = {}, onMockScore }) => {
   const [scoreA, setScoreA] = useState(match.scoreA ?? 0);
   const [scoreB, setScoreB] = useState(match.scoreB ?? 0);
   const [winner, setWinner] = useState<'a' | 'b' | null>(
@@ -32,7 +34,12 @@ const MatchScoreModal: React.FC<Props> = ({ match, isOpen, onClose, onScored, pa
     setIsSubmitting(true);
     try {
       const winnerId = winner === 'a' ? match.participantAId! : match.participantBId!;
-      await submitMatchScore(match.id, scoreA, scoreB, winnerId);
+      if (onMockScore) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        onMockScore(match.id, scoreA, scoreB, winnerId);
+      } else {
+        await submitMatchScore(match.id, scoreA, scoreB, winnerId);
+      }
       onScored();
       onClose();
     } catch (err: any) {
