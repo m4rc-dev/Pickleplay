@@ -6,7 +6,9 @@ export interface Notification {
   type: 'match_request' | 'match_accepted' | 'match_declined' | 'new_message' |
   'partner_review' | 'partner_endorsement' | 'group_message' | 'group_invite' |
   'event_reminder' | 'booking_reminder' | 'system' | 'ACHIEVEMENT' |
-  'player_invitation' | 'invitation_accepted' | 'invitation_declined';
+  'player_invitation' | 'invitation_accepted' | 'invitation_declined' |
+  'squad_join_request' | 'squad_member_joined' | 'squad_member_left' |
+  'squad_message' | 'squad_event_created' | 'squad_invitation';
   title: string;
   message?: string;
   related_user_id?: string;
@@ -15,6 +17,8 @@ export interface Notification {
   related_message_id?: string;
   related_group_id?: string;
   related_event_id?: string;
+  related_squad_id?: string;
+  related_squad_event_id?: string;
   booking_id?: string;
   action_url?: string;
   is_read: boolean;
@@ -29,14 +33,17 @@ export interface NotificationPreferences {
   email_messages: boolean;
   email_reviews: boolean;
   email_events: boolean;
+  email_squad_activity: boolean;
   push_match_requests: boolean;
   push_messages: boolean;
   push_reviews: boolean;
   push_events: boolean;
+  push_squad_activity: boolean;
   inapp_match_requests: boolean;
   inapp_messages: boolean;
   inapp_reviews: boolean;
   inapp_events: boolean;
+  inapp_squad_activity: boolean;
   quiet_hours_enabled: boolean;
   quiet_hours_start?: string;
   quiet_hours_end?: string;
@@ -194,7 +201,65 @@ export const subscribeToNotifications = (
     )
     .subscribe();
 
-  return () => {
-    channel.unsubscribe();
-  };
+  return channel;
+};
+
+/**
+ * Get unread message count for a specific squad
+ */
+export const getSquadUnreadCount = async (squadId: string) => {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .rpc('get_squad_unread_count', {
+      p_user_id: user.user.id,
+      p_squad_id: squadId
+    });
+
+  if (error) throw error;
+  return data as number;
+};
+
+/**
+ * Mark all messages in a squad as read
+ */
+export const markSquadMessagesAsRead = async (squadId: string) => {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .rpc('mark_squad_messages_read', {
+      p_user_id: user.user.id,
+      p_squad_id: squadId
+    });
+
+  if (error) throw error;
+};
+
+/**
+ * Get unread message counts for all user's squads
+ */
+export const getAllSquadUnreadCounts = async () => {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) throw new Error('Not authenticated');
+
+  // Get all squads where user is a member
+  const { data: memberships, error: membershipsError } = await supabase
+    .from('squad_members')
+    .select('squad_id')
+    .eq('user_id', user.user.id);
+
+  if (membershipsError) throw membershipsError;
+  if (!memberships || memberships.length === 0) return {};
+
+  // Get unread counts for each squad
+  const unreadCounts: Record<string, number> = {};
+  
+  for (const membership of memberships) {
+    const count = await getSquadUnreadCount(membership.squad_id);
+    unreadCounts[membership.squad_id] = count;
+  }
+
+  return unreadCounts;
 };

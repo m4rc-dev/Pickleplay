@@ -313,7 +313,10 @@ export interface TournamentRegistration {
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT';
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT' |
+    'squad_join_request' | 'squad_member_joined' | 'squad_member_left' |
+    'squad_message' | 'squad_event_created' | 'squad_invitation' |
+    'player_invitation' | 'invitation_accepted' | 'invitation_declined';
   message: string;
   actor: {
     name: string;
@@ -324,6 +327,8 @@ export interface Notification {
   isRead: boolean;
   userId?: string;
   bookingId?: string; // Optional reference to booking for navigation
+  action_url?: string; // URL to navigate to when clicking notification
+  metadata?: any; // Additional data specific to notification type
 }
 
 export type CourtEventType = 'maintenance' | 'private_event' | 'cleaning' | 'closure' | 'other';
