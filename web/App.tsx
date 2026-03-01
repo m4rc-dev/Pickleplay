@@ -1072,6 +1072,7 @@ const App: React.FC = () => {
   const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set());
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [isActualAdmin, setIsActualAdmin] = useState(() => localStorage.getItem('is_actual_admin') === 'true');
+  const [authLoading, setAuthLoading] = useState(true);
 
   const hasAdminRole = (roles: (string | UserRole)[] | null | undefined) =>
     Array.isArray(roles) && roles.some(r => (r || '').toString().toUpperCase() === 'ADMIN');
@@ -1088,9 +1089,21 @@ const App: React.FC = () => {
       });
     });
 
-    // Refetch maintenance + features on tab focus
+    // Refetch maintenance + features on tab focus, and proactively refresh the Supabase session
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        // Proactively refresh the access token so inactivity doesn't cause a SIGNED_OUT flash
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            // Session still alive — silently refresh the token
+            supabase.auth.refreshSession().then(({ data: { session: refreshed } }) => {
+              if (refreshed) {
+                // token refreshed successfully, no UI change needed
+              }
+            });
+          }
+          // If session is null here the user genuinely logged out elsewhere — let onAuthStateChange handle it
+        });
         getMaintenanceStatus().then(m => {
           if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); }
         });
@@ -1359,11 +1372,20 @@ const App: React.FC = () => {
 
     // 2. Auth Initialization
     supabase.auth.getSession().then(({ data: { session } }) => {
-      syncUserSession(session);
+      syncUserSession(session).finally(() => setAuthLoading(false));
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      syncUserSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        // Genuine sign-out — clear everything
+        syncUserSession(null);
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Token silently refreshed — session is still valid, no need to re-sync UI
+        // Just make sure currentUserId is set in case this is the first load
+        if (session?.user) setCurrentUserId(session.user.id);
+      } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') {
+        syncUserSession(session);
+      }
     });
 
     // 3. Fetch initial data
@@ -2046,6 +2068,21 @@ const App: React.FC = () => {
     setCartItems(prevItems => prevItems.filter(item => item.id !== productId));
   };
 
+
+  if (authLoading) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ backgroundColor: '#EBEBE6' }}>
+        <div className="flex flex-col items-center gap-4">
+          <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-16 h-16 rounded-2xl object-contain animate-pulse" />
+          <div className="flex gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Router>

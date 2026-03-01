@@ -310,6 +310,7 @@ const TournamentsManager: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                 onDelete={() => handleDelete(tournament.id)}
                                 onEdit={() => setEditTournament(tournament)}
                                 onView={() => navigate(`/tournaments/${tournament.id}`)}
+                                onManageHub={tournament.isApproved === true ? () => navigate(`/tournaments-admin/manage/${tournament.id}?tab=participants`) : undefined}
                                 approvalBadge={approvalBadge(tournament)}
                             />
                         )
@@ -354,7 +355,7 @@ const TournamentCard: React.FC<CardProps> = ({ tournament, onDelete, onEdit, onV
 
     return (
         <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
-            <div className="p-8">
+            <div className="p-8 cursor-pointer" onClick={onManageHub || onView}>
                 <div className="flex items-center justify-between mb-5">
                     <div className="p-3.5 rounded-2xl bg-indigo-50 text-indigo-600">
                         <Trophy size={26} />
@@ -376,12 +377,12 @@ const TournamentCard: React.FC<CardProps> = ({ tournament, onDelete, onEdit, onV
                 </div>
 
                 {tournament.image && (
-                    <div className="w-full h-48 rounded-3xl overflow-hidden mb-6 border border-slate-100 shadow-inner cursor-pointer" onClick={onView}>
+                    <div className="w-full h-48 rounded-3xl overflow-hidden mb-6 border border-slate-100 shadow-inner">
                         <img src={tournament.image} alt={tournament.name} className="w-full h-full object-cover" />
                     </div>
                 )}
 
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={onView}>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2 group-hover:text-indigo-600 transition-colors">
                     {tournament.name}
                 </h3>
 
@@ -416,7 +417,7 @@ const TournamentCard: React.FC<CardProps> = ({ tournament, onDelete, onEdit, onV
                     <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800 text-[12px]">
                         Registration deadline passed. You can generate the bracket now.
                         <div className="mt-2">
-                            <button onClick={onGenerateBracket} className="px-3 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors">
+                            <button onClick={(e) => { e.stopPropagation(); onGenerateBracket(); }} className="px-3 py-2 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-colors">
                                 Generate Bracket
                             </button>
                         </div>
@@ -428,7 +429,7 @@ const TournamentCard: React.FC<CardProps> = ({ tournament, onDelete, onEdit, onV
                     {(['UPCOMING', 'LIVE', 'COMPLETED'] as const).map(s => (
                         <button
                             key={s}
-                            onClick={() => onStatusChange(tournament.id, s)}
+                            onClick={(e) => { e.stopPropagation(); onStatusChange(tournament.id, s); }}
                             className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
                                 tournament.status === s ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
                             }`}
@@ -439,21 +440,21 @@ const TournamentCard: React.FC<CardProps> = ({ tournament, onDelete, onEdit, onV
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={onView} className="flex-1 py-3 bg-slate-50 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); onView(); }} className="flex-1 py-3 bg-slate-50 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5">
                         <Eye size={14} /> View
                     </button>
-                    <button onClick={onEdit} className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5">
                         <Edit2 size={14} /> Edit
                     </button>
                     {onManageHub && (
-                        <button onClick={onManageHub} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5" title="Open Management Hub">
+                        <button onClick={(e) => { e.stopPropagation(); onManageHub(); }} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5" title="Open Management Hub">
                             <Trophy size={14} /> Manage
                         </button>
                     )}
-                    <button onClick={onGenerateBracket} className="p-3 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all" title="Generate Bracket">
+                    <button onClick={(e) => { e.stopPropagation(); onGenerateBracket(); }} className="p-3 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-50 transition-all" title="Generate Bracket">
                         <GitBranch size={18} />
                     </button>
-                    <button onClick={onDelete} className="p-3 border border-rose-100 text-rose-500 rounded-xl hover:bg-rose-50 transition-all">
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-3 border border-rose-100 text-rose-500 rounded-xl hover:bg-rose-50 transition-all">
                         <Trash2 size={18} />
                     </button>
                 </div>
@@ -467,15 +468,16 @@ interface ListRowProps {
     onDelete: () => void;
     onEdit: () => void;
     onView: () => void;
+    onManageHub?: () => void;
     approvalBadge: { bg: string; label: string; icon: React.ElementType };
 }
 
-const TournamentListRow: React.FC<ListRowProps> = ({ tournament, onDelete, onEdit, onView, approvalBadge }) => {
+const TournamentListRow: React.FC<ListRowProps> = ({ tournament, onDelete, onEdit, onView, onManageHub, approvalBadge }) => {
     const ApprovalIcon = approvalBadge.icon;
 
     return (
         <div className="bg-white rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:shadow-lg transition-all">
-            <div className="flex items-center gap-6 cursor-pointer" onClick={onView}>
+            <div className="flex items-center gap-6 cursor-pointer" onClick={onManageHub || onView}>
                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 overflow-hidden">
                     {tournament.image ? (
                         <img src={tournament.image} alt={tournament.name} className="w-full h-full object-cover" />
@@ -509,13 +511,13 @@ const TournamentListRow: React.FC<ListRowProps> = ({ tournament, onDelete, onEdi
                     {tournament.status}
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={onView} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); onView(); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
                         <Eye size={18} />
                     </button>
-                    <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
                         <Edit2 size={18} />
                     </button>
-                    <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">
                         <Trash2 size={18} />
                     </button>
                 </div>

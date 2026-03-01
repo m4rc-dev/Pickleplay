@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { X, Upload, ChevronRight, ChevronLeft, Check, Trophy, Calendar, MapPin, Users, BookOpen, Award, Swords, Settings } from 'lucide-react';
+import { X, Upload, ChevronRight, ChevronLeft, Check, Trophy, Calendar, MapPin, Users, BookOpen, Award, Swords, Settings, Shield, Zap } from 'lucide-react';
 import { createTournament, updateTournament, type CreateTournamentInput } from '../../services/tournaments';
-import type { Tournament, TournamentFormat, TournamentEventType, TournamentCategory } from '../../types';
+import type { Tournament, TournamentFormat, TournamentEventType, TournamentCategory, TournamentMode, RegistrationMode, RosterLockTiming } from '../../types';
 
 interface Props {
   isOpen: boolean;
@@ -45,13 +45,16 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
   const [rules, setRules] = useState(editTournament?.rules || '11 points, win by 2, best of 3');
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(editTournament?.image || null);
-  const [registrationMode, setRegistrationMode] = useState<'player' | 'squad' | 'both'>(editTournament?.registrationMode || 'player');
+  const [tournamentMode, setTournamentMode] = useState<TournamentMode>(editTournament?.tournamentMode || 'casual');
+  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>(
+    editTournament?.registrationMode === 'squad' ? 'squad' : 'individual'
+  );
+  const [rosterLockTiming, setRosterLockTiming] = useState<RosterLockTiming>(editTournament?.rosterLockTiming || 'bracket_generated');
   const [squadMinSize, setSquadMinSize] = useState<number>(editTournament?.squadRequirements?.minSize || 2);
   const [squadRatingMin, setSquadRatingMin] = useState<number | ''>(editTournament?.squadRequirements?.ratingMin ?? '');
   const [squadRatingMax, setSquadRatingMax] = useState<number | ''>(editTournament?.squadRequirements?.ratingMax ?? '');
   const [squadRegions, setSquadRegions] = useState<string>((editTournament?.squadRequirements?.regions || []).join(', '));
   const [squadMembership, setSquadMembership] = useState<'any' | 'active' | 'premium'>(editTournament?.squadRequirements?.membership || 'any');
-  const [allowSoloFallback, setAllowSoloFallback] = useState<boolean>(editTournament?.allowSoloFallback ?? false);
 
   const isEditing = !!editTournament;
 
@@ -71,7 +74,8 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
       const input: CreateTournamentInput = {
         name,
         description,
-        date: new Date(`${date}T${startTime}`).toISOString(),
+        // Explicitly append PH timezone offset (+08:00) so the datetime is never misread as UTC
+        date: new Date(`${date}T${startTime}:00+08:00`).toISOString(),
         location,
         prizePool,
         skillLevel,
@@ -81,20 +85,22 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
         category,
         startTime,
         checkInTime,
-        registrationDeadline: registrationDeadline ? new Date(registrationDeadline).toISOString() : undefined,
+        // End of day PH time — a date-only input gives UTC midnight without this, which is 8 AM PH
+        registrationDeadline: registrationDeadline ? new Date(`${registrationDeadline}T23:59:59+08:00`).toISOString() : undefined,
         numCourts,
         rules,
         prizes,
         imageFile: posterFile || undefined,
+        tournamentMode,
         registrationMode,
-        squadRequirements: registrationMode === 'player' ? undefined : {
+        rosterLockTiming: tournamentMode === 'competitive' ? rosterLockTiming : 'bracket_generated',
+        squadRequirements: registrationMode === 'individual' ? undefined : {
           minSize: squadMinSize,
           ratingMin: squadRatingMin === '' ? undefined : squadRatingMin,
           ratingMax: squadRatingMax === '' ? undefined : squadRatingMax,
           regions: squadRegions.split(',').map(r => r.trim()).filter(Boolean),
           membership: squadMembership,
         },
-        allowSoloFallback: allowSoloFallback,
       };
 
       let result: Tournament;
@@ -199,27 +205,95 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
                 </div>
               </div>
 
-                <div className="p-4 md:p-6 bg-slate-50 border border-slate-100 rounded-3xl space-y-4">
+                <div className="p-4 md:p-6 bg-slate-50 border border-slate-100 rounded-3xl space-y-5">
+                  {/* Tournament Mode */}
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Tournament Mode</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTournamentMode('casual')}
+                        className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                          tournamentMode === 'casual' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 hover:border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Zap size={16} className={tournamentMode === 'casual' ? 'text-emerald-600' : 'text-slate-400'} />
+                          <span className={`font-black text-sm uppercase tracking-tight ${tournamentMode === 'casual' ? 'text-emerald-700' : 'text-slate-500'}`}>Casual</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">Flexible, fun, weekend events. Fast approval.</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTournamentMode('competitive')}
+                        className={`p-4 rounded-2xl border-2 text-left transition-all ${
+                          tournamentMode === 'competitive' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Shield size={16} className={tournamentMode === 'competitive' ? 'text-blue-600' : 'text-slate-400'} />
+                          <span className={`font-black text-sm uppercase tracking-tight ${tournamentMode === 'competitive' ? 'text-blue-700' : 'text-slate-500'}`}>Competitive</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-tight">Rated, strict brackets, approval required.</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Registration Mode */}
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registration Mode</p>
-                      <p className="text-sm text-slate-600 font-medium">Choose how participants join</p>
+                      <p className="text-sm text-slate-600 font-medium">How participants join</p>
                     </div>
-                    <select
-                      value={registrationMode}
-                      onChange={e => setRegistrationMode(e.target.value as any)}
-                      className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700"
-                    >
-                      <option value="player">Players</option>
-                      <option value="squad">Squads</option>
-                      <option value="both">Both</option>
-                    </select>
+                    <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setRegistrationMode('individual')}
+                        className={`px-4 py-2 text-xs font-black uppercase tracking-widest transition-all ${
+                          registrationMode === 'individual' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >Individual</button>
+                      <button
+                        type="button"
+                        onClick={() => setRegistrationMode('squad')}
+                        className={`px-4 py-2 text-xs font-black uppercase tracking-widest transition-all ${
+                          registrationMode === 'squad' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >Squad</button>
+                    </div>
                   </div>
 
-                  {(registrationMode === 'squad' || registrationMode === 'both') && (
+                  {/* Roster Lock Timing — competitive only */}
+                  {tournamentMode === 'competitive' && registrationMode === 'squad' && (
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Roster Lock Point</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {([
+                          { value: 'registration_close' as RosterLockTiming, label: 'At Registration Close', desc: 'Strictest — lock when deadline passes' },
+                          { value: 'bracket_generated' as RosterLockTiming, label: 'At Bracket Generation', desc: 'Recommended — lock when bracket is set' },
+                          { value: 'first_match_start' as RosterLockTiming, label: 'At First Match', desc: 'Most flexible — lock when play begins' },
+                        ]).map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setRosterLockTiming(opt.value)}
+                            className={`p-3 rounded-xl border text-left transition-all ${
+                              rosterLockTiming === opt.value ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200'
+                            }`}
+                          >
+                            <p className={`text-xs font-black ${rosterLockTiming === opt.value ? 'text-blue-700' : 'text-slate-600'}`}>{opt.label}</p>
+                            <p className="text-[10px] text-slate-400">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Squad Requirements — squad mode only */}
+                  {registrationMode === 'squad' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>Minimum Squad Size</label>
+                        <label className={labelClass}>Minimum Squad Roster</label>
                         <input
                           type="number"
                           min={2}
@@ -240,28 +314,30 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
                           <option value="premium">Premium</option>
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 md:col-span-2">
-                        <div>
-                          <label className={labelClass}>Rating Min</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={squadRatingMin}
-                            onChange={e => setSquadRatingMin(e.target.value === '' ? '' : Number(e.target.value))}
-                            className={inputClass}
-                          />
+                      {tournamentMode === 'competitive' && (
+                        <div className="grid grid-cols-2 gap-3 md:col-span-2">
+                          <div>
+                            <label className={labelClass}>Rating Min</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={squadRatingMin}
+                              onChange={e => setSquadRatingMin(e.target.value === '' ? '' : Number(e.target.value))}
+                              className={inputClass}
+                            />
+                          </div>
+                          <div>
+                            <label className={labelClass}>Rating Max</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={squadRatingMax}
+                              onChange={e => setSquadRatingMax(e.target.value === '' ? '' : Number(e.target.value))}
+                              className={inputClass}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className={labelClass}>Rating Max</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={squadRatingMax}
-                            onChange={e => setSquadRatingMax(e.target.value === '' ? '' : Number(e.target.value))}
-                            className={inputClass}
-                          />
-                        </div>
-                      </div>
+                      )}
                       <div className="md:col-span-2">
                         <label className={labelClass}>Allowed Regions (comma-separated)</label>
                         <input
@@ -271,15 +347,6 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
                           className={inputClass}
                         />
                       </div>
-                      <label className="flex items-center gap-3 text-sm font-bold text-slate-600 md:col-span-2">
-                        <input
-                          type="checkbox"
-                          checked={allowSoloFallback}
-                          onChange={e => setAllowSoloFallback(e.target.checked)}
-                          className="w-4 h-4"
-                        />
-                        Allow solo players if no squads qualify
-                      </label>
                     </div>
                   )}
                 </div>
@@ -442,6 +509,11 @@ const CreateTournamentModal: React.FC<Props> = ({ isOpen, onClose, onSaved, edit
                 <ReviewRow label="Format" value={format.replace('_', ' ')} />
                 <ReviewRow label="Max Players" value={String(maxPlayers)} />
                 <ReviewRow label="Courts" value={String(numCourts)} />
+                <ReviewRow label="Mode" value={tournamentMode === 'competitive' ? 'Competitive' : 'Casual'} />
+                <ReviewRow label="Registration" value={registrationMode === 'squad' ? 'Squad-based' : 'Individual'} />
+                {tournamentMode === 'competitive' && registrationMode === 'squad' && (
+                  <ReviewRow label="Roster Lock" value={rosterLockTiming.replace('_', ' ')} />
+                )}
                 {prizePool && <ReviewRow label="Prize Pool" value={prizePool} />}
                 {rules && <ReviewRow label="Rules" value={rules} />}
                 {description && <ReviewRow label="Description" value={description} />}

@@ -3,19 +3,24 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Trophy, Calendar, MapPin, Users, Award, Clock, Shield, Swords,
   ChevronRight, CheckCircle2, Star, Megaphone, UserPlus, UserMinus, Settings2,
-  AlertTriangle, Phone, FileText, BadgeCheck, X, Search
+  AlertTriangle, Phone, FileText, BadgeCheck, X, Search, Unlock, Eye, EyeOff,
+  ChevronDown, ChevronUp, Lock, AlertCircle, HeartPulse
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import {
   fetchTournamentById, fetchRegistrations, fetchRegistrationsWithRatings, registerPlayer, withdrawRegistration,
   getPlayerRegistration, evaluateSquadEligibility, approveRegistration,
   rejectRegistration, getPendingRegistrationsDetailed, checkRegistrationConflicts,
-  fetchTournamentChampion,
+  fetchTournamentChampion, openTournamentRegistration,
+  registerSquad, getSquadRegistrations, getSquadRegistration, withdrawSquadRegistration,
+  approveSquadRegistration, rejectSquadRegistration, lockAllRosters,
+  markPlayerInjured, evaluateSquadRosterEligibility,
   type TournamentConflict, type PendingRegistrationDetailed
 } from '../../services/tournaments';
-import { squadsService, type Squad } from '../../services/squads';
-import type { Tournament, TournamentRegistration } from '../../types';
+import { squadsService, type Squad, type SquadMember } from '../../services/squads';
+import type { Tournament, TournamentRegistration, TournamentMatch, SquadRegistration, TournamentRosterPlayer } from '../../types';
 import TournamentBracket from './TournamentBracket';
+import MatchLineupPanel from './MatchLineupPanel';
 import PlayerApprovalCard from './PlayerApprovalCard';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import Toast, { ToastType } from '../ui/Toast';
@@ -38,6 +43,9 @@ const TournamentPage: React.FC = () => {
   const [userSquads, setUserSquads] = useState<Squad[]>([]);
   const [selectedSquadId, setSelectedSquadId] = useState<string>('');
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [isOpeningReg, setIsOpeningReg] = useState(false);
+  const [viewAsPlayer, setViewAsPlayer] = useState(false);
+  const effectiveIsOrganizer = isOrganizer && !viewAsPlayer;
   const [conflicts, setConflicts] = useState<TournamentConflict[]>([]);
   const [showConflictsDialog, setShowConflictsDialog] = useState(false);
   const [applicationMessage, setApplicationMessage] = useState('');
@@ -45,6 +53,16 @@ const TournamentPage: React.FC = () => {
   const [playerRatings, setPlayerRatings] = useState<Map<string, number | null>>(new Map());
   const [champion, setChampion] = useState<{ id: string; name: string; avatar?: string } | null>(null);
   const [squadNames, setSquadNames] = useState<Map<string, string>>(new Map());
+
+  // Squad registration state
+  const [squadRegistrations, setSquadRegistrations] = useState<SquadRegistration[]>([]);
+  const [mySquadReg, setMySquadReg] = useState<SquadRegistration | null>(null);
+  const [squadMembers, setSquadMembers] = useState<SquadMember[]>([]);
+  const [selectedRosterIds, setSelectedRosterIds] = useState<Set<string>>(new Set());
+  const [showRosterPicker, setShowRosterPicker] = useState(false);
+  const [isRegisteringSquad, setIsRegisteringSquad] = useState(false);
+  const [userSquadRole, setUserSquadRole] = useState<string | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
@@ -132,13 +150,37 @@ const TournamentPage: React.FC = () => {
         const hasActiveRegistration = reg && reg.status !== 'rejected' && reg.status !== 'withdrawn';
         setIsRegistered(!!hasActiveRegistration);
         setRegistrationStatus(reg?.status || null);
-        if (t?.registrationMode === 'squad' || t?.registrationMode === 'both') {
+
+        // Load squad data if squad registration mode
+        if (t?.registrationMode === 'squad') {
           const squads = await squadsService.getUserSquads(userId);
           setUserSquads(squads);
-          if (squads.length > 0) setSelectedSquadId(squads[0].id);
+          if (squads.length > 0) {
+            setSelectedSquadId(squads[0].id);
+            // Check user's role in first squad
+            try {
+              const members = await squadsService.getSquadMembers(squads[0].id);
+              setSquadMembers(members);
+              const myMember = members.find(m => m.user_id === userId);
+              setUserSquadRole(myMember?.role || null);
+            } catch { /* squad members optional */ }
+            // Check if user's squad is already registered
+            try {
+              const existingReg = await getSquadRegistration(tournamentId, squads[0].id);
+              setMySquadReg(existingReg);
+            } catch { /* optional */ }
+          }
         } else {
           setUserSquads([]);
           setSelectedSquadId('');
+        }
+
+        // Load all squad registrations (for display)
+        if (t?.registrationMode === 'squad') {
+          try {
+            const allSquadRegs = await getSquadRegistrations(tournamentId);
+            setSquadRegistrations(allSquadRegs);
+          } catch { /* optional */ }
         }
       }
       setIsLoading(false);
@@ -247,34 +289,116 @@ const TournamentPage: React.FC = () => {
     }
   };
 
+  const handleOpenRegistration = async () => {
+    if (!tournament) return;
+    setIsOpeningReg(true);
+    try {
+      const updated = await openTournamentRegistration(tournament.id);
+      setTournament(updated);
+      showToast('Registration is now open!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to open registration', 'error');
+    } finally {
+      setIsOpeningReg(false);
+    }
+  };
+
+  // ── Squad registration handlers ──────────────────────────
+  const handleSquadChange = async (squadId: string) => {
+    setSelectedSquadId(squadId);
+    setSelectedRosterIds(new Set());
+    if (!squadId || !currentUserId) return;
+    try {
+      const members = await squadsService.getSquadMembers(squadId);
+      setSquadMembers(members);
+      const myMember = members.find(m => m.user_id === currentUserId);
+      setUserSquadRole(myMember?.role || null);
+      // Check existing registration
+      if (tournamentId) {
+        const existingReg = await getSquadRegistration(tournamentId, squadId);
+        setMySquadReg(existingReg);
+      }
+    } catch { /* optional */ }
+  };
+
+  const toggleRosterPlayer = (playerId: string) => {
+    setSelectedRosterIds(prev => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  };
+
+  const handleRegisterSquad = async () => {
+    if (!currentUserId || !tournamentId || !selectedSquadId) return;
+    setIsRegisteringSquad(true);
+    try {
+      const rosterIds = Array.from(selectedRosterIds);
+      await registerSquad(tournamentId, selectedSquadId, currentUserId, rosterIds, applicationMessage || undefined);
+      // Reload
+      const [squadRegs, myReg] = await Promise.all([
+        getSquadRegistrations(tournamentId),
+        getSquadRegistration(tournamentId, selectedSquadId),
+      ]);
+      setSquadRegistrations(squadRegs);
+      setMySquadReg(myReg);
+      setShowRosterPicker(false);
+      setApplicationMessage('');
+      showToast('Squad registration submitted! Awaiting organizer approval.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to register squad', 'error');
+    } finally {
+      setIsRegisteringSquad(false);
+    }
+  };
+
+  const handleWithdrawSquad = async () => {
+    if (!mySquadReg) return;
+    showConfirm(
+      'Withdraw Squad?',
+      'Are you sure you want to withdraw your squad from this tournament?',
+      async () => {
+        try {
+          await withdrawSquadRegistration(mySquadReg.id);
+          setMySquadReg(null);
+          if (tournamentId) {
+            const squadRegs = await getSquadRegistrations(tournamentId);
+            setSquadRegistrations(squadRegs);
+          }
+          showToast('Squad withdrawn from tournament.', 'success');
+        } catch (err: any) {
+          showToast(err.message || 'Failed to withdraw', 'error');
+        }
+      },
+      'warning'
+    );
+  };
+
   // ── Derived state ────────────────────────────────────────
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'bracket', label: 'Bracket' },
-    { key: 'participants', label: `Participants (${registrations.length}${isOrganizer && pendingRegistrations.length > 0 ? ` +${pendingRegistrations.length} pending` : ''})` },
+    { key: 'participants', label: `Participants (${registrations.length}${effectiveIsOrganizer && pendingRegistrations.length > 0 ? ` +${pendingRegistrations.length} pending` : ''})` },
   ];
 
   const isFull = tournament ? (tournament.registeredCount || 0) >= (tournament.maxPlayers || 0) : false;
-  const regMode = tournament?.registrationMode || 'player';
-  const isSquadOnly = regMode === 'squad';
-  const isSquadMode = regMode === 'squad' || regMode === 'both';
+  const regMode = tournament?.registrationMode || 'individual';
+  const isSquadMode = regMode === 'squad';
   const selectedSquad = userSquads.find(s => s.id === selectedSquadId);
-  const squadCheck = isSquadMode && tournament
-    ? evaluateSquadEligibility(tournament.squadRequirements, selectedSquad || { members_count: 0, avg_rating: 0, name: '' })
-    : { eligible: true, reasons: [] };
-  const squadNeeded = isSquadMode && !selectedSquad && !tournament?.allowSoloFallback;
-  const squadEligibleOrFallback = !isSquadMode
-    ? true
-    : selectedSquad
-      ? squadCheck.eligible
-      : !!tournament?.allowSoloFallback;
+  const teamSize = tournament?.squadRequirements?.teamSize || ((tournament?.eventType === 'doubles' || tournament?.eventType === 'mixed_doubles') ? 2 : 1);
+  const rosterCount = selectedRosterIds.size;
+  const rosterTeamCount = teamSize > 0 ? Math.floor(rosterCount / teamSize) : 0;
+  const rosterDivisible = teamSize > 0 && rosterCount > 0 && rosterCount % teamSize === 0;
+  const isSquadOwner = userSquadRole === 'owner' || userSquadRole === 'captain' || userSquadRole === 'OWNER';
+  const hasActiveSquadReg = mySquadReg && mySquadReg.status !== 'withdrawn' && mySquadReg.status !== 'rejected';
 
   const canRegister = tournament?.status === 'UPCOMING'
     && !isFull
     && !isRegistered
     && !!currentUserId
-    && (!isSquadOnly ? true : squadEligibleOrFallback)
-    && !(isSquadOnly && squadNeeded);
+    && (!isSquadMode || !hasActiveSquadReg)
+    && (!tournament.registrationDeadline || new Date() <= new Date(tournament.registrationDeadline));
   const isPast = tournament?.status === 'COMPLETED';
 
   if (!tournamentId) return null;
@@ -419,7 +543,7 @@ const TournamentPage: React.FC = () => {
                 </div>
 
                 {/* Pending approvals indicator */}
-                {isOrganizer && pendingRegistrations.length > 0 && (
+                {effectiveIsOrganizer && pendingRegistrations.length > 0 && (
                   <button
                     onClick={() => setActiveTab('participants')}
                     className="w-full bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between text-left hover:bg-amber-100 transition-colors"
@@ -473,21 +597,25 @@ const TournamentPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Registration Mode</p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${regMode === 'squad' ? 'bg-slate-900 text-white' : 'bg-blue-50 text-blue-700'}`}>
-                        {regMode === 'both' ? 'Players + Squads' : regMode === 'squad' ? 'Squads Only' : 'Players'}
+                        {regMode === 'squad' ? 'Squads Only' : 'Individual'}
                       </span>
-                      {tournament.allowSoloFallback && regMode !== 'player' && (
-                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-100">Solo fallback allowed</span>
+                      {tournament.tournamentMode && (
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                          tournament.tournamentMode === 'competitive' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        }`}>
+                          {tournament.tournamentMode}
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  {(tournament.squadRequirements && (tournament.registrationMode === 'squad' || tournament.registrationMode === 'both')) && (
+                  {(tournament.squadRequirements && tournament.registrationMode === 'squad') && (
                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Squad Requirements</p>
                       <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
-                        <li>Min size: {tournament.squadRequirements.minSize ?? 2}</li>
+                        <li>Min roster: {tournament.squadRequirements.minSize ?? 2} players</li>
                         {tournament.squadRequirements.ratingMin !== undefined && (
                           <li>Rating min: {tournament.squadRequirements.ratingMin}</li>
                         )}
@@ -499,9 +627,14 @@ const TournamentPage: React.FC = () => {
                         )}
                         <li>Membership: {tournament.squadRequirements.membership || 'any'}</li>
                       </ul>
-                      {isSquadMode && userSquads.length > 0 && (
+                      {isSquadMode && userSquads.length > 0 && !hasActiveSquadReg && (
                         <div className="mt-3 text-xs text-slate-500 font-bold">
                           You have {userSquads.length} squad{userSquads.length > 1 ? 's' : ''} that could register.
+                        </div>
+                      )}
+                      {hasActiveSquadReg && (
+                        <div className="mt-3 text-xs font-bold text-emerald-600">
+                          ✓ Your squad is {mySquadReg?.status}
                         </div>
                       )}
                     </div>
@@ -541,6 +674,11 @@ const TournamentPage: React.FC = () => {
                   tournamentId={tournamentId}
                   format={tournament.format || 'single_elim'}
                   currentUserId={currentUserId}
+                  onMatchClick={(m: TournamentMatch) => {
+                    if (isSquadMode && mySquadReg) {
+                      setSelectedMatch(m);
+                    }
+                  }}
                 />
               </div>
             )}
@@ -549,12 +687,80 @@ const TournamentPage: React.FC = () => {
               <div className="space-y-3 animate-in fade-in duration-200">
                 {regMode === 'squad' && (
                   <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600 font-bold">
-                    Squad-based signups are enabled for this event.
+                    Squad-based registrations. {squadRegistrations.filter(s => s.status === 'confirmed').length} squads confirmed.
+                  </div>
+                )}
+
+                {/* Pending squad approvals — organizers only */}
+                {effectiveIsOrganizer && isSquadMode && squadRegistrations.filter(s => s.status === 'pending').length > 0 && (
+                  <div className="space-y-3 pb-4 border-b border-amber-100">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Squad Approvals</h4>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-black">
+                        {squadRegistrations.filter(s => s.status === 'pending').length}
+                      </span>
+                    </div>
+                    {squadRegistrations.filter(s => s.status === 'pending').map(sr => (
+                      <div key={sr.id} className="bg-white border border-amber-100 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-black text-sm text-slate-900 uppercase tracking-tight">{sr.squad?.name || 'Unknown Squad'}</p>
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                              {sr.roster?.length || 0} players • {sr.roster ? Math.floor((sr.roster.filter(r => r.status === 'active').length) / teamSize) : 0} teams
+                            </p>
+                          </div>
+                          <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[9px] font-black uppercase tracking-widest border border-amber-100">Pending</span>
+                        </div>
+                        {/* Roster list */}
+                        {sr.roster && sr.roster.length > 0 && (
+                          <div className="space-y-1">
+                            {sr.roster.map(rp => (
+                              <div key={rp.id} className="flex items-center gap-2 text-sm">
+                                <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500">
+                                  {(rp.player?.full_name || '?')[0]}
+                                </div>
+                                <span className="font-bold text-slate-700">{rp.player?.full_name || rp.playerId.slice(0, 8)}</span>
+                                {rp.player?.rating && (
+                                  <span className="text-[9px] font-black text-amber-600">⭐ {rp.player.rating.toFixed(1)}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {sr.applicationMessage && (
+                          <p className="text-xs text-slate-500 italic bg-slate-50 rounded-xl p-2">"{sr.applicationMessage}"</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await approveSquadRegistration(sr.id, currentUserId!);
+                                const updated = await getSquadRegistrations(tournamentId!);
+                                setSquadRegistrations(updated);
+                                showToast('Squad approved!', 'success');
+                              } catch (err: any) { showToast(err.message || 'Failed', 'error'); }
+                            }}
+                            className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all"
+                          >Approve</button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await rejectSquadRegistration(sr.id, currentUserId!);
+                                const updated = await getSquadRegistrations(tournamentId!);
+                                setSquadRegistrations(updated);
+                                showToast('Squad rejected.', 'info');
+                              } catch (err: any) { showToast(err.message || 'Failed', 'error'); }
+                            }}
+                            className="flex-1 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100"
+                          >Reject</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
                 {/* Pending approvals — organizers only */}
-                {isOrganizer && pendingRegistrations.length > 0 && (
+                {effectiveIsOrganizer && pendingRegistrations.length > 0 && (
                   <div className="space-y-3 pb-4 border-b border-amber-100">
                     <div className="flex items-center gap-2">
                       <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Approvals</h4>
@@ -611,40 +817,54 @@ const TournamentPage: React.FC = () => {
                   </div>
                 )}
 
-                {regMode === 'squad' || regMode === 'both' ? (
+                {isSquadMode ? (
                   <div className="space-y-2">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Teams / Squads</h4>
-                    {(() => {
-                      const squadRegs = registrations.filter(r => (r as any).squadId);
-                      if (squadRegs.length === 0) {
-                        return (
-                          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-400 font-bold">
-                            No squad registrations yet. Squad roster details will be visible once teams register.
-                          </div>
-                        );
-                      }
-                      const grouped = new Map<string, typeof squadRegs>();
-                      squadRegs.forEach(r => {
-                        const sid = (r as any).squadId as string;
-                        if (!grouped.has(sid)) grouped.set(sid, []);
-                        grouped.get(sid)!.push(r);
-                      });
-                      return Array.from(grouped.entries()).map(([sid, members]) => (
-                        <div key={sid} className="bg-white border border-slate-100 rounded-2xl p-4 space-y-2">
-                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                            {squadNames.get(sid) || `Squad ${sid.slice(0, 6)}…`}
-                          </p>
-                          {members.map(m => (
-                            <div key={m.id} className="flex items-center gap-3">
-                              <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-black text-indigo-500">
-                                {(m.player?.full_name || '?')[0]}
-                              </div>
-                              <span className="text-sm font-bold text-slate-800">{m.player?.full_name || `Player ${m.playerId.slice(0,6)}…`}</span>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Registered Squads</h4>
+                    {squadRegistrations.filter(s => s.status === 'confirmed').length === 0 ? (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-400 font-bold">
+                        No confirmed squad registrations yet.
+                      </div>
+                    ) : (
+                      squadRegistrations.filter(s => s.status === 'confirmed').map(sr => (
+                        <div key={sr.id} className="bg-white border border-slate-100 rounded-2xl p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-black text-sm text-slate-900 uppercase tracking-tight">{sr.squad?.name || 'Unknown Squad'}</p>
+                              <p className="text-[10px] text-slate-400 font-bold">
+                                {sr.roster?.filter(r => r.status === 'active').length || 0} active players • {Math.floor((sr.roster?.filter(r => r.status === 'active').length || 0) / teamSize)} teams
+                              </p>
                             </div>
-                          ))}
+                            <div className="flex items-center gap-2">
+                              {sr.rosterLockedAt && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-black uppercase">
+                                  <Lock size={8} /> Locked
+                                </span>
+                              )}
+                              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest border border-emerald-100">Confirmed</span>
+                            </div>
+                          </div>
+                          {sr.roster && sr.roster.length > 0 && (
+                            <div className="space-y-1">
+                              {sr.roster.map(rp => (
+                                <div key={rp.id} className={`flex items-center gap-2 text-sm ${rp.status !== 'active' ? 'opacity-50' : ''}`}>
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black ${
+                                    rp.status === 'inactive_injured' ? 'bg-rose-100 text-rose-500' :
+                                    rp.status === 'substituted' ? 'bg-amber-100 text-amber-500' :
+                                    'bg-indigo-100 text-indigo-500'
+                                  }`}>
+                                    {rp.status === 'inactive_injured' ? <HeartPulse size={12} /> : (rp.player?.full_name || '?')[0]}
+                                  </div>
+                                  <span className="font-bold text-slate-700">{rp.player?.full_name || rp.playerId.slice(0, 8)}</span>
+                                  {rp.status !== 'active' && (
+                                    <span className="text-[8px] font-black uppercase text-slate-400">{rp.status.replace('_', ' ')}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      ));
-                    })()}
+                      ))
+                    )}
                   </div>
                 ) : null}
 
@@ -731,106 +951,317 @@ const TournamentPage: React.FC = () => {
           {/* ── Sticky footer action ── */}
           <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-4 sm:px-6">
             <div className="max-w-4xl mx-auto">
-              {isOrganizer ? (
-                <button
-                  onClick={() => navigate(`/tournaments-admin/manage/${tournamentId}`)}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
-                >
-                  <Settings2 size={16} /> Manage Tournament
-                </button>
+              {effectiveIsOrganizer ? (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => navigate(`/tournaments-admin/manage/${tournamentId}`)}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                  >
+                    <Settings2 size={16} /> Manage Tournament
+                  </button>
+                  {tournament?.status === 'UPCOMING' && tournament.registrationDeadline && new Date(tournament.registrationDeadline) < new Date() && (
+                    <button
+                      onClick={handleOpenRegistration}
+                      disabled={isOpeningReg}
+                      className="w-full py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      <Unlock size={15} /> {isOpeningReg ? 'Opening...' : 'Open Registration'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setViewAsPlayer(true)}
+                    className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Eye size={15} /> View as Player
+                  </button>
+                </div>
               ) : !isPast && (
                 <>
-                  {registrationStatus === 'rejected' ? (
-                    <div className="space-y-3">
-                      <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 text-center">
-                        <p className="text-sm font-bold text-rose-600 mb-0.5">Registration Not Approved</p>
-                        <p className="text-xs text-rose-500">You can reapply below.</p>
-                      </div>
-                      <button
-                        onClick={handleJoin}
-                        disabled={isJoining || !canRegister}
-                        className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-                          canRegister ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg shadow-slate-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <UserPlus size={18} /> {isJoining ? 'Reapplying...' : 'Reapply'}
-                      </button>
-                    </div>
-                  ) : isRegistered ? (
-                    <div className="flex gap-3">
-                      <div className={`flex-[3] flex items-center justify-center gap-2 py-4 rounded-2xl border font-black text-xs uppercase tracking-widest ${
-                        registrationStatus === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                      }`}>
-                        {registrationStatus === 'pending' ? 'Pending Approval' : "You're Registered ✓"}
-                      </div>
-                      <button
-                        onClick={handleLeave}
-                        disabled={isJoining}
-                        className="flex-1 flex items-center justify-center gap-2 bg-rose-50 text-rose-500 hover:bg-rose-100 py-4 rounded-2xl border border-rose-100 font-black text-[10px] uppercase tracking-widest transition-colors disabled:opacity-50"
-                      >
-                        <UserMinus size={16} /> Withdraw
-                      </button>
-                    </div>
-                  ) : canRegister ? (
-                    <div className="space-y-3">
-                      {isSquadMode && (
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Select Squad</p>
-                          <select
-                            value={selectedSquadId}
-                            onChange={e => setSelectedSquadId(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700"
-                          >
-                            <option value="">Choose a squad</option>
-                            {userSquads.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} — {s.members_count} members</option>
-                            ))}
-                          </select>
-                          {selectedSquad && squadCheck.reasons.length > 0 && (
-                            <p className="text-[11px] text-rose-500 font-bold mt-1">{squadCheck.reasons[0]}</p>
+                  {isOrganizer && viewAsPlayer && (
+                    <button
+                      onClick={() => setViewAsPlayer(false)}
+                      className="w-full mb-3 py-2.5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                    >
+                      <EyeOff size={13} /> Back to Organizer View
+                    </button>
+                  )}
+                  {/* ── Squad mode footer ── */}
+                  {isSquadMode ? (
+                    <>
+                      {/* Squad already registered — show status */}
+                      {hasActiveSquadReg && mySquadReg ? (
+                        <div className="space-y-3">
+                          <div className={`flex items-center justify-between py-3 px-4 rounded-2xl border font-black text-xs uppercase tracking-widest ${
+                            mySquadReg.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                            mySquadReg.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            'bg-blue-50 text-blue-600 border-blue-100'
+                          }`}>
+                            <div>
+                              <p className="text-[10px] text-slate-400 font-bold tracking-widest mb-0.5">Your Squad</p>
+                              <p>{mySquadReg.squad?.name || 'Your Squad'}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-slate-400">
+                                {mySquadReg.roster?.filter(r => r.status === 'active').length || 0} players • {rosterTeamCount} teams
+                              </p>
+                              <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${
+                                mySquadReg.status === 'pending' ? 'bg-amber-100 text-amber-600' :
+                                mySquadReg.status === 'confirmed' ? 'bg-emerald-100 text-emerald-600' :
+                                'bg-blue-100 text-blue-600'
+                              }`}>
+                                {mySquadReg.status === 'pending' ? 'Pending Approval' : mySquadReg.status === 'confirmed' ? 'Confirmed ✓' : mySquadReg.status}
+                              </span>
+                              {mySquadReg.rosterLockedAt && (
+                                <span className="ml-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-black uppercase">
+                                  <Lock size={8} className="inline mr-0.5" />Locked
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {isSquadOwner && (
+                            <button
+                              onClick={handleWithdrawSquad}
+                              disabled={isRegisteringSquad}
+                              className="w-full py-3 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-2xl border border-rose-100 font-black text-[10px] uppercase tracking-widest transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              <UserMinus size={14} /> Withdraw Squad
+                            </button>
                           )}
-                          {!selectedSquad && isSquadOnly && !tournament?.allowSoloFallback && (
-                            <p className="text-[11px] text-rose-500 font-bold mt-1">Select a squad to register.</p>
+                          {!isSquadOwner && (
+                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                              Only squad owners/captains can withdraw
+                            </p>
                           )}
                         </div>
+                      ) : isSquadOwner && canRegister ? (
+                        /* Squad owner — registration flow with roster picker */
+                        <div className="space-y-3">
+                          {/* Squad selector (if user has multiple squads) */}
+                          {userSquads.length > 1 && (
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Select Squad</p>
+                              <select
+                                value={selectedSquadId}
+                                onChange={e => handleSquadChange(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700"
+                              >
+                                <option value="">Choose a squad</option>
+                                {userSquads.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name} — {s.members_count} members</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Roster picker toggle */}
+                          {selectedSquadId && (
+                            <button
+                              onClick={() => setShowRosterPicker(!showRosterPicker)}
+                              className="w-full flex items-center justify-between bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-left hover:bg-slate-100 transition-colors"
+                            >
+                              <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Roster Players</p>
+                                <p className="text-sm font-bold text-slate-700">
+                                  {rosterCount} selected {rosterDivisible ? `= ${rosterTeamCount} team${rosterTeamCount !== 1 ? 's' : ''}` : ''}
+                                  {rosterCount > 0 && !rosterDivisible && (
+                                    <span className="text-rose-500 ml-1">(must be divisible by {teamSize})</span>
+                                  )}
+                                </p>
+                              </div>
+                              {showRosterPicker ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+                            </button>
+                          )}
+
+                          {/* Roster picker accordion content */}
+                          {showRosterPicker && selectedSquadId && (
+                            <div className="bg-white border border-slate-100 rounded-2xl p-3 space-y-1 max-h-48 overflow-y-auto">
+                              {squadMembers.length === 0 ? (
+                                <p className="text-sm text-slate-400 font-bold text-center py-4">No squad members found.</p>
+                              ) : (
+                                squadMembers.map(member => {
+                                  const isSelected = selectedRosterIds.has(member.user_id);
+                                  return (
+                                    <button
+                                      key={member.user_id}
+                                      onClick={() => toggleRosterPlayer(member.user_id)}
+                                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left ${
+                                        isSelected ? 'bg-indigo-50 border border-indigo-200' : 'bg-slate-50 border border-transparent hover:bg-slate-100'
+                                      }`}
+                                    >
+                                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                                        isSelected ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-slate-300 bg-white'
+                                      }`}>
+                                        {isSelected && <CheckCircle2 size={12} />}
+                                      </div>
+                                      <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-black text-indigo-500 flex-shrink-0">
+                                        {(member.profiles?.full_name || '?')[0]}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-slate-700 truncate">{member.profiles?.full_name || member.user_id.slice(0, 8)}</p>
+                                        {member.profiles?.skill_level && (
+                                          <p className="text-[10px] text-slate-400 font-bold">{member.profiles.skill_level} rating</p>
+                                        )}
+                                      </div>
+                                      <span className="text-[9px] font-black text-slate-400 uppercase">{member.role}</span>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+
+                          {/* Application message */}
+                          {selectedSquadId && rosterCount > 0 && (
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                                Message to Organizer (Optional)
+                              </label>
+                              <textarea
+                                value={applicationMessage}
+                                onChange={(e) => setApplicationMessage(e.target.value)}
+                                placeholder="Tell the organizer about your squad..."
+                                className="w-full p-2 text-sm border border-slate-200 rounded-xl resize-none h-16 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                maxLength={500}
+                              />
+                              <p className="text-[9px] text-slate-400 text-right mt-1">{applicationMessage.length}/500</p>
+                            </div>
+                          )}
+
+                          {/* Register Squad button */}
+                          <button
+                            onClick={handleRegisterSquad}
+                            disabled={isRegisteringSquad || !selectedSquadId || rosterCount === 0 || !rosterDivisible}
+                            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                          >
+                            {isRegisteringSquad ? 'Registering Squad...' : (
+                              <><Users size={16} /> Register Squad{rosterDivisible && rosterCount > 0 ? ` (${rosterTeamCount} team${rosterTeamCount !== 1 ? 's' : ''})` : ''}</>
+                            )}
+                          </button>
+                        </div>
+                      ) : !isSquadOwner && currentUserId ? (
+                        /* Squad member (not owner) — read-only view */
+                        <div className="text-center py-3 space-y-2">
+                          {mySquadReg ? (
+                            <div className={`px-4 py-3 rounded-2xl border font-bold text-sm ${
+                              mySquadReg.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                              mySquadReg.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                              'bg-slate-50 text-slate-500 border-slate-100'
+                            }`}>
+                              Your squad's registration is <span className="font-black uppercase">{mySquadReg.status}</span>
+                            </div>
+                          ) : (
+                            <p className="text-slate-400 font-bold text-xs uppercase">
+                              Only squad owners/captains can register
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        /* No canRegister — cannot register message */
+                        <div className="text-center py-2">
+                          <p className="text-slate-400 font-bold text-xs uppercase">
+                            {isFull ? 'Tournament is full'
+                              : !currentUserId ? 'Log in to register'
+                              : 'Registration closed'}
+                          </p>
+                        </div>
                       )}
-                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
-                          Message to Organizer (Optional)
-                        </label>
-                        <textarea
-                          value={applicationMessage}
-                          onChange={(e) => setApplicationMessage(e.target.value)}
-                          placeholder="Tell the organizer why you'd like to join..."
-                          className="w-full p-2 text-sm border border-slate-200 rounded-xl resize-none h-16 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                          maxLength={500}
-                        />
-                        <p className="text-[9px] text-slate-400 text-right mt-1">{applicationMessage.length}/500</p>
-                      </div>
-                      <button
-                        onClick={handleJoin}
-                        disabled={isJoining || (isSquadOnly && !squadEligibleOrFallback)}
-                        className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-                      >
-                        {isJoining ? 'Registering...' : <><UserPlus size={16} /> Register for Tournament</>}
-                      </button>
-                    </div>
+                    </>
+
+                  /* ── Individual mode footer ── */
                   ) : (
-                    <div className="text-center py-2">
-                      <p className="text-slate-400 font-bold text-xs uppercase">
-                        {isFull ? 'Tournament is full'
-                          : !currentUserId ? 'Log in to register'
-                          : isSquadOnly
-                            ? tournament?.allowSoloFallback ? 'Solo fallback allowed if no squad selected' : 'Squad signup required'
-                            : 'Registration closed'}
-                      </p>
-                    </div>
+                    <>
+                      {registrationStatus === 'rejected' ? (
+                        <div className="space-y-3">
+                          <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 text-center">
+                            <p className="text-sm font-bold text-rose-600 mb-0.5">Registration Not Approved</p>
+                            <p className="text-xs text-rose-500">You can reapply below.</p>
+                          </div>
+                          <button
+                            onClick={handleJoin}
+                            disabled={isJoining || !canRegister}
+                            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                              canRegister ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg shadow-slate-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            <UserPlus size={18} /> {isJoining ? 'Reapplying...' : 'Reapply'}
+                          </button>
+                        </div>
+                      ) : isRegistered ? (
+                        <div className="flex gap-3">
+                          <div className={`flex-[3] flex items-center justify-center gap-2 py-4 rounded-2xl border font-black text-xs uppercase tracking-widest ${
+                            registrationStatus === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                          }`}>
+                            {registrationStatus === 'pending' ? 'Pending Approval' : "You're Registered ✓"}
+                          </div>
+                          <button
+                            onClick={handleLeave}
+                            disabled={isJoining}
+                            className="flex-1 flex items-center justify-center gap-2 bg-rose-50 text-rose-500 hover:bg-rose-100 py-4 rounded-2xl border border-rose-100 font-black text-[10px] uppercase tracking-widest transition-colors disabled:opacity-50"
+                          >
+                            <UserMinus size={16} /> Withdraw
+                          </button>
+                        </div>
+                      ) : canRegister ? (
+                        <div className="space-y-3">
+                          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                              Message to Organizer (Optional)
+                            </label>
+                            <textarea
+                              value={applicationMessage}
+                              onChange={(e) => setApplicationMessage(e.target.value)}
+                              placeholder="Tell the organizer why you'd like to join..."
+                              className="w-full p-2 text-sm border border-slate-200 rounded-xl resize-none h-16 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                              maxLength={500}
+                            />
+                            <p className="text-[9px] text-slate-400 text-right mt-1">{applicationMessage.length}/500</p>
+                          </div>
+                          <button
+                            onClick={handleJoin}
+                            disabled={isJoining}
+                            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+                          >
+                            {isJoining ? 'Registering...' : <><UserPlus size={16} /> Register for Tournament</>}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center py-2">
+                          <p className="text-slate-400 font-bold text-xs uppercase">
+                            {isFull ? 'Tournament is full'
+                              : !currentUserId ? 'Log in to register'
+                              : 'Registration closed'}
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Match Lineup Panel ── */}
+      {selectedMatch && isSquadMode && mySquadReg && (
+        <MatchLineupPanel
+          match={selectedMatch}
+          squadRegistration={mySquadReg}
+          teamSize={teamSize}
+          isSquadOwner={isSquadOwner}
+          isRosterLocked={!!mySquadReg.rosterLockedAt}
+          tournamentMode={tournament?.tournamentMode || 'casual'}
+          onClose={() => setSelectedMatch(null)}
+          onSaved={async () => {
+            // Reload squad registration data
+            if (tournamentId && selectedSquadId) {
+              const updated = await getSquadRegistration(tournamentId, selectedSquadId);
+              setMySquadReg(updated);
+              const allRegs = await getSquadRegistrations(tournamentId);
+              setSquadRegistrations(allRegs);
+            }
+          }}
+        />
       )}
 
       {/* ── Dialogs ── */}

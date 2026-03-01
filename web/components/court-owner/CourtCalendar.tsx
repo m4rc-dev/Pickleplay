@@ -34,8 +34,6 @@ import {
 interface Court {
     id: string;
     name: string;
-    address: string;
-    city: string;
 }
 
 // Event Modal Component
@@ -350,7 +348,7 @@ const CourtCalendar: React.FC = () => {
 
             // Fetch courts and events in parallel
             const [courtsResponse, eventsResponse] = await Promise.all([
-                supabase.from('courts').select('id, name, address, city').eq('owner_id', userId),
+                supabase.from('courts').select('id, name').eq('owner_id', userId),
                 getOwnerEvents()
             ]);
 
