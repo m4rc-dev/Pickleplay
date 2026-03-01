@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Your User ID</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 16px;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .step-number {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            background: #3b82f6;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+        code {
+            background: #1e293b;
+            color: #10b981;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #dcfce7;
+            border: 2px solid #22c55e;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 12px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        #result {
+            margin-top: 20px;
+        }
+        .command {
+            background: #1e293b;
+            color: #10b981;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-top: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔑 Get Your User ID</h1>
+        <p class="subtitle">Follow these steps to get your user ID for testing squad tournaments</p>
+
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>Make sure you're logged in</strong> to your PicklePlay account
+        </div>
+
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>Click the button below</strong> to retrieve your user ID
+            <button onclick="getUserId()">🔍 Get My User ID</button>
+            <button onclick="checkLocalStorage()" style="background: #8b5cf6; margin-left: 8px;">📦 Try LocalStorage</button>
+        </div>
+
+        <div id="result"></div>
+
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>Copy the command</strong> shown above and run it in your terminal
+        </div>
+
+        <div style="margin-top: 32px; padding: 16px; background: #fef3c7; border-radius: 8px; border: 2px solid #f59e0b;">
+            <strong>⚠️ Can't get your ID?</strong><br>
+            Try this in your browser's DevTools console on the PicklePlay app:<br>
+            <code style="display: block; margin-top: 8px; background: white; color: #1e293b;">localStorage.getItem('sb-hdruhslfadbaadtgvetf-supabase-auth-token')</code>
+            <p style="margin-top: 8px; font-size: 14px; color: #78350f;">
+                Then look for the "user" object in the JSON and copy the "id" field.
+            </p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        window.supabase = createClient(
+            'https://hdruhslfadbaadtgvetf.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkcnVoc2xmYWRiYWFkdGd2ZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTEwMTUsImV4cCI6MjA4NTUyNzAxNX0.qmN6_w4J9Y6Jof6RVrEHq3cW8-EE8Bietq8_U4OVehM'
+        );
+
+        window.getUserId = async function() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                const { data, error } = await window.supabase.auth.getUser();
+                
+                if (error || !data.user) {
+                    resultDiv.innerHTML = `
+                        <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 16px; border-radius: 8px;">
+                            <strong>❌ Not logged in!</strong><br>
+                            Please log in to your PicklePlay account first.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const userId = data.user.id;
+                const tournamentId = '6167b1c0-fb1b-4e9a-b3e8-a9a058e9e9e8'; // Your tournament ID
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <strong>✅ Success! Your User ID:</strong><br>
+                        <code style="font-size: 12px;">${userId}</code>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <strong>📋 Copy this command:</strong>
+                        <div class="command">npx tsx test-squad-tournament.ts ${tournamentId} ${userId}</div>
+                    </div>
+                `;
+            } catch (err) {
+                resultDiv.innerHTML = `
+                    <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 16px; border-radius: 8px;">
+                        <strong>❌ Error:</strong><br>
+                        ${err.message}
+                    </div>
+                `;
+            }
+        };
+
+        window.checkLocalStorage = function() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // Try to get auth token from localStorage
+                const tokenKey = 'sb-hdruhslfadbaadtgvetf-auth-token';
+                let authData = localStorage.getItem(tokenKey);
+                
+                if (!authData) {
+                    // Try alternative key format
+                    const keys = Object.keys(localStorage).filter(k => k.includes('supabase-auth'));
+                    if (keys.length > 0) {
+                        authData = localStorage.getItem(keys[0]);
+                    }
+                }
+                
+                if (!authData) {
+                    resultDiv.innerHTML = `
+                        <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 16px; border-radius: 8px;">
+                            <strong>❌ No auth data found!</strong><br>
+                            Please make sure you're logged in to PicklePlay.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const parsed = JSON.parse(authData);
+                const userId = parsed.user?.id || parsed.id;
+                
+                if (!userId) {
+                    resultDiv.innerHTML = `
+                        <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 16px; border-radius: 8px;">
+                            <strong>❌ User ID not found in auth data!</strong><br>
+                            Auth data structure: <pre style="font-size: 11px;">${JSON.stringify(parsed, null, 2)}</pre>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const tournamentId = '6167b1c0-fb1b-4e9a-b3e8-a9a058e9e9e8';
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <strong>✅ Found! Your User ID:</strong><br>
+                        <code style="font-size: 12px;">${userId}</code>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <strong>📋 Copy this command:</strong>
+                        <div class="command">npx tsx test-squad-tournament.ts ${tournamentId} ${userId}</div>
+                    </div>
+                `;
+            } catch (err) {
+                resultDiv.innerHTML = `
+                    <div style="background: #fee2e2; border: 2px solid #ef4444; padding: 16px; border-radius: 8px;">
+                        <strong>❌ Error parsing auth data:</strong><br>
+                        ${err.message}
+                    </div>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>

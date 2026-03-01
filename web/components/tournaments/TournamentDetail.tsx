@@ -3,13 +3,13 @@ import ReactDOM from 'react-dom';
 import {
   X, Trophy, Calendar, MapPin, Users, Award, Clock, Shield, Swords,
   ChevronRight, CheckCircle2, Star, Megaphone, UserPlus, UserMinus, Settings2,
-  AlertTriangle, Phone, FileText, BadgeCheck, Search
+  AlertTriangle, Phone, FileText, BadgeCheck, Search, Unlock, Eye, EyeOff
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import {
   fetchTournamentById, fetchRegistrations, fetchRegistrationsWithRatings, registerPlayer, withdrawRegistration,
   getPlayerRegistration, evaluateSquadEligibility, approveRegistration, 
-  rejectRegistration, getPendingRegistrationsDetailed, checkRegistrationConflicts,
+  rejectRegistration, getPendingRegistrationsDetailed, checkRegistrationConflicts, openTournamentRegistration,
   type TournamentConflict, type PendingRegistrationDetailed
 } from '../../services/tournaments';
 import { squadsService, type Squad } from '../../services/squads';
@@ -43,6 +43,9 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
   const [userSquads, setUserSquads] = useState<Squad[]>([]);
   const [selectedSquadId, setSelectedSquadId] = useState<string>('');
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [isOpeningReg, setIsOpeningReg] = useState(false);
+  const [viewAsPlayer, setViewAsPlayer] = useState(false);
+  const effectiveIsOrganizer = isOrganizer && !viewAsPlayer;
   const [conflicts, setConflicts] = useState<TournamentConflict[]>([]);
   const [showConflictsDialog, setShowConflictsDialog] = useState(false);
   const [applicationMessage, setApplicationMessage] = useState('');
@@ -171,10 +174,10 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
     console.log('📊 State Update:', {
       isOrganizer,
       pendingCount: pendingRegistrations.length,
-      shouldShowPending: isOrganizer && pendingRegistrations.length > 0,
+      shouldShowPending: effectiveIsOrganizer && pendingRegistrations.length > 0,
       activeTab
     });
-  }, [isOrganizer, pendingRegistrations, activeTab]);
+  }, [isOrganizer, viewAsPlayer, pendingRegistrations, activeTab]);
 
   const handleJoin = async () => {
     if (!currentUserId) return;
@@ -308,12 +311,26 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
     }
   };
 
+  const handleOpenRegistration = async () => {
+    if (!tournament) return;
+    setIsOpeningReg(true);
+    try {
+      const updated = await openTournamentRegistration(tournament.id);
+      setTournament(updated);
+      showToast('Registration is now open!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to open registration', 'error');
+    } finally {
+      setIsOpeningReg(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'bracket', label: 'Bracket' },
-    { key: 'participants', label: `Participants (${registrations.length}${isOrganizer && pendingRegistrations.length > 0 ? ` +${pendingRegistrations.length} pending` : ''})` },
+    { key: 'participants', label: `Participants (${registrations.length}${effectiveIsOrganizer && pendingRegistrations.length > 0 ? ` +${pendingRegistrations.length} pending` : ''})` },
   ];
 
   const isFull = tournament ? (tournament.registeredCount || 0) >= (tournament.maxPlayers || 0) : false;
@@ -334,8 +351,8 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
     && !isRegistered
     && !!currentUserId
     && (!isSquadOnly ? true : squadEligibleOrFallback)
-    && !(isSquadOnly && squadNeeded);
-  const isPast = tournament?.status === 'COMPLETED';
+    && !(isSquadOnly && squadNeeded)
+    && (!tournament.registrationDeadline || new Date() <= new Date(tournament.registrationDeadline));
 
   return (
     <>
@@ -423,7 +440,7 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
                   </div>
 
                   {/* Pending approvals indicator for organizers */}
-                  {isOrganizer && pendingRegistrations.length > 0 && (
+                  {effectiveIsOrganizer && pendingRegistrations.length > 0 && (
                     <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
@@ -555,7 +572,7 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
                   )}
 
                   {/* Pending Approvals - Only visible to organizers */}
-                  {isOrganizer && pendingRegistrations.length > 0 && (
+                  {effectiveIsOrganizer && pendingRegistrations.length > 0 && (
                     <div className="space-y-3 pb-4 border-b border-amber-100">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -713,17 +730,40 @@ const TournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose, isOw
             </div>
 
             {/* Footer action */}
-            {isOwnerView ? (
-              <div className="p-6 border-t border-slate-100 shrink-0">
+            {isOwnerView && !viewAsPlayer ? (
+              <div className="p-6 border-t border-slate-100 shrink-0 space-y-3">
                 <button
                   onClick={onManage}
                   className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
                 >
                   <Settings2 size={16} /> Manage Tournament
                 </button>
+                {tournament?.status === 'UPCOMING' && tournament.registrationDeadline && new Date(tournament.registrationDeadline) < new Date() && (
+                  <button
+                    onClick={handleOpenRegistration}
+                    disabled={isOpeningReg}
+                    className="w-full py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    <Unlock size={15} /> {isOpeningReg ? 'Opening...' : 'Open Registration'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewAsPlayer(true)}
+                  className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                >
+                  <Eye size={15} /> View as Player
+                </button>
               </div>
             ) : !isPast && (
               <div className="p-6 border-t border-slate-100 shrink-0">
+                {viewAsPlayer && isOwnerView && (
+                  <button
+                    onClick={() => setViewAsPlayer(false)}
+                    className="w-full mb-3 py-2.5 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    <EyeOff size={13} /> Back to Organizer View
+                  </button>
+                )}
                 {registrationStatus === 'rejected' ? (
                   <div className="space-y-3">
                     <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-center">

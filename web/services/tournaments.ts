@@ -10,6 +10,15 @@ import type {
   TournamentCategory,
   TournamentStatus,
   SquadRequirements,
+  TournamentMode,
+  RegistrationMode,
+  RosterLockTiming,
+  SquadRegistration,
+  TournamentRosterPlayer,
+  MatchLineup,
+  SubstitutionLog,
+  RosterPlayerStatus,
+  SquadRegStatus,
 } from '../types';
 import type { Squad } from './squads';
 
@@ -51,6 +60,8 @@ export function mapTournament(t: any): Tournament {
     registrationMode: t.registration_mode,
     squadRequirements: t.squad_requirements || undefined,
     allowSoloFallback: t.allow_solo_fallback,
+    tournamentMode: t.tournament_mode || 'casual',
+    rosterLockTiming: t.roster_lock_timing || 'bracket_generated',
   };
 }
 
@@ -174,8 +185,12 @@ export interface CreateTournamentInput {
   locationId?: string;
   sponsorBannerUrl?: string;
   imageFile?: File;
-  registrationMode?: 'player' | 'squad' | 'both';
+  // Tournament mode & registration
+  tournamentMode?: TournamentMode;
+  registrationMode?: RegistrationMode;
+  rosterLockTiming?: RosterLockTiming;
   squadRequirements?: import('../types').SquadRequirements;
+  /** @deprecated */
   allowSoloFallback?: boolean;
 }
 
@@ -214,9 +229,11 @@ export async function createTournament(input: CreateTournamentInput): Promise<To
       court_id: input.courtId,
       location_id: input.locationId,
       sponsor_banner_url: input.sponsorBannerUrl,
-      registration_mode: input.registrationMode || 'player',
+      registration_mode: input.registrationMode || 'individual',
       squad_requirements: input.squadRequirements || null,
       allow_solo_fallback: input.allowSoloFallback ?? false,
+      tournament_mode: input.tournamentMode || 'casual',
+      roster_lock_timing: input.rosterLockTiming || 'bracket_generated',
       // set pending by default; admins will approve
       is_approved: null,
       is_featured: false,
@@ -224,6 +241,18 @@ export async function createTournament(input: CreateTournamentInput): Promise<To
     .select()
     .single();
 
+  if (error) throw error;
+  return mapTournament(data);
+}
+
+/** Clear the registration deadline so registration is open indefinitely. */
+export async function openTournamentRegistration(id: string): Promise<Tournament> {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .update({ registration_deadline: null })
+    .eq('id', id)
+    .select()
+    .single();
   if (error) throw error;
   return mapTournament(data);
 }
@@ -252,6 +281,8 @@ export async function updateTournament(id: string, updates: Partial<CreateTourna
   if (updates.registrationMode !== undefined) payload.registration_mode = updates.registrationMode;
   if (updates.squadRequirements !== undefined) payload.squad_requirements = updates.squadRequirements;
   if (updates.allowSoloFallback !== undefined) payload.allow_solo_fallback = updates.allowSoloFallback;
+  if (updates.tournamentMode !== undefined) payload.tournament_mode = updates.tournamentMode;
+  if (updates.rosterLockTiming !== undefined) payload.roster_lock_timing = updates.rosterLockTiming;
 
   if (updates.imageFile) {
     payload.image_url = await uploadTournamentPoster(updates.imageFile);
@@ -1580,4 +1611,668 @@ export async function createTeamByOwner(
   if (linkErr) throw linkErr;
 
   return mapTeam(teamData);
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// Squad Registration System
+// ════════════════════════════════════════════════════════════════
+
+function mapSquadRegistration(r: any): SquadRegistration {
+  return {
+    id: r.id,
+    tournamentId: r.tournament_id,
+    squadId: r.squad_id,
+    registeredBy: r.registered_by,
+    status: r.status,
+    rosterLockedAt: r.roster_locked_at,
+    registeredAt: r.registered_at,
+    approvedBy: r.approved_by,
+    approvedAt: r.approved_at,
+    applicationMessage: r.application_message,
+    squad: r.squad ? {
+      id: r.squad.id,
+      name: r.squad.name,
+      image_url: r.squad.image_url,
+      members_count: undefined,
+      avg_rating: undefined,
+    } : undefined,
+    roster: r.tournament_roster?.map(mapRosterPlayer) ?? undefined,
+  };
+}
+
+function mapRosterPlayer(r: any): TournamentRosterPlayer {
+  return {
+    id: r.id,
+    squadRegistrationId: r.squad_registration_id,
+    playerId: r.player_id,
+    status: r.status,
+    replacedBy: r.replaced_by,
+    injuryNote: r.injury_note,
+    addedAt: r.added_at,
+    player: r.profiles ? {
+      id: r.profiles.id,
+      full_name: r.profiles.full_name,
+      avatar_url: r.profiles.avatar_url,
+      rating: r.profiles.rating ?? r.profiles.dupr_rating,
+    } : undefined,
+  };
+}
+
+function mapMatchLineup(l: any): MatchLineup {
+  return {
+    id: l.id,
+    matchId: l.match_id,
+    squadRegistrationId: l.squad_registration_id,
+    playerId: l.player_id,
+    partnerId: l.partner_id,
+    teamNumber: l.team_number,
+    isBench: l.is_bench,
+    confirmedAt: l.confirmed_at,
+  };
+}
+
+function mapSubstitutionLog(s: any): SubstitutionLog {
+  return {
+    id: s.id,
+    tournamentId: s.tournament_id,
+    squadRegistrationId: s.squad_registration_id,
+    requestedBy: s.requested_by,
+    playerOut: s.player_out,
+    playerIn: s.player_in,
+    reason: s.reason,
+    adminOverride: s.admin_override,
+    approvedBy: s.approved_by,
+    status: s.status,
+    createdAt: s.created_at,
+    resolvedAt: s.resolved_at,
+  };
+}
+
+/**
+ * Register a squad for a tournament.
+ * Only the squad owner/captain can call this.
+ * Validates: roster size, divisibility by teamSize, rating (competitive), no duplicate registrations.
+ */
+export async function registerSquad(
+  tournamentId: string,
+  squadId: string,
+  ownerId: string,
+  rosterPlayerIds: string[],
+  applicationMessage?: string
+): Promise<SquadRegistration> {
+  console.log('[Service] registerSquad:', { tournamentId, squadId, ownerId, rosterCount: rosterPlayerIds.length });
+
+  // 1. Fetch tournament
+  const tournament = await fetchTournamentById(tournamentId);
+  if (!tournament) throw new Error('Tournament not found');
+  if (tournament.status !== 'UPCOMING') throw new Error('Registration is closed');
+  if (tournament.registrationMode !== 'squad') throw new Error('This tournament does not accept squad registrations');
+
+  if (tournament.registrationDeadline && new Date() > new Date(tournament.registrationDeadline)) {
+    throw new Error('Registration deadline has passed');
+  }
+
+  // 2. Determine team size from event type
+  const teamSize = (tournament.eventType === 'doubles' || tournament.eventType === 'mixed_doubles') ? 2 : 1;
+
+  // 3. Validate roster
+  if (rosterPlayerIds.length < 2) {
+    throw new Error('Roster must have at least 2 players');
+  }
+  if (rosterPlayerIds.length % teamSize !== 0) {
+    throw new Error(`Roster size (${rosterPlayerIds.length}) must be divisible by team size (${teamSize})`);
+  }
+  const minSize = tournament.squadRequirements?.minSize ?? 2;
+  if (rosterPlayerIds.length < minSize) {
+    throw new Error(`Roster needs at least ${minSize} players (has ${rosterPlayerIds.length})`);
+  }
+
+  // 4. Check squad ownership
+  const { data: memberRole } = await supabase
+    .from('squad_members')
+    .select('role')
+    .eq('squad_id', squadId)
+    .eq('user_id', ownerId)
+    .single();
+  if (!memberRole || memberRole.role !== 'OWNER') {
+    throw new Error('Only squad owners can register their squad');
+  }
+
+  // 5. Check all roster players are squad members
+  const { data: squadMembers } = await supabase
+    .from('squad_members')
+    .select('user_id')
+    .eq('squad_id', squadId);
+  const memberIds = new Set((squadMembers ?? []).map((m: any) => m.user_id));
+  const nonMembers = rosterPlayerIds.filter(id => !memberIds.has(id));
+  if (nonMembers.length > 0) {
+    throw new Error(`${nonMembers.length} player(s) are not members of this squad`);
+  }
+
+  // 6. Check no duplicate squad registration
+  const { data: existing } = await supabase
+    .from('squad_registrations')
+    .select('id, status')
+    .eq('tournament_id', tournamentId)
+    .eq('squad_id', squadId)
+    .maybeSingle();
+  if (existing && existing.status !== 'withdrawn' && existing.status !== 'rejected') {
+    throw new Error('This squad is already registered for this tournament');
+  }
+
+  // 7. Check players aren't registered with another squad in same tournament
+  const { data: otherRegs } = await supabase
+    .from('tournament_roster')
+    .select('player_id, squad_registration_id, squad_registrations!inner(tournament_id, status)')
+    .in('player_id', rosterPlayerIds);
+  const conflicting = (otherRegs ?? []).filter((r: any) =>
+    r.squad_registrations?.tournament_id === tournamentId &&
+    r.squad_registrations?.status !== 'withdrawn' &&
+    r.squad_registrations?.status !== 'rejected'
+  );
+  if (conflicting.length > 0) {
+    throw new Error('One or more players are already registered with another squad in this tournament');
+  }
+
+  // 8. Rating validation (competitive mode)
+  if (tournament.tournamentMode === 'competitive') {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, rating, dupr_rating')
+      .in('id', rosterPlayerIds);
+    const ratings = (profiles ?? []).map((p: any) => p.rating ?? p.dupr_rating).filter((r: number) => r != null);
+    if (ratings.length > 0) {
+      const avgRating = ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length;
+      const req = tournament.squadRequirements;
+      if (req?.ratingMin !== undefined && avgRating < req.ratingMin) {
+        throw new Error(`Squad average rating (${avgRating.toFixed(1)}) is below minimum (${req.ratingMin})`);
+      }
+      if (req?.ratingMax !== undefined && avgRating > req.ratingMax) {
+        throw new Error(`Squad average rating (${avgRating.toFixed(1)}) exceeds maximum (${req.ratingMax})`);
+      }
+    }
+  }
+
+  // 9. Insert squad_registration
+  const { data: regData, error: regErr } = await supabase
+    .from('squad_registrations')
+    .upsert({
+      tournament_id: tournamentId,
+      squad_id: squadId,
+      registered_by: ownerId,
+      status: 'pending',
+      application_message: applicationMessage || null,
+      registered_at: new Date().toISOString(),
+    }, { onConflict: 'tournament_id,squad_id' })
+    .select()
+    .single();
+  if (regErr) throw regErr;
+
+  // 10. Insert roster rows
+  const rosterInserts = rosterPlayerIds.map(pid => ({
+    squad_registration_id: regData.id,
+    player_id: pid,
+    status: 'active',
+    added_at: new Date().toISOString(),
+  }));
+  const { error: rosterErr } = await supabase
+    .from('tournament_roster')
+    .upsert(rosterInserts, { onConflict: 'squad_registration_id,player_id' });
+  if (rosterErr) throw rosterErr;
+
+  console.log('[Service] registerSquad success:', regData.id);
+  return mapSquadRegistration(regData);
+}
+
+/** Enrich roster players with profile data (separate query to avoid nested-join 400 errors) */
+async function enrichRosterWithProfiles(
+  roster: any[]
+): Promise<any[]> {
+  if (!roster || roster.length === 0) return roster;
+  const playerIds = [...new Set(roster.map((r: any) => r.player_id).filter(Boolean))];
+  if (playerIds.length === 0) return roster;
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url, rating, dupr_rating')
+    .in('id', playerIds);
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  return roster.map((r: any) => ({
+    ...r,
+    profiles: profileMap.get(r.player_id) ?? null,
+  }));
+}
+
+/** Fetch all squad registrations for a tournament, with roster and squad names */
+export async function getSquadRegistrations(tournamentId: string): Promise<SquadRegistration[]> {
+  // Step 1: fetch registrations + squad info + raw roster (no nested profiles join)
+  const { data, error } = await supabase
+    .from('squad_registrations')
+    .select(`
+      *,
+      squad:squads!squad_registrations_squad_id_fkey(id, name, image_url),
+      tournament_roster(*)
+    `)
+    .eq('tournament_id', tournamentId)
+    .order('registered_at', { ascending: true });
+
+  if (error) {
+    console.error('[Service] getSquadRegistrations error:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      tournamentId,
+    });
+    throw error;
+  }
+
+  // Step 2: enrich each registration's roster with profile data
+  const enriched = await Promise.all(
+    (data ?? []).map(async (reg: any) => ({
+      ...reg,
+      tournament_roster: await enrichRosterWithProfiles(reg.tournament_roster ?? []),
+    }))
+  );
+  return enriched.map(mapSquadRegistration);
+}
+
+/** Fetch a specific squad's registration for a tournament */
+export async function getSquadRegistration(
+  tournamentId: string,
+  squadId: string
+): Promise<SquadRegistration | null> {
+  // Step 1: fetch registration + squad info + raw roster (no nested profiles join)
+  const { data, error } = await supabase
+    .from('squad_registrations')
+    .select(`
+      *,
+      squad:squads!squad_registrations_squad_id_fkey(id, name, image_url),
+      tournament_roster(*)
+    `)
+    .eq('tournament_id', tournamentId)
+    .eq('squad_id', squadId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Service] getSquadRegistration error:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      tournamentId,
+      squadId,
+    });
+    throw error;
+  }
+  if (!data) return null;
+
+  // Step 2: enrich roster with profile data
+  const enriched = {
+    ...data,
+    tournament_roster: await enrichRosterWithProfiles(data.tournament_roster ?? []),
+  };
+  return mapSquadRegistration(enriched);
+}
+
+/** Approve a squad registration (organizer only) */
+export async function approveSquadRegistration(
+  squadRegistrationId: string,
+  approvedBy: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('squad_registrations')
+    .update({
+      status: 'confirmed',
+      approved_by: approvedBy,
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', squadRegistrationId);
+  if (error) throw error;
+}
+
+/** Reject a squad registration (organizer only) */
+export async function rejectSquadRegistration(
+  squadRegistrationId: string,
+  approvedBy: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('squad_registrations')
+    .update({
+      status: 'rejected',
+      approved_by: approvedBy,
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', squadRegistrationId);
+  if (error) throw error;
+}
+
+/** Withdraw a squad registration (captain only) */
+export async function withdrawSquadRegistration(
+  squadRegistrationId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('squad_registrations')
+    .update({ status: 'withdrawn' })
+    .eq('id', squadRegistrationId);
+  if (error) throw error;
+}
+
+/** Lock roster for a squad registration. Called when bracket is generated. */
+export async function lockRoster(squadRegistrationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('squad_registrations')
+    .update({ roster_locked_at: new Date().toISOString() })
+    .eq('id', squadRegistrationId);
+  if (error) throw error;
+}
+
+/** Lock rosters for ALL confirmed squads in a tournament */
+export async function lockAllRosters(tournamentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('squad_registrations')
+    .update({ roster_locked_at: new Date().toISOString() })
+    .eq('tournament_id', tournamentId)
+    .eq('status', 'confirmed')
+    .is('roster_locked_at', null);
+  if (error) throw error;
+}
+
+/**
+ * Mark a roster player as injured.
+ * Does NOT require roster to be unlocked — injuries can happen anytime.
+ * Returns whether the squad can still field enough teams.
+ */
+export async function markPlayerInjured(
+  rosterPlayerId: string,
+  injuryNote?: string
+): Promise<{ success: boolean; activeCount: number; insufficientPlayers: boolean }> {
+  // Update player status
+  const { data: updatedRow, error } = await supabase
+    .from('tournament_roster')
+    .update({
+      status: 'inactive_injured' as RosterPlayerStatus,
+      injury_note: injuryNote || null,
+    })
+    .eq('id', rosterPlayerId)
+    .select('squad_registration_id')
+    .single();
+  if (error) throw error;
+
+  // Count remaining active players
+  const { data: activeRoster } = await supabase
+    .from('tournament_roster')
+    .select('id')
+    .eq('squad_registration_id', updatedRow.squad_registration_id)
+    .eq('status', 'active');
+
+  const activeCount = activeRoster?.length ?? 0;
+
+  // Check if they can still form at least 1 team (doubles = 2)
+  return {
+    success: true,
+    activeCount,
+    insufficientPlayers: activeCount < 2,
+  };
+}
+
+/** Mark a roster player as withdrawn (voluntary) */
+export async function withdrawRosterPlayer(rosterPlayerId: string): Promise<void> {
+  const { error } = await supabase
+    .from('tournament_roster')
+    .update({ status: 'withdrawn' as RosterPlayerStatus })
+    .eq('id', rosterPlayerId);
+  if (error) throw error;
+}
+
+/**
+ * Set match lineup for a squad in a specific match.
+ * Captain selects which roster players play (active only) and pairs them into teams.
+ * Validates all players are in the locked roster and active.
+ */
+export async function setMatchLineup(
+  matchId: string,
+  squadRegistrationId: string,
+  teams: Array<{ playerId: string; partnerId?: string; teamNumber: number }>,
+  benchPlayerIds: string[] = []
+): Promise<MatchLineup[]> {
+  // 1. Verify roster is locked (bracket must be generated)
+  const { data: reg } = await supabase
+    .from('squad_registrations')
+    .select('roster_locked_at')
+    .eq('id', squadRegistrationId)
+    .single();
+  if (!reg?.roster_locked_at) {
+    throw new Error('Roster is not locked yet. Bracket must be generated first.');
+  }
+
+  // 2. Get active roster players for this squad
+  const { data: roster } = await supabase
+    .from('tournament_roster')
+    .select('player_id, status')
+    .eq('squad_registration_id', squadRegistrationId)
+    .eq('status', 'active');
+  const rosterIds = new Set((roster ?? []).map((r: any) => r.player_id));
+
+  // 3. Validate all lineup players are in active roster
+  const allPlayerIds = [
+    ...teams.map(t => t.playerId),
+    ...teams.filter(t => t.partnerId).map(t => t.partnerId!),
+    ...benchPlayerIds,
+  ];
+  const invalid = allPlayerIds.filter(id => !rosterIds.has(id));
+  if (invalid.length > 0) {
+    throw new Error('One or more players are not in the active roster');
+  }
+
+  // 4. Check no duplicate players in lineup
+  const uniqueCheck = new Set(allPlayerIds);
+  if (uniqueCheck.size !== allPlayerIds.length) {
+    throw new Error('A player cannot appear in multiple teams');
+  }
+
+  // 5. Delete existing lineup for this match + squad
+  await supabase
+    .from('match_lineups')
+    .delete()
+    .eq('match_id', matchId)
+    .eq('squad_registration_id', squadRegistrationId);
+
+  // 6. Insert new lineup
+  const inserts: any[] = [];
+  for (const team of teams) {
+    inserts.push({
+      match_id: matchId,
+      squad_registration_id: squadRegistrationId,
+      player_id: team.playerId,
+      partner_id: team.partnerId || null,
+      team_number: team.teamNumber,
+      is_bench: false,
+      confirmed_at: new Date().toISOString(),
+    });
+  }
+  for (const benchId of benchPlayerIds) {
+    inserts.push({
+      match_id: matchId,
+      squad_registration_id: squadRegistrationId,
+      player_id: benchId,
+      partner_id: null,
+      team_number: 0,
+      is_bench: true,
+      confirmed_at: null,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('match_lineups')
+    .insert(inserts)
+    .select();
+  if (error) throw error;
+  return (data ?? []).map(mapMatchLineup);
+}
+
+/** Get match lineup for a squad in a specific match */
+export async function getMatchLineup(
+  matchId: string,
+  squadRegistrationId: string
+): Promise<MatchLineup[]> {
+  const { data, error } = await supabase
+    .from('match_lineups')
+    .select('*')
+    .eq('match_id', matchId)
+    .eq('squad_registration_id', squadRegistrationId)
+    .order('team_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapMatchLineup);
+}
+
+/**
+ * Request a substitution (add player from outside locked roster — admin override).
+ * For normal lineup rotation within the roster, use setMatchLineup instead.
+ */
+export async function requestSubstitution(
+  tournamentId: string,
+  squadRegistrationId: string,
+  playerOutId: string,
+  playerInId: string,
+  reason: string,
+  requestedBy: string
+): Promise<SubstitutionLog> {
+  // Check tournament mode
+  const tournament = await fetchTournamentById(tournamentId);
+  if (!tournament) throw new Error('Tournament not found');
+
+  // Check player_in isn't already in another squad for this tournament
+  const { data: otherRegs } = await supabase
+    .from('tournament_roster')
+    .select('id, squad_registration_id, squad_registrations!inner(tournament_id, status)')
+    .eq('player_id', playerInId);
+  const conflict = (otherRegs ?? []).find((r: any) =>
+    r.squad_registrations?.tournament_id === tournamentId &&
+    r.squad_registrations?.status !== 'withdrawn' &&
+    r.squad_registrations?.status !== 'rejected'
+  );
+  if (conflict) {
+    throw new Error('Replacement player is already registered with another squad in this tournament');
+  }
+
+  // For competitive: validate rating proximity
+  if (tournament.tournamentMode === 'competitive') {
+    const tolerance = tournament.squadRequirements?.ratingReplacementTolerance ?? 0.5;
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, rating')
+      .in('id', [playerOutId, playerInId]);
+    const outRating = profiles?.find((p: any) => p.id === playerOutId)?.rating;
+    const inRating = profiles?.find((p: any) => p.id === playerInId)?.rating;
+    if (outRating != null && inRating != null && Math.abs(inRating - outRating) > tolerance) {
+      throw new Error(`Rating difference (${Math.abs(inRating - outRating).toFixed(1)}) exceeds allowed tolerance (±${tolerance})`);
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('substitution_logs')
+    .insert({
+      tournament_id: tournamentId,
+      squad_registration_id: squadRegistrationId,
+      requested_by: requestedBy,
+      player_out: playerOutId,
+      player_in: playerInId,
+      reason,
+      admin_override: true,
+      status: 'pending',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapSubstitutionLog(data);
+}
+
+/** Resolve a substitution request (organizer). If approved, updates roster. */
+export async function resolveSubstitution(
+  logId: string,
+  approvedBy: string,
+  decision: 'approved' | 'rejected'
+): Promise<void> {
+  // 1. Update log
+  const { data: log, error: logErr } = await supabase
+    .from('substitution_logs')
+    .update({
+      status: decision,
+      approved_by: approvedBy,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq('id', logId)
+    .select()
+    .single();
+  if (logErr) throw logErr;
+
+  if (decision === 'approved') {
+    // 2. Mark old player as substituted in roster
+    await supabase
+      .from('tournament_roster')
+      .update({
+        status: 'substituted' as RosterPlayerStatus,
+        replaced_by: log.player_in,
+      })
+      .eq('squad_registration_id', log.squad_registration_id)
+      .eq('player_id', log.player_out);
+
+    // 3. Add new player to roster
+    await supabase
+      .from('tournament_roster')
+      .upsert({
+        squad_registration_id: log.squad_registration_id,
+        player_id: log.player_in,
+        status: 'active',
+        added_at: new Date().toISOString(),
+      }, { onConflict: 'squad_registration_id,player_id' });
+  }
+}
+
+/** Get substitution logs for a tournament */
+export async function getSubstitutionLogs(tournamentId: string): Promise<SubstitutionLog[]> {
+  const { data, error } = await supabase
+    .from('substitution_logs')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(mapSubstitutionLog);
+}
+
+/** Get pending substitution requests for a tournament */
+export async function getPendingSubstitutions(tournamentId: string): Promise<SubstitutionLog[]> {
+  const { data, error } = await supabase
+    .from('substitution_logs')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapSubstitutionLog);
+}
+
+/** Enhanced evaluateSquadEligibility with roster validation */
+export function evaluateSquadRosterEligibility(
+  requirements: SquadRequirements | undefined,
+  squad: Pick<Squad, 'members_count' | 'avg_rating' | 'name'>,
+  rosterSize: number,
+  teamSize: number
+): { eligible: boolean; reasons: string[] } {
+  const base = evaluateSquadEligibility(requirements, squad);
+  const reasons = [...base.reasons];
+
+  if (rosterSize < 2) {
+    reasons.push('Roster must have at least 2 players');
+  }
+  if (rosterSize % teamSize !== 0) {
+    reasons.push(`Roster size (${rosterSize}) must be divisible by team size (${teamSize})`);
+  }
+  const minSize = requirements?.minSize ?? 2;
+  if (rosterSize < minSize) {
+    reasons.push(`Roster needs at least ${minSize} players (has ${rosterSize})`);
+  }
+
+  return { eligible: reasons.length === 0, reasons };
 }

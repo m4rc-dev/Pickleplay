@@ -276,6 +276,6 @@ export const MANAGEABLE_ROLES: { key: UserRole; label: string }[] = [
 export const DEFAULT_FEATURES_PER_ROLE: Record<string, string[]> = {
   PLAYER: ['booking', 'messages', 'tournaments', 'achievements', 'guides', 'teams', 'partners', 'coaches', 'community', 'dashboard', 'news', 'shop', 'profile', 'rankings', 'academy'],
   COACH: ['dashboard', 'students', 'clinics', 'schedule', 'teams', 'news', 'shop', 'profile', 'tournaments', 'community', 'achievements'],
-  COURT_OWNER: ['dashboard', 'locations', 'bookings-admin', 'court-calendar', 'tournaments-admin', 'revenue', 'court-policies', 'news', 'shop', 'profile', 'teams'],
+  COURT_OWNER: ['dashboard', 'locations', 'bookings-admin', 'court-calendar', 'tournaments-admin', 'tournaments', 'revenue', 'court-policies', 'news', 'shop', 'profile', 'teams'],
   CUSTOMER: ['booking', 'dashboard', 'news', 'shop', 'profile', 'tournaments', 'community'],
 };

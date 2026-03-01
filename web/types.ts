@@ -211,6 +211,13 @@ export type TournamentStatus = 'UPCOMING' | 'LIVE' | 'COMPLETED' | 'CANCELLED';
 export type TournamentMatchStatus = 'scheduled' | 'live' | 'completed' | 'forfeited' | 'bye';
 export type TournamentRegStatus = 'pending' | 'confirmed' | 'waitlisted' | 'withdrawn' | 'rejected';
 
+export type TournamentMode = 'casual' | 'competitive';
+export type RegistrationMode = 'individual' | 'squad';
+export type RosterLockTiming = 'registration_close' | 'bracket_generated' | 'first_match_start';
+export type RosterPlayerStatus = 'active' | 'inactive_injured' | 'substituted' | 'withdrawn';
+export type SquadRegStatus = 'pending' | 'confirmed' | 'waitlisted' | 'withdrawn' | 'rejected';
+export type SubstitutionStatus = 'pending' | 'approved' | 'rejected';
+
 export interface Tournament {
   id: string;
   name: string;
@@ -242,9 +249,12 @@ export interface Tournament {
   announcement?: string;
   createdAt?: string;
   updatedAt?: string;
-  // Registration mode
-  registrationMode?: 'player' | 'squad' | 'both';
+  // Tournament mode & registration
+  tournamentMode?: TournamentMode;
+  registrationMode?: RegistrationMode;
+  rosterLockTiming?: RosterLockTiming;
   squadRequirements?: SquadRequirements;
+  /** @deprecated Use registrationMode = 'individual' instead */
   allowSoloFallback?: boolean;
 }
 
@@ -254,6 +264,70 @@ export interface SquadRequirements {
   ratingMax?: number;
   regions?: string[];
   membership?: 'any' | 'active' | 'premium';
+  /** For competitive subs: replacement player rating must be within ±tolerance of outgoing player */
+  ratingReplacementTolerance?: number;
+}
+
+// ── Squad Tournament Registration ──────────────────────────────
+
+export interface SquadRegistration {
+  id: string;
+  tournamentId: string;
+  squadId: string;
+  registeredBy: string;
+  status: SquadRegStatus;
+  rosterLockedAt?: string;
+  registeredAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  applicationMessage?: string;
+  // Joined data
+  squad?: { id: string; name: string; image_url?: string; members_count: number; avg_rating: number };
+  roster?: TournamentRosterPlayer[];
+}
+
+export interface TournamentRosterPlayer {
+  id: string;
+  squadRegistrationId: string;
+  playerId: string;
+  status: RosterPlayerStatus;
+  replacedBy?: string;
+  injuryNote?: string;
+  addedAt: string;
+  // Joined
+  player?: { id: string; full_name: string; avatar_url?: string; rating?: number };
+}
+
+export interface MatchLineup {
+  id: string;
+  matchId: string;
+  squadRegistrationId: string;
+  playerId: string;
+  partnerId?: string;
+  teamNumber: number;
+  isBench: boolean;
+  confirmedAt?: string;
+  // Joined
+  player?: { id: string; full_name: string; avatar_url?: string };
+  partner?: { id: string; full_name: string; avatar_url?: string };
+}
+
+export interface SubstitutionLog {
+  id: string;
+  tournamentId: string;
+  squadRegistrationId: string;
+  requestedBy: string;
+  playerOut: string;
+  playerIn: string;
+  reason?: string;
+  adminOverride: boolean;
+  approvedBy?: string;
+  status: SubstitutionStatus;
+  createdAt: string;
+  resolvedAt?: string;
+  // Joined
+  playerOutProfile?: { id: string; full_name: string; avatar_url?: string; rating?: number };
+  playerInProfile?: { id: string; full_name: string; avatar_url?: string; rating?: number };
 }
 
 export interface TournamentTeam {
