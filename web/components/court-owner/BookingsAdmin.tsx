@@ -223,12 +223,6 @@ const BookingsAdmin: React.FC = () => {
 
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/booking')}
-                        className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
-                    >
-                        <Play size={18} fill="currentColor" /> Book A Court
-                    </button>
-                    <button
                         onClick={() => setShowScanner(true)}
                         className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
                     >

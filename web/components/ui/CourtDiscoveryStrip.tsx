@@ -25,7 +25,7 @@ const CourtDiscoveryStrip: React.FC = () => {
           setVenues(data as Venue[]);
           return;
         }
-      } catch (_) {}
+      } catch (_) { }
       // Fallback: empty list (UI still shows shell)
       setVenues([]);
     };
@@ -36,15 +36,13 @@ const CourtDiscoveryStrip: React.FC = () => {
     <div className="bg-white rounded-3xl p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-black uppercase tracking-widest text-slate-600">Court Discovery</h3>
-        <a href="#" onClick={(e)=>e.preventDefault()} className="text-blue-600 text-sm font-semibold">View all</a>
+        <a href="#" onClick={(e) => e.preventDefault()} className="text-blue-600 text-sm font-semibold">View all</a>
       </div>
       <div className="flex gap-4 overflow-x-auto no-scrollbar py-2">
-        {(venues.length ? venues : Array.from({length:6}).map((_,i)=>({id:String(i)} as Venue))).map((v, idx) => (
+        {(venues.length ? venues : Array.from({ length: 6 }).map((_, i) => ({ id: String(i) } as Venue))).map((v, idx) => (
           <div key={v.id || idx} className="min-w-[220px] bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition">
             <div className="h-28 rounded-t-2xl overflow-hidden bg-gradient-to-br from-slate-200 to-slate-100">
-              {v.image_url && (
-                <img src={v.image_url} alt={v.name || 'Venue'} className="w-full h-full object-cover" />
-              )}
+              <img src={v.image_url || '/images/home-images/pb2.jpg'} alt={v.name || 'Venue'} className="w-full h-full object-cover" />
             </div>
             <div className="p-3">
               <p className="font-semibold text-slate-900 truncate">{v.name || 'Local Court'}</p>

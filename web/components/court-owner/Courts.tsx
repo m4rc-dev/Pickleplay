@@ -40,7 +40,7 @@ const Courts: React.FC = () => {
         message: string;
         onConfirm: () => void;
         variant: 'warning' | 'danger' | 'info';
-    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
 
     // Confirm dialog helpers
     const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
@@ -48,7 +48,7 @@ const Courts: React.FC = () => {
     };
 
     const closeConfirm = () => {
-        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
     };
 
     const handleConfirm = () => {
@@ -272,558 +272,558 @@ const Courts: React.FC = () => {
 
     return (
         <>
-        <div className="space-y-10 animate-in fade-in duration-700">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Manage Courts</h1>
-                    <p className="text-slate-500 font-medium tracking-tight">Real-time utilization and status monitoring.</p>
-                </div>
-
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setViewMode('grid')}
-                        className={`px-5 py-3 border rounded-xl transition-all ${viewMode === 'grid' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
-                    >
-                        <LayoutGrid size={20} />
-                    </button>
-                    <button
-                        onClick={() => setViewMode('list')}
-                        className={`px-5 py-3 border rounded-xl transition-all ${viewMode === 'list' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
-                    >
-                        <List size={20} />
-                    </button>
-                    <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 ml-2"
-                    >
-                        Add Court
-                    </button>
-                </div>
-            </div>
-
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatusMetric label="Total Courts" count={courts.length.toString()} subtext="All locations" />
-                <StatusMetric label="Available" count={courts.filter(c => c.status === 'Available').length.toString()} subtext="Ready to play" color="text-lime-500" />
-                <StatusMetric label="Occupied" count={courts.filter(c => c.status === 'Occupied').length.toString()} subtext="Live matches" color="text-blue-600" />
-                <StatusMetric label="Maintenance" count={courts.filter(c => c.status === 'Maintenance').length.toString()} subtext="Scheduled repair" color="text-slate-400" />
-            </div>
-
-            {/* Courts Visual Board */}
-            <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-4"}>
-                {isLoading ? (
-                    Array(4).fill(0).map((_, i) => (
-                        <div key={i} className={`bg-white rounded-[40px] border border-slate-100 animate-pulse ${viewMode === 'grid' ? 'h-64' : 'h-24'}`}></div>
-                    ))
-                ) : courts.length > 0 ? (
-                    viewMode === 'grid' ? (
-                        courts.map((court) => (
-                            <CourtCard
-                                key={court.id}
-                                court={court}
-                                onBook={() => navigate('/bookings-admin')}
-                                onSettings={() => openEditModal(court)}
-                                onPromote={() => handlePromoteCourt(court)}
-                            />
-                        ))
-                    ) : (
-                        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse text-left">
-                                    <thead>
-                                        <tr className="bg-slate-50/50">
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Court Details</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Resources</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
-                                            <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {courts.map((court) => (
-                                            <CourtListRow
-                                                key={court.id}
-                                                court={court}
-                                                onBook={() => navigate('/bookings-admin')}
-                                                onSettings={() => openEditModal(court)}
-                                                onPromote={() => handlePromoteCourt(court)}
-                                            />
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )
-                ) : (
-                    <div className="col-span-full py-20 text-center bg-white rounded-[48px] border border-dashed border-slate-200">
-                        <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                        <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">No courts found</h3>
-                        <p className="text-slate-400 text-sm font-medium">Add your first court to start accepting bookings.</p>
+            <div className="space-y-10 animate-in fade-in duration-700">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                    <div>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Manage Courts</h1>
+                        <p className="text-slate-500 font-medium tracking-tight">Real-time utilization and status monitoring.</p>
                     </div>
-                )}
-            </div>
 
-            {/* Add Court Modal - Refined Stacking logic with Portal to escape container constraints */}
-            {isAddModalOpen && ReactDOM.createPortal(
-                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
-                            <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
-                                <X size={24} />
-                            </button>
-                        </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`px-5 py-3 border rounded-xl transition-all ${viewMode === 'grid' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
+                        >
+                            <LayoutGrid size={20} />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`px-5 py-3 border rounded-xl transition-all ${viewMode === 'list' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
+                        >
+                            <List size={20} />
+                        </button>
+                        <button
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 ml-2"
+                        >
+                            Add Court
+                        </button>
+                    </div>
+                </div>
 
-                        <form onSubmit={handleAddCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                            {/* Left Column: Form Fields */}
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={newName}
-                                        onChange={e => setNewName(e.target.value)}
-                                        placeholder="e.g. Center Court"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
-                                </div>
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <StatusMetric label="Total Courts" count={courts.length.toString()} subtext="All locations" />
+                    <StatusMetric label="Available" count={courts.filter(c => c.status === 'Available').length.toString()} subtext="Ready to play" color="text-lime-500" />
+                    <StatusMetric label="Occupied" count={courts.filter(c => c.status === 'Occupied').length.toString()} subtext="Live matches" color="text-blue-600" />
+                    <StatusMetric label="Maintenance" count={courts.filter(c => c.status === 'Maintenance').length.toString()} subtext="Scheduled repair" color="text-slate-400" />
+                </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
-                                        <input
-                                            required
-                                            type="text"
-                                            value={newCity}
-                                            onChange={e => setNewCity(e.target.value)}
-                                            placeholder="e.g. Manila"
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
-                                        <input
-                                            required
-                                            type="number"
-                                            min="1"
-                                            value={newNumCourts}
-                                            onChange={e => setNewNumCourts(Number(e.target.value))}
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
-                                        <input
-                                            required
-                                            type="text"
-                                            value={newSurface}
-                                            onChange={e => setNewSurface(e.target.value)}
-                                            placeholder="e.g. Pro-Cushion"
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
-                                        <input
-                                            required
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={newPrice}
-                                            onChange={e => setNewPrice(Number(e.target.value))}
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Cleaning Time Section */}
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
-                                        Cleaning Time Buffer
-                                    </label>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {[
-                                            { label: 'None', value: 0 },
-                                            { label: '15m', value: 15 },
-                                            { label: '30m', value: 30 },
-                                            { label: '1hr', value: 60 },
-                                            { label: '2hr', value: 120 },
-                                        ].map(option => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                        {[
-                                            { label: '3hr', value: 180 },
-                                            { label: '4hr', value: 240 },
-                                            { label: '6hr', value: 360 },
-                                            { label: '8hr', value: 480 },
-                                            { label: '12hr', value: 720 },
-                                        ].map(option => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max="720"
-                                            step="5"
-                                            value={newCleaningTime}
-                                            onChange={e => setNewCleaningTime(Number(e.target.value))}
-                                            placeholder="Custom minutes"
-                                            className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
-                                        />
-                                        <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
-                                    </div>
-                                    <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
-                                        Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
-                                        {newCleaningTime > 0 && ' - Time blocked after each booking'}
-                                    </p>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={newAddress}
-                                        onChange={e => setNewAddress(e.target.value)}
-                                        placeholder="Full street address"
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
-                                    <input
-                                        type="text"
-                                        value={newAmenities}
-                                        onChange={e => setNewAmenities(e.target.value)}
-                                        placeholder="WiFi, Parking, Water Station..."
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
+                {/* Courts Visual Board */}
+                <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-4"}>
+                    {isLoading ? (
+                        Array(4).fill(0).map((_, i) => (
+                            <div key={i} className={`bg-white rounded-[40px] border border-slate-100 animate-pulse ${viewMode === 'grid' ? 'h-64' : 'h-24'}`}></div>
+                        ))
+                    ) : courts.length > 0 ? (
+                        viewMode === 'grid' ? (
+                            courts.map((court) => (
+                                <CourtCard
+                                    key={court.id}
+                                    court={court}
+                                    onBook={() => navigate('/bookings-admin')}
+                                    onSettings={() => openEditModal(court)}
+                                    onPromote={() => handlePromoteCourt(court)}
+                                />
+                            ))
+                        ) : (
+                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-left">
+                                        <thead>
+                                            <tr className="bg-slate-50/50">
+                                                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Court Details</th>
+                                                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Resources</th>
+                                                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                                                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {courts.map((court) => (
+                                                <CourtListRow
+                                                    key={court.id}
+                                                    court={court}
+                                                    onBook={() => navigate('/bookings-admin')}
+                                                    onSettings={() => openEditModal(court)}
+                                                    onPromote={() => handlePromoteCourt(court)}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
+                        )
+                    ) : (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[48px] border border-dashed border-slate-200">
+                            <Building2 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                            <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">No courts found</h3>
+                            <p className="text-slate-400 text-sm font-medium">Add your first court to start accepting bookings.</p>
+                        </div>
+                    )}
+                </div>
 
-                            {/* Right Column: Map & Submit */}
-                            <div className="flex flex-col h-full">
-                                <div className="flex-1 space-y-4">
-                                    <div className="flex justify-between items-center ml-4">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
-                                        {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
-                                    </div>
-                                    <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
-                                        <MapPreview
-                                            coords={previewCoords}
-                                            onCoordsChange={setPreviewCoords}
-                                            onAddressChange={(address, city) => {
-                                                setNewAddress(address);
-                                                setNewCity(city);
-                                            }}
-                                        />
-                                        {!previewCoords && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 backdrop-blur-sm text-slate-300 gap-2">
-                                                <MapPin size={32} />
-                                                <p className="text-[10px] font-black uppercase tracking-widest">Enter address or use GPS</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest">
-                                        TIP: Drag the marker or click map to refine location
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="w-full h-16 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 mt-8 disabled:bg-slate-200 active:scale-95"
-                                >
-                                    {isSubmitting ? 'Adding...' : 'Confirm Registration'}
+                {/* Add Court Modal - Refined Stacking logic with Portal to escape container constraints */}
+                {isAddModalOpen && ReactDOM.createPortal(
+                    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                        <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
+                                <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                                    <X size={24} />
                                 </button>
                             </div>
-                        </form>
-                    </div>
-                </div>,
-                document.body
-            )}
 
-            {/* Edit Court Modal */}
-            {isEditModalOpen && ReactDOM.createPortal(
-                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court Details</h2>
-                            <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleUpdateCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                            {/* Left Column: Form Fields */}
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={newName}
-                                        onChange={e => setNewName(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
+                            <form onSubmit={handleAddCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                {/* Left Column: Form Fields */}
+                                <div className="space-y-6">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
                                         <input
                                             required
                                             type="text"
-                                            value={newCity}
-                                            onChange={e => setNewCity(e.target.value)}
+                                            value={newName}
+                                            onChange={e => setNewName(e.target.value)}
+                                            placeholder="e.g. Center Court"
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
-                                        <input
-                                            required
-                                            type="number"
-                                            min="1"
-                                            value={newNumCourts}
-                                            onChange={e => setNewNumCourts(Number(e.target.value))}
-                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                        />
-                                    </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newCity}
+                                                onChange={e => setNewCity(e.target.value)}
+                                                placeholder="e.g. Manila"
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="1"
+                                                value={newNumCourts}
+                                                onChange={e => setNewNumCourts(Number(e.target.value))}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newSurface}
+                                                onChange={e => setNewSurface(e.target.value)}
+                                                placeholder="e.g. Pro-Cushion"
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={newPrice}
+                                                onChange={e => setNewPrice(Number(e.target.value))}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Cleaning Time Section */}
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
+                                            Cleaning Time Buffer
+                                        </label>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {[
+                                                { label: 'None', value: 0 },
+                                                { label: '15m', value: 15 },
+                                                { label: '30m', value: 30 },
+                                                { label: '1hr', value: 60 },
+                                                { label: '2hr', value: 120 },
+                                            ].map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setNewCleaningTime(option.value)}
+                                                    className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                            {[
+                                                { label: '3hr', value: 180 },
+                                                { label: '4hr', value: 240 },
+                                                { label: '6hr', value: 360 },
+                                                { label: '8hr', value: 480 },
+                                                { label: '12hr', value: 720 },
+                                            ].map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setNewCleaningTime(option.value)}
+                                                    className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="720"
+                                                step="5"
+                                                value={newCleaningTime}
+                                                onChange={e => setNewCleaningTime(Number(e.target.value))}
+                                                placeholder="Custom minutes"
+                                                className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
+                                            />
+                                            <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
+                                            Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
+                                            {newCleaningTime > 0 && ' - Time blocked after each booking'}
+                                        </p>
+                                    </div>
+
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
                                         <input
                                             required
                                             type="text"
-                                            value={newSurface}
-                                            onChange={e => setNewSurface(e.target.value)}
+                                            value={newAddress}
+                                            onChange={e => setNewAddress(e.target.value)}
+                                            placeholder="Full street address"
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                         />
                                     </div>
+
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
                                         <input
-                                            required
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={newPrice}
-                                            onChange={e => setNewPrice(Number(e.target.value))}
+                                            type="text"
+                                            value={newAmenities}
+                                            onChange={e => setNewAmenities(e.target.value)}
+                                            placeholder="WiFi, Parking, Water Station..."
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                         />
                                     </div>
                                 </div>
 
-                                {/* Cleaning Time Section */}
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
-                                        Cleaning Time Buffer
-                                    </label>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {[
-                                            { label: 'None', value: 0 },
-                                            { label: '15m', value: 15 },
-                                            { label: '30m', value: 30 },
-                                            { label: '1hr', value: 60 },
-                                            { label: '2hr', value: 120 },
-                                        ].map(option => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                        {[
-                                            { label: '3hr', value: 180 },
-                                            { label: '4hr', value: 240 },
-                                            { label: '6hr', value: 360 },
-                                            { label: '8hr', value: 480 },
-                                            { label: '12hr', value: 720 },
-                                        ].map(option => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setNewCleaningTime(option.value)}
-                                                className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
-                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
+                                {/* Right Column: Map & Submit */}
+                                <div className="flex flex-col h-full">
+                                    <div className="flex-1 space-y-4">
+                                        <div className="flex justify-between items-center ml-4">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
+                                            {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
+                                        </div>
+                                        <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
+                                            <MapPreview
+                                                coords={previewCoords}
+                                                onCoordsChange={setPreviewCoords}
+                                                onAddressChange={(address, city) => {
+                                                    setNewAddress(address);
+                                                    setNewCity(city);
+                                                }}
+                                            />
+                                            {!previewCoords && (
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 backdrop-blur-sm text-slate-300 gap-2">
+                                                    <MapPin size={32} />
+                                                    <p className="text-[10px] font-black uppercase tracking-widest">Enter address or use GPS</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest">
+                                            TIP: Drag the marker or click map to refine location
+                                        </p>
                                     </div>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max="720"
-                                            step="5"
-                                            value={newCleaningTime}
-                                            onChange={e => setNewCleaningTime(Number(e.target.value))}
-                                            placeholder="Custom minutes"
-                                            className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
-                                        />
-                                        <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
-                                    </div>
-                                    <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
-                                        Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
-                                        {newCleaningTime > 0 && ' - Time blocked after each booking'}
-                                    </p>
-                                </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={newAddress}
-                                        onChange={e => setNewAddress(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
-                                    <input
-                                        type="text"
-                                        value={newAmenities}
-                                        onChange={e => setNewAmenities(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Right Column: Map & Actions */}
-                            <div className="flex flex-col h-full">
-                                <div className="flex-1 space-y-4">
-                                    <div className="flex justify-between items-center ml-4">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
-                                        {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
-                                    </div>
-                                    <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
-                                        <MapPreview
-                                            coords={previewCoords}
-                                            onCoordsChange={setPreviewCoords}
-                                            onAddressChange={(address, city) => {
-                                                setNewAddress(address);
-                                                setNewCity(city);
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4 mt-8">
-                                    <button
-                                        type="button"
-                                        onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
-                                        className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <Trash2 size={18} /> Remove
-                                    </button>
                                     <button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="flex-[2] h-16 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 disabled:bg-slate-200 active:scale-95"
+                                        className="w-full h-16 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 mt-8 disabled:bg-slate-200 active:scale-95"
                                     >
-                                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                                        {isSubmitting ? 'Adding...' : 'Confirm Registration'}
                                     </button>
                                 </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>,
-                document.body
-            )}
-
-            {/* Utilization Heatmap Placeholder */}
-            <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm overflow-hidden relative">
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Utilization Trends</h3>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Last 24 Hours</p>
-                    </div>
-                    <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest outline-none">
-                        <option>Today</option>
-                        <option>This Week</option>
-                    </select>
-                </div>
-
-                <div className="h-40 flex items-end gap-1.5 md:gap-3">
-                    {[45, 60, 85, 95, 100, 90, 75, 40, 30, 55, 80, 70, 45, 30, 20, 40, 60, 80, 100, 95, 70, 50, 40, 30].map((height, i) => (
-                        <div
-                            key={i}
-                            className={`flex-1 rounded-t-lg transition-all duration-1000 bg-blue-600/10 hover:bg-blue-600 hover:scale-x-110 cursor-pointer group`}
-                            style={{ height: `${height}%` }}
-                        >
-                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                {height}% Cap.
-                            </div>
+                            </form>
                         </div>
-                    ))}
+                    </div>,
+                    document.body
+                )}
+
+                {/* Edit Court Modal */}
+                {isEditModalOpen && ReactDOM.createPortal(
+                    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                        <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court Details</h2>
+                                <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleUpdateCourt} className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                {/* Left Column: Form Fields */}
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Name</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newName}
+                                            onChange={e => setNewName(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City</label>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newCity}
+                                                onChange={e => setNewCity(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4"># of Courts</label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="1"
+                                                value={newNumCourts}
+                                                onChange={e => setNewNumCourts(Number(e.target.value))}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Surface Type</label>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newSurface}
+                                                onChange={e => setNewSurface(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={newPrice}
+                                                onChange={e => setNewPrice(Number(e.target.value))}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Cleaning Time Section */}
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">
+                                            Cleaning Time Buffer
+                                        </label>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {[
+                                                { label: 'None', value: 0 },
+                                                { label: '15m', value: 15 },
+                                                { label: '30m', value: 30 },
+                                                { label: '1hr', value: 60 },
+                                                { label: '2hr', value: 120 },
+                                            ].map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setNewCleaningTime(option.value)}
+                                                    className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                            {[
+                                                { label: '3hr', value: 180 },
+                                                { label: '4hr', value: 240 },
+                                                { label: '6hr', value: 360 },
+                                                { label: '8hr', value: 480 },
+                                                { label: '12hr', value: 720 },
+                                            ].map(option => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setNewCleaningTime(option.value)}
+                                                    className={`py-3 rounded-xl font-bold text-xs transition-all border ${newCleaningTime === option.value
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-blue-400'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="720"
+                                                step="5"
+                                                value={newCleaningTime}
+                                                onChange={e => setNewCleaningTime(Number(e.target.value))}
+                                                placeholder="Custom minutes"
+                                                className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs"
+                                            />
+                                            <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap">Custom (0-720m)</span>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 ml-4 leading-relaxed">
+                                            Selected: <span className="font-bold text-slate-600">{newCleaningTime === 0 ? 'No buffer' : newCleaningTime >= 60 ? `${Math.floor(newCleaningTime / 60)}h ${newCleaningTime % 60 > 0 ? `${newCleaningTime % 60}m` : ''}` : `${newCleaningTime} minutes`}</span>
+                                            {newCleaningTime > 0 && ' - Time blocked after each booking'}
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Address</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={newAddress}
+                                            onChange={e => setNewAddress(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
+                                        <input
+                                            type="text"
+                                            value={newAmenities}
+                                            onChange={e => setNewAmenities(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Map & Actions */}
+                                <div className="flex flex-col h-full">
+                                    <div className="flex-1 space-y-4">
+                                        <div className="flex justify-between items-center ml-4">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
+                                            {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
+                                        </div>
+                                        <div className="h-64 lg:h-[400px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
+                                            <MapPreview
+                                                coords={previewCoords}
+                                                onCoordsChange={setPreviewCoords}
+                                                onAddressChange={(address, city) => {
+                                                    setNewAddress(address);
+                                                    setNewCity(city);
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4 mt-8">
+                                        <button
+                                            type="button"
+                                            onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
+                                            className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Trash2 size={18} /> Remove
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="flex-[2] h-16 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 disabled:bg-slate-200 active:scale-95"
+                                        >
+                                            {isSubmitting ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>,
+                    document.body
+                )}
+
+                {/* Utilization Heatmap Placeholder */}
+                <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm overflow-hidden relative">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Utilization Trends</h3>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Last 24 Hours</p>
+                        </div>
+                        <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest outline-none">
+                            <option>Today</option>
+                            <option>This Week</option>
+                        </select>
+                    </div>
+
+                    <div className="h-40 flex items-end gap-1.5 md:gap-3">
+                        {[45, 60, 85, 95, 100, 90, 75, 40, 30, 55, 80, 70, 45, 30, 20, 40, 60, 80, 100, 95, 70, 50, 40, 30].map((height, i) => (
+                            <div
+                                key={i}
+                                className={`flex-1 rounded-t-lg transition-all duration-1000 bg-blue-600/10 hover:bg-blue-600 hover:scale-x-110 cursor-pointer group`}
+                                style={{ height: `${height}%` }}
+                            >
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[8px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                    {height}% Cap.
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-between mt-4 px-1">
+                        <span className="text-[10px] font-black text-slate-400">12 AM</span>
+                        <span className="text-[10px] font-black text-slate-400">12 PM</span>
+                        <span className="text-[10px] font-black text-slate-400">11 PM</span>
+                    </div>
                 </div>
-                <div className="flex justify-between mt-4 px-1">
-                    <span className="text-[10px] font-black text-slate-400">12 AM</span>
-                    <span className="text-[10px] font-black text-slate-400">12 PM</span>
-                    <span className="text-[10px] font-black text-slate-400">11 PM</span>
-                </div>
+
+                {/* Marketing Poster Modal */}
+                {isPosterOpen && posterData && (
+                    <MarketingPosterModal
+                        isOpen={isPosterOpen}
+                        onClose={() => setIsPosterOpen(false)}
+                        data={posterData}
+                    />
+                )}
             </div>
 
-            {/* Marketing Poster Modal */}
-            {isPosterOpen && posterData && (
-                <MarketingPosterModal
-                    isOpen={isPosterOpen}
-                    onClose={() => setIsPosterOpen(false)}
-                    data={posterData}
-                />
-            )}
-        </div>
-
-        {/* Confirm Dialog */}
-        <ConfirmDialog
-            isOpen={confirmDialog.isOpen}
-            title={confirmDialog.title}
-            message={confirmDialog.message}
-            onConfirm={handleConfirm}
-            onCancel={closeConfirm}
-            variant={confirmDialog.variant}
-        />
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                onConfirm={handleConfirm}
+                onCancel={closeConfirm}
+                variant={confirmDialog.variant}
+            />
         </>
     );
 };

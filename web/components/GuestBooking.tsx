@@ -1401,7 +1401,7 @@ const GuestBooking: React.FC = () => {
                                                 >
                                                     <div className="w-full h-32 bg-slate-100 rounded-xl overflow-hidden relative">
                                                         <img
-                                                            src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=300`}
+                                                            src={location.hero_image || location.image_url || '/images/home-images/pb2.jpg'}
                                                             alt={location.name}
                                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                                         />
@@ -1468,7 +1468,7 @@ const GuestBooking: React.FC = () => {
                                         {/* Hero Image */}
                                         <div className="relative flex-1 min-h-0">
                                             <img
-                                                src={heroActiveCourt.imageUrl || selectedLocation.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800'}
+                                                src={heroActiveCourt.imageUrl || selectedLocation.image_url || '/images/home-images/pb2.jpg'}
                                                 alt={heroActiveCourt.name}
                                                 className="absolute inset-0 w-full h-full object-cover"
                                             />

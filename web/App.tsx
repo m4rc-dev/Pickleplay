@@ -128,8 +128,8 @@ const NotificationPanel: React.FC<{
     return null;
   };
   const isSystemNotif = (type: string) =>
-    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined', 
-     'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'].includes(type);
+    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined',
+      'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'].includes(type);
 
   return (
     <div className="absolute left-full ml-6 bottom-0 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-left-4 fade-in duration-300 z-[100]">
@@ -400,7 +400,7 @@ const NavigationHandler: React.FC<{
   const handleNotificationClick = (notification: Notification) => {
     const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
     const squadTypes = ['squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'];
-    
+
     if (invitationTypes.includes(notification.type as string)) {
       navigate('/my-bookings?tab=invitations');
     } else if (squadTypes.includes(notification.type as string) && notification.action_url) {
@@ -552,14 +552,14 @@ const NavigationHandler: React.FC<{
                     </div>
                   </Link>
                 ))}
-                {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                {feat('dashboard') && <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
 
                 {/* ── COMPETE section (collapsible) ── */}
                 <div className={`pt-2 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isCompeteOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
                     <button
                       onClick={() => setIsCompeteOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[9px] font-black uppercase tracking-[0.22em] ${isCompeteOpen ? 'text-white/80' : 'text-white/40 hover:text-white/80'}`}
+                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[12px] font-black uppercase tracking-[0.22em] ${isCompeteOpen ? 'text-white/80' : 'text-white/40 hover:text-white/80'}`}
                       aria-expanded={isCompeteOpen}
                       aria-controls="compete-group"
                     >
@@ -581,7 +581,7 @@ const NavigationHandler: React.FC<{
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
                     <button
                       onClick={() => setIsOthersOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
+                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[12px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
                       aria-expanded={isOthersOpen}
                       aria-controls="others-group"
                     >
@@ -593,7 +593,7 @@ const NavigationHandler: React.FC<{
                         {feat('partners') && <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                         {feat('coaches') && <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                         {feat('community') && <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('dashboard') && <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                       </div>
                     )}
                   </div>
@@ -609,7 +609,7 @@ const NavigationHandler: React.FC<{
             )}
             {role === 'COURT_OWNER' && (
               <>
-                <NavItem to="/locations" icon={<MapPin size={22} />} label="My Locations" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/locations" icon={<MapPin size={22} />} label="My Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
@@ -884,7 +884,7 @@ const NavigationHandler: React.FC<{
               )}
               {role === 'COURT_OWNER' && (
                 <>
-                  <NavItem to="/locations" icon={<MapPin size={22} />} label="My Locations" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/locations" icon={<MapPin size={22} />} label="My Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
@@ -1340,7 +1340,7 @@ const App: React.FC = () => {
 
         if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); }
         setMaintenanceChecked(true);
-        
+
         setRole(dbActiveRole);
         localStorage.setItem('active_role', dbActiveRole);
 

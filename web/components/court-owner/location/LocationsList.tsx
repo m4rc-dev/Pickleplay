@@ -57,7 +57,7 @@ const LocationsList: React.FC = () => {
         message: string;
         onConfirm: () => void;
         variant: 'warning' | 'danger' | 'info';
-    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
 
     // Confirm dialog helpers
     const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
@@ -65,7 +65,7 @@ const LocationsList: React.FC = () => {
     };
 
     const closeConfirm = () => {
-        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
     };
 
     const handleConfirm = () => {
@@ -744,7 +744,7 @@ const LocationsList: React.FC = () => {
 
                 {/* Image Upload */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 px-1">Location Image</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 px-1">Location Image</label>
                     <div className="relative group">
                         <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${formImagePreview ? 'border-blue-200 shadow-xl' : 'border-slate-100 hover:border-blue-300 hover:bg-blue-50/30'}`}>
                             {formImagePreview ? (
@@ -791,16 +791,16 @@ const LocationsList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Venue Name</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Venue Name</label>
                     <input required type="text" value={formName} onChange={e => setFormName(e.target.value)}
                         placeholder="e.g. Manila Sports Complex"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     {/* Region Dropdown */}
                     <div className="space-y-2 col-span-2" ref={regionDropdownRef}>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Region</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Region</label>
                         <div className="relative">
                             <div
                                 onClick={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
@@ -812,7 +812,7 @@ const LocationsList: React.FC = () => {
                                     onChange={e => { setRegionSearch(e.target.value); setIsRegionDropdownOpen(true); }}
                                     onFocus={() => setIsRegionDropdownOpen(true)}
                                     placeholder="Select region..."
-                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full"
+                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
                                     readOnly={false}
                                 />
                                 {isLoadingRegions ? (
@@ -851,7 +851,7 @@ const LocationsList: React.FC = () => {
 
                     {/* City/Municipality Dropdown */}
                     <div className="space-y-2" ref={cityDropdownRef}>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">City / Municipality</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">City / Municipality</label>
                         <div className="relative">
                             <div
                                 onClick={() => { if (selectedRegionCode) setIsCityDropdownOpen(!isCityDropdownOpen); }}
@@ -863,7 +863,7 @@ const LocationsList: React.FC = () => {
                                     onChange={e => { setCitySearch(e.target.value); setIsCityDropdownOpen(true); }}
                                     onFocus={() => { if (selectedRegionCode) setIsCityDropdownOpen(true); }}
                                     placeholder={selectedRegionCode ? 'Select city...' : 'Select region first'}
-                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full"
+                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
                                     disabled={!selectedRegionCode}
                                 />
                                 {isLoadingCities ? (
@@ -901,16 +901,16 @@ const LocationsList: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Phone</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Phone</label>
                         <input type="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)}
                             placeholder="09XX XXX XXXX"
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
                     </div>
                 </div>
 
                 {/* Barangay Dropdown */}
                 <div className="space-y-2" ref={barangayDropdownRef}>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Barangay</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Barangay</label>
                     <div className="relative">
                         <div
                             onClick={() => { if (selectedCityCode) setIsBarangayDropdownOpen(!isBarangayDropdownOpen); }}
@@ -922,7 +922,7 @@ const LocationsList: React.FC = () => {
                                 onChange={e => { setBarangaySearch(e.target.value); setIsBarangayDropdownOpen(true); }}
                                 onFocus={() => { if (selectedCityCode) setIsBarangayDropdownOpen(true); }}
                                 placeholder={selectedCityCode ? 'Select barangay...' : 'Select city first'}
-                                className="bg-transparent outline-none font-bold text-sm flex-1 w-full"
+                                className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
                                 disabled={!selectedCityCode}
                             />
                             {isLoadingBarangays ? (
@@ -960,7 +960,7 @@ const LocationsList: React.FC = () => {
 
                 {/* Court Type Selector */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Type</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
                     <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
                         {['Indoor', 'Outdoor', 'Both'].map((type) => (
                             <button
@@ -980,7 +980,7 @@ const LocationsList: React.FC = () => {
 
                 {/* Location Status Selector */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Location Status</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Location Status</label>
                     <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
                         {(['Active', 'Closed', 'Maintenance', 'Coming Soon'] as const).map((s) => (
                             <button
@@ -1003,14 +1003,14 @@ const LocationsList: React.FC = () => {
 
                 {/* Operation Hours */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Operation Hours</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Operation Hours</label>
                     <div className="flex items-center gap-3">
                         <div className="flex-1 relative">
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-emerald-500 uppercase tracking-widest">Open</div>
                             <select
                                 value={formOpeningTime}
                                 onChange={e => setFormOpeningTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm appearance-none cursor-pointer"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer"
                             >
                                 {Array.from({ length: 24 }, (_, i) => {
                                     const h = i.toString().padStart(2, '0');
@@ -1025,7 +1025,7 @@ const LocationsList: React.FC = () => {
                             <select
                                 value={formClosingTime}
                                 onChange={e => setFormClosingTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm appearance-none cursor-pointer"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer"
                             >
                                 {Array.from({ length: 24 }, (_, i) => {
                                     const h = i.toString().padStart(2, '0');
@@ -1042,10 +1042,10 @@ const LocationsList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Street Address</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Street Address</label>
                     <input required type="text" value={formAddress} onChange={e => setFormAddress(e.target.value)}
                         placeholder="e.g. 123 Rizal Street"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
                     {(formAddress || formBarangay || formCity || formRegion) && (
                         <p className="text-[9px] text-slate-400 ml-4 mt-1">
                             <span className="font-black text-blue-500">Full Address: </span>
@@ -1055,16 +1055,16 @@ const LocationsList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Description</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Description</label>
                     <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)}
                         placeholder="Brief description of your venue..."
                         rows={3}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm resize-none" />
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400 resize-none" />
                 </div>
 
 
                 <div className="space-y-2" ref={amenityDropdownRef}>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Amenities</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Amenities</label>
 
                     {/* Selected amenities tags */}
                     {selectedAmenities.length > 0 && (
@@ -1093,7 +1093,7 @@ const LocationsList: React.FC = () => {
                                 onChange={e => { setAmenitySearch(e.target.value); setIsAmenityDropdownOpen(true); }}
                                 onFocus={() => setIsAmenityDropdownOpen(true)}
                                 placeholder={selectedAmenities.length > 0 ? 'Add more...' : 'Select or type amenities...'}
-                                className="bg-transparent outline-none font-bold text-sm flex-1 w-full"
+                                className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
                             />
                             <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isAmenityDropdownOpen ? 'rotate-180' : ''}`} />
                         </div>
@@ -1156,7 +1156,7 @@ const LocationsList: React.FC = () => {
             <div className="flex flex-col h-full">
                 <div className="flex-1 space-y-4">
                     <div className="flex justify-between items-center ml-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location Verification</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Location Verification</label>
                         {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
                     </div>
                     <div className="h-64 lg:h-[380px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
@@ -1190,7 +1190,7 @@ const LocationsList: React.FC = () => {
                     <div className="mt-6 space-y-4">
                         <div className="flex items-center gap-2 ml-4">
                             <Calendar size={14} className="text-blue-500" />
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Schedule Closures</label>
+                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Schedule Closures</label>
                         </div>
                         <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-4">
                             {/* Calendar Month Navigation */}
@@ -1424,8 +1424,8 @@ const LocationsList: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
-                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURT OWNER / 2025</p>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">My Locations</h1>
+                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURT OWNER / 2026</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">My Courts</h1>
                     <p className="text-slate-500 font-medium tracking-tight">Manage your venues and courts in one place.</p>
                 </div>
 
@@ -1444,7 +1444,7 @@ const LocationsList: React.FC = () => {
                     </button>
                     <button onClick={() => { resetForm(); setIsAddModalOpen(true); }}
                         className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/10 flex items-center gap-2">
-                        <Plus size={16} /> Add Location
+                        <Plus size={16} /> Add Court
                     </button>
                 </div>
             </div>
@@ -1495,12 +1495,12 @@ const LocationsList: React.FC = () => {
                 </div>
             )}
 
-            {/* Add Location Modal */}
+            {/* Add Court Modal */}
             {isAddModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
                     <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Location</h2>
+                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
                             <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
                         </div>
                         {renderForm(handleAddLocation, false)}
@@ -1509,12 +1509,12 @@ const LocationsList: React.FC = () => {
                 document.body
             )}
 
-            {/* Edit Location Modal */}
+            {/* Edit Court Modal */}
             {isEditModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
                     <div className="bg-white w-full max-w-4xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Location</h2>
+                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court</h2>
                             <button onClick={() => { setIsEditModalOpen(false); setEditingLocation(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
                         </div>
                         {renderForm(handleUpdateLocation, true)}
@@ -1717,7 +1717,13 @@ const LocationCard: React.FC<{
                     />
                 ) : location.latitude && location.longitude ? (
                     <MiniMapPreview lat={location.latitude} lng={location.longitude} />
-                ) : null}
+                ) : (
+                    <img
+                        src="/images/home-images/pb2.jpg"
+                        alt={location.name}
+                        className="w-full h-full object-cover"
+                    />
+                )}
                 <div className="absolute top-4 right-4 flex gap-2">
                     <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border backdrop-blur-sm ${(location.status || (location.is_active ? 'Active' : 'Closed')) === 'Active'
                         ? 'bg-emerald-50/90 border-emerald-100 text-emerald-600'

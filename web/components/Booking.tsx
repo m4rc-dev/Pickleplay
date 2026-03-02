@@ -962,7 +962,7 @@ const Booking: React.FC = () => {
         };
         animateMarker();
 
-        const locationImage = location.hero_image || location.image_url || 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=260';
+        const locationImage = location.hero_image || location.image_url || '/images/home-images/pb2.jpg';
 
         const infoWindow = new window.google.maps.InfoWindow({
           content: `
@@ -1846,7 +1846,7 @@ const Booking: React.FC = () => {
                     {/* Hero image with map-like appearance */}
                     <div className="rounded-[24px] overflow-hidden h-48 sm:h-56 md:h-64 relative bg-slate-100 shadow-inner group">
                       <img
-                        src={selectedCourt.imageUrl || selectedLocation?.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800'}
+                        src={selectedCourt.imageUrl || selectedLocation?.image_url || '/images/home-images/pb2.jpg'}
                         alt={selectedCourt.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                       />
@@ -2049,7 +2049,7 @@ const Booking: React.FC = () => {
                               >
                                 <div className="w-full h-32 bg-slate-100 overflow-hidden relative">
                                   <img
-                                    src={court.imageUrl || `https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=400&h=300`}
+                                    src={court.imageUrl || '/images/home-images/pb2.jpg'}
                                     alt={court.name}
                                     className={`w-full h-full object-cover transition-transform duration-700 ${isCourtAvailable ? 'group-hover:scale-110' : 'grayscale'}`}
                                   />
@@ -2151,7 +2151,7 @@ const Booking: React.FC = () => {
                             >
                               <div className="w-full h-32 bg-slate-100 overflow-hidden relative">
                                 <img
-                                  src={location.hero_image || location.image_url || `https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&q=80&w=400&h=300`}
+                                  src={location.hero_image || location.image_url || '/images/home-images/pb2.jpg'}
                                   alt={location.name}
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
@@ -2231,7 +2231,7 @@ const Booking: React.FC = () => {
                     {/* Hero Image */}
                     <div className="relative flex-1 min-h-0">
                       <img
-                        src={heroActiveCourt.imageUrl || selectedLocation.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=800'}
+                        src={heroActiveCourt.imageUrl || selectedLocation.image_url || '/images/home-images/pb2.jpg'}
                         alt={heroActiveCourt.name}
                         className="absolute inset-0 w-full h-full object-cover"
                       />
