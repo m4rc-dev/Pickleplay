@@ -377,3 +377,134 @@ const resolveUserIdByEmail = async (email?: string): Promise<string | null> => {
     .maybeSingle();
   return data?.id ?? null;
 };
+
+/* ─────────────────────────────────────────────
+   Send a generic play invite (no booking required)
+───────────────────────────────────────────── */
+export const sendPlayInvite = async ({
+  inviteeId,
+  message,
+}: {
+  inviteeId: string;
+  message?: string;
+}): Promise<{ success: boolean; error?: string }> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return { success: false, error: 'Not authenticated' };
+
+  const inviterId = session.user.id;
+  if (inviterId === inviteeId) return { success: false, error: 'Cannot invite yourself.' };
+
+  // Check for duplicate pending invite (no booking)
+  const { data: existing } = await supabase
+    .from('player_invitations')
+    .select('id')
+    .is('booking_id', null)
+    .eq('inviter_id', inviterId)
+    .eq('invitee_id', inviteeId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (existing) return { success: false, error: 'You already have a pending invite to this player.' };
+
+  const { error } = await supabase
+    .from('player_invitations')
+    .insert({
+      booking_id: null,
+      inviter_id: inviterId,
+      invitee_id: inviteeId,
+      invitation_method: 'username' as const,
+      status: 'pending',
+      message: message?.trim() || null,
+    });
+
+  if (error) return { success: false, error: error.message };
+
+  // Notify invitee
+  try {
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('full_name, username')
+      .eq('id', inviterId)
+      .maybeSingle();
+    const inviterName = inviterProfile?.full_name || inviterProfile?.username || 'Someone';
+    await supabase.from('notifications').insert({
+      user_id: inviteeId,
+      type: 'player_invitation',
+      title: `${inviterName} invited you to play!`,
+      message: message?.trim()
+        ? `"${message.trim()}"`
+        : `${inviterName} wants to play pickleball with you. Check your invites to respond.`,
+      related_user_id: inviterId,
+      action_url: '/partners?tab=invites',
+    });
+  } catch { /* non-fatal */ }
+
+  return { success: true };
+};
+
+/* ─────────────────────────────────────────────
+   Upcoming booking shape (for invite modal)
+───────────────────────────────────────────── */
+export interface UpcomingBooking {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  court: { name: string; location: { name: string; city: string } | null } | null;
+}
+
+/* ─────────────────────────────────────────────
+   Get current user's upcoming bookings
+───────────────────────────────────────────── */
+export const getMyUpcomingBookings = async (): Promise<UpcomingBooking[]> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return [];
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, date, start_time, end_time, court:courts(name, location:locations(name, city))')
+    .eq('player_id', session.user.id)
+    .gte('date', today)
+    .not('status', 'eq', 'cancelled')
+    .order('date', { ascending: true })
+    .limit(10);
+
+  if (error) { console.error('getMyUpcomingBookings:', error); return []; }
+  return (data || []) as unknown as UpcomingBooking[];
+};
+
+/* ─────────────────────────────────────────────
+   Get received play invites (no booking)
+───────────────────────────────────────────── */
+export const getReceivedPlayInvites = async (): Promise<PlayerInvitation[]> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return [];
+  const { data, error } = await supabase
+    .from('player_invitations')
+    .select(`
+      *,
+      inviter:profiles!player_invitations_inviter_id_fkey(id, full_name, username, avatar_url)
+    `)
+    .eq('invitee_id', session.user.id)
+    .is('booking_id', null)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('getReceivedPlayInvites:', error); return []; }
+  return (data || []) as PlayerInvitation[];
+};
+
+/* ─────────────────────────────────────────────
+   Respond to a play invite (accept or decline)
+───────────────────────────────────────────── */
+export const respondToPlayInvite = async (
+  invitationId: string,
+  response: 'accepted' | 'declined'
+): Promise<{ success: boolean; error?: string }> => {
+  const { error } = await supabase
+    .from('player_invitations')
+    .update({ status: response, responded_at: new Date().toISOString() })
+    .eq('id', invitationId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};

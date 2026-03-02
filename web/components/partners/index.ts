@@ -6,3 +6,4 @@ export { MatchRequestCard } from './MatchRequestCard';
 export { SendRequestModal } from './SendRequestModal';
 export { ConversationList } from './ConversationList';
 export { ChatArea } from './ChatArea';
+export { InvitePlayerModal } from './InvitePlayerModal';

@@ -21,9 +21,7 @@ import {
   UserMinus,
   X,
   Loader2,
-  ChevronUp,
-  Moon,
-  Sun
+  ChevronUp
 } from 'lucide-react';
 import { Group, GroupMember, GroupEvent } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -55,12 +53,6 @@ const GroupDetail: React.FC = () => {
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [messageInput, setMessageInput] = useState('');
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('groupDetailDarkMode') === 'true' || false;
-    }
-    return false;
-  });
   const [messages, setMessages] = useState<any[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -98,18 +90,9 @@ const GroupDetail: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('groupDetailDarkMode', 'true');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('groupDetailDarkMode', 'false');
-    }
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(prev => !prev);
-  };
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('groupDetailDarkMode', 'false');
+  }, []);
 
   useEffect(() => {
     if (groupId) {
@@ -431,8 +414,8 @@ const GroupDetail: React.FC = () => {
     return (
       <div className="max-w-5xl mx-auto text-center py-20">
         <p className="text-slate-500 font-semibold mb-4">Group not found</p>
-        <button onClick={() => navigate('/community')} className="text-indigo-600 font-black text-sm uppercase tracking-widest hover:text-indigo-800">
-          Back to Community
+        <button onClick={() => navigate('/groups')} className="text-indigo-600 font-black text-sm uppercase tracking-widest hover:text-indigo-800">
+          Back to Find Groups
         </button>
       </div>
     );
@@ -448,11 +431,11 @@ const GroupDetail: React.FC = () => {
         {/* Top Bar */}
         <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => navigate('/community?tab=groups')}
+            onClick={() => navigate('/groups')}
             className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="text-xs font-black uppercase tracking-widest">Back to Community</span>
+            <span className="text-xs font-black uppercase tracking-widest">Back to Find Groups</span>
           </button>
         </div>
 
@@ -586,30 +569,23 @@ const GroupDetail: React.FC = () => {
 
   return (
     <>
-      <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900">
+      <div className="h-screen flex flex-col bg-slate-50">
         {/* Top Bar */}
-        <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
+        <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
           <button
-            onClick={() => navigate('/community')}
-            className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group"
+            onClick={() => navigate('/groups')}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="text-xs font-black uppercase tracking-widest">Back to Community</span>
+            <span className="text-xs font-black uppercase tracking-widest">Back to Find Groups</span>
           </button>
           <div className="flex items-center gap-3">
-            <button
-              onClick={toggleDarkMode}
-              className="p-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
-              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
             {(isCreator || isAdmin) && (
               <button
                 onClick={openManagePanel}
                 className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all duration-200 ${showManage
-                  ? 'bg-slate-900 dark:bg-slate-700 text-white shadow-lg'
-                  : 'bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 hover:shadow-md active:scale-95'
+                  ? 'bg-indigo-100 text-indigo-700 shadow-sm'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md active:scale-95'
                   }`}
               >
                 <Settings size={16} />
@@ -622,31 +598,31 @@ const GroupDetail: React.FC = () => {
         {/* 3-Column Layout */}
         <div className="flex-1 flex overflow-hidden">
           {/* LEFT SIDEBAR - Squad Profile */}
-          <div className="w-72 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col overflow-y-auto">
+          <div className="w-72 bg-white border-r border-slate-200 flex flex-col overflow-y-auto">
             {/* Squad Avatar & Info */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+            <div className="p-6 border-b border-slate-100">
               <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white text-3xl font-black mb-4 mx-auto">
                 {group.name.charAt(0)}
               </div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 text-center mb-1">{group.name}</h2>
+              <h2 className="text-xl font-black text-slate-900 text-center mb-1">{group.name}</h2>
               <div className="flex items-center justify-center gap-2 mb-3">
-                <div className="w-2 h-2 bg-emerald-500 dark:bg-emerald-400 rounded-full"></div>
-                <span className="text-sm text-slate-500 dark:text-slate-400 font-semibold">{members.length} members</span>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                <span className="text-sm text-slate-500 font-semibold">{members.length} members</span>
               </div>
-              <span className={`block text-center text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full mx-auto w-fit ${group.privacy === 'public' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+              <span className={`block text-center text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full mx-auto w-fit ${group.privacy === 'public' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                 }`}>
                 {group.privacy}
               </span>
             </div>
 
             {/* Action Buttons */}
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 space-y-2">
+            <div className="px-6 py-4 border-b border-slate-100 space-y-2">
               {/* Only show join button if data is fully loaded and user is definitely not a member/creator */}
               {!isLoading && currentUserId && !isMember && !isCreator && (
                 <button
                   onClick={handleJoin}
                   disabled={isJoining}
-                  className="w-full px-4 py-3 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full px-4 py-3 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <UserPlus size={14} />
                   {isJoining ? 'Joining...' : 'Join Squad'}
@@ -656,7 +632,7 @@ const GroupDetail: React.FC = () => {
                 <button
                   onClick={handleLeave}
                   disabled={isLeaving}
-                  className="w-full px-4 py-3 rounded-2xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] font-black uppercase tracking-widest hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full px-4 py-3 rounded-2xl border border-rose-200 text-rose-600 text-[11px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <LogOut size={14} />
                   {isLeaving ? 'Leaving...' : 'Leave Squad'}
@@ -665,21 +641,21 @@ const GroupDetail: React.FC = () => {
             </div>
 
             {/* About Section */}
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">About</h3>
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">About</h3>
               {group.description ? (
-                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{group.description}</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{group.description}</p>
               ) : (
-                <p className="text-sm text-slate-400 dark:text-slate-500 italic">No description</p>
+                <p className="text-sm text-slate-400 italic">No description</p>
               )}
             </div>
 
             {/* Location */}
             {group.location && (
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">Location</h3>
-                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 font-semibold">
-                  <MapPin size={14} className="text-indigo-500 dark:text-indigo-400" />
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Location</h3>
+                <div className="flex items-center gap-2 text-sm text-slate-600 font-semibold">
+                  <MapPin size={14} className="text-indigo-500" />
                   {group.location}
                 </div>
               </div>
@@ -688,10 +664,10 @@ const GroupDetail: React.FC = () => {
             {/* Tags */}
             {group.tags && group.tags.length > 0 && (
               <div className="px-6 py-4">
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3">Tags</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Tags</h3>
                 <div className="flex flex-wrap gap-2">
                   {group.tags.map(tag => (
-                    <span key={tag} className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                    <span key={tag} className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600">
                       {tag}
                     </span>
                   ))}
@@ -701,29 +677,29 @@ const GroupDetail: React.FC = () => {
           </div>
 
           {/* CENTER - Main Chat Area */}
-          <div className="flex-1 bg-white dark:bg-slate-800 flex flex-col">
+          <div className="flex-1 bg-white flex flex-col">
             {/* MANAGE SQUAD OVERLAY — covers entire center area including Messages header */}
             {showManage ? (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Manage Header */}
-                <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 to-indigo-900">
+                <div className="px-8 py-5 border-b border-slate-200 flex items-center justify-between bg-indigo-50">
                   <div className="flex items-center gap-3">
-                    <Settings size={20} className="text-white/60" />
+                    <Settings size={20} className="text-indigo-500" />
                     <div>
-                      <h2 className="text-lg font-black text-white">Manage Squad</h2>
-                      <p className="text-xs text-slate-300 font-semibold">{group.name} • {members.length} members</p>
+                      <h2 className="text-lg font-black text-slate-900">Manage Squad</h2>
+                      <p className="text-xs text-slate-500 font-semibold">{group.name} • {members.length} members</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowManage(false)}
-                    className="p-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-all shadow-lg"
+                    className="p-2 rounded-xl bg-white text-rose-600 hover:bg-rose-50 transition-all border border-rose-200"
                   >
                     <X size={18} />
                   </button>
                 </div>
 
                 {/* Manage Tabs */}
-                <div className="border-b border-slate-200 dark:border-slate-700 px-8 bg-white dark:bg-slate-800">
+                <div className="border-b border-slate-200 px-8 bg-white">
                   <div className="flex gap-1">
                     {[
                       { key: 'info' as const, label: 'Squad Info', icon: Edit2 },
@@ -734,8 +710,8 @@ const GroupDetail: React.FC = () => {
                         key={tab.key}
                         onClick={() => setManageTab(tab.key)}
                         className={`flex items-center gap-2 px-5 py-4 text-[11px] font-black uppercase tracking-widest transition-all border-b-2 ${manageTab === tab.key
-                          ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
-                          : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-400 hover:text-slate-600'
                           }`}
                       >
                         <tab.icon size={15} /> {tab.label}
@@ -745,44 +721,44 @@ const GroupDetail: React.FC = () => {
                 </div>
 
                 {/* Manage Content */}
-                <div className="flex-1 overflow-y-auto px-8 py-6 bg-white dark:bg-slate-800">
+                <div className="flex-1 overflow-y-auto px-8 py-6 bg-white">
                   {/* INFO TAB */}
                   {manageTab === 'info' && (
                     <div className="space-y-6 max-w-2xl">
                       {isEditing ? (
                         <div className="space-y-5">
                           <div>
-                            <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Squad Name</label>
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Squad Name</label>
                             <input
                               value={manageForm.name}
                               onChange={e => setManageForm(prev => ({ ...prev, name: e.target.value }))}
-                              className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                              className="w-full rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                             />
                           </div>
                           <div>
-                            <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Description</label>
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Description</label>
                             <textarea
                               value={manageForm.description}
                               onChange={e => setManageForm(prev => ({ ...prev, description: e.target.value }))}
-                              className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
+                              className="w-full rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
                               rows={4}
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Location</label>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Location</label>
                               <input
                                 value={manageForm.location}
                                 onChange={e => setManageForm(prev => ({ ...prev, location: e.target.value }))}
-                                className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                className="w-full rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                               />
                             </div>
                             <div>
-                              <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Privacy</label>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Privacy</label>
                               <select
                                 value={manageForm.privacy}
                                 onChange={e => setManageForm(prev => ({ ...prev, privacy: e.target.value as any }))}
-                                className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 px-5 py-3.5 text-sm font-medium bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                className="w-full rounded-2xl border border-slate-200 px-5 py-3.5 text-sm font-medium bg-white text-slate-900 focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                               >
                                 <option value="public">Public — Anyone can join</option>
                                 <option value="private">Private — Approval required</option>
@@ -790,20 +766,20 @@ const GroupDetail: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Tags</label>
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Tags</label>
                             <input
                               value={manageForm.tags}
                               onChange={e => setManageForm(prev => ({ ...prev, tags: e.target.value }))}
-                              className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                              className="w-full rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                               placeholder="Comma separated (e.g. beginner, social, competitive)"
                             />
                           </div>
                           <div>
-                            <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-2">Squad Rules</label>
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Squad Rules</label>
                             <textarea
                               value={manageForm.rules}
                               onChange={e => setManageForm(prev => ({ ...prev, rules: e.target.value }))}
-                              className="w-full rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
+                              className="w-full rounded-2xl border border-slate-200 bg-white text-slate-900 px-5 py-3.5 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
                               rows={3}
                               placeholder="Optional community guidelines..."
                             />
@@ -823,14 +799,14 @@ const GroupDetail: React.FC = () => {
                                   });
                                 }
                               }}
-                              className="flex-1 px-4 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                              className="flex-1 px-4 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={handleManageSave}
                               disabled={isSaving || !manageForm.name.trim()}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all disabled:opacity-50"
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
                             >
                               <Save size={14} /> {isSaving ? 'Saving...' : 'Save changes'}
                             </button>
@@ -840,34 +816,34 @@ const GroupDetail: React.FC = () => {
                         <div className="space-y-6">
                           <div className="grid grid-cols-2 gap-6">
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Squad Name</p>
-                              <p className="text-base font-bold text-slate-900 dark:text-slate-100">{group.name}</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Squad Name</p>
+                              <p className="text-base font-bold text-slate-900">{group.name}</p>
                             </div>
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Privacy</p>
-                              <p className="text-base font-bold text-slate-900 dark:text-slate-100 capitalize">{group.privacy}</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Privacy</p>
+                              <p className="text-base font-bold text-slate-900 capitalize">{group.privacy}</p>
                             </div>
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Location</p>
-                              <p className="text-base font-bold text-slate-900 dark:text-slate-100">{group.location || 'Not specified'}</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Location</p>
+                              <p className="text-base font-bold text-slate-900">{group.location || 'Not specified'}</p>
                             </div>
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Created</p>
-                              <p className="text-base font-bold text-slate-900 dark:text-slate-100">{new Date(group.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Created</p>
+                              <p className="text-base font-bold text-slate-900">{new Date(group.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                             </div>
                           </div>
 
                           <div>
-                            <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Description</p>
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{group.description || 'No description yet'}</p>
+                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Description</p>
+                            <p className="text-sm text-slate-700 leading-relaxed">{group.description || 'No description yet'}</p>
                           </div>
 
                           {group.tags && group.tags.length > 0 && (
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Tags</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Tags</p>
                               <div className="flex flex-wrap gap-2">
                                 {group.tags.map(tag => (
-                                  <span key={tag} className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400">{tag}</span>
+                                  <span key={tag} className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600">{tag}</span>
                                 ))}
                               </div>
                             </div>
@@ -875,22 +851,22 @@ const GroupDetail: React.FC = () => {
 
                           {group.rules && (
                             <div>
-                              <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">Rules</p>
-                              <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{group.rules}</p>
+                              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Rules</p>
+                              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{group.rules}</p>
                             </div>
                           )}
 
-                          <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+                          <div className="flex gap-3 pt-4 border-t border-slate-100">
                             <button
                               onClick={() => setIsEditing(true)}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all"
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all"
                             >
                               <Edit2 size={14} /> Edit info
                             </button>
                             {isCreator && (
                               <button
                                 onClick={() => setShowDeleteConfirm(true)}
-                                className="flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[11px] font-black uppercase tracking-widest hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all border border-rose-100 dark:border-rose-800"
+                                className="flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-rose-50 text-rose-600 text-[11px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100"
                               >
                                 <Trash2 size={14} /> Delete squad
                               </button>
@@ -898,19 +874,19 @@ const GroupDetail: React.FC = () => {
                           </div>
 
                           {showDeleteConfirm && (
-                            <div className="bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-700 rounded-2xl p-6 space-y-4">
-                              <p className="font-black text-rose-800 dark:text-rose-300 text-sm">Are you sure you want to delete "{group.name}"?</p>
-                              <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">This will permanently remove all members, events, and messages. This action cannot be undone.</p>
+                            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 space-y-4">
+                              <p className="font-black text-rose-800 text-sm">Are you sure you want to delete "{group.name}"?</p>
+                              <p className="text-xs text-rose-600 font-medium">This will permanently remove all members, events, and messages. This action cannot be undone.</p>
                               <div className="flex gap-3">
                                 <button
                                   onClick={() => setShowDeleteConfirm(false)}
-                                  className="flex-1 px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-all"
+                                  className="flex-1 px-4 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
                                 >
                                   Cancel
                                 </button>
                                 <button
                                   onClick={handleManageDelete}
-                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-rose-600 dark:bg-rose-700 text-white text-[11px] font-black uppercase tracking-widest hover:bg-rose-700 dark:hover:bg-rose-600 transition-all"
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-rose-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all"
                                 >
                                   <Trash2 size={14} /> Delete permanently
                                 </button>
@@ -927,36 +903,36 @@ const GroupDetail: React.FC = () => {
                     <div className="space-y-3">
                       {sortedMembers.map(member => (
                         <div key={member.id} className={`flex items-center justify-between rounded-2xl p-4 border transition-all ${member.status === 'pending'
-                          ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-200/50 dark:border-blue-700/50'
+                          ? 'bg-blue-50/50 border-blue-200/50'
                           : member.role === 'admin'
-                            ? 'bg-blue-50/30 dark:bg-blue-900/20 border-blue-200/30 dark:border-blue-700/30'
-                            : 'bg-white dark:bg-slate-700/50 border-slate-100 dark:border-slate-600 hover:border-slate-200 dark:hover:border-slate-500'
+                            ? 'bg-blue-50/30 border-blue-200/30'
+                            : 'bg-white border-slate-100 hover:border-slate-200'
                           }`}>
                           <div className="flex items-center gap-3">
                             <img
                               src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`}
-                              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-600"
+                              className="w-10 h-10 rounded-xl bg-slate-100"
                             />
                             <div>
                               <div className="flex items-center gap-2">
-                                <p className="font-black text-slate-900 dark:text-slate-100 text-sm">{member.user?.full_name || 'Unknown'}</p>
+                                <p className="font-black text-slate-900 text-sm">{member.user?.full_name || 'Unknown'}</p>
                                 {member.role === 'admin' && (
-                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                                     <Crown size={10} /> Creator
                                   </span>
                                 )}
                                 {member.role === 'moderator' && (
-                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                                  <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
                                     <Shield size={10} /> Mod
                                   </span>
                                 )}
                                 {member.status === 'pending' && (
-                                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                                     Pending
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">
+                              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                                 {member.role} • Joined {new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                               </p>
                             </div>
@@ -967,20 +943,20 @@ const GroupDetail: React.FC = () => {
                               {member.status === 'pending' && (
                                 <button
                                   onClick={() => handleApproveMember(member.id)}
-                                  className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl bg-emerald-500 dark:bg-emerald-600 text-white hover:bg-emerald-600 dark:hover:bg-emerald-500 transition-all"
+                                  className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-all"
                                 >
                                   Approve
                                 </button>
                               )}
                               <button
                                 onClick={() => handleUpdateRole(member.id, member.role)}
-                                className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
+                                className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all"
                               >
                                 {member.role === 'member' ? 'Make Mod' : 'Demote'}
                               </button>
                               <button
                                 onClick={() => handleRemoveMember(member.id, member.user?.full_name || 'member')}
-                                className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all flex items-center gap-1"
+                                className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all flex items-center gap-1"
                               >
                                 <UserMinus size={12} /> Remove
                               </button>
@@ -991,8 +967,8 @@ const GroupDetail: React.FC = () => {
 
                       {members.length === 0 && (
                         <div className="text-center py-12">
-                          <Users size={32} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                          <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold">No members yet</p>
+                          <Users size={32} className="text-slate-300 mx-auto mb-3" />
+                          <p className="text-sm text-slate-500 font-semibold">No members yet</p>
                         </div>
                       )}
                     </div>
@@ -1002,10 +978,10 @@ const GroupDetail: React.FC = () => {
                   {manageTab === 'events' && (
                     <div className="space-y-6 max-w-3xl">
                       <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">Squad Events</h3>
+                        <h3 className="text-lg font-black text-slate-900">Squad Events</h3>
                         <button
                           onClick={() => setShowCreateEvent(true)}
-                          className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all"
+                          className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all"
                         >
                           <Plus size={14} /> Create Event
                         </button>
@@ -1013,30 +989,30 @@ const GroupDetail: React.FC = () => {
 
                       <div className="space-y-3">
                         {events.map(event => (
-                          <div key={event.id} className="bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-5 hover:border-slate-300 dark:hover:border-slate-500 transition-all">
+                          <div key={event.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-slate-300 transition-all">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">
                                     {event.event_type}
                                   </span>
-                                  <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">
+                                  <span className="text-xs text-slate-400 font-bold">
                                     {new Date(event.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                   </span>
                                 </div>
-                                <h4 className="text-base font-black text-slate-900 dark:text-slate-100 mb-1">{event.title}</h4>
+                                <h4 className="text-base font-black text-slate-900 mb-1">{event.title}</h4>
                                 {event.description && (
-                                  <p className="text-sm text-slate-600 dark:text-slate-300 mb-2 leading-relaxed">{event.description}</p>
+                                  <p className="text-sm text-slate-600 mb-2 leading-relaxed">{event.description}</p>
                                 )}
-                                <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                                <div className="flex flex-wrap gap-3 text-xs text-slate-500 font-semibold">
                                   {event.location && (
                                     <div className="flex items-center gap-1">
-                                      <MapPin size={12} className="text-indigo-500 dark:text-indigo-400" />
+                                      <MapPin size={12} className="text-indigo-500" />
                                       {event.location}
                                     </div>
                                   )}
                                   <div className="flex items-center gap-1">
-                                    <Users size={12} className="text-indigo-500 dark:text-indigo-400" />
+                                    <Users size={12} className="text-indigo-500" />
                                     {event.rsvp_count || 0} going{event.max_attendees ? ` / ${event.max_attendees}` : ''}
                                   </div>
                                 </div>
@@ -1044,14 +1020,14 @@ const GroupDetail: React.FC = () => {
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => setEditingEvent(event)}
-                                  className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all"
+                                  className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all"
                                   title="Edit event"
                                 >
                                   <Edit2 size={14} />
                                 </button>
                                 <button
                                   onClick={() => setDeletingEventId(event.id)}
-                                  className="p-2.5 rounded-xl text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all"
+                                  className="p-2.5 rounded-xl text-rose-500 hover:bg-rose-50 transition-all"
                                   title="Delete event"
                                 >
                                   <Trash2 size={14} />
@@ -1060,13 +1036,13 @@ const GroupDetail: React.FC = () => {
                             </div>
 
                             {deletingEventId === event.id && (
-                              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 bg-rose-50 dark:bg-rose-900/30 rounded-xl p-4">
-                                <p className="font-black text-rose-800 dark:text-rose-400 text-sm mb-2">Delete this event?</p>
-                                <p className="text-xs text-rose-600 dark:text-rose-400 font-medium mb-3">This will remove all RSVPs. This action cannot be undone.</p>
+                              <div className="mt-4 pt-4 border-t border-slate-200 bg-rose-50 rounded-xl p-4">
+                                <p className="font-black text-rose-800 text-sm mb-2">Delete this event?</p>
+                                <p className="text-xs text-rose-600 font-medium mb-3">This will remove all RSVPs. This action cannot be undone.</p>
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => setDeletingEventId(null)}
-                                    className="flex-1 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-all"
+                                    className="flex-1 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
                                   >
                                     Cancel
                                   </button>
@@ -1081,7 +1057,7 @@ const GroupDetail: React.FC = () => {
                                         alert('Failed to delete event.');
                                       }
                                     }}
-                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-rose-600 dark:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 dark:hover:bg-rose-600 transition-all"
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all"
                                   >
                                     <Trash2 size={12} /> Delete
                                   </button>
@@ -1093,11 +1069,11 @@ const GroupDetail: React.FC = () => {
 
                         {events.length === 0 && (
                           <div className="text-center py-12">
-                            <Calendar size={32} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                            <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mb-4">No events yet</p>
+                            <Calendar size={32} className="text-slate-300 mx-auto mb-3" />
+                            <p className="text-sm text-slate-500 font-semibold mb-4">No events yet</p>
                             <button
                               onClick={() => setShowCreateEvent(true)}
-                              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all"
+                              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all"
                             >
                               <Plus size={14} /> Create your first event
                             </button>
@@ -1112,12 +1088,12 @@ const GroupDetail: React.FC = () => {
               /* Chat Messages */
               <>
                 {/* Chat Header */}
-                <div className="px-8 py-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <MessageCircle size={24} className="text-indigo-600 dark:text-indigo-400" />
+                    <MessageCircle size={24} className="text-indigo-600" />
                     <div>
-                      <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">Messages</h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{messages.length} messages</p>
+                      <h2 className="text-lg font-black text-slate-900">Messages</h2>
+                      <p className="text-xs text-slate-500 font-semibold">{messages.length} messages</p>
                     </div>
                   </div>
                 </div>
@@ -1132,7 +1108,7 @@ const GroupDetail: React.FC = () => {
                           <button
                             onClick={loadEarlierMessages}
                             disabled={loadingEarlier}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all disabled:opacity-50"
                           >
                             {loadingEarlier ? (
                               <><Loader2 size={14} className="animate-spin" /> Loading...</>
@@ -1144,11 +1120,11 @@ const GroupDetail: React.FC = () => {
                       )}
                       {messages.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-center">
-                          <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl flex items-center justify-center mb-4">
-                            <MessageCircle size={28} className="text-indigo-300 dark:text-indigo-400" />
+                          <div className="w-16 h-16 bg-indigo-50 rounded-3xl flex items-center justify-center mb-4">
+                            <MessageCircle size={28} className="text-indigo-300" />
                           </div>
-                          <p className="font-black text-slate-900 dark:text-slate-100 mb-1">No messages yet</p>
-                          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Be the first to say something to the squad!</p>
+                          <p className="font-black text-slate-900 mb-1">No messages yet</p>
+                          <p className="text-sm text-slate-500 font-medium">Be the first to say something to the squad!</p>
                         </div>
                       ) : (
                         messages.map((msg, idx) => {
@@ -1159,7 +1135,7 @@ const GroupDetail: React.FC = () => {
                               {showAvatar ? (
                                 <img
                                   src={msg.sender?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.user_id}`}
-                                  className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-600 shrink-0"
+                                  className="w-10 h-10 rounded-2xl bg-slate-100 shrink-0"
                                 />
                               ) : (
                                 <div className="w-10 shrink-0" />
@@ -1167,17 +1143,17 @@ const GroupDetail: React.FC = () => {
                               <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%]`}>
                                 {showAvatar && (
                                   <div className={`flex items-center gap-2 mb-1 ${isOwn ? 'flex-row-reverse' : ''}`}>
-                                    <p className="text-xs font-black text-slate-900 dark:text-slate-100">
+                                    <p className="text-xs font-black text-slate-900">
                                       {isOwn ? 'You' : msg.sender?.full_name || 'Unknown'}
                                     </p>
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">
+                                    <p className="text-[10px] text-slate-400 font-bold">
                                       {formatMessageTime(msg.created_at)}
                                     </p>
                                   </div>
                                 )}
                                 <div className={`rounded-2xl px-4 py-3 ${isOwn
-                                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white rounded-tr-sm'
-                                  : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-tl-sm'
+                                  ? 'bg-indigo-600 text-white rounded-tr-sm'
+                                  : 'bg-slate-100 text-slate-800 rounded-tl-sm'
                                   }`}>
                                   <p className="text-sm font-medium leading-relaxed">{msg.content}</p>
                                 </div>
@@ -1190,7 +1166,7 @@ const GroupDetail: React.FC = () => {
                     </div>
 
                     {/* Message Input */}
-                    <div className="px-8 py-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                    <div className="px-8 py-6 border-t border-slate-100 bg-slate-50">
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -1204,13 +1180,13 @@ const GroupDetail: React.FC = () => {
                             value={messageInput}
                             onChange={(e) => setMessageInput(e.target.value)}
                             placeholder="Type a message..."
-                            className="w-full rounded-3xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-6 py-4 text-sm font-medium dark:text-slate-100 dark:placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                            className="w-full rounded-3xl bg-white border border-slate-200 px-6 py-4 text-sm font-medium focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 transition-all"
                           />
                         </div>
                         <button
                           type="submit"
                           disabled={!messageInput.trim()}
-                          className="p-4 rounded-full bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all disabled:opacity-30 disabled:hover:bg-indigo-600 dark:disabled:hover:bg-indigo-500 shrink-0"
+                          className="p-4 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-30 disabled:hover:bg-indigo-600 shrink-0"
                         >
                           <Send size={20} />
                         </button>
@@ -1220,15 +1196,15 @@ const GroupDetail: React.FC = () => {
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-center px-8">
                     <div>
-                      <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                        <MessageCircle size={28} className="text-indigo-300 dark:text-indigo-400" />
+                      <div className="w-16 h-16 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                        <MessageCircle size={28} className="text-indigo-300" />
                       </div>
-                      <p className="font-black text-slate-900 dark:text-slate-100 mb-2">Join to access group chat</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-6">Members can send messages and coordinate games</p>
+                      <p className="font-black text-slate-900 mb-2">Join to access group chat</p>
+                      <p className="text-sm text-slate-500 font-medium mb-6">Members can send messages and coordinate games</p>
                       <button
                         onClick={handleJoin}
                         disabled={isJoining}
-                        className="px-6 py-3 rounded-2xl bg-indigo-600 dark:bg-indigo-500 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all disabled:opacity-50"
+                        className="px-6 py-3 rounded-2xl bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
                       >
                         <UserPlus size={14} className="inline mr-2" />
                         {isJoining ? 'Joining...' : 'Join this squad'}
@@ -1241,19 +1217,19 @@ const GroupDetail: React.FC = () => {
           </div>
 
           {/* RIGHT SIDEBAR - Directory (Members & Events) */}
-          <div className="w-80 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col overflow-y-auto">
+          <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-y-auto">
             {/* Directory Header */}
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-              <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">Directory</h2>
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-900">Directory</h2>
             </div>
 
             {/* Team Members Section */}
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+            <div className="px-6 py-4 border-b border-slate-100">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
                   Team Members
                 </h3>
-                <span className="text-xs font-black bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">
+                <span className="text-xs font-black bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
                   {members.length}
                 </span>
               </div>
@@ -1262,33 +1238,33 @@ const GroupDetail: React.FC = () => {
                   <Link
                     key={member.id}
                     to={`/profile/${member.user_id}`}
-                    className={`flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all group ${member.role === 'admin' ? 'bg-blue-50/30 dark:bg-blue-900/20' : ''
+                    className={`flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-all group ${member.role === 'admin' ? 'bg-blue-50/30' : ''
                       }`}
                   >
                     <div className="relative">
                       <img
                         src={member.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.user_id}`}
-                        className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-700"
+                        className="w-11 h-11 rounded-xl bg-slate-100"
                       />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 dark:bg-emerald-400 rounded-full border-2 border-white dark:border-slate-800"></div>
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
                         {member.user?.full_name || 'Unknown'}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {member.role === 'admin' && (
-                          <span className="flex items-center gap-0.5 text-[9px] text-blue-600 dark:text-blue-400">
+                          <span className="flex items-center gap-0.5 text-[9px] text-blue-600">
                             <Crown size={10} /> Admin
                           </span>
                         )}
                         {member.role === 'moderator' && (
-                          <span className="flex items-center gap-0.5 text-[9px] text-indigo-600 dark:text-indigo-400">
+                          <span className="flex items-center gap-0.5 text-[9px] text-indigo-600">
                             <Shield size={10} /> Mod
                           </span>
                         )}
                         {member.user_id === currentUserId && (
-                          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-black">• You</span>
+                          <span className="text-[9px] text-slate-500 font-black">• You</span>
                         )}
                       </div>
                     </div>
@@ -1297,7 +1273,7 @@ const GroupDetail: React.FC = () => {
                 {members.length > 8 && (
                   <button
                     onClick={() => setShowAllMembers(!showAllMembers)}
-                    className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 py-2 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+                    className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 py-2 hover:text-indigo-800 transition-colors"
                   >
                     {showAllMembers ? 'Show less' : `See all (${members.length})`}
                   </button>
@@ -1308,7 +1284,7 @@ const GroupDetail: React.FC = () => {
             {/* Events Section */}
             <div className="px-6 py-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
                   Upcoming Events
                 </h3>
                 <div className="flex items-center gap-2">
@@ -1319,14 +1295,14 @@ const GroupDetail: React.FC = () => {
                           setManageTab('events');
                           setShowManage(true);
                         }}
-                        className="text-[9px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+                        className="text-[9px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800 transition-colors"
                         title="Manage Events"
                       >
                         Manage
                       </button>
                       <button
                         onClick={() => setShowCreateEvent(true)}
-                        className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 transition-all shadow-sm hover:shadow-md"
+                        className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md"
                         title="Create Event"
                       >
                         <Plus size={14} />
@@ -1338,26 +1314,26 @@ const GroupDetail: React.FC = () => {
               <div className="space-y-3">
                 {events.length > 0 ? (
                   (showAllEvents ? events : events.slice(0, 5)).map(event => (
-                    <div key={event.id} className="border border-slate-100 dark:border-slate-700 rounded-2xl p-4 hover:border-indigo-200 dark:hover:border-indigo-500 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/20 transition-all group dark:bg-slate-800/50">
+                    <div key={event.id} className="border border-slate-100 rounded-2xl p-4 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 mb-1">
                             {formatTime(event.start_time)}
                           </p>
-                          <h4 className="font-black text-slate-900 dark:text-slate-100 text-sm group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">{event.title}</h4>
+                          <h4 className="font-black text-slate-900 text-sm group-hover:text-indigo-700 transition-colors">{event.title}</h4>
                         </div>
                         {(isCreator || isAdmin) && (
                           <div className="flex gap-1">
                             <button
                               onClick={() => setEditingEvent(event)}
-                              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+                              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
                               title="Edit event"
                             >
                               <Edit2 size={12} />
                             </button>
                             <button
                               onClick={() => setDeletingEventId(event.id)}
-                              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+                              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-rose-600 hover:bg-rose-50"
                               title="Delete event"
                             >
                               <Trash2 size={12} />
@@ -1365,7 +1341,7 @@ const GroupDetail: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-3">
+                      <div className="flex items-center gap-2 text-[10px] text-slate-500 font-semibold mb-3">
                         <span className="flex items-center gap-1">
                           <Users size={10} /> {event.rsvp_count || 0} going
                         </span>
@@ -1378,13 +1354,13 @@ const GroupDetail: React.FC = () => {
                       </div>
 
                       {deletingEventId === event.id ? (
-                        <div className="bg-rose-50 dark:bg-rose-900/30 dark:border dark:border-rose-700 rounded-xl p-3 space-y-2">
-                          <p className="font-black text-rose-800 dark:text-rose-300 text-xs">Delete this event?</p>
-                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">This will remove all RSVPs.</p>
+                        <div className="bg-rose-50 rounded-xl p-3 space-y-2">
+                          <p className="font-black text-rose-800 text-xs">Delete this event?</p>
+                          <p className="text-[10px] text-rose-600 font-medium">This will remove all RSVPs.</p>
                           <div className="flex gap-2">
                             <button
                               onClick={() => setDeletingEventId(null)}
-                              className="flex-1 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-all"
+                              className="flex-1 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-600 bg-white hover:bg-slate-50 transition-all"
                             >
                               Cancel
                             </button>
@@ -1399,7 +1375,7 @@ const GroupDetail: React.FC = () => {
                                   alert('Failed to delete event.');
                                 }
                               }}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-rose-600 dark:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 dark:hover:bg-rose-600 transition-all"
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-rose-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all"
                             >
                               <Trash2 size={10} /> Delete
                             </button>
@@ -1410,8 +1386,8 @@ const GroupDetail: React.FC = () => {
                           <button
                             onClick={() => handleRsvp(event.id)}
                             className={`w-full text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${event.user_rsvp_status === 'going'
-                              ? 'bg-emerald-500 dark:bg-emerald-600 text-white hover:bg-emerald-600 dark:hover:bg-emerald-500'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                               }`}
                           >
                             {event.user_rsvp_status === 'going' ? '✓ Going' : 'RSVP'}
@@ -1421,12 +1397,12 @@ const GroupDetail: React.FC = () => {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">No upcoming events</p>
+                  <p className="text-sm text-slate-400 text-center py-8">No upcoming events</p>
                 )}
                 {events.length > 5 && (
                   <button
                     onClick={() => setShowAllEvents(!showAllEvents)}
-                    className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 py-2 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors"
+                    className="w-full text-center text-[10px] font-black uppercase tracking-widest text-indigo-600 py-2 hover:text-indigo-800 transition-colors"
                   >
                     {showAllEvents ? 'Show less' : `See all (${events.length})`}
                   </button>

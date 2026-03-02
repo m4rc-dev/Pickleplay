@@ -3,3 +3,4 @@
 backup_database
 
 .env.local
+/docs

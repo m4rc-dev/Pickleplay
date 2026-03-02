@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getOrCreateConversation, checkMutualFollow } from '../services/directMessages';
 import {
   User,
   MapPin,
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   LogOut,
   Loader2,
+  ArrowLeft,
   ArrowLeftRight,
   ChevronDown,
   Clock,
@@ -37,7 +39,8 @@ import {
   Star,
   QrCode,
   Smartphone,
-  Trophy
+  Trophy,
+  MessageCircle
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
@@ -241,8 +244,11 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const isCurrentUser = !userId || userId === 'player-current';
   const profileId = isCurrentUser ? 'player-current' : userId;
 
+  const navigate = useNavigate();
   const [profileData, setProfileData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMessaging, setIsMessaging] = useState(false);
+  const [isMutualFollow, setIsMutualFollow] = useState<boolean | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
 
@@ -763,11 +769,16 @@ Never share them with anyone.`;
         }
 
         if (targetId) {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', targetId)
-            .single();
+          // Support both UUID and username slug
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+          let query = supabase.from('profiles').select('*');
+          query = isUuid ? query.eq('id', targetId) : query.eq('username', targetId);
+          const { data, error } = await query.single();
+
+          // If username lookup succeeded, update targetId to the real UUID
+          if (!error && data && !isUuid) {
+            targetId = data.id;
+          }
 
           if (!error && data) {
             let resolvedFullName = data.full_name || '';
@@ -834,6 +845,12 @@ Never share them with anyone.`;
 
     fetchProfile();
   }, [userId]);
+
+  // Check mutual follow whenever viewing another user's profile
+  useEffect(() => {
+    if (!profileData?.id || isCurrentUser) { setIsMutualFollow(null); return; }
+    checkMutualFollow(profileData.id).then(setIsMutualFollow);
+  }, [profileData?.id, isCurrentUser]);
 
   // Realtime: profile points updates
   useEffect(() => {
@@ -1373,7 +1390,25 @@ Never share them with anyone.`;
   }
 
   const themeColor = profileData.active_role === 'COACH' ? 'rose' : profileData.active_role === 'ADMIN' ? 'indigo' : 'blue';
-  const isFollowing = profileId ? followedUsers.includes(profileId) : false;
+  // Use profileData?.id (resolved UUID) — profileId may be a username slug
+  const resolvedProfileId = profileData?.id ?? profileId;
+  const isFollowing = resolvedProfileId && resolvedProfileId !== 'player-current' ? followedUsers.includes(resolvedProfileId) : false;
+
+  const handleOpenMessage = async () => {
+    // Use profileData?.id (resolved UUID) — profileId may be a username slug
+    const targetId = profileData?.id;
+    if (!targetId || isCurrentUser) return;
+    if (isMutualFollow === false) return; // blocked — buttons already show locked state
+    setIsMessaging(true);
+    try {
+      const conversationId = await getOrCreateConversation(targetId);
+      navigate(`/messages?conversation=${conversationId}`);
+    } catch (err) {
+      console.error('Error opening message thread:', err);
+    } finally {
+      setIsMessaging(false);
+    }
+  };
   const userPosts = posts.filter(post => post.authorId === profileId);
   const displayRole = profileData.active_role || 'PLAYER';
   const displayName = profileData.full_name || 'Player';
@@ -1491,6 +1526,15 @@ Never share them with anyone.`;
             <div className="flex-1 space-y-4 pt-1">
               {/* Identity */}
               <div>
+                {!isCurrentUser && (
+                  <button
+                    onClick={() => navigate(-1)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest mb-2 transition-all shadow-sm"
+                  >
+                    <ArrowLeft size={12} />
+                    Back
+                  </button>
+                )}
                 <p className={`text-[10px] font-black text-${themeColor}-600 uppercase tracking-[0.3em] mb-1`}>
                   User Identity / {displayRole.replace('_', ' ')}
                 </p>
@@ -1571,12 +1615,27 @@ Never share them with anyone.`;
                   </div>
                 )}
 
-                {/* Follow Button for Other Users */}
+                {/* Follow + Message Buttons for Other Users */}
                 {!isCurrentUser && (
-                  <button onClick={() => onFollow(profileId!, displayName)} className={`h-10 px-5 rounded-full font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${isFollowing ? `bg-blue-600 text-white shadow-xl` : `bg-slate-900 text-white hover:bg-blue-600 shadow-lg`}`}>
-                    {isFollowing ? <UserCheck size={14} /> : <UserPlus size={14} />}
-                    {isFollowing ? 'Following' : 'Follow'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => resolvedProfileId && onFollow(resolvedProfileId, displayName)} className={`h-10 px-5 rounded-full font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${isFollowing ? `bg-blue-600 text-white shadow-xl` : `bg-slate-900 text-white hover:bg-blue-600 shadow-lg`}`}>
+                      {isFollowing ? <UserCheck size={14} /> : <UserPlus size={14} />}
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                    <button
+                      onClick={handleOpenMessage}
+                      disabled={isMessaging || isMutualFollow === false}
+                      title={isMutualFollow === false ? 'Follow each other to unlock messaging' : undefined}
+                      className={`h-10 px-5 rounded-full font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${
+                        isMutualFollow === false
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                          : 'bg-slate-100 text-slate-800 hover:bg-blue-50 hover:text-blue-700 shadow-sm disabled:opacity-60'
+                      }`}
+                    >
+                      <MessageCircle size={14} />
+                      {isMutualFollow === false ? 'Locked' : isMessaging ? '…' : 'Message'}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1586,6 +1645,15 @@ Never share them with anyone.`;
         {/* Desktop Profile Header */}
         <div className="hidden md:flex md:flex-row md:items-center justify-between">
           <div>
+            {!isCurrentUser && (
+              <button
+                onClick={() => navigate(-1)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest mb-3 transition-all shadow-sm"
+              >
+                <ArrowLeft size={13} />
+                Back
+              </button>
+            )}
             <p className={`text-xs font-black text-${themeColor}-600 uppercase tracking-[0.4em] mb-2`}>
               User Identity / {displayRole.replace('_', ' ')}
             </p>
@@ -1593,10 +1661,25 @@ Never share them with anyone.`;
           </div>
 
           {!isCurrentUser && (
-            <button onClick={() => onFollow(profileId!, displayName)} className={`h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 whitespace-nowrap ${isFollowing ? `bg-blue-600 text-white shadow-xl shadow-blue-100` : `bg-slate-900 text-white hover:bg-blue-600 shadow-xl`}`}>
-              {isFollowing ? <UserCheck size={16} /> : <UserPlus size={16} />}
-              {isFollowing ? 'Following' : 'Follow'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => resolvedProfileId && onFollow(resolvedProfileId, displayName)} className={`h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 whitespace-nowrap ${isFollowing ? `bg-blue-600 text-white shadow-xl shadow-blue-100` : `bg-slate-900 text-white hover:bg-blue-600 shadow-xl`}`}>
+                {isFollowing ? <UserCheck size={16} /> : <UserPlus size={16} />}
+                {isFollowing ? 'Following' : 'Follow'}
+              </button>
+              <button
+                onClick={handleOpenMessage}
+                disabled={isMessaging || isMutualFollow === false}
+                title={isMutualFollow === false ? 'Follow each other to unlock messaging' : undefined}
+                className={`h-12 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3 whitespace-nowrap ${
+                  isMutualFollow === false
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-lg'
+                    : 'bg-slate-100 text-slate-800 hover:bg-blue-50 hover:text-blue-700 shadow-lg disabled:opacity-60'
+                }`}
+              >
+                <MessageCircle size={16} />
+                {isMutualFollow === false ? 'Locked' : isMessaging ? '…' : 'Message'}
+              </button>
+            </div>
           )}
         </div>
 
