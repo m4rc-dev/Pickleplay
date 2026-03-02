@@ -1,21 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { Poster, PosterData } from './Poster';
-import { Loader2, Calendar, UserPlus, Ticket } from 'lucide-react';
+import { Loader2, Calendar, UserPlus, Ticket, Download } from 'lucide-react';
 import useSEO from '../hooks/useSEO';
 import QRCode from 'qrcode';
+import { toPng } from 'html-to-image';
 
 const PosterPage: React.FC = () => {
     const { slug, bookingId } = useParams<{ slug: string; bookingId: string }>();
     // Extract the sharer's username from slug: "tzuyu-invites-you-to-play" → "tzuyu"
     const username = slug?.split('-invites-you-to-play')[0] || slug || '';
     const navigate = useNavigate();
+    const posterRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(true);
     const [booking, setBooking] = useState<any>(null);
     const [posterOverrides, setPosterOverrides] = useState<any>(null);
     const [sharerName, setSharerName] = useState<string>('');
     const [qrDataUrl, setQrDataUrl] = useState('');
+    const [isDownloading, setIsDownloading] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -163,16 +166,41 @@ const PosterPage: React.FC = () => {
             </div>
 
             {/* ── Poster Preview ── */}
-            <div className="shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] rounded-[24px] overflow-hidden w-full max-w-[540px]" style={{ transform: 'scale(0.95)', transformOrigin: 'top' }}>
+            <div ref={posterRef} className="shadow-[0_40px_100px_-20px_rgba(0,0,0,0.8)] rounded-[24px] overflow-hidden w-full max-w-[540px]" style={{ transform: 'scale(0.95)', transformOrigin: 'top' }}>
                 <Poster data={posterData} qrDataUrl={qrDataUrl} />
             </div>
 
             {/* ── CTA ── */}
             <div className="w-full max-w-[540px] flex flex-col items-center gap-4">
                 <button
-                    onClick={() => navigate(`/court/${booking.court?.id}`)}
-                    className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl shadow-orange-950/40 flex items-center justify-center gap-3"
+                    onClick={async () => {
+                        if (!posterRef.current) return;
+                        setIsDownloading(true);
+                        try {
+                            const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true });
+                            const link = document.createElement('a');
+                            link.download = `pickleplay-poster.png`;
+                            link.href = dataUrl;
+                            link.click();
+                        } catch (err) {
+                            console.error('Download failed:', err);
+                        } finally {
+                            setIsDownloading(false);
+                        }
+                    }}
+                    disabled={isDownloading}
+                    className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                 >
+                    {isDownloading ? (
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <Download size={18} />
+                    )}
+                    {isDownloading ? 'Exporting...' : 'Download PNG'}
+                </button>
+                <button
+                    onClick={() => navigate(`/court/${booking.court?.id}`)}
+                    className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl shadow-orange-950/40 flex items-center justify-center gap-3">
                     <UserPlus size={18} />
                     Book Your Slot Now
                 </button>

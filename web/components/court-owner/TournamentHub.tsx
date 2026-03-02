@@ -3,7 +3,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Trophy, Users, Megaphone, GitBranch, CheckCircle2, Clock,
   UserCheck, UserX, Shuffle, Plus, Loader2, Radio, BarChart3,
-  Settings2, Zap, Star, ChevronUp, ChevronDown, SlidersHorizontal, RotateCcw
+  Settings2, Zap, Star, ChevronUp, ChevronDown, SlidersHorizontal, RotateCcw,
+  HeartPulse, AlertCircle, FileText, Lock, ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import {
@@ -12,16 +13,18 @@ import {
   removeRegistrantByAdmin, createTeamByOwner, fetchTeams, resolveParticipantNames,
   getPendingRegistrationsDetailed, approveRegistration, rejectRegistration,
   fetchRegistrationsWithRatings, fetchTournamentChampion,
+  lockAllRosters, getSquadRegistrations, getPendingSubstitutions, getSubstitutionLogs, resolveSubstitution,
+  approveSquadRegistration, rejectSquadRegistration,
   type PendingRegistrationDetailed
 } from '../../services/tournaments';
-import type { Tournament, TournamentRegistration, TournamentTeam } from '../../types';
+import type { Tournament, TournamentRegistration, TournamentTeam, SquadRegistration, SubstitutionLog } from '../../types';
 import TournamentBracket from '../tournaments/TournamentBracket';
 import PlayerApprovalCard from '../tournaments/PlayerApprovalCard';
 import MatchScoreModal from '../tournaments/MatchScoreModal';
 import MarketingPosterModal, { PosterData } from '../MarketingPosterModal';
 import { supabase } from '../../services/supabase';
 
-type HubTab = 'overview' | 'participants' | 'teams' | 'bracket' | 'announcements';
+type HubTab = 'overview' | 'participants' | 'teams' | 'bracket' | 'announcements' | 'substitutions';
 
 // ─── Mock data for presentations ──────────────────────────────────────────────
 const MOCK_PLAYER_IDS = ['pm-alex','pm-sarah','pm-marcus','pm-emily','pm-david','pm-lisa','pm-tom','pm-jenna'];
@@ -180,6 +183,13 @@ const TournamentHub: React.FC = () => {
   // Champion
   const [champion, setChampion] = useState<{ id: string; name: string; avatar?: string } | null>(null);
 
+  // Squad & substitution management
+  const [squadRegs, setSquadRegs] = useState<SquadRegistration[]>([]);
+  const [pendingSubs, setPendingSubs] = useState<SubstitutionLog[]>([]);
+  const [subLogs, setSubLogs] = useState<SubstitutionLog[]>([]);
+  const [isResolvingSub, setIsResolvingSub] = useState<string | null>(null);
+  const [openRosters, setOpenRosters] = useState<Set<string>>(new Set());
+
   // Team builder
   const [selectedP1, setSelectedP1] = useState<string | null>(null);
   const [selectedP2, setSelectedP2] = useState<string | null>(null);
@@ -261,6 +271,19 @@ const TournamentHub: React.FC = () => {
       if (allPlayerIds.length > 0) {
         const map = await resolveParticipantNames(allPlayerIds);
         setNameMap(map);
+      }
+      // Load squad registrations & substitution logs for squad-mode tournaments
+      if (t?.registrationMode === 'squad') {
+        try {
+          const [sRegs, pSubs, sLogs] = await Promise.all([
+            getSquadRegistrations(tournamentId),
+            getPendingSubstitutions(tournamentId),
+            getSubstitutionLogs(tournamentId),
+          ]);
+          setSquadRegs(sRegs);
+          setPendingSubs(pSubs);
+          setSubLogs(sLogs);
+        } catch (e) { console.warn('Squad data load failed:', e); }
       }
     } finally {
       setIsLoading(false);
@@ -444,12 +467,21 @@ const TournamentHub: React.FC = () => {
     const customOrder = showSeeding && seedingPlayers.length > 0
       ? seedingPlayers.map(p => p.playerId)
       : undefined;
+    const isSquadTournament = tournament?.registrationMode === 'squad';
     showConfirm(
       'Generate bracket?',
-      'This will create a new tournament bracket from the current participants. Any existing bracket and match results will be permanently overwritten. This action cannot be undone.',
+      `This will create a new tournament bracket from the current participants. Any existing bracket and match results will be permanently overwritten. This action cannot be undone.${isSquadTournament ? '\n\nAll squad rosters will be locked automatically.' : ''}`,
       async () => {
         setIsProcessing('bracket');
         try {
+          // Auto-lock rosters for squad tournaments before bracket generation
+          if (isSquadTournament && !tournamentId?.startsWith('mock-')) {
+            try {
+              await lockAllRosters(tournamentId!);
+            } catch (lockErr: any) {
+              console.warn('Roster lock note:', lockErr.message);
+            }
+          }
           if (tournamentId?.startsWith('mock-')) {
             await new Promise(resolve => setTimeout(resolve, 800));
             // Build bracket from current registrations
@@ -610,25 +642,114 @@ const TournamentHub: React.FC = () => {
     } catch (err: any) { alert(err.message || 'Failed to reject'); }
   };
 
+  const handleApproveSquad = async (squadRegId: string) => {
+    if (!currentUserId) return;
+    setIsProcessing(`approve-squad-${squadRegId}`);
+    try {
+      await approveSquadRegistration(squadRegId, currentUserId);
+      await load();
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve squad');
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleRejectSquad = async (squadRegId: string) => {
+    if (!currentUserId) return;
+    showConfirm(
+      'Reject squad registration?',
+      'This squad will be notified of the rejection and can reapply if needed.',
+      async () => {
+        setIsProcessing(`reject-squad-${squadRegId}`);
+        try {
+          await rejectSquadRegistration(squadRegId, currentUserId);
+          await load();
+        } catch (err: any) {
+          alert(err.message || 'Failed to reject squad');
+        } finally {
+          setIsProcessing(null);
+        }
+      },
+      'danger'
+    );
+  };
+
+  // Validate squad against tournament requirements
+  const validateSquad = (reg: SquadRegistration) => {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    
+    if (!tournament) return { valid: true, issues, warnings };
+
+    const teamSize = (tournament.eventType === 'doubles' || tournament.eventType === 'mixed_doubles') ? 2 : 1;
+    const rosterCount = reg.roster?.length || 0;
+    const minSize = tournament.squadRequirements?.minSize ?? 2;
+
+    // Check minimum roster size
+    if (rosterCount < minSize) {
+      issues.push(`Roster too small: ${rosterCount}/${minSize} minimum`);
+    }
+
+    // Check team size divisibility
+    if (rosterCount % teamSize !== 0) {
+      issues.push(`Roster (${rosterCount}) must be divisible by team size (${teamSize})`);
+    }
+
+    // Check rating requirements for competitive tournaments
+    if (tournament.tournamentMode === 'competitive' && reg.roster && reg.roster.length > 0) {
+      const ratings = reg.roster
+        .map(p => p.player?.rating ?? p.player?.dupr_rating)
+        .filter((r): r is number => r !== undefined && r !== null);
+      
+      if (ratings.length > 0) {
+        const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+        const req = tournament.squadRequirements;
+        
+        if (req?.ratingMin !== undefined && avgRating < req.ratingMin) {
+          issues.push(`Avg rating ${avgRating.toFixed(1)} below minimum ${req.ratingMin}`);
+        }
+        if (req?.ratingMax !== undefined && avgRating > req.ratingMax) {
+          issues.push(`Avg rating ${avgRating.toFixed(1)} above maximum ${req.ratingMax}`);
+        }
+      } else if (tournament.squadRequirements?.ratingMin !== undefined) {
+        warnings.push('No player ratings available to verify requirements');
+      }
+    }
+
+    // Check for injured players
+    const injuredCount = reg.roster?.filter(p => p.status === 'inactive_injured').length || 0;
+    if (injuredCount > 0) {
+      warnings.push(`${injuredCount} injured player(s) in roster`);
+    }
+
+    return { valid: issues.length === 0, issues, warnings };
+  };
+
   const isDoubles = tournament?.eventType?.toLowerCase().includes('double') ||
                     tournament?.eventType?.toLowerCase().includes('mixed');
   const checkedInCount = registrations.filter(r => r.checkedIn).length;
   const unassignedRegs = registrations.filter(r => !r.teamId);
   const fillPct = Math.min(100, Math.round((registrations.length / (tournament?.maxPlayers || 1)) * 100));
 
-  const pendingSuffix = pendingRegistrations.length > 0 ? ` +${pendingRegistrations.length}⏳` : '';
-  const participantsLabel = tournament?.registrationMode === 'squad'
-    ? `Squads (${registrations.length}${pendingSuffix})`
-    : tournament?.registrationMode === 'both'
-      ? `Players/Squads (${registrations.length}${pendingSuffix})`
-      : `Players (${registrations.length}${pendingSuffix})`;
+  const activeSquadRegs = squadRegs.filter(s => s.status !== 'withdrawn' && s.status !== 'rejected');
+  const confirmedSquadRegs = activeSquadRegs.filter(s => s.status === 'confirmed');
+  const pendingSquadRegs = activeSquadRegs.filter(s => s.status === 'pending' || s.status === 'waitlisted');
+  const isSquadTournament = tournament?.registrationMode === 'squad';
+
+  const participantsLabel = isSquadTournament
+    ? `Squads (${activeSquadRegs.length})`
+    : `Players (${registrations.length})`;
+
+  const subsBadge = pendingSubs.length > 0 ? ` (${pendingSubs.length})` : '';
 
   const tabs: { key: HubTab; label: string; icon: React.ElementType; hidden?: boolean }[] = [
-    { key: 'overview',      label: 'Overview',                        icon: BarChart3  },
-    { key: 'participants',  label: participantsLabel, icon: Users    },
-    { key: 'teams',         label: `Teams (${teams.length})`,          icon: Shuffle, hidden: !isDoubles },
-    { key: 'bracket',       label: 'Bracket',                          icon: GitBranch },
-    { key: 'announcements', label: 'Announce',                         icon: Megaphone },
+    { key: 'overview',       label: 'Overview',                          icon: BarChart3  },
+    { key: 'participants',   label: participantsLabel,                   icon: Users    },
+    { key: 'teams',          label: `Teams (${teams.length})`,           icon: Shuffle, hidden: !isDoubles },
+    { key: 'bracket',        label: 'Bracket',                           icon: GitBranch },
+    { key: 'substitutions',  label: `Subs${subsBadge}`,                  icon: HeartPulse, hidden: !isSquadTournament },
+    { key: 'announcements',  label: 'Announce',                          icon: Megaphone },
   ];
 
   const statusRing: Record<string, string> = {
@@ -866,8 +987,152 @@ const TournamentHub: React.FC = () => {
         {activeTab === 'participants' && (
           <div className="space-y-6 animate-in fade-in duration-200">
 
+            {/* Pending Squad Approvals */}
+            {isSquadTournament && pendingSquadRegs.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Squad Approvals</h3>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-black">{pendingSquadRegs.length}</span>
+                </div>
+                {pendingSquadRegs.map(reg => {
+                  const squadName = reg.squad?.name || 'Unknown Squad';
+                  const rosterCount = reg.roster?.length ?? 0;
+                  const approveKey = `approve-squad-${reg.id}`;
+                  const rejectKey = `reject-squad-${reg.id}`;
+                  const validation = validateSquad(reg);
+                  return (
+                    <div key={reg.id} className="bg-white rounded-2xl border border-amber-100 p-5 shadow-sm">
+                      <div className="flex items-start gap-4">
+                        {reg.squad?.image_url ? (
+                          <img src={reg.squad.image_url} alt={squadName} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 font-black text-xl shrink-0">
+                            {squadName[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-black text-slate-900 text-base">{squadName}</p>
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-black uppercase tracking-widest">Pending</span>
+                            {validation.valid ? (
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                                <ShieldCheck size={10} className="text-emerald-600" />
+                                <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Valid</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200">
+                                <ShieldAlert size={10} className="text-rose-600" />
+                                <span className="text-[9px] font-black text-rose-700 uppercase tracking-widest">Issues</span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+                            {new Date(reg.registeredAt).toLocaleDateString()} · {rosterCount} rostered
+                            {reg.squad?.members_count && ` · ${reg.squad.members_count} total members`}
+                            {reg.squad?.avg_rating && ` · ${reg.squad.avg_rating.toFixed(1)} avg rating`}
+                          </p>
+                          {/* Validation Issues */}
+                          {(validation.issues.length > 0 || validation.warnings.length > 0) && (
+                            <div className="bg-slate-50 rounded-xl p-3 mb-3 space-y-2">
+                              {validation.issues.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest mb-1.5">Eligibility Issues</p>
+                                  <ul className="space-y-1">
+                                    {validation.issues.map((issue, i) => (
+                                      <li key={i} className="flex items-start gap-1.5 text-xs text-rose-700">
+                                        <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                                        <span>{issue}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {validation.warnings.length > 0 && (
+                                <div>
+                                  <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1.5">Warnings</p>
+                                  <ul className="space-y-1">
+                                    {validation.warnings.map((warning, i) => (
+                                      <li key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                                        <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                                        <span>{warning}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {reg.applicationMessage && (
+                            <div className="bg-slate-50 rounded-xl p-3 mb-3">
+                              <p className="text-xs text-slate-600 italic">"{reg.applicationMessage}"</p>
+                            </div>
+                          )}
+                          {reg.roster && reg.roster.length > 0 && (
+                            <div className="mb-3">
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Roster ({rosterCount})</p>
+                              <div className="flex flex-wrap gap-2">
+                                {reg.roster.slice(0, 8).map(player => (
+                                  <div key={player.playerId} className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg">
+                                    {player.player?.avatar_url ? (
+                                      <img src={player.player.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-[8px] font-black">
+                                        {player.player?.full_name?.[0] || '?'}
+                                      </div>
+                                    )}
+                                    <span className="text-[10px] font-bold text-slate-600">{player.player?.full_name || 'Unknown'}</span>
+                                    {player.player?.rating && (
+                                      <span className="text-[9px] text-slate-400">({player.player.rating.toFixed(1)})</span>
+                                    )}
+                                  </div>
+                                ))}
+                                {rosterCount > 8 && (
+                                  <div className="px-2 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-500">
+                                    +{rosterCount - 8} more
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleApproveSquad(reg.id)}
+                              disabled={isProcessing === approveKey || !validation.valid}
+                              className={`flex-1 px-4 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+                                validation.valid
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                              title={!validation.valid ? 'Squad does not meet requirements' : 'Approve this squad'}
+                            >
+                              {isProcessing === approveKey ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <><CheckCircle2 size={11} /> Approve</>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleRejectSquad(reg.id)}
+                              disabled={isProcessing === rejectKey}
+                              className="flex-1 px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                              {isProcessing === rejectKey ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <><UserX size={11} /> Reject</>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Pending Approvals */}
-            {pendingRegistrations.length > 0 && (
+            {!isSquadTournament && pendingRegistrations.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Approvals</h3>
@@ -887,66 +1152,143 @@ const TournamentHub: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tighter">Confirmed Participants</h2>
+                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tighter">
+                  {isSquadTournament ? 'Squad Registrations' : 'Confirmed Participants'}
+                </h2>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                  {checkedInCount} of {registrations.length} checked in
+                  {isSquadTournament
+                    ? `${confirmedSquadRegs.length} confirmed · ${pendingSquadRegs.length} pending`
+                    : `${checkedInCount} of ${registrations.length} checked in`}
                 </p>
               </div>
-              <button
-                onClick={handleCheckInAll}
-                disabled={isProcessing === 'ci-all' || registrations.length === 0}
-                className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none"
-              >
-                {isProcessing === 'ci-all' ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />}
-                Check In All
-              </button>
+              {!isSquadTournament && (
+                <button
+                  onClick={handleCheckInAll}
+                  disabled={isProcessing === 'ci-all' || registrations.length === 0}
+                  className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none"
+                >
+                  {isProcessing === 'ci-all' ? <Loader2 size={13} className="animate-spin" /> : <UserCheck size={13} />}
+                  Check In All
+                </button>
+              )}
             </div>
 
-            {registrations.length === 0 ? (
-              <EmptyState icon={Users} message="No participants registered yet" />
+            {(isSquadTournament ? activeSquadRegs.length === 0 : registrations.length === 0) ? (
+              <EmptyState icon={Users} message={isSquadTournament ? 'No squads registered yet' : 'No participants registered yet'} />
             ) : (
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                {registrations.map((reg, i) => {
-                  const info = nameMap.get(reg.playerId);
-                  const displayName = info?.name || reg.playerId.slice(0, 12) + '…';
-                  const ciKey = `ci-${reg.playerId}`;
-                  const rmKey = `rm-${reg.playerId}`;
-                  return (
-                    <div key={reg.id} className={`flex items-center gap-4 px-6 py-4 group hover:bg-slate-50 transition-colors ${i < registrations.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                      <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center font-black text-xs shrink-0">{i + 1}</span>
-                      {info?.avatar
-                        ? <img src={info.avatar} alt={displayName} className="w-10 h-10 rounded-full object-cover shrink-0" />
-                        : <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-black text-sm shrink-0">{displayName[0]?.toUpperCase()}</div>
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-sm text-slate-900 truncate">{displayName}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          {new Date(reg.registeredAt).toLocaleDateString()}{reg.teamId && ' · In Team'}
-                        </p>
+                {isSquadTournament ? (
+                  confirmedSquadRegs.map((reg, i) => {
+                    const statusClass =
+                      reg.status === 'confirmed'
+                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                        : reg.status === 'waitlisted'
+                          ? 'bg-amber-100 text-amber-700 border-amber-200'
+                          : 'bg-blue-100 text-blue-700 border-blue-200';
+                    const squadName = reg.squad?.name || reg.squadId.slice(0, 12) + '…';
+                    const rosterCount = reg.roster?.length ?? 0;
+                    const showRoster = openRosters.has(reg.id);
+                    const toggleRoster = () => setOpenRosters(prev => {
+                      const next = new Set(prev);
+                      next.has(reg.id) ? next.delete(reg.id) : next.add(reg.id);
+                      return next;
+                    });
+
+                    return (
+                      <div key={reg.id} className={`px-6 py-4 hover:bg-slate-50 transition-colors ${i < confirmedSquadRegs.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                        <div className="flex items-center gap-4">
+                          <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center font-black text-xs shrink-0">{i + 1}</span>
+                          {reg.squad?.image_url
+                            ? <img src={reg.squad.image_url} alt={squadName} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                            : <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-black text-sm shrink-0">{squadName[0]?.toUpperCase()}</div>
+                          }
+                          <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-slate-900 truncate">{squadName}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              {new Date(reg.registeredAt).toLocaleDateString()} · {rosterCount} rostered
+                              {reg.rosterLockedAt && ' · Locked'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={toggleRoster}
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-[9px] font-black uppercase tracking-widest transition-colors flex items-center gap-1"
+                          >
+                            <Users size={10} />
+                            Roster ({rosterCount})
+                          </button>
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${statusClass}`}>
+                            {reg.status}
+                          </span>
+                        </div>
+                        {showRoster && reg.roster && reg.roster.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                              {reg.roster.map(player => (
+                                <div key={player.playerId} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg">
+                                  {player.player?.avatar_url ? (
+                                    <img src={player.player.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs font-black">
+                                      {player.player?.full_name?.[0] || '?'}
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-900 truncate">{player.player?.full_name || 'Unknown'}</p>
+                                    <p className="text-[9px] text-slate-400">
+                                      {player.status === 'inactive_injured' ? 'Injured' : player.player?.rating ? `${player.player.rating.toFixed(1)} rating` : '–'}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        onClick={() => handleCheckIn(reg.playerId, !!reg.checkedIn)}
-                        disabled={isProcessing === ciKey}
-                        className={`px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 ${
-                          reg.checkedIn
-                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
-                      >
-                        {isProcessing === ciKey
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : reg.checkedIn ? <><CheckCircle2 size={11} /> Checked In</> : <><Clock size={11} /> Check In</>}
-                      </button>
-                      <button
-                        onClick={() => handleRemove(reg.playerId, displayName)}
-                        disabled={isProcessing === rmKey}
-                        className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100"
-                      >
-                        {isProcessing === rmKey ? <Loader2 size={15} className="animate-spin" /> : <UserX size={15} />}
-                      </button>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  registrations.map((reg, i) => {
+                    const info = nameMap.get(reg.playerId);
+                    const displayName = info?.name || reg.playerId.slice(0, 12) + '…';
+                    const ciKey = `ci-${reg.playerId}`;
+                    const rmKey = `rm-${reg.playerId}`;
+                    return (
+                      <div key={reg.id} className={`flex items-center gap-4 px-6 py-4 group hover:bg-slate-50 transition-colors ${i < registrations.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                        <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center font-black text-xs shrink-0">{i + 1}</span>
+                        {info?.avatar
+                          ? <img src={info.avatar} alt={displayName} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                          : <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-black text-sm shrink-0">{displayName[0]?.toUpperCase()}</div>
+                        }
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-sm text-slate-900 truncate">{displayName}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {new Date(reg.registeredAt).toLocaleDateString()}{reg.teamId && ' · In Team'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleCheckIn(reg.playerId, !!reg.checkedIn)}
+                          disabled={isProcessing === ciKey}
+                          className={`px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 ${
+                            reg.checkedIn
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                        >
+                          {isProcessing === ciKey
+                            ? <Loader2 size={11} className="animate-spin" />
+                            : reg.checkedIn ? <><CheckCircle2 size={11} /> Checked In</> : <><Clock size={11} /> Check In</>}
+                        </button>
+                        <button
+                          onClick={() => handleRemove(reg.playerId, displayName)}
+                          disabled={isProcessing === rmKey}
+                          className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          {isProcessing === rmKey ? <Loader2 size={15} className="animate-spin" /> : <UserX size={15} />}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
@@ -1217,6 +1559,172 @@ const TournamentHub: React.FC = () => {
                 } : undefined}
               />
             </div>
+          </div>
+        )}
+
+        {/* SUBSTITUTIONS (squad tournaments only) */}
+        {activeTab === 'substitutions' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Pending substitution requests */}
+            <div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
+                Pending Requests {pendingSubs.length > 0 && <span className="text-amber-500">({pendingSubs.length})</span>}
+              </h3>
+              {pendingSubs.length === 0 ? (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                  <CheckCircle2 size={24} className="text-emerald-400 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-400">No pending substitution requests.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingSubs.map(sub => (
+                    <div key={sub.id} className="bg-white border border-amber-100 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-black text-slate-800">
+                            {sub.playerOutProfile?.full_name || sub.playerOut.slice(0, 8)} → {sub.playerInProfile?.full_name || sub.playerIn.slice(0, 8)}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                            Reason: {sub.reason || 'No reason provided'}
+                          </p>
+                          {sub.adminOverride && (
+                            <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[8px] font-black uppercase border border-amber-100">
+                              <AlertCircle size={8} className="inline mr-0.5" /> Admin Override Required
+                            </span>
+                          )}
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[8px] font-black uppercase">Pending</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            setIsResolvingSub(sub.id);
+                            try {
+                              await resolveSubstitution(sub.id, currentUserId!, 'approved');
+                              const [pSubs, logs] = await Promise.all([
+                                getPendingSubstitutions(tournamentId!),
+                                getSubstitutionLogs(tournamentId!),
+                              ]);
+                              setPendingSubs(pSubs);
+                              setSubLogs(logs);
+                            } catch (err: any) { alert(err.message || 'Failed to approve'); }
+                            finally { setIsResolvingSub(null); }
+                          }}
+                          disabled={isResolvingSub === sub.id}
+                          className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                        >
+                          <CheckCircle2 size={14} /> Approve
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setIsResolvingSub(sub.id);
+                            try {
+                              await resolveSubstitution(sub.id, currentUserId!, 'rejected');
+                              const [pSubs, logs] = await Promise.all([
+                                getPendingSubstitutions(tournamentId!),
+                                getSubstitutionLogs(tournamentId!),
+                              ]);
+                              setPendingSubs(pSubs);
+                              setSubLogs(logs);
+                            } catch (err: any) { alert(err.message || 'Failed to reject'); }
+                            finally { setIsResolvingSub(null); }
+                          }}
+                          disabled={isResolvingSub === sub.id}
+                          className="flex-1 py-2.5 bg-rose-50 text-rose-500 border border-rose-100 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                        >
+                          <UserX size={14} /> Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Audit trail */}
+            <div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1">
+                <FileText size={12} /> Substitution Audit Trail
+              </h3>
+              {subLogs.length === 0 ? (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                  <p className="text-sm font-bold text-slate-400">No substitution history yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {subLogs.map(log => (
+                    <div key={log.id} className={`bg-white border rounded-2xl p-3 ${
+                      log.status === 'approved' ? 'border-emerald-100' :
+                      log.status === 'rejected' ? 'border-rose-100' :
+                      'border-slate-100'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black ${
+                            log.status === 'approved' ? 'bg-emerald-100 text-emerald-600' :
+                            log.status === 'rejected' ? 'bg-rose-100 text-rose-600' :
+                            'bg-amber-100 text-amber-600'
+                          }`}>
+                            {log.status === 'approved' ? '✓' : log.status === 'rejected' ? '✕' : '?'}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">
+                              {log.playerOutProfile?.full_name || log.playerOut.slice(0, 8)} → {log.playerInProfile?.full_name || log.playerIn.slice(0, 8)}
+                            </p>
+                            <p className="text-[9px] text-slate-400">{log.reason || 'No reason'}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${
+                            log.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                            log.status === 'rejected' ? 'bg-rose-50 text-rose-600' :
+                            'bg-amber-50 text-amber-600'
+                          }`}>
+                            {log.status}
+                          </span>
+                          {log.adminOverride && (
+                            <span className="block mt-0.5 text-[8px] font-bold text-amber-500">Admin Override</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Lock all rosters manually */}
+            {tournament?.registrationMode === 'squad' && (
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-black text-slate-700 flex items-center gap-1"><Lock size={14} /> Lock All Rosters</p>
+                    <p className="text-[10px] text-slate-400 font-bold">Prevents any further roster changes for all squads.</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      showConfirm(
+                        'Lock all rosters?',
+                        'This will lock all squad rosters. Players cannot be added or removed after locking. This is typically done automatically when the bracket is generated.',
+                        async () => {
+                          try {
+                            await lockAllRosters(tournamentId!);
+                            await load();
+                            alert('All rosters locked successfully.');
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to lock rosters');
+                          }
+                        },
+                        'warning'
+                      );
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-colors"
+                  >
+                    Lock All
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

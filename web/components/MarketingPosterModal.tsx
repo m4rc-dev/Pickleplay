@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { toPng } from 'html-to-image';
 import QRCode from 'qrcode';
 import {
-    X, Megaphone, CheckCircle, Copy
+    X, Megaphone, CheckCircle, Copy, Download
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Poster, PosterData } from './Poster';
@@ -20,6 +20,7 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
     const [qrDataUrl, setQrDataUrl] = useState('');
     const [copied, setCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [posterData, setPosterData] = useState<PosterData>(data);
 
     // The link embedded in the QR code (typically the booking/court page)
@@ -85,6 +86,22 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
             setTimeout(() => setCopied(false), 3000);
         } catch (err) {
             console.error('Copy failed:', err);
+        }
+    };
+
+    const handleDownloadPng = async () => {
+        if (!posterRef.current) return;
+        setIsDownloading(true);
+        try {
+            const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true });
+            const link = document.createElement('a');
+            link.download = `pickleplay-poster-${posterData.courtName.replace(/\s+/g, '-').toLowerCase()}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (err) {
+            console.error('Download failed:', err);
+        } finally {
+            setIsDownloading(false);
         }
     };
 
@@ -183,6 +200,19 @@ const MarketingPosterModal: React.FC<MarketingPosterModalProps> = ({ isOpen, onC
                         {/* Export & Share Links */}
                         <div className="space-y-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Share Link</p>
+
+                            <button
+                                onClick={handleDownloadPng}
+                                disabled={isDownloading}
+                                className="w-full py-4 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all duration-200 shadow-lg flex items-center justify-center gap-2.5 active:scale-95 disabled:opacity-50"
+                            >
+                                {isDownloading ? (
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <Download size={16} />
+                                )}
+                                {isDownloading ? 'Exporting...' : 'Download PNG'}
+                            </button>
 
                             <button
                                 onClick={handleCopyLink}
