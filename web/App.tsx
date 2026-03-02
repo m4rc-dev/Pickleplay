@@ -53,6 +53,7 @@ import Home from './components/Home';
 import Dashboard from './components/Dashboard';
 import Booking from './components/Booking';
 import Community, { GroupDetail, GroupManage } from './components/community';
+import Groups from './components/community/Groups';
 import Rankings from './components/Rankings';
 import AdminDashboard from './components/admin/AdminDashboard';
 import Tournaments from './components/Tournaments';
@@ -78,6 +79,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
+import { getTotalUnreadCount } from './services/directMessages';
 import Others from './components/Others';
 
 // Guides Components
@@ -179,9 +181,13 @@ const NotificationPanel: React.FC<{
 };
 
 
-const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false }) => {
+const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean, badge?: number }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false, badge }) => {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const hasQuery = to.includes('?');
+  const [toPath, toSearch] = hasQuery ? to.split('?', 2).map((s, i) => i === 1 ? '?' + s : s) : [to, ''];
+  const isActive = hasQuery
+    ? location.pathname === toPath && location.search === toSearch
+    : location.pathname === to;
   const isPrimaryBook = !isMobile && to === '/booking';
 
   return (
@@ -193,15 +199,25 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
         : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/95 hover:bg-white/10 hover:text-white'}`
         } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''}`}
     >
-      <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'}`}>
+      <div className={`relative shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'}`}>
         {icon}
+        {badge != null && badge > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-rose-500 rounded-full text-[9px] font-black text-white flex items-center justify-center px-0.5 leading-none">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
       </div>
       {!isCollapsed && (
         <span className={`font-black ${isPrimaryBook ? 'text-[14px]' : 'text-[13px]'} uppercase tracking-widest animate-in fade-in slide-in-from-left-2 duration-300`}>
           {label}
         </span>
       )}
-      {!isCollapsed && isActive && (
+      {!isCollapsed && badge != null && badge > 0 && (
+        <span className="ml-auto bg-rose-500 text-white text-[9px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+      {!isCollapsed && isActive && !(badge != null && badge > 0) && (
         <div className={`ml-auto w-1.5 h-1.5 rounded-full ${isMobile ? 'bg-white' : 'bg-blue-600'}`} />
       )}
     </Link>
@@ -340,6 +356,7 @@ const NavigationHandler: React.FC<{
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isOthersOpen, setIsOthersOpen] = useState(true);
   const [isCompeteOpen, setIsCompeteOpen] = useState(true);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const scrollContainerRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -348,6 +365,28 @@ const NavigationHandler: React.FC<{
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
 
+  // Load + poll unread message count
+  useEffect(() => {
+    if (!currentUserId) return;
+    getTotalUnreadCount().then(setUnreadMessagesCount);
+    const interval = setInterval(() => {
+      getTotalUnreadCount().then(setUnreadMessagesCount);
+    }, 5000); // poll every 5s
+    return () => clearInterval(interval);
+  }, [currentUserId]);
+
+  // When user is on the messages page, clear badge faster
+  const messagesPathActive = location.pathname === '/messages';
+  useEffect(() => {
+    if (!messagesPathActive || !currentUserId) return;
+    // Immediate refresh
+    getTotalUnreadCount().then(setUnreadMessagesCount);
+    // Fast poll while on messages page
+    const fast = setInterval(() => {
+      getTotalUnreadCount().then(setUnreadMessagesCount);
+    }, 2000);
+    return () => clearInterval(fast);
+  }, [messagesPathActive, currentUserId]);
   const pendingCount = applications.filter(a => a.status === 'PENDING').length;
   const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
   const hasUnreadNotifications = unreadNotificationsCount > 0;
@@ -400,8 +439,10 @@ const NavigationHandler: React.FC<{
   const handleNotificationClick = (notification: Notification) => {
     const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
     const squadTypes = ['squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'];
-
-    if (invitationTypes.includes(notification.type as string)) {
+    
+    if (notification.type === 'FOLLOW' && notification.actor?.id) {
+      navigate(`/profile/${notification.actor.id}`);
+    } else if (invitationTypes.includes(notification.type as string)) {
       navigate('/my-bookings?tab=invitations');
     } else if (squadTypes.includes(notification.type as string) && notification.action_url) {
       navigate(notification.action_url);
@@ -552,8 +593,31 @@ const NavigationHandler: React.FC<{
                     </div>
                   </Link>
                 ))}
+                {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={unreadMessagesCount || undefined} />}
                 {feat('dashboard') && <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
 
+                {/* Others group (collapsible) */}
+                <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+                  <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
+                    <button
+                      onClick={() => setIsOthersOpen(v => !v)}
+                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
+                      aria-expanded={isOthersOpen}
+                      aria-controls="others-group"
+                    >
+                      <span>Others</span>
+                      <ChevronDown size={14} className={`transition-transform duration-300 ${isOthersOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isOthersOpen && (
+                      <div id="others-group" className="mt-2 space-y-2 pl-2">
+                        {feat('community') && <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        {feat('partners') && <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        {feat('coaches') && <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        {feat('community') && <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 {/* ── COMPETE section (collapsible) ── */}
                 <div className={`pt-2 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
                   <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isCompeteOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
@@ -572,28 +636,6 @@ const NavigationHandler: React.FC<{
                         {feat('teams') && <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                         {feat('achievements') && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                         {feat('guides') && <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* Others group (collapsible) */}
-                <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-                  <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
-                    <button
-                      onClick={() => setIsOthersOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[12px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
-                      aria-expanded={isOthersOpen}
-                      aria-controls="others-group"
-                    >
-                      <span>Others</span>
-                      <ChevronDown size={14} className={`transition-transform duration-300 ${isOthersOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isOthersOpen && (
-                      <div id="others-group" className="mt-2 space-y-2 pl-2">
-                        {feat('partners') && <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('coaches') && <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('community') && <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
                       </div>
                     )}
                   </div>
@@ -873,6 +915,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               {role === 'COACH' && (
@@ -926,9 +969,12 @@ const NavigationHandler: React.FC<{
           : (
             location.pathname.startsWith('/tournaments-admin/manage/') ||
               location.pathname.startsWith('/tournaments/') ||
+              location.pathname.startsWith('/community/groups/') ||
               (location.pathname.startsWith('/teams/') && location.pathname !== '/teams') ||
               location.pathname === '/terms' ||
-              location.pathname === '/policy'
+              location.pathname === '/policy' ||
+              location.pathname === '/messages' ||
+              location.pathname.startsWith('/groups')
               ? '' // full-bleed — these pages manage their own layout
               : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           )
@@ -966,10 +1012,11 @@ const NavigationHandler: React.FC<{
               <Route path="/tournaments/:id" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <TournamentPage /> : <Navigate to="/" />} />
               <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <FeatureUnavailable featureName="coaches" /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/groups" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Groups /> : <Navigate to="/" />} />
               <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
               <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
-              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners /> : <Navigate to="/" />} />
-              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages /> : <Navigate to="/" />} />
+              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages onConversationRead={() => getTotalUnreadCount().then(setUnreadMessagesCount)} /> : <Navigate to="/" />} />
               <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
               <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to={`/login?redirect=${encodeURIComponent('/teams')}`} replace />} />
               <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />} />
@@ -1868,11 +1915,13 @@ const App: React.FC = () => {
           .insert({ follower_id: currentUserId, followed_id: userId });
         setFollowedUsers(prev => [...prev, userId]);
 
-        // Send notification (optional, can be done via DB trigger too)
+        // Send notification to the followed user
         await supabase.from('notifications').insert({
           user_id: userId,
           actor_id: currentUserId,
-          type: 'FOLLOW',
+          related_user_id: currentUserId,
+          type: 'system',
+          title: userName || 'Someone',
           message: 'started following you.'
         });
       }

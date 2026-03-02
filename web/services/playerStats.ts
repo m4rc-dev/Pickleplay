@@ -114,7 +114,7 @@ export const getUserReviews = async (userId: string, limit = 20) => {
     .from('partner_reviews')
     .select(`
       *,
-      reviewer:profiles!partner_reviews_reviewer_id_fkey(id, full_name, avatar_url, skill_level)
+      reviewer:profiles!partner_reviews_reviewer_id_fkey(id, full_name, avatar_url, dupr_rating)
     `)
     .eq('reviewed_user_id', userId)
     .order('created_at', { ascending: false })

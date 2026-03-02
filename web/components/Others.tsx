@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Users, GraduationCap, Globe } from 'lucide-react';
+import { Users, GraduationCap, Globe, UsersRound } from 'lucide-react';
 
 const tiles = [
   {
@@ -20,9 +20,16 @@ const tiles = [
   {
     to: '/community',
     title: 'Community Hub',
-    desc: 'Groups, posts, and local events',
+    desc: 'Posts, news, and the community feed',
     icon: <Globe className="w-6 h-6" />,
     bg: 'bg-violet-50',
+  },
+  {
+    to: '/groups',
+    title: 'Find Groups',
+    desc: 'Join or create local pickleball squads',
+    icon: <UsersRound className="w-6 h-6" />,
+    bg: 'bg-indigo-50',
   },
 ];
 
