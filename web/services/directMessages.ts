@@ -1,5 +1,34 @@
 import { supabase } from './supabase';
 
+/**
+ * Get total count of unread messages across all conversations
+ */
+export const getTotalUnreadCount = async (): Promise<number> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+  try {
+    const { data: participantData } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', user.id);
+    const convIds = (participantData || []).map((p: any) => p.conversation_id);
+    if (convIds.length === 0) return 0;
+    const { data: readReceipts } = await supabase
+      .from('message_read_receipts')
+      .select('message_id')
+      .eq('user_id', user.id);
+    const readIds = new Set((readReceipts || []).map((r: any) => r.message_id));
+    const { data: incoming } = await supabase
+      .from('direct_messages')
+      .select('id')
+      .in('conversation_id', convIds)
+      .neq('sender_id', user.id);
+    return (incoming || []).filter((m: any) => !readIds.has(m.id)).length;
+  } catch {
+    return 0;
+  }
+};
+
 export interface Conversation {
   id: string;
   created_at: string;
@@ -28,6 +57,47 @@ export interface ConversationWithDetails extends Conversation {
 }
 
 /**
+ * Check if two users mutually follow each other (consent gate for messaging)
+ */
+export const checkMutualFollow = async (otherUserId: string): Promise<boolean> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return false;
+  const myId = session.user.id;
+  const [{ count: iFollow }, { count: theyFollow }] = await Promise.all([
+    supabase.from('user_follows').select('*', { count: 'exact', head: true })
+      .eq('follower_id', myId).eq('followed_id', otherUserId),
+    supabase.from('user_follows').select('*', { count: 'exact', head: true })
+      .eq('follower_id', otherUserId).eq('followed_id', myId),
+  ]);
+  return (iFollow ?? 0) > 0 && (theyFollow ?? 0) > 0;
+};
+
+/**
+ * Follow another user — used when accepting a message request
+ */
+export const followUser = async (targetUserId: string): Promise<void> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return;
+  const myId = session.user.id;
+
+  // Upsert to avoid duplicate key error if already following
+  await supabase.from('user_follows').upsert(
+    { follower_id: myId, followed_id: targetUserId },
+    { onConflict: 'follower_id,followed_id', ignoreDuplicates: true }
+  );
+
+  // Fire-and-forget notification
+  try {
+    await supabase.from('notifications').insert({
+      user_id: targetUserId,
+      actor_id: myId,
+      type: 'FOLLOW',
+      message: 'started following you.',
+    });
+  } catch (_) { /* non-critical */ }
+};
+
+/**
  * Get or create a conversation with another user
  */
 export const getOrCreateConversation = async (otherUserId: string) => {
@@ -51,69 +121,94 @@ export const getUserConversations = async () => {
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) throw new Error('Not authenticated');
 
-  // Get conversations the user is part of
-  const { data: participantData, error: participantError } = await supabase
+  // 1. Get all conversation IDs the user belongs to
+  const { data: myParticipantRows, error: participantError } = await supabase
     .from('conversation_participants')
     .select('conversation_id')
     .eq('user_id', user.user.id);
 
   if (participantError) throw participantError;
 
-  const conversationIds = participantData.map(p => p.conversation_id);
+  const conversationIds = (myParticipantRows || []).map((p: any) => p.conversation_id);
+  if (conversationIds.length === 0) return [];
 
-  if (conversationIds.length === 0) {
-    return [];
-  }
-
-  // Get conversation details with last message
+  // 2. Fetch conversations (no nested join — avoids missing-FK error)
   const { data: conversations, error: conversationError } = await supabase
     .from('conversations')
-    .select(`
-      *,
-      participants:conversation_participants(
-        user:profiles(id, full_name, avatar_url, skill_level)
-      )
-    `)
+    .select('*')
     .in('id', conversationIds)
     .order('last_message_at', { ascending: false, nullsFirst: false });
 
   if (conversationError) throw conversationError;
 
-  // Get last message for each conversation
+  // 3. Fetch ALL participant rows for these conversations in one query
+  const { data: allParticipantRows } = await supabase
+    .from('conversation_participants')
+    .select('conversation_id, user_id')
+    .in('conversation_id', conversationIds);
+
+  // 4. Collect unique user IDs of the other participants
+  const otherUserIds = [
+    ...new Set(
+      (allParticipantRows || [])
+        .filter((p: any) => p.user_id !== user.user!.id)
+        .map((p: any) => p.user_id)
+    )
+  ];
+
+  // 5. Fetch profiles for all those users in one query
+  let profileMap: Record<string, any> = {};
+  if (otherUserIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url, dupr_rating')
+      .in('id', otherUserIds);
+    (profiles || []).forEach((p: any) => { profileMap[p.id] = p; });
+  }
+
+  // 6. Fetch read receipt IDs once
+  const { data: readReceipts } = await supabase
+    .from('message_read_receipts')
+    .select('message_id')
+    .eq('user_id', user.user.id);
+  const readIds = new Set((readReceipts || []).map((r: any) => r.message_id));
+
+  // 7. Enrich each conversation
   const conversationsWithMessages = await Promise.all(
     (conversations || []).map(async (conv) => {
-      // Get last message
-      const { data: lastMessage } = await supabase
+      // Last message
+      const { data: lastMessages } = await supabase
         .from('direct_messages')
-        .select(`
-          *,
-          sender:profiles(id, full_name, avatar_url)
-        `)
+        .select('id, content, created_at, sender_id')
         .eq('conversation_id', conv.id)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
+      const lastMessage = lastMessages?.[0] ?? null;
 
-      // Get unread count
-      const { data: unreadData } = await supabase
+      // Unread count
+      const { data: incomingMessages } = await supabase
         .from('direct_messages')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('conversation_id', conv.id)
-        .neq('sender_id', user.user!.id)
-        .not('id', 'in',
-          `(SELECT message_id FROM message_read_receipts WHERE user_id = '${user.user!.id}')`
-        );
+        .neq('sender_id', user.user!.id);
+      const unreadCount = (incomingMessages || []).filter(
+        (m: any) => !readIds.has(m.id)
+      ).length;
 
-      // Filter out current user from participants to get "other user"
-      const otherUser = conv.participants?.find(
-        (p: any) => p.user.id !== user.user!.id
-      )?.user;
+      // Other user from the profile map
+      const otherParticipant = (allParticipantRows || []).find(
+        (p: any) => p.conversation_id === conv.id && p.user_id !== user.user!.id
+      );
+      const otherUser = otherParticipant ? profileMap[otherParticipant.user_id] ?? null : null;
 
       return {
         ...conv,
         last_message: lastMessage,
-        unread_count: 0, // TODO: Fix this query
-        other_user: otherUser
+        unread_count: unreadCount,
+        other_user: otherUser,
+        participants: (allParticipantRows || [])
+          .filter((p: any) => p.conversation_id === conv.id)
+          .map((p: any) => ({ user: profileMap[p.user_id] ?? { id: p.user_id } }))
       };
     })
   );
@@ -131,10 +226,7 @@ export const getConversationMessages = async (
 ) => {
   let query = supabase
     .from('direct_messages')
-    .select(`
-      *,
-      sender:profiles(id, full_name, avatar_url)
-    `)
+    .select('*')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -147,14 +239,29 @@ export const getConversationMessages = async (
       .single();
 
     if (beforeMessage) {
-      query = query.lt('created_at', beforeMessage.created_at);
+      query = query.lt('created_at', (beforeMessage as any).created_at);
     }
   }
 
   const { data, error } = await query;
-
   if (error) throw error;
-  return (data as DirectMessage[]).reverse(); // Return in chronological order
+
+  const messages = (data || []) as DirectMessage[];
+
+  // Fetch sender profiles in one batch query
+  const senderIds = [...new Set(messages.map((m: any) => m.sender_id).filter(Boolean))];
+  let senderMap: Record<string, any> = {};
+  if (senderIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', senderIds);
+    (profiles || []).forEach((p: any) => { senderMap[p.id] = p; });
+  }
+
+  return messages
+    .map((m: any) => ({ ...m, sender: senderMap[m.sender_id] ?? null }))
+    .reverse() as DirectMessage[];
 };
 
 /**
@@ -171,14 +278,41 @@ export const sendMessage = async (conversationId: string, content: string) => {
       sender_id: user.user.id,
       content
     })
-    .select(`
-      *,
-      sender:profiles(id, full_name, avatar_url)
-    `)
+    .select('*')
     .single();
 
   if (error) throw error;
-  return data as DirectMessage;
+
+  // Attach sender profile from auth user (avoids FK join)
+  const { data: senderProfile } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .eq('id', user.user.id)
+    .single();
+  const messageWithSender = { ...(data as any), sender: senderProfile ?? null };
+
+  // Notify the other participant (fire-and-forget)
+  try {
+    const { data: participants } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', user.user.id);
+    if (participants && participants.length > 0) {
+      const recipientId = participants[0].user_id;
+      const preview = content.length > 60 ? content.substring(0, 60) + '…' : content;
+      await supabase.from('notifications').insert({
+        user_id: recipientId,
+        related_user_id: user.user.id,
+        type: 'new_message',
+        title: 'New message',
+        message: preview,
+        action_url: `/messages?conversation=${conversationId}`
+      });
+    }
+  } catch (_) { /* non-critical */ }
+
+  return messageWithSender as DirectMessage;
 };
 
 /**
@@ -192,14 +326,20 @@ export const editMessage = async (messageId: string, newContent: string) => {
       is_edited: true
     })
     .eq('id', messageId)
-    .select(`
-      *,
-      sender:profiles(id, full_name, avatar_url)
-    `)
+    .select('*')
     .single();
 
   if (error) throw error;
-  return data as DirectMessage;
+
+  // Fetch sender profile separately
+  const msg = data as any;
+  const { data: senderProfile } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .eq('id', msg.sender_id)
+    .single();
+
+  return { ...msg, sender: senderProfile ?? null } as DirectMessage;
 };
 
 /**
@@ -221,15 +361,19 @@ export const markMessageAsRead = async (messageId: string) => {
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) throw new Error('Not authenticated');
 
-  const { error } = await supabase
+  // Check if already marked — skip insert to avoid conflict
+  const { data: existing } = await supabase
     .from('message_read_receipts')
-    .insert({
-      message_id: messageId,
-      user_id: user.user.id
-    });
+    .select('message_id')
+    .eq('message_id', messageId)
+    .eq('user_id', user.user.id)
+    .maybeSingle();
 
-  // Ignore duplicate key errors (already marked as read)
-  if (error && error.code !== '23505') throw error;
+  if (existing) return; // already read
+
+  await supabase
+    .from('message_read_receipts')
+    .insert({ message_id: messageId, user_id: user.user.id });
 };
 
 /**
@@ -239,7 +383,7 @@ export const markConversationAsRead = async (conversationId: string) => {
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) throw new Error('Not authenticated');
 
-  // Get all unread messages in the conversation
+  // All messages from others in this conversation
   const { data: messages } = await supabase
     .from('direct_messages')
     .select('id')
@@ -248,18 +392,24 @@ export const markConversationAsRead = async (conversationId: string) => {
 
   if (!messages || messages.length === 0) return;
 
-  // Mark all as read
-  const receipts = messages.map(msg => ({
-    message_id: msg.id,
-    user_id: user.user.id
-  }));
+  const allIds = messages.map(m => m.id);
 
-  const { error } = await supabase
+  // Find which ones are already marked read
+  const { data: alreadyRead } = await supabase
     .from('message_read_receipts')
-    .insert(receipts);
+    .select('message_id')
+    .eq('user_id', user.user.id)
+    .in('message_id', allIds);
 
-  // Ignore duplicate key errors
-  if (error && error.code !== '23505') throw error;
+  const readSet = new Set((alreadyRead || []).map((r: any) => r.message_id));
+  const unreadIds = allIds.filter(id => !readSet.has(id));
+
+  if (unreadIds.length === 0) return;
+
+  // Only insert receipts for truly unread messages — no conflicts possible
+  await supabase
+    .from('message_read_receipts')
+    .insert(unreadIds.map(id => ({ message_id: id, user_id: user.user!.id })));
 };
 
 /**
@@ -280,17 +430,14 @@ export const subscribeToConversation = (
         filter: `conversation_id=eq.${conversationId}`,
       },
       async (payload) => {
-        // Fetch full message with sender data
-        const { data } = await supabase
-          .from('direct_messages')
-          .select(`
-            *,
-            sender:profiles(id, full_name, avatar_url)
-          `)
-          .eq('id', (payload.new as any).id)
+        const newMsg = payload.new as any;
+        // Fetch sender profile separately (no FK join)
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .eq('id', newMsg.sender_id)
           .single();
-
-        if (data) callback(data as DirectMessage);
+        callback({ ...newMsg, sender: senderProfile ?? null } as DirectMessage);
       }
     )
     .subscribe();

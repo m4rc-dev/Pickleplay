@@ -532,313 +532,10 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
             <p className="text-xs font-black text-indigo-600 uppercase tracking-[0.4em] mb-4">THE KITCHEN HUB / 2025</p>
             <h1 className="text-5xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase">Community.</h1>
           </div>
-
-          <div className="flex bg-white rounded-full border border-slate-200 shadow-md p-1.5">
-            {([
-              { key: 'feed', label: 'THE FEED' },
-              { key: 'partners', label: 'FIND PARTNERS' },
-              { key: 'groups', label: 'FIND GROUPS' }
-            ] as const).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-6 md:px-8 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.key ? 'bg-slate-950 text-white shadow-xl' : 'text-slate-400 hover:text-slate-950'}`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Search bar - all tabs */}
-        <div className="bg-white border border-slate-200 shadow-sm rounded-[32px] p-6 flex flex-col gap-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div className="flex-1 flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-3 border border-slate-100">
-              <Search size={18} className="text-slate-400" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={
-                  activeTab === 'feed' ? "Search posts by text, author, or tags" :
-                    activeTab === 'partners' ? "Search partners by name or location" :
-                      "Search squads by name or category"
-                }
-                className="w-full bg-transparent outline-none text-sm font-medium text-slate-700"
-              />
-            </div>
-            {/* Filters - Feed tab only */}
-            {activeTab === 'feed' && (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setFilters(prev => ({ ...prev, hasImage: !prev.hasImage }))}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${filters.hasImage ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                >
-                  <ImageIcon size={16} /> Media
-                </button>
-                <button
-                  onClick={() => setFilters(prev => ({ ...prev, hasLikes: !prev.hasLikes }))}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${filters.hasLikes ? 'bg-rose-500 text-white border-rose-500 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                >
-                  <Heart size={16} /> Liked
-                </button>
-                <button
-                  onClick={() => setFilters(prev => ({ ...prev, followedTagsOnly: !prev.followedTagsOnly }))}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${filters.followedTagsOnly ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                >
-                  <BookmarkPlus size={16} /> My Tags
-                </button>
-                <div ref={roleMenuRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowRoleMenu(v => !v)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-200 text-[11px] font-black uppercase tracking-widest text-slate-700 bg-white shadow-[0_6px_18px_-12px_rgba(15,23,42,0.25)] min-w-[170px] hover:border-slate-300 hover:shadow-[0_10px_26px_-14px_rgba(15,23,42,0.35)] transition-all"
-                  >
-                    <SlidersHorizontal size={16} className="text-slate-400" />
-                    <span className="flex-1 text-left">{filters.authorRole === 'all' ? 'All roles' : filters.authorRole === 'PLAYER' ? 'Players' : filters.authorRole === 'COACH' ? 'Coaches' : 'Court Owners'}</span>
-                    <ChevronDown size={14} className={`text-slate-400 transition-transform ${showRoleMenu ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showRoleMenu && (
-                    <div className="absolute z-20 mt-2 w-56 bg-white rounded-2xl border border-slate-100 shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-                      {[
-                        { value: 'all', label: 'All roles' },
-                        { value: 'PLAYER', label: 'Players' },
-                        { value: 'COACH', label: 'Coaches' },
-                        { value: 'COURT_OWNER', label: 'Court Owners' },
-                      ].map(option => (
-                        <button
-                          key={option.value}
-                          onClick={() => { setFilters(prev => ({ ...prev, authorRole: option.value as any })); setShowRoleMenu(false); }}
-                          className={`w-full text-left px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-slate-50 ${filters.authorRole === option.value ? 'text-indigo-600' : 'text-slate-700'}`}
-                        >
-                          <span>{option.label}</span>
-                          {filters.authorRole === option.value && <Check size={16} className="text-indigo-600" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {(selectedTag || searchQuery || filters.hasImage || filters.hasLikes || filters.followedTagsOnly || filters.authorRole !== 'all') && (
-                  <button
-                    onClick={() => { setSearchQuery(''); setSelectedTag(null); setFilters({ hasImage: false, hasLikes: false, authorRole: 'all', followedTagsOnly: false }); }}
-                    className="px-3 py-2 rounded-full border border-slate-200 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Followed tags - Feed tab only */}
-          {activeTab === 'feed' && followedTags.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {followedTags.map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[11px] font-black uppercase tracking-widest transition-all ${selectedTag === tag ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                >
-                  <Tag size={14} /> {tag}
-                  <span onClick={(e) => { e.stopPropagation(); handleToggleFollowTag(tag); }} className="text-slate-400 hover:text-rose-500">✕</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
           <div className="lg:col-span-2 space-y-8">
-            {activeTab === 'partners' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredPartners.map(partner => {
-                  const isFollowing = followedUsers.includes(partner.id);
-                  return (
-                    <div key={partner.id} className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group">
-                      <div className="flex items-center gap-4 mb-6">
-                        <div className="relative">
-                          <img src={partner.avatar} className="w-16 h-16 rounded-2xl object-cover bg-slate-50" />
-                          <div className="absolute -bottom-2 -right-2 bg-lime-400 text-slate-950 font-black text-[10px] px-2 py-1 rounded-lg border-2 border-white">
-                            {partner.level}
-                          </div>
-                        </div>
-                        <div>
-                          <Link to={`/profile/${partner.id}`} className="font-black text-slate-950 text-xl tracking-tight group-hover:text-indigo-600 transition-colors">{partner.name}</Link>
-                          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5 mt-1">
-                            <MapPin size={12} className="text-indigo-600" /> {partner.location}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${partner.availabilityStatus === 'looking'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : partner.availabilityStatus === 'busy'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-slate-200 text-slate-600'
-                              }`}>
-                              {partner.availabilityStatus === 'looking' ? 'Looking to Play' : partner.availabilityStatus === 'busy' ? 'Busy' : 'Offline'}
-                            </span>
-                            {partner.availabilityStatus === 'looking' && partner.availabilityStart && partner.availabilityEnd && (
-                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{partner.availabilityStart} - {partner.availabilityEnd}</span>
-                            )}
-                          </div>
-                          {partner.availabilityNote && (
-                            <p className="text-[10px] text-slate-500 font-semibold mt-1">{partner.availabilityNote}</p>
-                          )}
-                          {(partner.preferredSkillMin || partner.preferredSkillMax) && (
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
-                              Prefers DUPR {partner.preferredSkillMin || '?'}-{partner.preferredSkillMax || '?'}
-                            </p>
-                          )}
-                          {partner.preferredCourtType && (
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">
-                              Court Type: {partner.preferredCourtType}
-                            </p>
-                          )}
-                          {(partner.preferredLocationIds?.length || partner.preferredCourtIds?.length) && (
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">
-                              Prefers {partner.preferredLocationIds?.length || 0} locations • {partner.preferredCourtIds?.length || 0} courts
-                            </p>
-                          )}
-                          {partner.preferredLocationMode && (
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">
-                              Locations: {partner.preferredLocationMode === 'auto' ? 'Auto' : 'Manual'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-8">
-                        {partner.tags.map((tag: string) => (
-                          <span key={tag} className="text-[9px] font-black bg-slate-50 text-slate-500 px-3 py-1 rounded-lg uppercase tracking-widest border border-slate-100">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => onFollow(partner.id, partner.name)}
-                        className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl text-xs uppercase tracking-[0.2em] transition-all ${isFollowing ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-slate-950 text-white hover:bg-indigo-600 shadow-slate-100'
-                          }`}
-                      >
-                        {isFollowing ? <UserCheck size={16} /> : <UserPlus size={16} />}
-                        {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
-                      </button>
-                    </div>
-                  );
-                })}
-                {filteredPartners.length === 0 && (
-                  <div className="col-span-full text-center py-16">
-                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                      <Search size={32} className="text-slate-400" />
-                    </div>
-                    <h3 className="text-lg font-black text-slate-900 mb-2">No partners found</h3>
-                    <p className="text-sm text-slate-500">Try adjusting your search to find more results</p>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === 'groups' ? (
-              <div className="space-y-4">
-                <div className="bg-indigo-600 p-8 md:p-10 rounded-[48px] text-white shadow-2xl relative overflow-hidden">
-                  <div className="absolute -bottom-10 -right-10 w-48 h-48 text-white/10 rotate-12">
-                    <TrophyIcon className="w-full h-full" />
-                  </div>
-                  <h3 className="text-3xl font-black mb-4 tracking-tight uppercase leading-none">JOIN THE <br /> SQUAD.</h3>
-                  <p className="text-indigo-100 text-sm font-medium mb-8 leading-relaxed">Find local teams or found your own elite pickleball dynasty in your district.</p>
-                  <div className={`grid grid-cols-1 ${groups.length > 0 ? 'md:grid-cols-2' : ''} gap-3`}>
-                    <button
-                      onClick={() => setShowCreateGroup(true)}
-                      className="w-full bg-white text-indigo-600 font-black py-4 rounded-[24px] hover:bg-lime-400 hover:text-slate-900 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-xl"
-                    >
-                      Create squad <Plus size={16} />
-                    </button>
-                    {(() => {
-                      // Check if user is admin of any group
-                      const isAdminOfAny = groups.some(g => g.created_by === currentUserId);
-                      return isAdminOfAny ? (
-                        <button
-                          onClick={() => setShowCreateEvent(true)}
-                          className="w-full bg-indigo-500/70 text-white font-black py-4 rounded-[24px] hover:bg-indigo-400 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest border border-white/20"
-                        >
-                          Create event <Calendar size={16} />
-                        </button>
-                      ) : (
-                        <p className="text-indigo-200 text-xs font-semibold mt-2">Only squad admins can create events</p>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredGroups.map(group => {
-                    const isCreator = group.created_by === currentUserId;
-                    return (
-                      <div key={group.id} className={`bg-white p-6 rounded-[32px] border shadow-sm hover:shadow-xl transition-all ${isCreator ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'}`}>
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pickleball</p>
-                              {isCreator && (
-                                <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-600 text-white">YOUR SQUAD</span>
-                              )}
-                            </div>
-                            <h4 className="text-lg font-black text-slate-900 leading-tight">{group.name}</h4>
-                            <p className="text-sm text-slate-600 mt-1 line-clamp-2">{group.description || 'Join this group to connect with other players'}</p>
-                          </div>
-                          <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full shrink-0 ${group.privacy === 'public' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>{group.privacy === 'public' ? 'Public' : 'Private'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold mb-3">
-                          <Users size={14} className="text-indigo-500" /> {group.member_count} members
-                          <span>•</span>
-                          <MapPin size={14} className="text-indigo-500" /> {group.location || 'Location TBD'}
-                        </div>
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {(group.tags || []).map(tag => (
-                            <span key={tag} className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-slate-50 border border-slate-100 text-slate-500">{tag}</span>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => navigate(`/community/groups/${group.id}`)}
-                            className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
-                          >
-                            View details
-                          </button>
-                          {isCreator ? (
-                            <button
-                              onClick={() => navigate(`/community/groups/${group.id}/manage`)}
-                              title="Manage Squad"
-                              className="p-2.5 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
-                            >
-                              <Settings size={18} />
-                            </button>
-                          ) : group.user_is_member ? (
-                            <button
-                              disabled
-                              className="px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] font-black uppercase tracking-widest cursor-default"
-                            >
-                              Joined
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleJoinGroup(group.id)}
-                              className="px-4 py-3 rounded-2xl bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all disabled:opacity-50"
-                              disabled={joiningGroupId === group.id}
-                            >
-                              {joiningGroupId === group.id ? 'Joining...' : 'Join group'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filteredGroups.length === 0 && (
-                    <div className="col-span-full text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-                        <Search size={32} className="text-slate-400" />
-                      </div>
-                      <h3 className="text-lg font-black text-slate-900 mb-2">No squads found</h3>
-                      <p className="text-sm text-slate-500">Try adjusting your search or create a new squad</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
               <>
                 <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
                   <form onSubmit={handlePost} className="space-y-4">
@@ -952,7 +649,6 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                   )}
                 </div>
               </>
-            )}
           </div>
 
           {/* RIGHT SIDEBAR — News, Events & My Squads (all tabs) */}
@@ -1040,10 +736,10 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
                       <h3 className="text-lg font-black mb-2 tracking-tight uppercase leading-none">Join The<br />Squad.</h3>
                       <p className="text-indigo-100 text-xs font-medium mb-5 leading-relaxed">Find local teams or found your own elite pickleball dynasty.</p>
                       <button
-                        onClick={() => setActiveTab('groups')}
+                        onClick={() => navigate('/groups')}
                         className="w-full bg-white text-indigo-600 font-black py-3 rounded-2xl hover:bg-lime-400 hover:text-slate-900 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest"
                       >
-                        {activeTab === 'groups' ? 'Create squad' : 'View squads'} <Plus size={14} />
+                        View squads <Plus size={14} />
                       </button>
                     </div>
                     <TrophyIcon className="absolute -bottom-6 -right-6 w-32 h-32 text-white/10 rotate-12" />
@@ -1088,20 +784,6 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         </div>
       </div>
 
-      {/* Extracted Modals */}
-      <CreateGroupModal
-        show={showCreateGroup}
-        onClose={() => setShowCreateGroup(false)}
-        onGroupCreated={(newGroup) => setGroups(prev => [newGroup, ...prev])}
-        userSquadCount={userSquadCount}
-      />
-
-      <CreateEventModal
-        show={showCreateEvent}
-        onClose={() => setShowCreateEvent(false)}
-        onEventCreated={(newEvent) => setUpcomingMeets(prev => [newEvent, ...prev])}
-        groups={groups.filter(g => g.created_by === currentUserId)}
-      />
     </>
   );
 };

@@ -15,6 +15,7 @@ import {
     searchPlayerForInvite,
     PlayerInvitation,
 } from '../services/invitations';
+import { getOrCreateConversation, sendMessage } from '../services/directMessages';
 
 const ITEMS_PER_PAGE = 8;
 const STATUS_FILTERS = ['All', 'Confirmed', 'Pending', 'Paid', 'Cancelled'] as const;
@@ -107,6 +108,8 @@ const MyBookings: React.FC = () => {
     const [isSendingInvite, setIsSendingInvite] = useState(false);
     const [inviteSendError, setInviteSendError] = useState('');
     const [inviteSendSuccess, setInviteSendSuccess] = useState(false);
+    const [inviteFollowedPlayers, setInviteFollowedPlayers] = useState<any[]>([]);
+    const [inviteLoadingFollowed, setInviteLoadingFollowed] = useState(false);
 
     // ── Invitations Tab State ──
     const [receivedInvitations, setReceivedInvitations] = useState<PlayerInvitation[]>([]);
@@ -528,6 +531,20 @@ const MyBookings: React.FC = () => {
             message: inviteMessage.trim() || undefined,
         });
         if (result.success) {
+            // Auto-send invite details as a DM in their conversation
+            try {
+                const b = selectedBookingForInvite;
+                const courtName = b.court?.name || 'a court';
+                const locationName = b.court?.location?.name ? ` at ${b.court.location.name}` : '';
+                const dateStr = new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                const fmt12 = (t: string) => { const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`; };
+                const timeStr = `${fmt12(b.start_time)}–${fmt12(b.end_time)}`;
+                const firstName = (inviteSearchResult.full_name || inviteSearchResult.username || 'there').split(' ')[0];
+                let dmText = `Hey ${firstName}! 🏓 I'd love to play pickleball with you.\n\n📍 ${courtName}${locationName}\n📅 ${dateStr} · ${timeStr}`;
+                if (inviteMessage.trim()) dmText += `\n\n${inviteMessage.trim()}`;
+                const convId = await getOrCreateConversation(inviteSearchResult.id);
+                await sendMessage(convId, dmText);
+            } catch { /* non-critical — invite already saved */ }
             setInviteSendSuccess(true);
         } else {
             setInviteSendError(result.error ?? 'Failed to send invitation.');
@@ -543,7 +560,23 @@ const MyBookings: React.FC = () => {
         setInviteMessage('');
         setInviteSendError('');
         setInviteSendSuccess(false);
+        setInviteFollowedPlayers([]);
+        setInviteLoadingFollowed(true);
         setShowInviteModal(true);
+        // Load followed players as quick-invite recommendations
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session?.user) { setInviteLoadingFollowed(false); return; }
+            supabase.from('user_follows').select('followed_id').eq('follower_id', session.user.id)
+                .then(({ data: followRows }) => {
+                    const ids = (followRows || []).map((r: any) => r.followed_id);
+                    if (!ids.length) { setInviteLoadingFollowed(false); return; }
+                    supabase.from('profiles').select('id, full_name, username, avatar_url').in('id', ids).order('full_name').limit(20)
+                        .then(({ data: profiles }) => {
+                            setInviteFollowedPlayers(profiles || []);
+                            setInviteLoadingFollowed(false);
+                        });
+                });
+        });
     };
 
     const handleRespondInvitation = async (invitationId: string, status: 'accepted' | 'declined') => {
@@ -1486,13 +1519,84 @@ const MyBookings: React.FC = () => {
                                     <p className="text-lg font-black text-slate-900 uppercase tracking-tight">Invitation Sent!</p>
                                     <p className="text-xs text-slate-500 mt-1">{inviteSearchResult?.full_name || inviteSearchResult?.username} has been invited.</p>
                                 </div>
-                                <button onClick={() => setShowInviteModal(false)}
-                                    className="px-8 py-3 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-blue-600 transition-all">
-                                    Done
-                                </button>
+                                <div className="flex flex-col gap-2 pt-1">
+                                    <button
+                                        onClick={async () => {
+                                            if (!inviteSearchResult?.id) return;
+                                            try {
+                                                const convId = await getOrCreateConversation(inviteSearchResult.id);
+                                                setShowInviteModal(false);
+                                                navigate(`/messages?conversation=${convId}`);
+                                            } catch { setShowInviteModal(false); navigate('/messages'); }
+                                        }}
+                                        className="w-full px-8 py-3 bg-violet-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-violet-700 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Send size={14} /> Message {inviteSearchResult?.full_name?.split(' ')[0] || inviteSearchResult?.username || 'Player'}
+                                    </button>
+                                    <button onClick={() => setShowInviteModal(false)}
+                                        className="w-full px-8 py-3 bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-all">
+                                        Done
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="space-y-4">
+                                {/* ── Recommended Friends ── */}
+                                {(inviteLoadingFollowed || inviteFollowedPlayers.length > 0) && (
+                                    <div className="space-y-2">
+                                        <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Recommended Friends</label>
+                                        {inviteLoadingFollowed ? (
+                                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                                {[1,2,3].map(i => (
+                                                    <div key={i} className="flex-shrink-0 w-16 flex flex-col items-center gap-1.5 animate-pulse">
+                                                        <div className="w-12 h-12 rounded-2xl bg-slate-100" />
+                                                        <div className="h-2 w-10 bg-slate-100 rounded" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                                {inviteFollowedPlayers.map(fp => {
+                                                    const isSelected = inviteSearchResult?.id === fp.id;
+                                                    return (
+                                                        <button
+                                                            key={fp.id}
+                                                            onClick={() => {
+                                                                setInviteSearchResult(fp);
+                                                                setInviteSearchQuery('');
+                                                                setInviteSearchError('');
+                                                            }}
+                                                            className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-2 py-2 rounded-2xl border-2 transition-all ${
+                                                                isSelected
+                                                                    ? 'border-violet-500 bg-violet-50'
+                                                                    : 'border-transparent bg-slate-50 hover:bg-violet-50 hover:border-violet-200'
+                                                            }`}
+                                                        >
+                                                            <div className="relative">
+                                                                {fp.avatar_url ? (
+                                                                    <img src={fp.avatar_url} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" alt="" />
+                                                                ) : (
+                                                                    <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center border-2 border-white shadow-sm">
+                                                                        <UserPlus size={16} className="text-violet-500" />
+                                                                    </div>
+                                                                )}
+                                                                {isSelected && (
+                                                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center border-2 border-white">
+                                                                        <CheckCircle size={10} className="text-white" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[9px] font-black text-slate-700 uppercase tracking-tight text-center max-w-[52px] truncate leading-tight">
+                                                                {(fp.full_name || fp.username || '').split(' ')[0]}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Search */}
                                 <div className="space-y-2">
                                     <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Search by Username or Email</label>

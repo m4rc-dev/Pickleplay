@@ -387,7 +387,7 @@ export interface TournamentRegistration {
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT' |
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT' | 'new_message' |
     'squad_join_request' | 'squad_member_joined' | 'squad_member_left' |
     'squad_message' | 'squad_event_created' | 'squad_invitation' |
     'player_invitation' | 'invitation_accepted' | 'invitation_declined';

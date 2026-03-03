@@ -1278,17 +1278,25 @@ const Booking: React.FC = () => {
         setShowSuccessModal(true);
         setIsBooked(true);
 
-        // Load all players for the invite list
+        // Load followed players for the invite list
         setPostBookLoadingPlayers(true);
         setPostBookInviteSent([]);
         setPostBookInviteQuery('');
-        const { data: allProfiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, avatar_url')
-          .neq('id', user.id)
-          .order('full_name', { ascending: true })
-          .limit(100);
-        setPostBookAllPlayers(allProfiles ?? []);
+        const { data: followingRows } = await supabase
+          .from('user_follows')
+          .select('followed_id')
+          .eq('follower_id', user.id);
+        const followedIds = (followingRows || []).map((r: any) => r.followed_id);
+        if (followedIds.length > 0) {
+          const { data: followedProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, username, avatar_url')
+            .in('id', followedIds)
+            .order('full_name', { ascending: true });
+          setPostBookAllPlayers(followedProfiles ?? []);
+        } else {
+          setPostBookAllPlayers([]);
+        }
         setPostBookLoadingPlayers(false);
 
         // Clear slot selection immediately
@@ -2695,7 +2703,7 @@ const Booking: React.FC = () => {
                         type="text"
                         value={postBookInviteQuery}
                         onChange={e => setPostBookInviteQuery(e.target.value)}
-                        placeholder="Search by name or username..."
+                        placeholder="Search followed players..."
                         className="flex-1 bg-transparent outline-none text-sm font-bold text-slate-700 placeholder:text-slate-300"
                       />
                       {postBookInviteQuery && (
@@ -2722,7 +2730,13 @@ const Booking: React.FC = () => {
                         if (filtered.length === 0) {
                           return (
                             <div className="text-center py-4">
-                              <p className="text-xs font-bold text-slate-400">No players found</p>
+                              <p className="text-xs font-bold text-slate-400">
+                                {postBookInviteQuery
+                                  ? 'No players match your search'
+                                  : postBookAllPlayers.length === 0
+                                    ? 'Follow players in Find Partners to invite them here'
+                                    : 'No players found'}
+                              </p>
                             </div>
                           );
                         }
