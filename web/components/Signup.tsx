@@ -251,8 +251,27 @@ const Signup: React.FC = () => {
             const msg = err.message || 'Failed to create account. Please try again.';
             if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
                 if (isGuestFlow) {
-                    // Guest account already exists — redirect straight to login with email pre-filled
-                    navigate(`/login?email=${encodeURIComponent(email)}`);
+                    // Guest account already exists — update their password via server admin API
+                    try {
+                        const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001';
+                        const res = await fetch(`${serverUrl}/api/auth/set-guest-password`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, newPassword: password }),
+                        });
+                        const result = await res.json();
+                        if (res.ok && result.success) {
+                            // Password updated successfully — show success screen
+                            setSuccess(true);
+                            setTimeout(() => navigate(`/login?email=${encodeURIComponent(email)}`), 3000);
+                            return;
+                        }
+                        // Server couldn't update — show error
+                        setError(result.error || 'Account already exists. Please try logging in or use a different email.');
+                    } catch (serverErr) {
+                        console.error('Failed to update guest password via server:', serverErr);
+                        setError('Account already exists. Please try logging in or use a different email.');
+                    }
                     return;
                 }
                 setAlreadyRegistered(true);
