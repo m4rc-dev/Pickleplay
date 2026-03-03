@@ -1437,6 +1437,9 @@ const Booking: React.FC = () => {
 
   // Add state for desktop suggestions dropdown
   const [showDesktopSuggestions, setShowDesktopSuggestions] = useState(false);
+  // How-to-book guide
+  const [showGuide, setShowGuide] = useState(() => localStorage.getItem('pp_guide_dismissed') !== '1');
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   // Filtered courts (same as GuestBooking)
   const filteredCourts = courts
@@ -1599,6 +1602,19 @@ const Booking: React.FC = () => {
           )}
         </div>
 
+        {/* Back to Courts — mobile, shown when in a location detail */}
+        {!isSearchExpanded && urlLocationId && selectedLocation && (
+          <div className="px-4 pb-2">
+            <button
+              onClick={() => navigate('/booking')}
+              className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
+            >
+              <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+              Back to Courts
+            </button>
+          </div>
+        )}
+
         {/* Filter pills row */}
         {!isSearchExpanded && (
           <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
@@ -1653,7 +1669,7 @@ const Booking: React.FC = () => {
           </div>
 
           {/* Desktop Filter Pills */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
               <button
                 key={type}
@@ -1801,14 +1817,14 @@ const Booking: React.FC = () => {
               </button>
             </form>
 
-            {/* ─── Back button for court detail view ─── */}
-            {heroActiveCourt && !selectedCourt && (
+            {/* ─── Back to Courts button (desktop, location detail view) ─── */}
+            {urlLocationId && selectedLocation && (
               <button
-                onClick={() => { setHeroCourtId(null); navigate('/booking'); }}
-                className="hidden md:flex items-center gap-1.5 text-slate-500 text-xs font-bold hover:text-blue-600 transition-colors mb-3"
+                onClick={() => navigate('/booking')}
+                className="hidden md:flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest mb-4 transition-colors group"
               >
-                <ChevronLeft size={14} />
-                Back to Locations
+                <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                Back to Courts
               </button>
             )}
 
@@ -1961,7 +1977,7 @@ const Booking: React.FC = () => {
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
-                            <Building2 size={10} />
+                            <img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" />
                             {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
                           </span>
                           {(() => {
@@ -2072,7 +2088,7 @@ const Booking: React.FC = () => {
                                 <div className="p-3.5 text-left">
                                   <p className={`font-black text-sm tracking-tight mb-0.5 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-[#1E40AF] transition-colors' : 'text-slate-400'}`}>{court.name}</p>
                                   <div className="flex items-center gap-2.5">
-                                    <span className="text-[10px] font-bold text-slate-400">🎾 {court.numCourts} Units</span>
+                                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" /> {court.numCourts} Units</span>
                                     <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
                                     <span className="text-[10px] font-bold text-[#a3e635] uppercase tracking-wider">Book Now</span>
                                   </div>
@@ -2170,8 +2186,8 @@ const Booking: React.FC = () => {
                                     <MapPin size={10} className="text-[#1E40AF]" /> {location.city}
                                   </span>
                                   <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
-                                  <span className="text-[10px] font-bold text-slate-400">
-                                    🎾 {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
+                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                    <img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" /> {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
                                   </span>
                                 </div>
                                 <div className="mt-2.5 flex items-center justify-between">

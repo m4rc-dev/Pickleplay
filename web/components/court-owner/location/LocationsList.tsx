@@ -744,7 +744,7 @@ const LocationsList: React.FC = () => {
 
                 {/* Image Upload */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 px-1">Location Image</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 px-1 flex items-center gap-1.5">Court Image <span className="text-rose-500 font-black">*</span></label>
                     <div className="relative group">
                         <div className={`w-full h-40 rounded-[32px] border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center overflow-hidden bg-slate-50 ${formImagePreview ? 'border-blue-200 shadow-xl' : 'border-slate-100 hover:border-blue-300 hover:bg-blue-50/30'}`}>
                             {formImagePreview ? (
@@ -791,7 +791,7 @@ const LocationsList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Venue Name</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Venue Name <span className="text-rose-500 font-black">*</span></label>
                     <input required type="text" value={formName} onChange={e => setFormName(e.target.value)}
                         placeholder="e.g. Manila Sports Complex"
                         className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
@@ -800,7 +800,7 @@ const LocationsList: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                     {/* Region Dropdown */}
                     <div className="space-y-2 col-span-2" ref={regionDropdownRef}>
-                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Region</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Region <span className="text-rose-500 font-black">*</span></label>
                         <div className="relative">
                             <div
                                 onClick={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
@@ -851,7 +851,7 @@ const LocationsList: React.FC = () => {
 
                     {/* City/Municipality Dropdown */}
                     <div className="space-y-2" ref={cityDropdownRef}>
-                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">City / Municipality</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">City / Municipality <span className="text-rose-500 font-black">*</span></label>
                         <div className="relative">
                             <div
                                 onClick={() => { if (selectedRegionCode) setIsCityDropdownOpen(!isCityDropdownOpen); }}
@@ -901,7 +901,7 @@ const LocationsList: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Phone</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-2">Phone <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">(Optional)</span></label>
                         <input type="tel" value={formPhone} onChange={e => setFormPhone(e.target.value)}
                             placeholder="09XX XXX XXXX"
                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
@@ -910,7 +910,7 @@ const LocationsList: React.FC = () => {
 
                 {/* Barangay Dropdown */}
                 <div className="space-y-2" ref={barangayDropdownRef}>
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Barangay</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Barangay <span className="text-rose-500 font-black">*</span></label>
                     <div className="relative">
                         <div
                             onClick={() => { if (selectedCityCode) setIsBarangayDropdownOpen(!isBarangayDropdownOpen); }}
@@ -958,91 +958,8 @@ const LocationsList: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Court Type Selector */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
-                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                        {['Indoor', 'Outdoor', 'Both'].map((type) => (
-                            <button
-                                key={type}
-                                type="button"
-                                onClick={() => setFormCourtType(type as any)}
-                                className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${formCourtType === type
-                                    ? 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
-                                    : 'text-slate-400 hover:text-slate-600'
-                                    }`}
-                            >
-                                {type}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Location Status Selector */}
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Location Status</label>
-                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                        {(['Active', 'Closed', 'Maintenance', 'Coming Soon'] as const).map((s) => (
-                            <button
-                                key={s}
-                                type="button"
-                                onClick={() => setFormStatus(s)}
-                                className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${formStatus === s
-                                    ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
-                                        : s === 'Closed' ? 'bg-white text-rose-500 shadow-lg shadow-rose-100/50'
-                                            : s === 'Maintenance' ? 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
-                                                : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
-                                    : 'text-slate-400 hover:text-slate-600'
-                                    }`}
-                            >
-                                {s}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Operation Hours */}
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Operation Hours</label>
-                    <div className="flex items-center gap-3">
-                        <div className="flex-1 relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-emerald-500 uppercase tracking-widest">Open</div>
-                            <select
-                                value={formOpeningTime}
-                                onChange={e => setFormOpeningTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer"
-                            >
-                                {Array.from({ length: 24 }, (_, i) => {
-                                    const h = i.toString().padStart(2, '0');
-                                    const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`;
-                                    return <option key={h} value={`${h}:00`}>{label}</option>;
-                                })}
-                            </select>
-                        </div>
-                        <span className="text-slate-300 font-black text-xs">to</span>
-                        <div className="flex-1 relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-rose-400 uppercase tracking-widest">Close</div>
-                            <select
-                                value={formClosingTime}
-                                onChange={e => setFormClosingTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer"
-                            >
-                                {Array.from({ length: 24 }, (_, i) => {
-                                    const h = i.toString().padStart(2, '0');
-                                    const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`;
-                                    return <option key={h} value={`${h}:00`}>{label}</option>;
-                                })}
-                            </select>
-                        </div>
-                    </div>
-                    <p className="text-[9px] text-slate-400 ml-4">
-                        <Clock size={10} className="inline mr-1 -mt-0.5" />
-                        Only time slots within these hours will be available for booking.
-                    </p>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Street Address</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Street Address <span className="text-rose-500 font-black">*</span></label>
                     <input required type="text" value={formAddress} onChange={e => setFormAddress(e.target.value)}
                         placeholder="e.g. 123 Rizal Street"
                         className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 placeholder:text-slate-400" />
@@ -1055,7 +972,7 @@ const LocationsList: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Description</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-2">Description <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">(Optional)</span></label>
                     <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)}
                         placeholder="Brief description of your venue..."
                         rows={3}
@@ -1064,7 +981,7 @@ const LocationsList: React.FC = () => {
 
 
                 <div className="space-y-2" ref={amenityDropdownRef}>
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Amenities</label>
+                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-2">Amenities <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">(Optional)</span></label>
 
                     {/* Selected amenities tags */}
                     {selectedAmenities.length > 0 && (
@@ -1156,7 +1073,7 @@ const LocationsList: React.FC = () => {
             <div className="flex flex-col h-full">
                 <div className="flex-1 space-y-4">
                     <div className="flex justify-between items-center ml-4">
-                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Location Verification</label>
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Court Verification</label>
                         {isGeocoding && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
                     </div>
                     <div className="h-64 lg:h-[380px] bg-slate-50 rounded-[32px] border border-slate-100 overflow-hidden relative shadow-inner">
@@ -1183,6 +1100,65 @@ const LocationsList: React.FC = () => {
                     <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest">
                         TIP: Drag the marker or click map to refine location
                     </p>
+
+                    {/* ── Court Type, Status & Hours ── */}
+                    <div className="space-y-4 pt-2">
+                        {/* Court Type Selector */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
+                            <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                                {['Indoor', 'Outdoor', 'Both'].map((type) => (
+                                    <button key={type} type="button" onClick={() => setFormCourtType(type as any)}
+                                        className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${formCourtType === type ? 'bg-white text-blue-500 shadow-lg shadow-blue-100/50' : 'text-slate-400 hover:text-slate-600'}`}>
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Court Status Selector */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
+                            <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                                {(['Active', 'Closed', 'Maintenance', 'Coming Soon'] as const).map((s) => (
+                                    <button key={s} type="button" onClick={() => setFormStatus(s)}
+                                        className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${formStatus === s
+                                            ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
+                                                : s === 'Closed' ? 'bg-white text-rose-500 shadow-lg shadow-rose-100/50'
+                                                    : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
+                                            : 'text-slate-400 hover:text-slate-600'}`}>
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Operation Hours */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Operation Hours</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 relative">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-emerald-500 uppercase tracking-widest">Open</div>
+                                    <select value={formOpeningTime} onChange={e => setFormOpeningTime(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer">
+                                        {Array.from({ length: 24 }, (_, i) => { const h = i.toString().padStart(2, '0'); const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`; return <option key={h} value={`${h}:00`}>{label}</option>; })}
+                                    </select>
+                                </div>
+                                <span className="text-slate-300 font-black text-xs">to</span>
+                                <div className="flex-1 relative">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-rose-400 uppercase tracking-widest">Close</div>
+                                    <select value={formClosingTime} onChange={e => setFormClosingTime(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer">
+                                        {Array.from({ length: 24 }, (_, i) => { const h = i.toString().padStart(2, '0'); const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`; return <option key={h} value={`${h}:00`}>{label}</option>; })}
+                                    </select>
+                                </div>
+                            </div>
+                            <p className="text-[9px] text-slate-400 ml-4">
+                                <Clock size={10} className="inline mr-1 -mt-0.5" />
+                                Only time slots within these hours will be available for booking.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* ──── Location Closures Calendar (Edit Only) ──── */}
@@ -1412,7 +1388,7 @@ const LocationsList: React.FC = () => {
                     )}
                     <button type="submit" disabled={isSubmitting}
                         className={`${isEdit ? 'flex-[2]' : 'w-full'} h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95`}>
-                        {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Location'}
+                        {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Court'}
                     </button>
                 </div>
             </div>

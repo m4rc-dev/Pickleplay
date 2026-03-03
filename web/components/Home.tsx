@@ -295,15 +295,14 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('locations')
           .select(`
-            id, name, city, state, address, latitude, longitude, image_url,
+            id, name, city, state, address, latitude, longitude, image_url, hero_image, status, is_active,
             courts (
               id, base_price,
               court_reviews (
                 rating
               )
             )
-          `)
-          .eq('is_active', true);
+          `);
 
         if (error) throw error;
 
@@ -341,7 +340,9 @@ const Home: React.FC = () => {
             avg_price: courtCount > 0 ? Math.round(totalPrice / courtCount) : 0,
             avg_rating: totalReviews > 0 ? Math.round((totalRating / totalReviews) * 10) / 10 : 0,
             total_reviews: totalReviews,
-            imageUrl: loc.image_url
+            imageUrl: (loc as any).hero_image || loc.image_url,
+            status: (loc as any).status,
+            is_active: (loc as any).is_active
           };
         });
         setLocations(locationData);
@@ -654,8 +655,13 @@ const Home: React.FC = () => {
 
     // Prioritize locations over courts
     if (locations.length > 0) {
+      // Only show Active locations in featured section
+      const activeLocations = locations.filter(loc =>
+        (loc as any).status === 'Active' || (loc as any).is_active === true
+      );
+      const locationsPool = activeLocations.length > 0 ? activeLocations : locations;
       // All locations sorted by rating (5 to 1) for neutral/fallback use
-      const allLocationsSorted = [...locations].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+      const allLocationsSorted = [...locationsPool].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
 
       if (gpsEnabled) {
         if (userCity) {
