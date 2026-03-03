@@ -95,6 +95,28 @@ const Login: React.FC = () => {
             if (authError) throw authError;
             if (data.user) {
                 await ensureProfileFields(data.user);
+
+                // Check if user must reset their temporary password
+                const mustReset = data.user.user_metadata?.must_reset_password === true;
+                if (!mustReset) {
+                    // Also check profiles table as fallback
+                    const { data: profileCheck } = await supabase
+                        .from('profiles')
+                        .select('must_reset_password')
+                        .eq('id', data.user.id)
+                        .maybeSingle();
+                    if (profileCheck?.must_reset_password) {
+                        localStorage.setItem('must_reset_password', 'true');
+                        navigate('/reset-password');
+                        return;
+                    }
+                }
+                if (mustReset) {
+                    localStorage.setItem('must_reset_password', 'true');
+                    navigate('/reset-password');
+                    return;
+                }
+
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
                 try {
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
