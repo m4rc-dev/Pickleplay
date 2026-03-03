@@ -86,13 +86,17 @@ const ForcePasswordReset: React.FC = () => {
 
             if (updateError) throw updateError;
 
-            // Clear the flag in profiles table
+            // Clear the flag in profiles table (safely handle missing column)
             const { data: { session: updatedSession } } = await supabase.auth.getSession();
             if (updatedSession?.user) {
-                await supabase
-                    .from('profiles')
-                    .update({ must_reset_password: false })
-                    .eq('id', updatedSession.user.id);
+                try {
+                    await supabase
+                        .from('profiles')
+                        .update({ must_reset_password: false })
+                        .eq('id', updatedSession.user.id);
+                } catch {
+                    // Column may not exist yet — ignore
+                }
             }
 
             // Clear the local storage flag

@@ -423,70 +423,27 @@ const BookingsAdmin: React.FC = () => {
 
             if (error) throw error;
 
-            // 4. For guest bookings: Create Supabase account + send credentials email via server
-            if (mbUserType === 'guest' && guestEmail && !guestAccountCreated) {
+            // 4. For guest bookings: Send booking receipt email with "Setup Your Account" link
+            if (mbUserType === 'guest' && guestEmail) {
                 setMbSendingEmail(true);
                 const selectedCourt = myCourts.find((c: any) => c.id === mbCourtId);
                 const selectedLoc = myLocations.find((l: any) => l.id === mbLocationId);
                 try {
-                    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:5001';
-                    const response = await fetch(`${serverUrl}/api/auth/create-guest-account`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            guestEmail,
-                            guestFirstName: mbGuestFirstName.trim(),
-                            guestLastName: mbGuestLastName.trim(),
-                            referenceId: bookingData?.id || '',
-                            locationName: selectedLoc?.name || 'PicklePlay Court',
-                            locationAddress: selectedLoc?.address || selectedLoc?.city || '',
-                            courtName: selectedCourt?.name || 'Court',
-                            date: mbDate,
-                            startTime: slotStart,
-                            endTime: slotEnd,
-                            totalPrice: mbPrice,
-                        }),
-                    });
-                    const result = await response.json();
-                    if (response.ok && result.userId) {
-                        // Account created successfully — update booking to link to the real user
-                        await supabase
-                            .from('bookings')
-                            .update({ player_id: result.userId, guest_name: null, guest_email: null })
-                            .eq('id', bookingData.id);
-                        console.log(`✅ Guest account created & linked: ${guestEmail} → ${result.userId}`);
-                    } else {
-                        console.error('Server returned error:', result.error);
-                        // Fallback: send basic email notification
-                        await sendGuestBookingEmail({
-                            guestEmail,
-                            guestName,
-                            referenceId: bookingData?.id || '',
-                            locationName: selectedLoc?.name || 'PicklePlay Court',
-                            locationAddress: selectedLoc?.address || selectedLoc?.city || '',
-                            courtName: selectedCourt?.name || 'Court',
-                            date: mbDate,
-                            startTime: slotStart,
-                            endTime: slotEnd,
-                            totalPrice: mbPrice
-                        });
-                    }
-                } catch (serverErr) {
-                    console.error('Server unreachable, falling back to email-only:', serverErr);
-                    const selectedCourt2 = myCourts.find((c: any) => c.id === mbCourtId);
-                    const selectedLoc2 = myLocations.find((l: any) => l.id === mbLocationId);
                     await sendGuestBookingEmail({
                         guestEmail,
                         guestName,
                         referenceId: bookingData?.id || '',
-                        locationName: selectedLoc2?.name || 'PicklePlay Court',
-                        locationAddress: selectedLoc2?.address || selectedLoc2?.city || '',
-                        courtName: selectedCourt2?.name || 'Court',
+                        locationName: selectedLoc?.name || 'PicklePlay Court',
+                        locationAddress: selectedLoc?.address || selectedLoc?.city || '',
+                        courtName: selectedCourt?.name || 'Court',
                         date: mbDate,
                         startTime: slotStart,
                         endTime: slotEnd,
                         totalPrice: mbPrice
                     });
+                    console.log(`✅ Guest booking email sent to ${guestEmail}`);
+                } catch (emailErr) {
+                    console.error('Failed to send guest email:', emailErr);
                 }
                 setMbSendingEmail(false);
             }

@@ -24,6 +24,9 @@ const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [cameFromLogout, setCameFromLogout] = useState(false);
+    const [forgotMode, setForgotMode] = useState(false);
+    const [resetSent, setResetSent] = useState(false);
+    const [sendingReset, setSendingReset] = useState(false);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
 
@@ -32,6 +35,11 @@ const Login: React.FC = () => {
         if (localStorage.getItem('came_from_logout')) {
             setCameFromLogout(true);
             localStorage.removeItem('came_from_logout');
+        }
+        // Pre-fill email from query param (e.g., guest signup redirect)
+        const emailParam = searchParams.get('email');
+        if (emailParam && !email) {
+            setEmail(decodeURIComponent(emailParam));
         }
     }, []);
     const redirectUrl = searchParams.get('redirect') || '/';
@@ -96,27 +104,6 @@ const Login: React.FC = () => {
             if (data.user) {
                 await ensureProfileFields(data.user);
 
-                // Check if user must reset their temporary password
-                const mustReset = data.user.user_metadata?.must_reset_password === true;
-                if (!mustReset) {
-                    // Also check profiles table as fallback
-                    const { data: profileCheck } = await supabase
-                        .from('profiles')
-                        .select('must_reset_password')
-                        .eq('id', data.user.id)
-                        .maybeSingle();
-                    if (profileCheck?.must_reset_password) {
-                        localStorage.setItem('must_reset_password', 'true');
-                        navigate('/reset-password');
-                        return;
-                    }
-                }
-                if (mustReset) {
-                    localStorage.setItem('must_reset_password', 'true');
-                    navigate('/reset-password');
-                    return;
-                }
-
                 const deviceName = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser';
                 try {
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
@@ -142,6 +129,27 @@ const Login: React.FC = () => {
             setError(err.message || 'Failed to sign in. Please check your credentials.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        if (!email) {
+            setError('Please enter your email address first.');
+            return;
+        }
+        setSendingReset(true);
+        setError(null);
+        try {
+            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${appUrl}/login`,
+            });
+            if (resetError) throw resetError;
+            setResetSent(true);
+        } catch (err: any) {
+            setError(err.message || 'Failed to send reset email. Please try again.');
+        } finally {
+            setSendingReset(false);
         }
     };
 
@@ -303,8 +311,13 @@ const Login: React.FC = () => {
                                     <input type="checkbox" checked={rememberSession} onChange={(e) => setRememberSession(e.target.checked)} className="w-4 h-4 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
                                     <span className="text-xs text-slate-700 font-semibold">Remember session</span>
                                 </label>
-                                <button type="button" className="text-[0.625rem] font-extrabold uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
-                                    Forgot Password?
+                                <button
+                                    type="button"
+                                    onClick={handleForgotPassword}
+                                    disabled={sendingReset}
+                                    className="text-[0.625rem] font-extrabold uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors disabled:opacity-50"
+                                >
+                                    {sendingReset ? 'Sending...' : 'Forgot Password?'}
                                 </button>
                             </div>
 

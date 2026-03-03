@@ -219,27 +219,42 @@ const Signup: React.FC = () => {
         setError(null);
         try {
             const referralCode = searchParams.get('ref');
+
             const { data, error: authError } = await supabase.auth.signUp({
                 email, password,
                 options: { data: { full_name: fullName, username: fullName.toLowerCase().replace(/\s+/g, '_'), referred_by_code: referralCode } }
             });
             if (authError) throw authError;
             if (data.user) {
+                // Create/update profile so the DB trigger transfers guest bookings to this user
+                const profileData = {
+                    id: data.user.id,
+                    email: data.user.email || email,
+                    full_name: fullName,
+                    username: normalizeUsername(fullName || data.user.email?.split('@')[0] || 'player'),
+                    terms_accepted_at: new Date().toISOString()
+                };
+
                 if (data.session) {
-                    const { error: profileError } = await supabase.from('profiles').upsert({
-                        id: data.user.id, email: data.user.email || email, full_name: fullName,
-                        username: normalizeUsername(fullName || data.user.email?.split('@')[0] || 'player'),
-                        terms_accepted_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
+                    // Session available — upsert profile directly
+                    const { error: profileError } = await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
                     if (profileError) console.error('Failed to upsert profile fields during signup:', profileError);
                 }
+
                 setSuccess(true);
-                const loginUrl = redirectUrl !== '/dashboard' ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login';
+                const loginUrl = isGuestFlow
+                    ? `/login?email=${encodeURIComponent(email)}`
+                    : redirectUrl !== '/dashboard' ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login';
                 setTimeout(() => navigate(loginUrl), 3000);
             }
         } catch (err: any) {
             const msg = err.message || 'Failed to create account. Please try again.';
             if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+                if (isGuestFlow) {
+                    // Guest account already exists — redirect straight to login with email pre-filled
+                    navigate(`/login?email=${encodeURIComponent(email)}`);
+                    return;
+                }
                 setAlreadyRegistered(true);
                 setError(null);
             } else {
@@ -271,8 +286,14 @@ const Signup: React.FC = () => {
                     <div className="inline-flex items-center justify-center w-20 h-20 bg-lime-400 rounded-full shadow-xl shadow-lime-400/30 animate-bounce">
                         <CheckCircle2 size={40} className="text-slate-900" />
                     </div>
-                    <h1 className="text-3xl font-black text-white tracking-tight uppercase">Account Created!</h1>
-                    <p className="text-white/50 text-base leading-relaxed">You're all set. Redirecting you to login...</p>
+                    <h1 className="text-3xl font-black text-white tracking-tight uppercase">
+                        {isGuestFlow ? 'Account Successfully Set Up!' : 'Account Created!'}
+                    </h1>
+                    <p className="text-white/50 text-base leading-relaxed">
+                        {isGuestFlow
+                            ? 'Your account is ready. Redirecting you to login...'
+                            : "You're all set. Redirecting you to login..."}
+                    </p>
                     <Loader2 className="animate-spin text-lime-400 mx-auto" size={28} />
                 </div>
             </div>

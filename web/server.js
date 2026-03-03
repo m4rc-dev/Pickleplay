@@ -12,9 +12,9 @@ dotenv.config({ path: '../.env.local' }); // Try root as well
 const app = express();
 const PORT = 5001;
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const WEB_AUTH_REDIRECT_URL = process.env.WEB_AUTH_REDIRECT_URL;
+const WEB_AUTH_REDIRECT_URL = process.env.WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL;
 
 let supabaseAdmin = null;
 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -272,10 +272,12 @@ app.post('/api/auth/create-guest-account', async (req, res) => {
         throw updateError;
       }
 
-      // Update profile
+      // Update profile (safely handle missing column)
       await supabaseAdmin.from('profiles')
         .update({ must_reset_password: true })
-        .eq('id', userId);
+        .eq('id', userId)
+        .then(() => {})
+        .catch(() => console.warn('must_reset_password column may not exist yet — run migration 009'));
 
       console.log(`🔄 Updated existing user ${guestEmail} (${userId}) with new temp password`);
 
@@ -306,12 +308,20 @@ app.post('/api/auth/create-guest-account', async (req, res) => {
               user_metadata: { ...found.user_metadata, must_reset_password: true },
             });
             // Ensure profile exists
-            await supabaseAdmin.from('profiles').upsert({
+            // Upsert profile — try with must_reset_password, fallback without
+            let upsertResult = await supabaseAdmin.from('profiles').upsert({
               id: userId,
               email: guestEmail,
               full_name: guestName,
               must_reset_password: true,
             }, { onConflict: 'id' });
+            if (upsertResult.error) {
+              await supabaseAdmin.from('profiles').upsert({
+                id: userId,
+                email: guestEmail,
+                full_name: guestName,
+              }, { onConflict: 'id' });
+            }
             console.log(`🔄 Found existing auth user, updated: ${guestEmail} (${userId})`);
           } else {
             throw createError;
@@ -326,28 +336,31 @@ app.post('/api/auth/create-guest-account', async (req, res) => {
         const baseUsername = firstName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 22);
         const username = `${baseUsername}_${Math.random().toString(36).slice(2, 7)}`;
 
-        const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+        const profileData = {
           id: userId,
           email: guestEmail,
           full_name: guestName,
           username: username,
           active_role: 'PLAYER',
           roles: ['PLAYER'],
+        };
+
+        // Try insert with must_reset_password first
+        let { error: profileError } = await supabaseAdmin.from('profiles').insert({
+          ...profileData,
           must_reset_password: true,
         });
 
         if (profileError) {
-          console.error('Profile insert error (trying upsert):', profileError);
-          // Fallback to upsert if insert fails
-          await supabaseAdmin.from('profiles').upsert({
-            id: userId,
-            email: guestEmail,
-            full_name: guestName,
-            username: username,
-            active_role: 'PLAYER',
-            roles: ['PLAYER'],
-            must_reset_password: true,
-          }, { onConflict: 'id' });
+          console.error('Profile insert error (trying without must_reset_password):', profileError.message);
+          // Column may not exist yet — retry without it
+          const { error: retryError } = await supabaseAdmin.from('profiles').insert(profileData);
+          if (retryError) {
+            console.error('Profile insert retry error (trying upsert):', retryError.message);
+            await supabaseAdmin.from('profiles').upsert(profileData, { onConflict: 'id' });
+          }
+          // Try to set must_reset_password separately (will silently fail if column missing)
+          await supabaseAdmin.from('profiles').update({ must_reset_password: true }).eq('id', userId).then(() => {}).catch(() => {});
         }
 
         console.log(`✅ Created new user: ${guestEmail} (${userId})`);
@@ -573,6 +586,93 @@ app.post('/api/auth/create-guest-account', async (req, res) => {
   } catch (error) {
     console.error('❌ Create guest account error:', error);
     res.status(500).json({ error: error.message || 'Failed to create guest account' });
+  }
+});
+
+// ─── Set Guest Password (for pre-created accounts via Signup flow) ────────────────
+app.post('/api/auth/set-guest-password', async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: 'Missing required fields: email, newPassword' });
+    }
+
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: 'Supabase admin client not configured. Set SUPABASE_SERVICE_ROLE_KEY.' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    // Find user in profiles
+    let profile = null;
+    let hasResetColumn = true;
+
+    // Try with must_reset_password column first
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, must_reset_password')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (profileError && (profileError.code === '42703' || profileError.message?.includes('column') || profileError.code === 'PGRST204')) {
+      // Column doesn't exist — query without it
+      hasResetColumn = false;
+      const { data: fallbackProfile, error: fallbackError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      if (fallbackError) throw fallbackError;
+      profile = fallbackProfile;
+    } else if (profileError) {
+      throw profileError;
+    } else {
+      profile = profileData;
+    }
+
+    if (!profile) {
+      // No profile — try finding user in auth directly
+      const { data: allUsersData } = await supabaseAdmin.auth.admin.listUsers();
+      const found = allUsersData?.users?.find(u => u.email === email);
+      if (!found) {
+        return res.status(404).json({ error: 'No guest account found for this email.' });
+      }
+      profile = { id: found.id };
+    }
+
+    // Update password via admin API
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
+      password: newPassword,
+      user_metadata: { must_reset_password: false },
+    });
+
+    if (updateError) {
+      console.error('Failed to update guest password:', updateError);
+      throw updateError;
+    }
+
+    // Clear the must_reset_password flag and set password_set_at (safely handle missing columns)
+    await supabaseAdmin.from('profiles')
+      .update({ must_reset_password: false, password_set_at: new Date().toISOString() })
+      .eq('id', profile.id)
+      .then(() => {})
+      .catch(async () => {
+        // Columns may not exist — try without must_reset_password
+        await supabaseAdmin.from('profiles')
+          .update({ password_set_at: new Date().toISOString() })
+          .eq('id', profile.id)
+          .catch(() => {});
+      });
+
+    console.log(`✅ Guest password set successfully for ${email} (${profile.id})`);
+    res.json({ success: true, userId: profile.id });
+
+  } catch (error) {
+    console.error('❌ Set guest password error:', error);
+    res.status(500).json({ error: error.message || 'Failed to set password.' });
   }
 });
 
