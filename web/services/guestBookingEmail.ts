@@ -42,7 +42,8 @@ export const sendGuestBookingEmail = async (data: GuestBookingEmailData): Promis
         const durationMin = (eh * 60 + em) - (sh * 60 + sm);
         const durationHrs = durationMin >= 60 ? `${Math.floor(durationMin / 60)}h${durationMin % 60 > 0 ? ` ${durationMin % 60}m` : ''}` : `${durationMin}m`;
 
-        const signupUrl = `https://www.pickleplay.ph/signup?email=${encodeURIComponent(data.guestEmail)}&name=${encodeURIComponent(data.guestName)}&guest=true`;
+        const appUrl = 'https://www.pickleplay.ph';
+        const setupUrl = `${appUrl}/signup?guest=true&email=${encodeURIComponent(data.guestEmail)}&name=${encodeURIComponent(data.guestName)}`;
         const logoUrl = 'https://www.pickleplay.ph/images/PicklePlayLogo.jpg';
 
         // Full email HTML — PicklePlay branded: Vivid Blue (#2563EB) + Yellow Green (#84CC16)
@@ -67,7 +68,7 @@ export const sendGuestBookingEmail = async (data: GuestBookingEmailData): Promis
         Welcome, ${data.guestName}! 🎉
       </h2>
       <p style="margin: 0 0 24px; font-size: 14px; color: #64748b; line-height: 1.6; text-align: center;">
-        A court has been booked for you at <strong style="color: #1e40af;">${data.locationName}</strong>. Here's your booking receipt:
+        A court has been booked for you at <strong style="color: #1e40af;">${data.locationName}</strong>. Here are your booking details:
       </p>
 
       <!-- Booking Receipt Card -->
@@ -115,15 +116,30 @@ export const sendGuestBookingEmail = async (data: GuestBookingEmailData): Promis
       <!-- Setup Account CTA -->
       <div style="background: linear-gradient(135deg, #1e40af, #1d4ed8); border-radius: 16px; padding: 28px 24px; text-align: center; margin-bottom: 28px;">
         <h3 style="color: #ffffff; font-size: 17px; font-weight: 800; margin: 0 0 8px;">Setup Your PicklePlay Account</h3>
-        <p style="color: rgba(255,255,255,0.6); font-size: 13px; line-height: 1.5; margin: 0 0 20px;">
-          Set your password for <strong style="color: #a3e635;">${data.guestEmail}</strong> and this booking will automatically appear in your <strong style="color: #ffffff;">My Bookings</strong> page.
+        <p style="color: rgba(255,255,255,0.6); font-size: 13px; line-height: 1.5; margin: 0 0 8px;">
+          Create your account to view and manage your bookings, find partners, and track rankings.
         </p>
-        <a href="${signupUrl}" target="_blank" style="display: inline-block; text-decoration: none; color: #1e40af; background: linear-gradient(135deg, #a3e635, #84cc16); padding: 14px 36px; border-radius: 12px; font-size: 14px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">
-          Setup Your Account
+        <p style="color: rgba(255,255,255,0.5); font-size: 12px; line-height: 1.5; margin: 0 0 20px;">
+          Your email <strong style="color: #a3e635;">${data.guestEmail}</strong> is already set — just pick a password!
+        </p>
+        <a href="${setupUrl}" target="_blank" style="display: inline-block; text-decoration: none; color: #1e40af; background: linear-gradient(135deg, #a3e635, #84cc16); padding: 16px 40px; border-radius: 12px; font-size: 14px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">
+          🏸 Setup Your Account
         </a>
         <p style="color: rgba(255,255,255,0.4); font-size: 11px; margin: 14px 0 0;">
-          Find partners, book courts, track rankings &amp; more!
+          After setup, log in and your booking will appear in <strong style="color: rgba(255,255,255,0.7);">My Bookings</strong>.
         </p>
+      </div>
+
+      <!-- What You Get -->
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 28px;">
+        <p style="margin: 0 0 12px; color: #0f172a; font-size: 14px; font-weight: 800; text-align: center;">What You Can Do on PicklePlay:</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr><td style="padding: 6px 0; color: #334155; font-size: 13px;">🏸 Book courts anytime</td></tr>
+          <tr><td style="padding: 6px 0; color: #334155; font-size: 13px;">🤝 Find playing partners</td></tr>
+          <tr><td style="padding: 6px 0; color: #334155; font-size: 13px;">📊 Track your rankings &amp; stats</td></tr>
+          <tr><td style="padding: 6px 0; color: #334155; font-size: 13px;">🏆 Join tournaments &amp; events</td></tr>
+          <tr><td style="padding: 6px 0; color: #334155; font-size: 13px;">📱 All from your phone or desktop</td></tr>
+        </table>
       </div>
 
       <!-- Footer note -->

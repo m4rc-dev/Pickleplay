@@ -76,7 +76,6 @@ import MatchVerifyPage from './components/MatchVerifyPage';
 import PosterPage from './components/PosterPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
-import ForcePasswordReset from './components/ForcePasswordReset';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
@@ -363,9 +362,8 @@ const NavigationHandler: React.FC<{
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/reset-password';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
-  const isMustResetPassword = localStorage.getItem('must_reset_password') === 'true';
 
   // Load + poll unread message count
   useEffect(() => {
@@ -984,9 +982,7 @@ const NavigationHandler: React.FC<{
               <Route path="/" element={
                 isTwoFactorPending
                   ? <Navigate to="/verify-2fa" replace />
-                  : isMustResetPassword
-                    ? <Navigate to="/reset-password" replace />
-                    : role === 'guest'
+                  : role === 'guest'
                       ? <Home />
                       : role === 'PLAYER'
                         ? <Navigate to="/booking" replace />
@@ -996,7 +992,6 @@ const NavigationHandler: React.FC<{
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
-              <Route path="/reset-password" element={<ForcePasswordReset />} />
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
@@ -1336,32 +1331,63 @@ const App: React.FC = () => {
           consolidatedRoles = [...dbRoles];
         } else if (session.user) {
           // Fallback: Create profile if missing
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              email: session.user.email || null,
-              full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
-              username: ((session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'player') as string)
+          const baseUsername = ((session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'player') as string)
                 .toLowerCase()
                 .trim()
                 .replace(/\s+/g, '_')
                 .replace(/[^a-z0-9_]/g, '')
-                .slice(0, 30) || 'player',
-              avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '',
-              active_role: 'PLAYER',
-              roles: ['PLAYER']
-            })
-            .select()
-            .single();
+                .slice(0, 22) || 'player';
 
-          if (!createError && newProfile) {
-            console.log('✅ Fallback profile created successfully');
-            setUserName(newProfile.full_name);
-            setUserAvatar(newProfile.avatar_url);
-            consolidatedRoles = ['PLAYER'];
-          } else {
-            console.error('❌ Failed to create fallback profile:', createError);
+          let profileCreated = false;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const candidateUsername = attempt === 0 ? baseUsername.slice(0, 30) : `${baseUsername}_${Math.random().toString(36).slice(2, 7)}`;
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: session.user.id,
+                email: session.user.email || null,
+                full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+                username: candidateUsername,
+                avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '',
+                active_role: 'PLAYER',
+                roles: ['PLAYER']
+              })
+              .select()
+              .single();
+
+            if (!createError && newProfile) {
+              console.log('✅ Fallback profile created successfully');
+              setUserName(newProfile.full_name);
+              setUserAvatar(newProfile.avatar_url);
+              consolidatedRoles = ['PLAYER'];
+              profileCreated = true;
+              break;
+            } else if (createError?.code === '23505') {
+              // Username conflict — retry with random suffix
+              console.warn(`⚠️ Username "${candidateUsername}" taken, retrying...`);
+              continue;
+            } else {
+              console.error('❌ Failed to create fallback profile:', createError);
+              break;
+            }
+          }
+
+          // If insert kept failing due to conflict, the profile might already exist
+          // (e.g. created by server but not returned by initial query due to timing)
+          if (!profileCreated) {
+            const { data: retryProfile } = await supabase
+              .from('profiles')
+              .select('full_name, username, active_role, roles, avatar_url, email, points')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            if (retryProfile) {
+              setUserName(retryProfile.full_name);
+              setUserAvatar(retryProfile.avatar_url);
+              dbRoles = (retryProfile.roles as UserRole[]) || ['PLAYER'];
+              consolidatedRoles = [...dbRoles];
+            } else {
+              consolidatedRoles = ['PLAYER'];
+            }
           }
         }
 
@@ -1383,10 +1409,14 @@ const App: React.FC = () => {
 
         if (allPossibleRoles.length > dbRoles.length) {
           console.log('Self-healing triggered: Updating roles array in database...');
-          await supabase
-            .from('profiles')
-            .update({ roles: allPossibleRoles })
-            .eq('id', session.user.id);
+          try {
+            await supabase
+              .from('profiles')
+              .update({ roles: allPossibleRoles })
+              .eq('id', session.user.id);
+          } catch {
+            // Ignore — profile may not be fully set up yet
+          }
           consolidatedRoles = allPossibleRoles;
         }
 
