@@ -656,7 +656,6 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/court-policies" icon={<Shield size={22} />} label="Court Policies" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -932,7 +931,6 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/court-policies" icon={<Shield size={22} />} label="Court Policies" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />

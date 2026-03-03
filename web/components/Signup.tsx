@@ -10,7 +10,11 @@ import {
     CheckCircle2,
     ArrowLeft,
     X,
-    Shield
+    Shield,
+    LogIn,
+    KeyRound,
+    Mail,
+    UserCheck
 } from 'lucide-react';
 
 // ─── Default T&C ──────────────────────────────────────────────────────────────
@@ -137,9 +141,50 @@ const Signup: React.FC = () => {
     const [success, setSuccess] = useState(false);
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [showTermsModal, setShowTermsModal] = useState(false);
+    const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+    const [resetEmailSent, setResetEmailSent] = useState(false);
+    const [sendingReset, setSendingReset] = useState(false);
+    const [guestName, setGuestName] = useState('');
+    const [guestLoading, setGuestLoading] = useState(false);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const redirectUrl = searchParams.get('redirect') || '/dashboard';
+    const isGuestFlow = searchParams.get('guest') === 'true';
+
+    // Pre-fill email & name from URL query params (from guest booking email)
+    useEffect(() => {
+        const emailParam = searchParams.get('email');
+        const nameParam = searchParams.get('name');
+        if (emailParam) setEmail(decodeURIComponent(emailParam));
+        if (nameParam) {
+            const decoded = decodeURIComponent(nameParam);
+            setGuestName(decoded);
+            setFullName(decoded);
+        }
+    }, [searchParams]);
+
+    // For guest flow: fetch guest info from bookings if name not in URL
+    useEffect(() => {
+        if (!isGuestFlow || !email || guestName) return;
+        setGuestLoading(true);
+        (async () => {
+            try {
+                const { data } = await supabase
+                    .from('bookings')
+                    .select('guest_name')
+                    .eq('guest_email', email)
+                    .not('guest_name', 'is', null)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                if (data?.guest_name) {
+                    setGuestName(data.guest_name);
+                    setFullName(data.guest_name);
+                }
+            } catch { /* ignore */ }
+            finally { setGuestLoading(false); }
+        })();
+    }, [isGuestFlow, email, guestName]);
 
     const normalizeUsername = (value: string) =>
         value.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30);
@@ -193,8 +238,29 @@ const Signup: React.FC = () => {
                 setTimeout(() => navigate(loginUrl), 3000);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to create account. Please try again.');
+            const msg = err.message || 'Failed to create account. Please try again.';
+            if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+                setAlreadyRegistered(true);
+                setError(null);
+            } else {
+                setError(msg);
+            }
         } finally { setLoading(false); }
+    };
+
+    // Send password reset email for already-registered users
+    const handleSendResetEmail = async () => {
+        setSendingReset(true);
+        try {
+            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${appUrl}/login`,
+            });
+            if (resetError) throw resetError;
+            setResetEmailSent(true);
+        } catch (err: any) {
+            setError(err.message || 'Failed to send reset email. Please try again.');
+        } finally { setSendingReset(false); }
     };
 
     /* ── Success ── */
@@ -213,6 +279,266 @@ const Signup: React.FC = () => {
         );
     }
 
+    /* ── Already Registered (guest already has an account) ── */
+    if (alreadyRegistered) {
+        return (
+            <div className="min-h-screen w-full bg-[#030712] flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+                {/* Background Gradients */}
+                <div className="absolute top-[15%] right-[10%] w-[35rem] h-[35rem] rounded-full bg-amber-500/10 blur-[130px] pointer-events-none" />
+                <div className="absolute bottom-[10%] left-[5%] w-[45rem] h-[45rem] rounded-full bg-blue-600/15 blur-[110px] pointer-events-none animate-pulse" />
+
+                <div className="relative z-10 w-full max-w-md">
+                    {/* Back */}
+                    <div className="mb-4">
+                        <button
+                            onClick={() => { setAlreadyRegistered(false); setResetEmailSent(false); setError(null); }}
+                            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white/80 transition-colors"
+                        >
+                            <ArrowLeft size={14} />
+                            Back
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-[32px] shadow-2xl shadow-black/50 border border-white/5 p-8 sm:p-10 text-center space-y-6">
+                        {/* Icon */}
+                        <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-50 rounded-full border-2 border-blue-200 mx-auto">
+                            <UserCheck size={36} className="text-blue-600" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <h1 className="text-2xl font-black text-slate-950 tracking-tight">Account Found!</h1>
+                            <p className="text-slate-500 text-sm leading-relaxed">
+                                An account with <strong className="text-blue-600">{email}</strong> already exists on PicklePlay.
+                            </p>
+                            <p className="text-slate-500 text-sm leading-relaxed">
+                                Log in or reset your password below. Your guest booking will automatically appear in <strong className="text-slate-800">My Bookings</strong>.
+                            </p>
+                        </div>
+
+                        {resetEmailSent ? (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
+                                <div className="flex items-center justify-center gap-2 text-emerald-600">
+                                    <CheckCircle2 size={18} />
+                                    <span className="font-bold text-sm">Password Reset Email Sent!</span>
+                                </div>
+                                <p className="text-emerald-600/70 text-xs leading-relaxed">
+                                    Check your inbox for <strong>{email}</strong>. Click the link to set your password, then log in to see your booking.
+                                </p>
+                                <Link
+                                    to="/login"
+                                    className="inline-flex items-center gap-2 mt-2 text-blue-600 font-bold text-sm hover:text-blue-700 transition-colors"
+                                >
+                                    <LogIn size={14} />
+                                    Go to Login
+                                </Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {error && (
+                                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm">
+                                        <AlertCircle size={16} className="shrink-0" />
+                                        <p className="font-medium">{error}</p>
+                                    </div>
+                                )}
+
+                                {/* Option 1: Login */}
+                                <Link
+                                    to={`/login${redirectUrl !== '/dashboard' ? `?redirect=${encodeURIComponent(redirectUrl)}` : ''}`}
+                                    className="w-full bg-[#1E40AF] hover:bg-blue-800 text-white font-black h-14 rounded-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-xl shadow-blue-900/20"
+                                >
+                                    <LogIn size={16} />
+                                    Log In to Your Account
+                                </Link>
+
+                                {/* Divider */}
+                                <div className="relative">
+                                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+                                    <div className="relative flex justify-center text-[0.625rem] font-bold uppercase tracking-widest">
+                                        <span className="bg-white px-4 text-slate-400">or</span>
+                                    </div>
+                                </div>
+
+                                {/* Option 2: Reset Password */}
+                                <button
+                                    onClick={handleSendResetEmail}
+                                    disabled={sendingReset}
+                                    className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold h-12 rounded-xl text-xs uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] border border-slate-200"
+                                >
+                                    {sendingReset ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                                    {sendingReset ? 'Sending...' : "Reset Password via Email"}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    /* ── Guest Setup Flow — streamlined password-only form ── */
+    if (isGuestFlow && email) {
+        return (
+            <div className="min-h-screen w-full bg-[#030712] flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+                <style>{`
+                    @keyframes fadeInBlur {
+                        from { opacity: 0; filter: blur(10px); transform: scale(0.98) translateY(20px); }
+                        to { opacity: 1; filter: blur(0); transform: scale(1) translateY(0); }
+                    }
+                    .animate-fade-in-blur {
+                        animation: fadeInBlur 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    }
+                `}</style>
+
+                {/* Background */}
+                <div className="absolute top-[15%] right-[10%] w-[35rem] h-[35rem] rounded-full bg-emerald-500/10 blur-[130px] pointer-events-none" />
+                <div className="absolute bottom-[10%] left-[5%] w-[45rem] h-[45rem] rounded-full bg-blue-600/15 blur-[110px] pointer-events-none animate-pulse" />
+                <div className="absolute inset-0 bg-[radial-gradient(#ffffff05_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+
+                {/* Back to Home */}
+                <div className="relative z-10 w-full max-w-md mb-4">
+                    <Link to="/" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white/80 transition-colors">
+                        <ArrowLeft size={14} />
+                        Back to Home
+                    </Link>
+                </div>
+
+                <div className="relative z-10 w-full max-w-md bg-white rounded-[32px] shadow-2xl shadow-black/50 border border-white/5 overflow-hidden animate-fade-in-blur">
+                    <div className="p-8 sm:p-10">
+                        {/* Logo */}
+                        <div className="flex justify-center mb-6">
+                            <div className="relative">
+                                <div className="absolute -inset-2 bg-blue-100/50 rounded-2xl blur-lg" />
+                                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="relative w-14 h-14 rounded-xl object-contain shadow-lg ring-2 ring-slate-100" />
+                            </div>
+                        </div>
+
+                        {/* Welcome */}
+                        <div className="text-center mb-8">
+                            <h1 className="text-2xl font-black text-slate-950 tracking-tight mb-2">Setup Your Account</h1>
+                            {guestLoading ? (
+                                <div className="flex items-center justify-center gap-2 text-slate-400">
+                                    <Loader2 size={14} className="animate-spin" />
+                                    <span className="text-sm">Loading your info...</span>
+                                </div>
+                            ) : (
+                                <p className="text-slate-500 text-sm leading-relaxed">
+                                    {guestName ? (
+                                        <>Welcome, <strong className="text-slate-800">{guestName}</strong>! Set</>  
+                                    ) : (
+                                        <>Set</>  
+                                    )}
+                                    {' '}your password to access your PicklePlay account and view your bookings.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Account info card */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                                <Mail size={18} className="text-blue-600" />
+                            </div>
+                            <div className="min-w-0">
+                                {guestName && <p className="text-sm font-bold text-slate-900 truncate">{guestName}</p>}
+                                <p className="text-xs text-slate-500 font-medium truncate">{email}</p>
+                            </div>
+                            <div className="ml-auto">
+                                <span className="text-[0.6rem] font-extrabold uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">Guest</span>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSignup} className="space-y-4">
+                            {error && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm">
+                                    <AlertCircle size={16} className="shrink-0" />
+                                    <p className="font-medium">{error}</p>
+                                </div>
+                            )}
+
+                            {/* Password */}
+                            <div className="space-y-1.5">
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-slate-50/50 border border-slate-200 focus:border-[#1E40AF] focus:ring-2 focus:ring-blue-100 rounded-xl py-3.5 px-4 text-slate-900 text-sm font-semibold placeholder:text-slate-400 outline-none transition-all"
+                                        placeholder="Enter your password"
+                                    />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Confirm Password */}
+                            <div className="space-y-1.5">
+                                <label className="text-[0.625rem] font-extrabold uppercase tracking-widest text-slate-700 ml-1">Confirm Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        required
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className={`w-full bg-slate-50/50 border rounded-xl py-3.5 px-4 text-slate-900 text-sm font-semibold placeholder:text-slate-400 outline-none transition-all focus:ring-2 ${confirmPassword && confirmPassword !== password
+                                            ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10'
+                                            : 'border-slate-200 focus:border-[#1E40AF] focus:ring-blue-100'
+                                            }`}
+                                        placeholder="Confirm your password"
+                                    />
+                                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {password.length > 0 && password.length < 8 && (
+                                    <p className="text-[0.625rem] text-amber-500 font-semibold ml-1">Password must be at least 8 characters</p>
+                                )}
+                            </div>
+
+                            {/* Terms */}
+                            <div className="flex items-start gap-2.5 pt-1">
+                                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
+                                    <span className="text-xs text-slate-700 font-medium leading-relaxed">
+                                        I agree to the{' '}
+                                        <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-blue-600 font-bold hover:text-blue-700 underline underline-offset-2 transition-colors">
+                                            Terms & Privacy Policy
+                                        </button>
+                                    </span>
+                                </label>
+                            </div>
+
+                            {/* CTA */}
+                            <button
+                                type="submit"
+                                disabled={loading || !agreedToTerms}
+                                className={`w-full font-black h-14 rounded-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-xl ${agreedToTerms
+                                    ? 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-blue-900/20'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                    }`}
+                            >
+                                {loading ? <Loader2 size={20} className="animate-spin" /> : 'Setup Your Account'}
+                            </button>
+                        </form>
+
+                        {/* Already have password? */}
+                        <p className="mt-5 text-center text-slate-600 text-sm font-medium">
+                            Already have a password?{' '}
+                            <Link to="/login" className="text-[#1E40AF] font-bold hover:text-blue-700 transition-all">
+                                Sign In
+                            </Link>
+                        </p>
+                    </div>
+                </div>
+
+                {/* Terms Modal */}
+                <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} />
+            </div>
+        );
+    }
+
+    /* ── Normal Signup ── */
     return (
         <div className="min-h-screen w-full bg-[#030712] flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
             <style>{`

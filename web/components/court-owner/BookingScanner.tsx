@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { X, QrCode, CheckCircle2, AlertCircle, Camera, Banknote, DollarSign } from 'lucide-react';
+import { X, QrCode, CheckCircle2, AlertCircle, Camera, Banknote, DollarSign, AlertTriangle, Calendar } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface BookingScannerProps {
@@ -34,6 +34,8 @@ interface BookingDetails {
     profiles: {
         username: string;
         full_name: string;
+        email?: string;
+        avatar_url?: string;
     };
 }
 
@@ -49,6 +51,10 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
     const [showCashFlow, setShowCashFlow] = useState(false);
     const [cashReceived, setCashReceived] = useState<string>('');
     const [change, setChange] = useState<number>(0);
+    const [cashError, setCashError] = useState('');
+
+    // Today's date string for date comparisons
+    const scannerTodayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
 
     const onScanSuccess = async (decodedText: string) => {
         try {
@@ -164,7 +170,9 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
           ),
           profiles!inner (
             username,
-            full_name
+            full_name,
+            email,
+            avatar_url
           )
         `)
                 .eq('id', bookingId)
@@ -251,11 +259,58 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
         }
     };
 
+    const handleAdvancePay = async (isPaidViaCash = false) => {
+        if (!bookingDetails) return;
+        setIsVerifying(true);
+        setError('');
+
+        try {
+            const updates: any = {
+                status: 'confirmed',
+                payment_status: 'paid'
+            };
+
+            if (isPaidViaCash) {
+                const fullUpdates: any = {
+                    ...updates,
+                    amount_tendered: parseFloat(cashReceived),
+                    change_amount: change
+                };
+                let { error: updateError } = await supabase
+                    .from('bookings')
+                    .update(fullUpdates)
+                    .eq('id', bookingDetails.id);
+
+                if (updateError) {
+                    const { error: fallbackError } = await supabase
+                        .from('bookings')
+                        .update(updates)
+                        .eq('id', bookingDetails.id);
+                    if (fallbackError) throw fallbackError;
+                }
+            } else {
+                const { error: updateError } = await supabase
+                    .from('bookings')
+                    .update(updates)
+                    .eq('id', bookingDetails.id);
+                if (updateError) throw updateError;
+            }
+
+            setSuccess(true);
+            setTimeout(() => onClose(), 2000);
+        } catch (err: any) {
+            setError(err.message || 'Failed to process advance payment');
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
     const calculateChange = (value: string) => {
         const received = parseFloat(value) || 0;
         const total = bookingDetails?.total_price || 0;
         setCashReceived(value);
         setChange(Math.max(0, received - total));
+        setCashError('');
     };
 
     const handleReset = () => {
@@ -268,8 +323,8 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[40px] shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-200">
                     <div className="flex items-center gap-3">
@@ -327,10 +382,37 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                         <div className="space-y-4">
                             {!showCashFlow ? (
                                 <>
-                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
-                                        <CheckCircle2 className="mx-auto text-emerald-600 mb-3" size={48} />
-                                        <h3 className="text-lg font-black text-emerald-900 mb-1">Valid Booking</h3>
-                                        <p className="text-sm text-emerald-700">Ready to check in</p>
+                                    {bookingDetails.date !== scannerTodayStr ? (
+                                        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-6 text-center">
+                                            <Calendar className="mx-auto text-indigo-600 mb-3" size={48} />
+                                            <h3 className="text-lg font-black text-indigo-900 mb-1">Future Booking</h3>
+                                            <p className="text-sm text-indigo-700">Scheduled for {new Date(bookingDetails.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                                            <p className="text-[10px] font-bold text-indigo-400 mt-2 uppercase tracking-widest">Check-in available on scheduled date only</p>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+                                            <CheckCircle2 className="mx-auto text-emerald-600 mb-3" size={48} />
+                                            <h3 className="text-lg font-black text-emerald-900 mb-1">Valid Booking</h3>
+                                            <p className="text-sm text-emerald-700">Ready to check in</p>
+                                        </div>
+                                    )}
+
+                                    {/* Player Profile */}
+                                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Player Information</p>
+                                        <div className="flex items-center gap-3">
+                                            {bookingDetails.profiles.avatar_url ? (
+                                                <img src={bookingDetails.profiles.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                                            ) : (
+                                                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(bookingDetails.profiles.full_name || bookingDetails.profiles.username)}&background=random&size=48&font-size=0.4&bold=true`} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                                            )}
+                                            <div>
+                                                <p className="font-black text-slate-900 tracking-tight uppercase">{bookingDetails.profiles.full_name || bookingDetails.profiles.username}</p>
+                                                {bookingDetails.profiles.email && (
+                                                    <p className="text-[10px] font-bold text-slate-400">{bookingDetails.profiles.email}</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-3">
@@ -342,6 +424,14 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                                         <div className="flex justify-between items-center">
                                             <span className="text-sm font-medium text-slate-600">Court</span>
                                             <span className="text-sm font-bold text-slate-900">{bookingDetails.courts.name}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-slate-600">Date</span>
+                                            <span className="text-sm font-bold text-slate-900">{new Date(bookingDetails.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-slate-600">Time</span>
+                                            <span className="text-sm font-bold text-slate-900">{bookingDetails.start_time.slice(0, 5)} – {bookingDetails.end_time.slice(0, 5)}</span>
                                         </div>
                                         <div className="flex justify-between items-center">
                                             <span className="text-sm font-medium text-slate-600 text-right">Payment Status</span>
@@ -363,7 +453,22 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                                     <div className="flex gap-3">
                                         <button onClick={handleReset} className="flex-1 px-6 py-4 bg-slate-100 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Cancel</button>
 
-                                        {bookingDetails.payment_status === 'unpaid' && (!bookingDetails.payment_method || bookingDetails.payment_method === 'cash') ? (
+                                        {bookingDetails.date !== scannerTodayStr ? (
+                                            // Future booking — advance pay only, no check-in
+                                            bookingDetails.payment_status === 'paid' ? (
+                                                <div className="flex-1 px-6 py-4 bg-lime-50 border-2 border-lime-200 text-lime-700 rounded-2xl font-black text-sm flex items-center justify-center gap-2">
+                                                    <CheckCircle2 size={18} /> Already Paid
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setShowCashFlow(true)}
+                                                    className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                                                >
+                                                    <Banknote size={18} />
+                                                    Advance Pay
+                                                </button>
+                                            )
+                                        ) : bookingDetails.payment_status === 'unpaid' && (!bookingDetails.payment_method || bookingDetails.payment_method === 'cash') ? (
                                             <button
                                                 onClick={() => setShowCashFlow(true)}
                                                 className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
@@ -427,21 +532,39 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                                             </div>
                                             <span className="text-2xl font-black text-lime-400">₱{change.toFixed(2)}</span>
                                         </div>
+
+                                {cashError && (
+                                    <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl">
+                                        <AlertTriangle size={14} className="text-rose-500 shrink-0" />
+                                        <p className="text-xs font-bold text-rose-600">{cashError}</p>
+                                    </div>
+                                )}
                                     </div>
 
                                     <div className="flex gap-3">
                                         <button
-                                            onClick={() => setShowCashFlow(false)}
+                                            onClick={() => { setShowCashFlow(false); setCashError(''); }}
                                             className="px-6 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
                                         >
                                             Back
                                         </button>
                                         <button
-                                            onClick={() => handleCheckIn(true)}
-                                            disabled={parseFloat(cashReceived) < bookingDetails.total_price || isVerifying}
-                                            className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50"
+                                            onClick={() => {
+                                                const received = parseFloat(cashReceived) || 0;
+                                                if (received < bookingDetails.total_price) {
+                                                    setCashError(`Cash received (₱${received.toFixed(2)}) must not be less than the total bill (₱${bookingDetails.total_price.toFixed(2)}).`);
+                                                    return;
+                                                }
+                                                if (bookingDetails.date !== scannerTodayStr) {
+                                                    handleAdvancePay(true);
+                                                } else {
+                                                    handleCheckIn(true);
+                                                }
+                                            }}
+                                            disabled={isVerifying}
+                                            className={`flex-1 px-6 py-4 ${bookingDetails.date !== scannerTodayStr ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl disabled:opacity-50`}
                                         >
-                                            Complete Payment & Check-In
+                                            {bookingDetails.date !== scannerTodayStr ? 'Complete Advance Payment' : 'Complete Payment & Check-In'}
                                         </button>
                                     </div>
                                 </div>
@@ -450,10 +573,14 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                     )}
 
                     {success && (
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
-                            <CheckCircle2 className="mx-auto text-emerald-600 mb-4" size={64} />
-                            <h3 className="text-2xl font-black text-emerald-900 mb-2">Check-In Successful!</h3>
-                            <p className="text-sm text-emerald-700">Player has been checked in</p>
+                        <div className={`${bookingDetails && bookingDetails.date !== scannerTodayStr ? 'bg-indigo-50 border-indigo-200' : 'bg-emerald-50 border-emerald-200'} border rounded-2xl p-8 text-center`}>
+                            <CheckCircle2 className={`mx-auto ${bookingDetails && bookingDetails.date !== scannerTodayStr ? 'text-indigo-600' : 'text-emerald-600'} mb-4`} size={64} />
+                            <h3 className={`text-2xl font-black ${bookingDetails && bookingDetails.date !== scannerTodayStr ? 'text-indigo-900' : 'text-emerald-900'} mb-2`}>
+                                {bookingDetails && bookingDetails.date !== scannerTodayStr ? 'Advance Payment Successful!' : 'Check-In Successful!'}
+                            </h3>
+                            <p className={`text-sm ${bookingDetails && bookingDetails.date !== scannerTodayStr ? 'text-indigo-700' : 'text-emerald-700'}`}>
+                                {bookingDetails && bookingDetails.date !== scannerTodayStr ? 'Payment has been recorded for future booking' : 'Player has been checked in'}
+                            </p>
                         </div>
                     )}
                 </div>
