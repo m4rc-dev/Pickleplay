@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { getOwnerPolicies, createPolicy, updatePolicy, deletePolicy, LocationPolicy } from '../../services/policies';
-import { Shield, Plus, Pencil, Trash2, Save, X, Loader2, ChevronDown, MapPin, FileText, AlertCircle, CheckCircle2, GripVertical, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Shield, Plus, Pencil, Trash2, Save, X, Loader2, ChevronDown, MapPin, FileText, AlertCircle, CheckCircle2, GripVertical, ToggleLeft, ToggleRight, ArrowLeft } from 'lucide-react';
 
 const LocationPolicies: React.FC = () => {
+    const navigate = useNavigate();
     const [policies, setPolicies] = useState<LocationPolicy[]>([]);
     const [locations, setLocations] = useState<any[]>([]);
     const [selectedLocationId, setSelectedLocationId] = useState<string>('');
@@ -124,20 +127,36 @@ const LocationPolicies: React.FC = () => {
     const selectedLocation = locations.find(l => l.id === selectedLocationId);
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 animate-fade-in pb-20">
+        <div className="space-y-8 animate-in fade-in duration-700 pb-12">
             {/* Header */}
-            <div>
-                <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-4">COURT OWNER / 2026</p>
-                <h1 className="text-4xl md:text-6xl font-black text-slate-950 tracking-tighter uppercase leading-[0.85]">
-                    Court <span className="text-blue-600">Policies.</span>
-                </h1>
-                <p className="text-slate-500 font-medium mt-3 text-sm">Create and manage terms & conditions for your locations. Players will see these before booking.</p>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <button
+                        onClick={() => navigate('/locations')}
+                        className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors mb-4 group"
+                    >
+                        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                        Back to My Courts
+                    </button>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Court Policies</h1>
+                    <p className="text-slate-500 font-medium tracking-tight">Create and manage terms & conditions for your locations.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={openAddForm}
+                        disabled={!selectedLocationId}
+                        className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <Plus size={16} /> Add Policy
+                    </button>
+                </div>
             </div>
 
             {/* Location Selector */}
             {locations.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-600 pl-2">
                         <MapPin size={16} className="text-blue-600" />
                         <span>Location:</span>
                     </div>
@@ -147,7 +166,7 @@ const LocationPolicies: React.FC = () => {
                                 key={loc.id}
                                 onClick={() => setSelectedLocationId(loc.id)}
                                 className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 ${selectedLocationId === loc.id
-                                    ? 'bg-slate-950 text-white border-slate-950 shadow-xl shadow-slate-200/50'
+                                    ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-200/50'
                                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
                                     }`}
                             >
@@ -158,19 +177,14 @@ const LocationPolicies: React.FC = () => {
                 </div>
             )}
 
-            {/* Add Policy Button */}
+            {/* Section Title */}
             <div className="flex items-center justify-between">
                 <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
                     {selectedLocation?.name ? `Policies for ${selectedLocation.name}` : 'Select a Location'}
                 </h2>
-                <button
-                    onClick={openAddForm}
-                    disabled={!selectedLocationId}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-900/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                    <Plus size={16} />
-                    Add Policy
-                </button>
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                    {policies.length} {policies.length === 1 ? 'Policy' : 'Policies'}
+                </span>
             </div>
 
             {/* Policies List */}
@@ -248,7 +262,7 @@ const LocationPolicies: React.FC = () => {
                         </div>
                         <button
                             onClick={openAddForm}
-                            className="px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10"
+                            className="px-8 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
                         >
                             Create Your First Policy
                         </button>
@@ -257,23 +271,30 @@ const LocationPolicies: React.FC = () => {
             </div>
 
             {/* ─── Add/Edit Policy Modal ─── */}
-            {isFormOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md" onClick={() => { setIsFormOpen(false); setEditingPolicy(null); }} />
-                    <div className="relative w-full max-w-xl bg-white rounded-[40px] shadow-3xl p-8 sm:p-10 space-y-6 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tight leading-none mb-1">
-                                    {editingPolicy ? 'Edit Policy' : 'New Policy'}
-                                </h3>
-                                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                                    {selectedLocation?.name || 'Select location'}
-                                </p>
+            {isFormOpen && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
+                                    <Shield className="text-blue-600" size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                                        {editingPolicy ? 'Edit Policy' : 'New Policy'}
+                                    </h2>
+                                    <p className="text-xs text-slate-500 font-medium">
+                                        {selectedLocation?.name || 'Select location'}
+                                    </p>
+                                </div>
                             </div>
-                            <button onClick={() => { setIsFormOpen(false); setEditingPolicy(null); }} className="p-2 text-slate-400 hover:text-slate-950 transition-colors rounded-xl hover:bg-slate-100">
-                                <X size={22} />
+                            <button onClick={() => { setIsFormOpen(false); setEditingPolicy(null); }} className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                                <X size={20} className="text-slate-600" />
                             </button>
                         </div>
+
+                        <div className="p-6 space-y-6">
 
                         {/* Location (for new policies only) */}
                         {!editingPolicy && locations.length > 1 && (
@@ -334,14 +355,14 @@ const LocationPolicies: React.FC = () => {
                         <div className="flex gap-3 pt-2">
                             <button
                                 onClick={() => { setIsFormOpen(false); setEditingPolicy(null); }}
-                                className="flex-1 py-4 bg-slate-50 text-slate-400 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-slate-100 transition-all"
+                                className="px-6 py-4 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-all"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving || !formTitle.trim() || !formContent.trim()}
-                                className="flex-1 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-slate-900 disabled:opacity-40 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/10"
+                                className="flex-1 py-4 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-blue-700 disabled:opacity-40 disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-200"
                             >
                                 {isSaving ? <Loader2 className="animate-spin" size={16} /> : (
                                     <>
@@ -351,15 +372,16 @@ const LocationPolicies: React.FC = () => {
                                 )}
                             </button>
                         </div>
+                        </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ─── Delete Confirmation Modal ─── */}
-            {deletingId && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md" onClick={() => setDeletingId(null)} />
-                    <div className="relative w-full max-w-sm bg-white rounded-[32px] shadow-3xl p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
+            {deletingId && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
                         <div className="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto">
                             <Trash2 size={28} className="text-rose-500" />
                         </div>
@@ -388,7 +410,8 @@ const LocationPolicies: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

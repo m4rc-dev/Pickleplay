@@ -196,6 +196,20 @@ const MyBookings: React.FC = () => {
                 return;
             }
             setCurrentUserId(session.user.id);
+            const userEmail = session.user.email;
+
+            // Auto-claim: transfer any guest bookings that match this user's email
+            if (userEmail) {
+                try {
+                    await supabase
+                        .from('bookings')
+                        .update({ player_id: session.user.id, guest_name: null })
+                        .eq('guest_email', userEmail)
+                        .not('booked_by', 'is', null);
+                } catch (claimErr) {
+                    console.warn('Guest booking claim check:', claimErr);
+                }
+            }
 
             try {
                 const { data: profile } = await supabase
