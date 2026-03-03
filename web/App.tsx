@@ -76,6 +76,7 @@ import MatchVerifyPage from './components/MatchVerifyPage';
 import PosterPage from './components/PosterPage';
 import TermsOfService from './components/TermsOfService';
 import PrivacyPolicy from './components/PrivacyPolicy';
+import ForcePasswordReset from './components/ForcePasswordReset';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
@@ -362,8 +363,9 @@ const NavigationHandler: React.FC<{
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/reset-password';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
+  const isMustResetPassword = localStorage.getItem('must_reset_password') === 'true';
 
   // Load + poll unread message count
   useEffect(() => {
@@ -982,16 +984,19 @@ const NavigationHandler: React.FC<{
               <Route path="/" element={
                 isTwoFactorPending
                   ? <Navigate to="/verify-2fa" replace />
-                  : role === 'guest'
-                    ? <Home />
-                    : role === 'PLAYER'
-                      ? <Navigate to="/booking" replace />
-                      : role === 'ADMIN'
-                        ? <Navigate to="/admin" replace />
-                        : <Navigate to="/dashboard" replace />
+                  : isMustResetPassword
+                    ? <Navigate to="/reset-password" replace />
+                    : role === 'guest'
+                      ? <Home />
+                      : role === 'PLAYER'
+                        ? <Navigate to="/booking" replace />
+                        : role === 'ADMIN'
+                          ? <Navigate to="/admin" replace />
+                          : <Navigate to="/dashboard" replace />
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/reset-password" element={<ForcePasswordReset />} />
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
