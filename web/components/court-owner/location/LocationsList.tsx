@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
-import { uploadCourtImage } from '../../../services/locations';
+import { uploadCourtImage, uploadCourtPhoto } from '../../../services/locations';
 import { Location, LocationClosure, LocationClosureReason, CourtStatus } from '../../../types';
 import ConfirmDialog from '../../ui/ConfirmDialog';
 
@@ -63,7 +63,7 @@ const LocationsList: React.FC = () => {
     const [viewCourtBookings, setViewCourtBookings] = useState<any[]>([]);
     const [isLoadingViewBookings, setIsLoadingViewBookings] = useState(false);
 
-// Today's bookings count per court (with time-aware availability)
+    // Today's bookings count per court (with time-aware availability)
     const [courtBookingCounts, setCourtBookingCounts] = useState<Record<string, { booked: number; passed: number; available: number; totalSlots: number }>>({});
 
     // Court form state
@@ -78,6 +78,9 @@ const LocationsList: React.FC = () => {
     const [surfaceSearch, setSurfaceSearch] = useState('');
     const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
     const [locationDropdownSearch, setLocationDropdownSearch] = useState('');
+    const [courtImageFile, setCourtImageFile] = useState<File | null>(null);
+    const [courtImagePreview, setCourtImagePreview] = useState<string | null>(null);
+    const courtImageInputRef = useRef<HTMLInputElement>(null);
     const surfaceDropdownRef = useRef<HTMLDivElement>(null);
     const locationDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -924,6 +927,8 @@ const LocationsList: React.FC = () => {
         setIsSurfaceDropdownOpen(false);
         setIsLocationDropdownOpen(false);
         setLocationDropdownSearch('');
+        setCourtImageFile(null);
+        setCourtImagePreview(null);
     };
 
     const handleAddCourt = async (e: React.FormEvent) => {
@@ -936,6 +941,15 @@ const LocationsList: React.FC = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
             const selectedLoc = locations.find(l => l.id === courtLocationId);
+
+            // Upload image if provided
+            let imageUrl: string | null = null;
+            if (courtImageFile) {
+                const uploadResult = await uploadCourtPhoto(courtImageFile, user.id);
+                if (!uploadResult.success) throw new Error(`Image upload failed: ${uploadResult.message}`);
+                imageUrl = uploadResult.publicUrl || null;
+            }
+
             const { error } = await supabase
                 .from('courts')
                 .insert({
@@ -949,6 +963,7 @@ const LocationsList: React.FC = () => {
                     status: courtStatus,
                     latitude: selectedLoc?.latitude,
                     longitude: selectedLoc?.longitude,
+                    image_url: imageUrl,
                 });
             if (error) throw error;
             setIsAddCourtModalOpen(false);
@@ -971,7 +986,18 @@ const LocationsList: React.FC = () => {
         const finalPrice = isCourtFree ? 0 : courtPrice;
         setIsCourtSubmitting(true);
         try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Not authenticated');
             const selectedLoc = locations.find(l => l.id === courtLocationId);
+
+            // Upload new image if provided, else keep existing
+            let imageUrl: string | null | undefined = editingCourt.image_url;
+            if (courtImageFile) {
+                const uploadResult = await uploadCourtPhoto(courtImageFile, user.id, editingCourt.id);
+                if (!uploadResult.success) throw new Error(`Image upload failed: ${uploadResult.message}`);
+                imageUrl = uploadResult.publicUrl || null;
+            }
+
             const { error } = await supabase
                 .from('courts')
                 .update({
@@ -984,6 +1010,7 @@ const LocationsList: React.FC = () => {
                     status: courtStatus,
                     latitude: selectedLoc?.latitude,
                     longitude: selectedLoc?.longitude,
+                    image_url: imageUrl,
                 })
                 .eq('id', editingCourt.id);
             if (error) throw error;
@@ -1034,6 +1061,9 @@ const LocationsList: React.FC = () => {
         setIsSurfaceDropdownOpen(false);
         setIsLocationDropdownOpen(false);
         setLocationDropdownSearch('');
+        // Load existing image into preview
+        setCourtImageFile(null);
+        setCourtImagePreview(court.image_url || null);
         setIsEditCourtModalOpen(true);
     };
 
@@ -1761,11 +1791,10 @@ const LocationsList: React.FC = () => {
                 </div>
                 <div className="relative" ref={locationFilterRef}>
                     <button onClick={() => setIsLocationFilterOpen(!isLocationFilterOpen)}
-                        className={`flex items-center gap-2 px-5 py-3.5 border rounded-2xl text-sm font-bold transition-all ${
-                            courtLocationFilter
-                                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                        }`}>
+                        className={`flex items-center gap-2 px-5 py-3.5 border rounded-2xl text-sm font-bold transition-all ${courtLocationFilter
+                            ? 'bg-blue-50 border-blue-200 text-blue-700'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}>
                         <Building2 size={16} />
                         <span className="max-w-[160px] truncate">
                             {courtLocationFilter ? (locations.find(l => l.id === courtLocationFilter)?.name || 'Location') : 'All Locations'}
@@ -1775,24 +1804,20 @@ const LocationsList: React.FC = () => {
                     {isLocationFilterOpen && (
                         <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 min-w-[240px] max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                             <button onClick={() => { setCourtLocationFilter(''); setIsLocationFilterOpen(false); }}
-                                className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
-                                    !courtLocationFilter ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
-                                }`}>
-                                <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                                    !courtLocationFilter ? 'border-blue-400 bg-blue-50' : 'border-slate-200'
-                                }`}>
+                                className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${!courtLocationFilter ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
+                                    }`}>
+                                <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${!courtLocationFilter ? 'border-blue-400 bg-blue-50' : 'border-slate-200'
+                                    }`}>
                                     {!courtLocationFilter && <Check size={12} className="text-blue-600" />}
                                 </span>
                                 All Locations
                             </button>
                             {locations.map(loc => (
                                 <button key={loc.id} onClick={() => { setCourtLocationFilter(loc.id); setIsLocationFilterOpen(false); }}
-                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
-                                        courtLocationFilter === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
-                                    }`}>
-                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                                        courtLocationFilter === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'
-                                    }`}>
+                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtLocationFilter === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
+                                        }`}>
+                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtLocationFilter === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'
+                                        }`}>
                                         {courtLocationFilter === loc.id && <Check size={12} className="text-blue-600" />}
                                     </span>
                                     <div>
@@ -1845,12 +1870,11 @@ const LocationsList: React.FC = () => {
                                             onClick={() => openViewCourtModal(court)}>
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`p-2 rounded-xl ${
-                                                        isFull ? 'bg-rose-50 text-rose-500'
+                                                    <div className={`p-2 rounded-xl ${isFull ? 'bg-rose-50 text-rose-500'
                                                         : cStatus === 'Available' ? 'bg-emerald-50 text-emerald-600'
-                                                        : cStatus === 'Maintenance' ? 'bg-amber-50 text-amber-600'
-                                                        : 'bg-blue-50 text-blue-600'
-                                                    }`}>
+                                                            : cStatus === 'Maintenance' ? 'bg-amber-50 text-amber-600'
+                                                                : 'bg-blue-50 text-blue-600'
+                                                        }`}>
                                                         <MapPin size={16} />
                                                     </div>
                                                     <span className="text-sm font-black text-slate-900 tracking-tight uppercase">{court.name}</span>
@@ -1860,11 +1884,10 @@ const LocationsList: React.FC = () => {
                                                 <span className="text-xs font-bold text-slate-500">{court.location_name}</span>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                                                    court.court_type === 'Indoor' ? 'bg-purple-50 border-purple-100 text-purple-600'
+                                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${court.court_type === 'Indoor' ? 'bg-purple-50 border-purple-100 text-purple-600'
                                                     : court.court_type === 'Outdoor' ? 'bg-orange-50 border-orange-100 text-orange-600'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400'
-                                                }`}>
+                                                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                    }`}>
                                                     {court.court_type || 'N/A'}
                                                 </span>
                                             </td>
@@ -1892,9 +1915,8 @@ const LocationsList: React.FC = () => {
                                                         </span>
                                                     )}
                                                     <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full rounded-full transition-all duration-500 ${
-                                                            isFull ? 'bg-rose-500' : slotPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                                                        }`} style={{ width: `${slotPercent}%` }} />
+                                                        <div className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-rose-500' : slotPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                                            }`} style={{ width: `${slotPercent}%` }} />
                                                     </div>
                                                     {passedSlots > 0 && (
                                                         <span className="text-[8px] font-bold text-slate-400">{passedSlots} expired</span>
@@ -1902,13 +1924,12 @@ const LocationsList: React.FC = () => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                    cStatus === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${cStatus === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                                                     : cStatus === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                                    : cStatus === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
-                                                    : cStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400'
-                                                }`}>
+                                                        : cStatus === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
+                                                            : cStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                                : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                    }`}>
                                                     {cStatus}
                                                 </span>
                                             </td>
@@ -1952,168 +1973,175 @@ const LocationsList: React.FC = () => {
             {/* View Court Detail Modal */}
             {isViewCourtModalOpen && viewingCourt && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-2xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{viewingCourt.name}</h2>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{viewingCourt.location_name}</p>
-                            </div>
-                            <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
-                        </div>
-
-                        {/* Court Info Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Court Type</p>
-                                <p className="text-sm font-black text-slate-900">{viewingCourt.court_type || 'N/A'}</p>
-                            </div>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Surface</p>
-                                <p className="text-sm font-black text-slate-900">{viewingCourt.surface_type || '—'}</p>
-                            </div>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                                <p className="text-sm font-black text-slate-900">
-                                    {(viewingCourt.base_price || 0) === 0 ? <span className="text-emerald-600">Free</span> : `₱${viewingCourt.base_price}/hr`}
-                                </p>
-                            </div>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                    (viewingCourt.status || 'Available') === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                    : (viewingCourt.status) === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                    : (viewingCourt.status) === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
-                                    : (viewingCourt.status) === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                    : 'bg-slate-50 border-slate-200 text-slate-400'
-                                }`}>
-                                    {viewingCourt.status || 'Available'}
-                                </span>
-                            </div>
-                            {(() => {
-                                const info = courtBookingCounts[viewingCourt.id];
-                                const booked = info?.booked || 0;
-                                const passed = info?.passed || 0;
-                                const total = info?.totalSlots || 10;
-                                const available = info?.available ?? Math.max(total - booked, 0);
-                                const usedSlots = booked + passed;
-                                const full = available === 0;
-                                const usedPercent = total > 0 ? Math.min((usedSlots / total) * 100, 100) : 0;
-                                const bookedPercent = total > 0 ? Math.min((booked / total) * 100, 100) : 0;
-                                return (
-                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 col-span-2 md:col-span-2">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Today's Availability</p>
-                                        {/* Slot breakdown */}
-                                        <div className="flex gap-3 mb-3">
-                                            <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
-                                                <p className="text-lg font-black text-blue-600">{booked}</p>
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Booked</p>
-                                            </div>
-                                            <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
-                                                <p className="text-lg font-black text-slate-300">{passed}</p>
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Expired</p>
-                                            </div>
-                                            <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
-                                                <p className={`text-lg font-black ${available > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{available}</p>
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Available</p>
-                                            </div>
-                                            <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
-                                                <p className="text-lg font-black text-slate-900">{total}</p>
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total</p>
-                                            </div>
-                                        </div>
-                                        {/* Progress bar with segments */}
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1">
-                                                <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
-                                                    {bookedPercent > 0 && (
-                                                        <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${bookedPercent}%` }} />
-                                                    )}
-                                                    {passed > 0 && (
-                                                        <div className="h-full bg-slate-300 transition-all duration-500" style={{ width: `${total > 0 ? (passed / total) * 100 : 0}%` }} />
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-4 mt-1.5">
-                                                    <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Booked</span>
-                                                    <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Expired</span>
-                                                    <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-100 border border-slate-200"></span> Available</span>
-                                                </div>
-                                            </div>
-                                            <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                full ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                            }`}>
-                                                {full ? 'Full' : `${available}/${total}`}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </div>
-
-                        {/* Upcoming Bookings */}
-                        <div>
-                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <Calendar size={14} className="text-blue-600" /> Upcoming Bookings
-                            </h3>
-                            {isLoadingViewBookings ? (
-                                <div className="space-y-3">
-                                    {Array(3).fill(0).map((_, i) => (
-                                        <div key={i} className="bg-slate-50 rounded-2xl h-14 animate-pulse"></div>
-                                    ))}
+                    <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-hidden">
+                        <div className="overflow-y-auto max-h-[90vh] p-10">
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{viewingCourt.name}</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{viewingCourt.location_name}</p>
                                 </div>
-                            ) : viewCourtBookings.length > 0 ? (
-                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                    {viewCourtBookings.map((booking: any) => {
-                                        const bookDate = new Date(booking.date + 'T00:00:00');
-                                        const isToday = booking.date === new Date().toISOString().split('T')[0];
-                                        return (
-                                            <div key={booking.id}
-                                                onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate('/bookings-admin'); }}
-                                                className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-3.5 border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 transition-all cursor-pointer group/booking">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-center ${
-                                                        isToday ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600'
-                                                    }`}>
-                                                        <span className="text-[8px] font-black uppercase leading-none">{bookDate.toLocaleDateString('en-US', { month: 'short' })}</span>
-                                                        <span className="text-sm font-black leading-none">{bookDate.getDate()}</span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-black text-slate-900 group-hover/booking:text-blue-600 transition-colors">{booking.profiles?.full_name || 'Guest'}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400">{booking.start_time} - {booking.end_time}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                        booking.status === 'confirmed' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                                        : booking.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                                        : booking.status === 'completed' ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-400'
-                                                    }`}>
-                                                        {booking.status}
-                                                    </span>
-                                                    <ChevronRight size={14} className="text-slate-300 group-hover/booking:text-blue-500 transition-colors" />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="py-10 text-center bg-slate-50 rounded-2xl border border-slate-100">
-                                    <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No upcoming bookings</p>
+                                <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
+                            </div>
+
+                            {/* Court Photo Banner */}
+                            {viewingCourt.image_url && (
+                                <div className="mb-8 rounded-3xl overflow-hidden border border-slate-100 h-44 w-full relative">
+                                    <img src={viewingCourt.image_url} alt={viewingCourt.name}
+                                        className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent" />
                                 </div>
                             )}
-                        </div>
 
-                        {/* Actions */}
-                        <div className="flex gap-3 mt-8">
-                            <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); openEditCourtModal(viewingCourt); }}
-                                className="flex-1 h-14 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
-                                <Pencil size={16} /> Edit Court
-                            </button>
-                            <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); handleDeleteCourt(viewingCourt.id); }}
-                                className="h-14 px-6 border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
-                                <Trash2 size={16} /> Remove
-                            </button>
+                            {/* Court Info Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Court Type</p>
+                                    <p className="text-sm font-black text-slate-900">{viewingCourt.court_type || 'N/A'}</p>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Surface</p>
+                                    <p className="text-sm font-black text-slate-900">{viewingCourt.surface_type || '—'}</p>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
+                                    <p className="text-sm font-black text-slate-900">
+                                        {(viewingCourt.base_price || 0) === 0 ? <span className="text-emerald-600">Free</span> : `₱${viewingCourt.base_price}/hr`}
+                                    </p>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${(viewingCourt.status || 'Available') === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                        : (viewingCourt.status) === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                            : (viewingCourt.status) === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
+                                                : (viewingCourt.status) === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                    : 'bg-slate-50 border-slate-200 text-slate-400'
+                                        }`}>
+                                        {viewingCourt.status || 'Available'}
+                                    </span>
+                                </div>
+                                {(() => {
+                                    const info = courtBookingCounts[viewingCourt.id];
+                                    const booked = info?.booked || 0;
+                                    const passed = info?.passed || 0;
+                                    const total = info?.totalSlots || 10;
+                                    const available = info?.available ?? Math.max(total - booked, 0);
+                                    const usedSlots = booked + passed;
+                                    const full = available === 0;
+                                    const usedPercent = total > 0 ? Math.min((usedSlots / total) * 100, 100) : 0;
+                                    const bookedPercent = total > 0 ? Math.min((booked / total) * 100, 100) : 0;
+                                    return (
+                                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 col-span-2 md:col-span-2">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Today's Availability</p>
+                                            {/* Slot breakdown */}
+                                            <div className="flex gap-3 mb-3">
+                                                <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
+                                                    <p className="text-lg font-black text-blue-600">{booked}</p>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Booked</p>
+                                                </div>
+                                                <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
+                                                    <p className="text-lg font-black text-slate-300">{passed}</p>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Expired</p>
+                                                </div>
+                                                <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
+                                                    <p className={`text-lg font-black ${available > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{available}</p>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Available</p>
+                                                </div>
+                                                <div className="flex-1 bg-white rounded-xl p-2.5 border border-slate-100 text-center">
+                                                    <p className="text-lg font-black text-slate-900">{total}</p>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total</p>
+                                                </div>
+                                            </div>
+                                            {/* Progress bar with segments */}
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex-1">
+                                                    <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
+                                                        {bookedPercent > 0 && (
+                                                            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${bookedPercent}%` }} />
+                                                        )}
+                                                        {passed > 0 && (
+                                                            <div className="h-full bg-slate-300 transition-all duration-500" style={{ width: `${total > 0 ? (passed / total) * 100 : 0}%` }} />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-4 mt-1.5">
+                                                        <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Booked</span>
+                                                        <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Expired</span>
+                                                        <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-100 border border-slate-200"></span> Available</span>
+                                                    </div>
+                                                </div>
+                                                <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${full ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                                    }`}>
+                                                    {full ? 'Full' : `${available}/${total}`}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Upcoming Bookings */}
+                            <div>
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Calendar size={14} className="text-blue-600" /> Upcoming Bookings
+                                </h3>
+                                {isLoadingViewBookings ? (
+                                    <div className="space-y-3">
+                                        {Array(3).fill(0).map((_, i) => (
+                                            <div key={i} className="bg-slate-50 rounded-2xl h-14 animate-pulse"></div>
+                                        ))}
+                                    </div>
+                                ) : viewCourtBookings.length > 0 ? (
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                        {viewCourtBookings.map((booking: any) => {
+                                            const bookDate = new Date(booking.date + 'T00:00:00');
+                                            const isToday = booking.date === new Date().toISOString().split('T')[0];
+                                            return (
+                                                <div key={booking.id}
+                                                    onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate('/bookings-admin'); }}
+                                                    className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-3.5 border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 transition-all cursor-pointer group/booking">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-center ${isToday ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                                                            }`}>
+                                                            <span className="text-[8px] font-black uppercase leading-none">{bookDate.toLocaleDateString('en-US', { month: 'short' })}</span>
+                                                            <span className="text-sm font-black leading-none">{bookDate.getDate()}</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-black text-slate-900 group-hover/booking:text-blue-600 transition-colors">{booking.profiles?.full_name || 'Guest'}</p>
+                                                            <p className="text-[10px] font-bold text-slate-400">{booking.start_time} - {booking.end_time}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${booking.status === 'confirmed' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                                            : booking.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                                : booking.status === 'completed' ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                                                    : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                            }`}>
+                                                            {booking.status}
+                                                        </span>
+                                                        <ChevronRight size={14} className="text-slate-300 group-hover/booking:text-blue-500 transition-colors" />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="py-10 text-center bg-slate-50 rounded-2xl border border-slate-100">
+                                        <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No upcoming bookings</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3 mt-8">
+                                <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); openEditCourtModal(viewingCourt); }}
+                                    className="flex-1 h-14 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
+                                    <Pencil size={16} /> Edit Court
+                                </button>
+                                <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); handleDeleteCourt(viewingCourt.id); }}
+                                    className="h-14 px-6 border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
+                                    <Trash2 size={16} /> Remove
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,
@@ -2123,190 +2151,240 @@ const LocationsList: React.FC = () => {
             {/* Add Court Modal */}
             {isAddCourtModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
-                            <button onClick={() => setIsAddCourtModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
-                        </div>
-                        <form onSubmit={handleAddCourt} className="space-y-6">
-                            {/* Location Dropdown */}
-                            <div className="space-y-2" ref={locationDropdownRef}>
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Location <span className="text-rose-500">*</span></label>
-                                <div className="relative">
-                                    <div onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
-                                        <input type="text"
-                                            value={isLocationDropdownOpen ? locationDropdownSearch : (locations.find(l => l.id === courtLocationId)?.name || '')}
-                                            onChange={e => { setLocationDropdownSearch(e.target.value); setIsLocationDropdownOpen(true); }}
-                                            onFocus={() => { setIsLocationDropdownOpen(true); setLocationDropdownSearch(''); }}
-                                            placeholder="Select a location..."
-                                            className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
-                                        <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isLocationDropdownOpen ? 'rotate-180' : ''}`} />
-                                    </div>
-                                    {isLocationDropdownOpen && (
-                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                            {locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).length > 0 ? (
-                                                locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).map(loc => (
-                                                    <button type="button" key={loc.id}
-                                                        onClick={() => { setCourtLocationId(loc.id); setLocationDropdownSearch(''); setIsLocationDropdownOpen(false); }}
-                                                        className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtLocationId === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
-                                                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtLocationId === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                                            {courtLocationId === loc.id && <Check size={12} className="text-blue-600" />}
-                                                        </span>
-                                                        <div>
-                                                            <p className="font-black text-sm">{loc.name}</p>
-                                                            <p className="text-[10px] text-slate-400 font-medium">{loc.address}, {loc.city}</p>
-                                                        </div>
-                                                    </button>
-                                                ))
-                                            ) : (
-                                                <div className="px-5 py-4 text-center">
-                                                    <p className="text-[10px] text-slate-400 font-bold">No locations found.</p>
-                                                    <button type="button" onClick={() => { setIsAddCourtModalOpen(false); setIsLocationListModalOpen(true); }}
-                                                        className="mt-2 text-[10px] font-black text-blue-600 hover:underline">Add a location first →</button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                    <div className="bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-hidden">
+                        <div className="overflow-y-auto max-h-[90vh] p-10">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Add New Court</h2>
+                                <button onClick={() => setIsAddCourtModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
                             </div>
-
-                            {/* Court Name */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Court Name <span className="text-rose-500">*</span></label>
-                                <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
-                                    placeholder="e.g. Center Court, Court A"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                            </div>
-
-                            {/* Court Type */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
-                                <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                                    {['Indoor', 'Outdoor'].map((type) => (
-                                        <button key={type} type="button"
-                                            onClick={() => { setCourtType(type as 'Indoor' | 'Outdoor'); setCourtSurface(''); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                            className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
-                                                ? 'bg-white text-blue-600 shadow-lg shadow-blue-100/50'
-                                                : 'text-slate-400 hover:text-slate-600'
-                                            }`}>
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Court Status */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {([
-                                        { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
-                                        { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
-                                        { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
-                                        { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
-                                    ]).map((opt) => {
-                                        const isSelected = courtStatus === opt.value;
-                                        const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
-                                            emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-                                            blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-                                            violet: { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', ring: 'ring-violet-500/20' },
-                                            amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
-                                        };
-                                        const c = colorMap[opt.color];
-                                        return (
-                                            <button key={opt.value} type="button" onClick={() => setCourtStatus(opt.value)}
-                                                className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
-                                                    ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                                                }`}>
-                                                <span>{opt.icon}</span> {opt.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Surface Type & Price */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2" ref={surfaceDropdownRef}>
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Surface Type</label>
+                            <form onSubmit={handleAddCourt} className="space-y-6">
+                                {/* Location Dropdown */}
+                                <div className="space-y-2" ref={locationDropdownRef}>
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Location <span className="text-rose-500">*</span></label>
                                     <div className="relative">
-                                        <div onClick={() => setIsSurfaceDropdownOpen(!isSurfaceDropdownOpen)}
+                                        <div onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
                                             <input type="text"
-                                                value={isSurfaceDropdownOpen ? surfaceSearch : courtSurface}
-                                                onChange={e => { setSurfaceSearch(e.target.value); setIsSurfaceDropdownOpen(true); }}
-                                                onFocus={() => { setIsSurfaceDropdownOpen(true); setSurfaceSearch(''); }}
-                                                placeholder="Select surface..."
+                                                value={isLocationDropdownOpen ? locationDropdownSearch : (locations.find(l => l.id === courtLocationId)?.name || '')}
+                                                onChange={e => { setLocationDropdownSearch(e.target.value); setIsLocationDropdownOpen(true); }}
+                                                onFocus={() => { setIsLocationDropdownOpen(true); setLocationDropdownSearch(''); }}
+                                                placeholder="Select a location..."
                                                 className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
-                                            <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isSurfaceDropdownOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isLocationDropdownOpen ? 'rotate-180' : ''}`} />
                                         </div>
-                                        {isSurfaceDropdownOpen && (
+                                        {isLocationDropdownOpen && (
                                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                                {(() => {
-                                                    const options = courtType === 'Indoor' ? INDOOR_SURFACES : OUTDOOR_SURFACES;
-                                                    const filtered = options.filter(s => s.toLowerCase().includes(surfaceSearch.toLowerCase()));
-                                                    const trimmed = surfaceSearch.trim();
-                                                    const isCustom = trimmed && !options.some(s => s.toLowerCase() === trimmed.toLowerCase());
-                                                    return (
-                                                        <>
-                                                            {filtered.map((s, idx) => (
-                                                                <button type="button" key={idx}
-                                                                    onClick={() => { setCourtSurface(s); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtSurface === s ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
-                                                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtSurface === s ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                                                        {courtSurface === s && <Check size={12} className="text-blue-600" />}
-                                                                    </span>
-                                                                    {s}
-                                                                </button>
-                                                            ))}
-                                                            {isCustom && (
-                                                                <button type="button"
-                                                                    onClick={() => { setCourtSurface(trimmed); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                                                    className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-t border-slate-100">
-                                                                    <Plus size={14} className="text-blue-600 shrink-0" />
-                                                                    <span className="font-bold text-sm text-blue-600">Use "{trimmed}"</span>
-                                                                </button>
-                                                            )}
-                                                            {filtered.length === 0 && !isCustom && (
-                                                                <div className="px-5 py-4 text-center">
-                                                                    <p className="text-[10px] text-slate-400 font-bold">Type to add a custom surface.</p>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    );
-                                                })()}
+                                                {locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).length > 0 ? (
+                                                    locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).map(loc => (
+                                                        <button type="button" key={loc.id}
+                                                            onClick={() => { setCourtLocationId(loc.id); setLocationDropdownSearch(''); setIsLocationDropdownOpen(false); }}
+                                                            className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtLocationId === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
+                                                            <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtLocationId === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                                                {courtLocationId === loc.id && <Check size={12} className="text-blue-600" />}
+                                                            </span>
+                                                            <div>
+                                                                <p className="font-black text-sm">{loc.name}</p>
+                                                                <p className="text-[10px] text-slate-400 font-medium">{loc.address}, {loc.city}</p>
+                                                            </div>
+                                                        </button>
+                                                    ))
+                                                ) : (
+                                                    <div className="px-5 py-4 text-center">
+                                                        <p className="text-[10px] text-slate-400 font-bold">No locations found.</p>
+                                                        <button type="button" onClick={() => { setIsAddCourtModalOpen(false); setIsLocationListModalOpen(true); }}
+                                                            className="mt-2 text-[10px] font-black text-blue-600 hover:underline">Add a location first →</button>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Court Name */}
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
-                                    <div className="flex items-center gap-3">
-                                        <button type="button"
-                                            onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
-                                            className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
-                                                ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                                                : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
-                                            }`}>
-                                            🎉 Free
-                                        </button>
-                                        {!isCourtFree && (
-                                            <input required type="number" min="1" step="1" value={courtPrice}
-                                                onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
-                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                                        )}
-                                        {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Court Name <span className="text-rose-500">*</span></label>
+                                    <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
+                                        placeholder="e.g. Center Court, Court A"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                                </div>
+
+                                {/* Court Type */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
+                                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                                        {['Indoor', 'Outdoor'].map((type) => (
+                                            <button key={type} type="button"
+                                                onClick={() => { setCourtType(type as 'Indoor' | 'Outdoor'); setCourtSurface(''); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
+                                                    ? 'bg-white text-blue-600 shadow-lg shadow-blue-100/50'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                                    }`}>
+                                                {type}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                            </div>
 
-                            <button type="submit" disabled={isCourtSubmitting}
-                                className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95 mt-4">
-                                {isCourtSubmitting ? 'Adding...' : 'Add Court'}
-                            </button>
-                        </form>
+                                {/* Court Status */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {([
+                                            { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
+                                            { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
+                                            { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
+                                            { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
+                                        ]).map((opt) => {
+                                            const isSelected = courtStatus === opt.value;
+                                            const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
+                                                emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
+                                                blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
+                                                violet: { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', ring: 'ring-violet-500/20' },
+                                                amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
+                                            };
+                                            const c = colorMap[opt.color];
+                                            return (
+                                                <button key={opt.value} type="button" onClick={() => setCourtStatus(opt.value)}
+                                                    className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
+                                                        ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
+                                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                                                        }`}>
+                                                    <span>{opt.icon}</span> {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Surface Type & Price */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2" ref={surfaceDropdownRef}>
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Surface Type</label>
+                                        <div className="relative">
+                                            <div onClick={() => setIsSurfaceDropdownOpen(!isSurfaceDropdownOpen)}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
+                                                <input type="text"
+                                                    value={isSurfaceDropdownOpen ? surfaceSearch : courtSurface}
+                                                    onChange={e => { setSurfaceSearch(e.target.value); setIsSurfaceDropdownOpen(true); }}
+                                                    onFocus={() => { setIsSurfaceDropdownOpen(true); setSurfaceSearch(''); }}
+                                                    placeholder="Select surface..."
+                                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
+                                                <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isSurfaceDropdownOpen ? 'rotate-180' : ''}`} />
+                                            </div>
+                                            {isSurfaceDropdownOpen && (
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                                                    {(() => {
+                                                        const options = courtType === 'Indoor' ? INDOOR_SURFACES : OUTDOOR_SURFACES;
+                                                        const filtered = options.filter(s => s.toLowerCase().includes(surfaceSearch.toLowerCase()));
+                                                        const trimmed = surfaceSearch.trim();
+                                                        const isCustom = trimmed && !options.some(s => s.toLowerCase() === trimmed.toLowerCase());
+                                                        return (
+                                                            <>
+                                                                {filtered.map((s, idx) => (
+                                                                    <button type="button" key={idx}
+                                                                        onClick={() => { setCourtSurface(s); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                                        className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtSurface === s ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
+                                                                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtSurface === s ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                                                            {courtSurface === s && <Check size={12} className="text-blue-600" />}
+                                                                        </span>
+                                                                        {s}
+                                                                    </button>
+                                                                ))}
+                                                                {isCustom && (
+                                                                    <button type="button"
+                                                                        onClick={() => { setCourtSurface(trimmed); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                                        className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-t border-slate-100">
+                                                                        <Plus size={14} className="text-blue-600 shrink-0" />
+                                                                        <span className="font-bold text-sm text-blue-600">Use "{trimmed}"</span>
+                                                                    </button>
+                                                                )}
+                                                                {filtered.length === 0 && !isCustom && (
+                                                                    <div className="px-5 py-4 text-center">
+                                                                        <p className="text-[10px] text-slate-400 font-bold">Type to add a custom surface.</p>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
+                                        <div className="flex items-center gap-3">
+                                            <button type="button"
+                                                onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
+                                                className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
+                                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
+                                                    }`}>
+                                                🎉 Free
+                                            </button>
+                                            {!isCourtFree && (
+                                                <input required type="number" min="1" step="1" value={courtPrice}
+                                                    onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
+                                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                                            )}
+                                            {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Court Photo Upload */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">
+                                        <Camera size={12} /> Court Photo <span className="text-slate-400 font-medium normal-case tracking-normal">optional</span>
+                                    </label>
+                                    <input
+                                        ref={courtImageInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setCourtImageFile(file);
+                                            const reader = new FileReader();
+                                            reader.onload = ev => setCourtImagePreview(ev.target?.result as string);
+                                            reader.readAsDataURL(file);
+                                        }}
+                                    />
+                                    {courtImagePreview ? (
+                                        <div className="relative rounded-2xl overflow-hidden border border-slate-100 h-36 group">
+                                            <img src={courtImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                                <button type="button"
+                                                    onClick={() => courtImageInputRef.current?.click()}
+                                                    className="px-4 py-2 bg-white text-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center gap-1.5">
+                                                    <Camera size={12} /> Change
+                                                </button>
+                                                <button type="button"
+                                                    onClick={() => { setCourtImageFile(null); setCourtImagePreview(null); }}
+                                                    className="px-4 py-2 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-1.5">
+                                                    <X size={12} /> Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button type="button"
+                                            onClick={() => courtImageInputRef.current?.click()}
+                                            className="w-full h-28 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-300 hover:bg-blue-50/30 transition-all group">
+                                            <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-blue-100 transition-colors">
+                                                <Image size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Upload Photo</span>
+                                            <span className="text-[9px] text-slate-300 font-medium">JPG, PNG, or WEBP</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                <button type="submit" disabled={isCourtSubmitting}
+                                    className="w-full h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95 mt-4">
+                                    {isCourtSubmitting ? 'Adding...' : 'Add Court'}
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>,
                 document.body
@@ -2315,194 +2393,244 @@ const LocationsList: React.FC = () => {
             {/* Edit Court Modal */}
             {isEditCourtModalOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-40 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court</h2>
-                            <button onClick={() => { setIsEditCourtModalOpen(false); setEditingCourt(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
-                        </div>
-                        <form onSubmit={handleUpdateCourt} className="space-y-6">
-                            {/* Location Dropdown */}
-                            <div className="space-y-2" ref={locationDropdownRef}>
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Location <span className="text-rose-500">*</span></label>
-                                <div className="relative">
-                                    <div onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
-                                        <input type="text"
-                                            value={isLocationDropdownOpen ? locationDropdownSearch : (locations.find(l => l.id === courtLocationId)?.name || '')}
-                                            onChange={e => { setLocationDropdownSearch(e.target.value); setIsLocationDropdownOpen(true); }}
-                                            onFocus={() => { setIsLocationDropdownOpen(true); setLocationDropdownSearch(''); }}
-                                            placeholder="Select a location..."
-                                            className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
-                                        <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isLocationDropdownOpen ? 'rotate-180' : ''}`} />
-                                    </div>
-                                    {isLocationDropdownOpen && (
-                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                            {locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).length > 0 ? (
-                                                locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).map(loc => (
-                                                    <button type="button" key={loc.id}
-                                                        onClick={() => { setCourtLocationId(loc.id); setLocationDropdownSearch(''); setIsLocationDropdownOpen(false); }}
-                                                        className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtLocationId === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
-                                                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtLocationId === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                                            {courtLocationId === loc.id && <Check size={12} className="text-blue-600" />}
-                                                        </span>
-                                                        <div>
-                                                            <p className="font-black text-sm">{loc.name}</p>
-                                                            <p className="text-[10px] text-slate-400 font-medium">{loc.address}, {loc.city}</p>
-                                                        </div>
-                                                    </button>
-                                                ))
-                                            ) : (
-                                                <div className="px-5 py-4 text-center">
-                                                    <p className="text-[10px] text-slate-400 font-bold">No locations found.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                    <div className="bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 z-[100] max-h-[90vh] overflow-hidden">
+                        <div className="overflow-y-auto max-h-[90vh] p-10">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Edit Court</h2>
+                                <button onClick={() => { setIsEditCourtModalOpen(false); setEditingCourt(null); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X size={24} /></button>
                             </div>
-
-                            {/* Court Name */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Court Name <span className="text-rose-500">*</span></label>
-                                <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
-                                    placeholder="e.g. Center Court, Court A"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                            </div>
-
-                            {/* Court Type */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
-                                <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                                    {['Indoor', 'Outdoor'].map((type) => (
-                                        <button key={type} type="button"
-                                            onClick={() => { setCourtType(type as 'Indoor' | 'Outdoor'); setCourtSurface(''); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                            className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
-                                                ? 'bg-white text-blue-600 shadow-lg shadow-blue-100/50'
-                                                : 'text-slate-400 hover:text-slate-600'
-                                            }`}>
-                                            {type}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Court Status */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {([
-                                        { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
-                                        { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
-                                        { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
-                                        { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
-                                    ]).map((opt) => {
-                                        const isSelected = courtStatus === opt.value;
-                                        const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
-                                            emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-                                            blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-                                            violet: { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', ring: 'ring-violet-500/20' },
-                                            amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
-                                        };
-                                        const c = colorMap[opt.color];
-                                        return (
-                                            <button key={opt.value} type="button" onClick={() => setCourtStatus(opt.value)}
-                                                className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
-                                                    ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                                                }`}>
-                                                <span>{opt.icon}</span> {opt.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Surface Type & Price */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2" ref={surfaceDropdownRef}>
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Surface Type</label>
+                            <form onSubmit={handleUpdateCourt} className="space-y-6">
+                                {/* Location Dropdown */}
+                                <div className="space-y-2" ref={locationDropdownRef}>
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Location <span className="text-rose-500">*</span></label>
                                     <div className="relative">
-                                        <div onClick={() => setIsSurfaceDropdownOpen(!isSurfaceDropdownOpen)}
+                                        <div onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
                                             <input type="text"
-                                                value={isSurfaceDropdownOpen ? surfaceSearch : courtSurface}
-                                                onChange={e => { setSurfaceSearch(e.target.value); setIsSurfaceDropdownOpen(true); }}
-                                                onFocus={() => { setIsSurfaceDropdownOpen(true); setSurfaceSearch(''); }}
-                                                placeholder="Select surface..."
+                                                value={isLocationDropdownOpen ? locationDropdownSearch : (locations.find(l => l.id === courtLocationId)?.name || '')}
+                                                onChange={e => { setLocationDropdownSearch(e.target.value); setIsLocationDropdownOpen(true); }}
+                                                onFocus={() => { setIsLocationDropdownOpen(true); setLocationDropdownSearch(''); }}
+                                                placeholder="Select a location..."
                                                 className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
-                                            <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isSurfaceDropdownOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isLocationDropdownOpen ? 'rotate-180' : ''}`} />
                                         </div>
-                                        {isSurfaceDropdownOpen && (
+                                        {isLocationDropdownOpen && (
                                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                                {(() => {
-                                                    const options = courtType === 'Indoor' ? INDOOR_SURFACES : OUTDOOR_SURFACES;
-                                                    const filtered = options.filter(s => s.toLowerCase().includes(surfaceSearch.toLowerCase()));
-                                                    const trimmed = surfaceSearch.trim();
-                                                    const isCustom = trimmed && !options.some(s => s.toLowerCase() === trimmed.toLowerCase());
-                                                    return (
-                                                        <>
-                                                            {filtered.map((s, idx) => (
-                                                                <button type="button" key={idx}
-                                                                    onClick={() => { setCourtSurface(s); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                                                    className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtSurface === s ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
-                                                                    <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtSurface === s ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                                                        {courtSurface === s && <Check size={12} className="text-blue-600" />}
-                                                                    </span>
-                                                                    {s}
-                                                                </button>
-                                                            ))}
-                                                            {isCustom && (
-                                                                <button type="button"
-                                                                    onClick={() => { setCourtSurface(trimmed); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
-                                                                    className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-t border-slate-100">
-                                                                    <Plus size={14} className="text-blue-600 shrink-0" />
-                                                                    <span className="font-bold text-sm text-blue-600">Use "{trimmed}"</span>
-                                                                </button>
-                                                            )}
-                                                            {filtered.length === 0 && !isCustom && (
-                                                                <div className="px-5 py-4 text-center">
-                                                                    <p className="text-[10px] text-slate-400 font-bold">Type to add a custom surface.</p>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    );
-                                                })()}
+                                                {locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).length > 0 ? (
+                                                    locations.filter(l => l.name.toLowerCase().includes(locationDropdownSearch.toLowerCase())).map(loc => (
+                                                        <button type="button" key={loc.id}
+                                                            onClick={() => { setCourtLocationId(loc.id); setLocationDropdownSearch(''); setIsLocationDropdownOpen(false); }}
+                                                            className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtLocationId === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
+                                                            <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtLocationId === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                                                {courtLocationId === loc.id && <Check size={12} className="text-blue-600" />}
+                                                            </span>
+                                                            <div>
+                                                                <p className="font-black text-sm">{loc.name}</p>
+                                                                <p className="text-[10px] text-slate-400 font-medium">{loc.address}, {loc.city}</p>
+                                                            </div>
+                                                        </button>
+                                                    ))
+                                                ) : (
+                                                    <div className="px-5 py-4 text-center">
+                                                        <p className="text-[10px] text-slate-400 font-bold">No locations found.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Court Name */}
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
-                                    <div className="flex items-center gap-3">
-                                        <button type="button"
-                                            onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
-                                            className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
-                                                ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                                                : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
-                                            }`}>
-                                            🎉 Free
-                                        </button>
-                                        {!isCourtFree && (
-                                            <input required type="number" min="1" step="1" value={courtPrice}
-                                                onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
-                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                                        )}
-                                        {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">Court Name <span className="text-rose-500">*</span></label>
+                                    <input required type="text" value={courtName} onChange={e => setCourtName(e.target.value)}
+                                        placeholder="e.g. Center Court, Court A"
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                                </div>
+
+                                {/* Court Type */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Type</label>
+                                    <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                                        {['Indoor', 'Outdoor'].map((type) => (
+                                            <button key={type} type="button"
+                                                onClick={() => { setCourtType(type as 'Indoor' | 'Outdoor'); setCourtSurface(''); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                className={`flex-1 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 ${courtType === type
+                                                    ? 'bg-white text-blue-600 shadow-lg shadow-blue-100/50'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                                    }`}>
+                                                {type}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="flex gap-4 mt-4">
-                                <button type="button" onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
-                                    className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
-                                    <Trash2 size={18} /> Remove
-                                </button>
-                                <button type="submit" disabled={isCourtSubmitting}
-                                    className="flex-[2] h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95">
-                                    {isCourtSubmitting ? 'Saving...' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </form>
+                                {/* Court Status */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {([
+                                            { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
+                                            { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
+                                            { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
+                                            { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
+                                        ]).map((opt) => {
+                                            const isSelected = courtStatus === opt.value;
+                                            const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
+                                                emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
+                                                blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
+                                                violet: { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', ring: 'ring-violet-500/20' },
+                                                amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
+                                            };
+                                            const c = colorMap[opt.color];
+                                            return (
+                                                <button key={opt.value} type="button" onClick={() => setCourtStatus(opt.value)}
+                                                    className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
+                                                        ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
+                                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                                                        }`}>
+                                                    <span>{opt.icon}</span> {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Surface Type & Price */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2" ref={surfaceDropdownRef}>
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Surface Type</label>
+                                        <div className="relative">
+                                            <div onClick={() => setIsSurfaceDropdownOpen(!isSurfaceDropdownOpen)}
+                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors">
+                                                <input type="text"
+                                                    value={isSurfaceDropdownOpen ? surfaceSearch : courtSurface}
+                                                    onChange={e => { setSurfaceSearch(e.target.value); setIsSurfaceDropdownOpen(true); }}
+                                                    onFocus={() => { setIsSurfaceDropdownOpen(true); setSurfaceSearch(''); }}
+                                                    placeholder="Select surface..."
+                                                    className="bg-transparent outline-none font-bold text-sm flex-1 w-full min-w-0" />
+                                                <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ml-2 ${isSurfaceDropdownOpen ? 'rotate-180' : ''}`} />
+                                            </div>
+                                            {isSurfaceDropdownOpen && (
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                                                    {(() => {
+                                                        const options = courtType === 'Indoor' ? INDOOR_SURFACES : OUTDOOR_SURFACES;
+                                                        const filtered = options.filter(s => s.toLowerCase().includes(surfaceSearch.toLowerCase()));
+                                                        const trimmed = surfaceSearch.trim();
+                                                        const isCustom = trimmed && !options.some(s => s.toLowerCase() === trimmed.toLowerCase());
+                                                        return (
+                                                            <>
+                                                                {filtered.map((s, idx) => (
+                                                                    <button type="button" key={idx}
+                                                                        onClick={() => { setCourtSurface(s); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                                        className={`w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${courtSurface === s ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'}`}>
+                                                                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${courtSurface === s ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                                                            {courtSurface === s && <Check size={12} className="text-blue-600" />}
+                                                                        </span>
+                                                                        {s}
+                                                                    </button>
+                                                                ))}
+                                                                {isCustom && (
+                                                                    <button type="button"
+                                                                        onClick={() => { setCourtSurface(trimmed); setSurfaceSearch(''); setIsSurfaceDropdownOpen(false); }}
+                                                                        className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-t border-slate-100">
+                                                                        <Plus size={14} className="text-blue-600 shrink-0" />
+                                                                        <span className="font-bold text-sm text-blue-600">Use "{trimmed}"</span>
+                                                                    </button>
+                                                                )}
+                                                                {filtered.length === 0 && !isCustom && (
+                                                                    <div className="px-5 py-4 text-center">
+                                                                        <p className="text-[10px] text-slate-400 font-bold">Type to add a custom surface.</p>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
+                                        <div className="flex items-center gap-3">
+                                            <button type="button"
+                                                onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
+                                                className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
+                                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
+                                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
+                                                    }`}>
+                                                🎉 Free
+                                            </button>
+                                            {!isCourtFree && (
+                                                <input required type="number" min="1" step="1" value={courtPrice}
+                                                    onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
+                                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
+                                            )}
+                                            {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Court Photo Upload (Edit) */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-1.5">
+                                        <Camera size={12} /> Court Photo <span className="text-slate-400 font-medium normal-case tracking-normal">optional</span>
+                                    </label>
+                                    <input
+                                        ref={courtImageInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setCourtImageFile(file);
+                                            const reader = new FileReader();
+                                            reader.onload = ev => setCourtImagePreview(ev.target?.result as string);
+                                            reader.readAsDataURL(file);
+                                        }}
+                                    />
+                                    {courtImagePreview ? (
+                                        <div className="relative rounded-2xl overflow-hidden border border-slate-100 h-36 group">
+                                            <img src={courtImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                                <button type="button"
+                                                    onClick={() => courtImageInputRef.current?.click()}
+                                                    className="px-4 py-2 bg-white text-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center gap-1.5">
+                                                    <Camera size={12} /> Change
+                                                </button>
+                                                <button type="button"
+                                                    onClick={() => { setCourtImageFile(null); setCourtImagePreview(null); }}
+                                                    className="px-4 py-2 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-1.5">
+                                                    <X size={12} /> Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button type="button"
+                                            onClick={() => courtImageInputRef.current?.click()}
+                                            className="w-full h-28 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-300 hover:bg-blue-50/30 transition-all group">
+                                            <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-blue-100 transition-colors">
+                                                <Image size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Upload Photo</span>
+                                            <span className="text-[9px] text-slate-300 font-medium">JPG, PNG, or WEBP</span>
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-4 mt-4">
+                                    <button type="button" onClick={() => editingCourt && handleDeleteCourt(editingCourt.id)}
+                                        className="flex-1 h-16 border border-rose-100 text-rose-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
+                                        <Trash2 size={18} /> Remove
+                                    </button>
+                                    <button type="submit" disabled={isCourtSubmitting}
+                                        className="flex-[2] h-16 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 disabled:bg-slate-200 active:scale-95">
+                                        {isCourtSubmitting ? 'Saving...' : 'Save Changes'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>,
                 document.body
@@ -2593,13 +2721,12 @@ const LocationsList: React.FC = () => {
                                                 </div>
                                             </div>
                                             {/* Status Badge */}
-                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border shrink-0 ${
-                                                locStatus === 'Active' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border shrink-0 ${locStatus === 'Active' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                                                 : locStatus === 'Closed' ? 'bg-rose-50 border-rose-100 text-rose-600'
-                                                : locStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                                : locStatus === 'Coming Soon' ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                                : 'bg-slate-50 border-slate-200 text-slate-400'
-                                            }`}>
+                                                    : locStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                        : locStatus === 'Coming Soon' ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                }`}>
                                                 {locStatus}
                                             </span>
                                             {/* Actions */}
