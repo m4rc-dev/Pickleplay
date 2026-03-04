@@ -131,6 +131,14 @@ const BookingsAdmin: React.FC = () => {
     const [mbGuestLastName, setMbGuestLastName] = useState('');
     const [mbGuestEmail, setMbGuestEmail] = useState('');
     const [mbSendingEmail, setMbSendingEmail] = useState(false);
+    // Manual Booking Payment Step
+    const [mbPaymentStep, setMbPaymentStep] = useState(false);
+    const [mbCashReceived, setMbCashReceived] = useState('');
+    const [mbPayChange, setMbPayChange] = useState(0);
+    const [mbPayError, setMbPayError] = useState('');
+    const [mbPayProcessing, setMbPayProcessing] = useState(false);
+    const [mbCreatedBooking, setMbCreatedBooking] = useState<any>(null);
+    const [mbShowConfetti, setMbShowConfetti] = useState(false);
 
     useEffect(() => {
         fetchBookings();
@@ -330,6 +338,13 @@ const BookingsAdmin: React.FC = () => {
         setMbGuestFirstName('');
         setMbGuestLastName('');
         setMbGuestEmail('');
+        setMbPaymentStep(false);
+        setMbCashReceived('');
+        setMbPayChange(0);
+        setMbPayError('');
+        setMbPayProcessing(false);
+        setMbCreatedBooking(null);
+        setMbShowConfetti(false);
     };
 
     const handleManualBooking = async (e: React.FormEvent) => {
@@ -448,8 +463,24 @@ const BookingsAdmin: React.FC = () => {
                 setMbSendingEmail(false);
             }
 
-            setIsModalOpen(false);
-            resetManualBookingForm();
+            // Transition to payment step instead of closing
+            const selectedCourt2 = myCourts.find((c: any) => c.id === mbCourtId);
+            setMbCreatedBooking({
+                id: bookingData?.id || '',
+                courtName: selectedCourt2?.name || 'Court',
+                date: mbDate,
+                startTime: slotStart,
+                endTime: slotEnd,
+                totalPrice: mbPrice,
+                guestName: mbUserType === 'guest' ? `${mbGuestFirstName.trim()} ${mbGuestLastName.trim()}` : (mbSelectedPlayer?.full_name || mbSelectedPlayer?.username || 'Player'),
+                guestEmail: mbUserType === 'guest' ? mbGuestEmail.trim() : (mbSelectedPlayer?.email || ''),
+                avatarUrl: mbUserType === 'player' ? mbSelectedPlayer?.avatar_url : null,
+                isGuest: mbUserType === 'guest',
+            });
+            setMbPaymentStep(true);
+            setMbCashReceived('');
+            setMbPayChange(0);
+            setMbPayError('');
             fetchBookings();
         } catch (err) {
             console.error('Error creating manual booking:', err);
@@ -1177,16 +1208,65 @@ const BookingsAdmin: React.FC = () => {
                 {/* New Booking Modal */}
                 {isModalOpen && ReactDOM.createPortal(
                     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                        <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+                        <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto relative overflow-x-hidden">
+                            {/* Confetti Animation */}
+                            {mbShowConfetti && (
+                                <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+                                    {[...Array(60)].map((_, i) => {
+                                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                                        const color = colors[i % colors.length];
+                                        const left = Math.random() * 100;
+                                        const delay = Math.random() * 0.5;
+                                        const duration = 1.5 + Math.random() * 2;
+                                        const size = 6 + Math.random() * 8;
+                                        const rotation = Math.random() * 360;
+                                        const drift = -30 + Math.random() * 60;
+                                        return (
+                                            <div
+                                                key={i}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: `${left}%`,
+                                                    top: '-10px',
+                                                    width: `${size}px`,
+                                                    height: `${size * (Math.random() > 0.5 ? 1 : 0.6)}px`,
+                                                    backgroundColor: color,
+                                                    borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+                                                    transform: `rotate(${rotation}deg)`,
+                                                    animation: `confettiFall ${duration}s ease-in ${delay}s forwards`,
+                                                    opacity: 0,
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                    <style>{`
+                                        @keyframes confettiFall {
+                                            0% { opacity: 1; transform: translateY(0) rotate(0deg) translateX(0); }
+                                            100% { opacity: 0; transform: translateY(600px) rotate(720deg) translateX(${Math.random() > 0.5 ? '' : '-'}80px); }
+                                        }
+                                    `}</style>
+                                </div>
+                            )}
+
                             {/* Header */}
                             <div className="flex items-center justify-between p-6 border-b border-slate-200">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
-                                        <Calendar className="text-blue-600" size={24} />
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${mbShowConfetti ? 'bg-emerald-50' : mbPaymentStep ? 'bg-blue-50' : 'bg-blue-50'}`}>
+                                        {mbShowConfetti ? (
+                                            <CheckCircle className="text-emerald-600" size={24} />
+                                        ) : mbPaymentStep ? (
+                                            <Banknote className="text-blue-600" size={24} />
+                                        ) : (
+                                            <Calendar className="text-blue-600" size={24} />
+                                        )}
                                     </div>
                                     <div>
-                                        <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Manual Booking</h2>
-                                        <p className="text-xs text-slate-500 font-medium">Create a new court reservation</p>
+                                        <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                                            {mbShowConfetti ? 'Booking Complete!' : mbPaymentStep ? 'Payment' : 'Manual Booking'}
+                                        </h2>
+                                        <p className="text-xs text-slate-500 font-medium">
+                                            {mbShowConfetti ? 'Guest booking successfully completed' : mbPaymentStep ? 'Complete payment for this booking' : 'Create a new court reservation'}
+                                        </p>
                                     </div>
                                 </div>
                                 <button onClick={() => { setIsModalOpen(false); resetManualBookingForm(); }} className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
@@ -1194,6 +1274,195 @@ const BookingsAdmin: React.FC = () => {
                                 </button>
                             </div>
 
+                            {/* Confetti Success Screen */}
+                            {mbShowConfetti && mbCreatedBooking && (
+                                <div className="p-8 space-y-6 text-center animate-in zoom-in-95 duration-500">
+                                    <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto shadow-xl shadow-emerald-100">
+                                        <CheckCircle className="text-emerald-600" size={48} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Payment Received!</h3>
+                                        <p className="text-sm text-slate-500 mt-1">{mbCreatedBooking.isGuest ? 'Guest' : 'Player'} booking has been confirmed and paid</p>
+                                    </div>
+                                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 text-left space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Player</span>
+                                            <span className="text-sm font-black text-slate-900">{mbCreatedBooking.guestName}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Court</span>
+                                            <span className="text-sm font-black text-slate-900">{mbCreatedBooking.courtName}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
+                                            <span className="text-sm font-black text-slate-900">{new Date(mbCreatedBooking.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</span>
+                                            <span className="text-sm font-black text-slate-900">{mbCreatedBooking.startTime} – {mbCreatedBooking.endTime}</span>
+                                        </div>
+                                        <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Amount Paid</span>
+                                            <span className="text-lg font-black text-emerald-600">₱{mbCreatedBooking.totalPrice.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => { setIsModalOpen(false); resetManualBookingForm(); }}
+                                        className="w-full h-14 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 flex items-center justify-center gap-2"
+                                    >
+                                        <CheckCircle size={18} /> Done
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Payment Step */}
+                            {mbPaymentStep && !mbShowConfetti && mbCreatedBooking && (
+                                <div className="p-6 space-y-4 animate-in slide-in-from-right duration-300">
+                                    {/* Player/Guest Info */}
+                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">{mbCreatedBooking.isGuest ? 'Guest' : 'Player'}</p>
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={mbCreatedBooking.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(mbCreatedBooking.guestName)}&background=random&size=40&font-size=0.4&bold=true`}
+                                                alt=""
+                                                className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm"
+                                            />
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-black text-slate-900 tracking-tight uppercase">{mbCreatedBooking.guestName}</p>
+                                                    {mbCreatedBooking.isGuest && <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase tracking-widest">Guest</span>}
+                                                </div>
+                                                <p className="text-[10px] font-bold text-slate-400">{mbCreatedBooking.guestEmail}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Booking Summary */}
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Court</p>
+                                            <p className="text-xs font-black text-slate-900 mt-1">{mbCreatedBooking.courtName}</p>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Date</p>
+                                            <p className="text-xs font-black text-slate-900 mt-1">{new Date(mbCreatedBooking.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Time</p>
+                                            <p className="text-xs font-black text-slate-900 mt-1">{mbCreatedBooking.startTime} – {mbCreatedBooking.endTime}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Total Bill */}
+                                    <div className="bg-blue-50 border border-blue-100 rounded-3xl p-8 text-center space-y-3">
+                                        <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-blue-200">
+                                            <Banknote size={28} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-blue-400 uppercase tracking-widest mb-1">Total Bill</p>
+                                            <h3 className="text-4xl font-black text-blue-900 tracking-tighter">₱{mbCreatedBooking.totalPrice.toFixed(2)}</h3>
+                                        </div>
+                                    </div>
+
+                                    {/* Cash Received */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cash Received</label>
+                                        <div className="relative">
+                                            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-400">₱</span>
+                                            <input
+                                                type="number"
+                                                value={mbCashReceived}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setMbCashReceived(val);
+                                                    const received = parseFloat(val) || 0;
+                                                    setMbPayChange(Math.max(0, received - mbCreatedBooking.totalPrice));
+                                                    setMbPayError('');
+                                                }}
+                                                placeholder="0"
+                                                autoFocus
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-[24px] py-6 pl-12 pr-6 text-2xl font-black text-slate-950 focus:border-blue-500 transition-all outline-none"
+                                            />
+                                        </div>
+                                        {mbPayError && (
+                                            <div className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 border border-rose-200 rounded-xl">
+                                                <AlertTriangle size={14} className="text-rose-500 shrink-0" />
+                                                <p className="text-xs font-bold text-rose-600">{mbPayError}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Change */}
+                                    <div className="p-6 bg-slate-900 rounded-[32px] flex justify-between items-center text-white">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
+                                                <DollarSign className="text-lime-400" size={20} />
+                                            </div>
+                                            <span className="text-xs font-black uppercase tracking-widest">Change</span>
+                                        </div>
+                                        <span className="text-2xl font-black text-lime-400">₱{mbPayChange.toFixed(2)}</span>
+                                    </div>
+
+                                    {/* Buttons */}
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setMbPaymentStep(false); }}
+                                            className="px-6 py-4 bg-slate-100 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                const received = parseFloat(mbCashReceived) || 0;
+                                                if (received < mbCreatedBooking.totalPrice) {
+                                                    setMbPayError(`Cash received (₱${received.toFixed(2)}) must not be less than the total bill (₱${mbCreatedBooking.totalPrice.toFixed(2)}).`);
+                                                    return;
+                                                }
+                                                setMbPayProcessing(true);
+                                                try {
+                                                    const now = new Date().toISOString();
+                                                    const isAdvancePay = mbCreatedBooking.date !== todayDateStr;
+                                                    const fullUpdates: any = {
+                                                        status: 'confirmed',
+                                                        payment_status: 'paid',
+                                                        amount_tendered: received,
+                                                        change_amount: mbPayChange,
+                                                    };
+                                                    if (!isAdvancePay) {
+                                                        fullUpdates.is_checked_in = true;
+                                                        fullUpdates.checked_in_at = now;
+                                                    }
+                                                    let { error } = await supabase.from('bookings').update(fullUpdates).eq('id', mbCreatedBooking.id);
+                                                    if (error) {
+                                                        const { error: fallbackErr } = await supabase.from('bookings').update({ status: 'confirmed', payment_status: 'paid' }).eq('id', mbCreatedBooking.id);
+                                                        if (fallbackErr) throw fallbackErr;
+                                                    }
+                                                    // Show confetti
+                                                    setMbShowConfetti(true);
+                                                    fetchBookings();
+                                                } catch (err: any) {
+                                                    setMbPayError(err.message || 'Failed to process payment');
+                                                } finally {
+                                                    setMbPayProcessing(false);
+                                                }
+                                            }}
+                                            disabled={mbPayProcessing}
+                                            className="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {mbPayProcessing ? (
+                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                <>{mbCreatedBooking.date !== todayDateStr ? 'Complete Advance Payment' : `Complete ${mbCreatedBooking.isGuest ? 'Guest' : ''} Booking`}</>  
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Booking Form (initial step) */}
+                            {!mbPaymentStep && !mbShowConfetti && (
                             <form onSubmit={handleManualBooking} className="p-6 space-y-5">
                                 {/* Location & Court */}
                                 <div className="grid grid-cols-2 gap-4">
@@ -1445,6 +1714,7 @@ const BookingsAdmin: React.FC = () => {
                                     ) : 'Create Booking'}
                                 </button>
                             </form>
+                            )}
                         </div>
                     </div>,
                     document.body
