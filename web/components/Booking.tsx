@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -213,6 +213,9 @@ const Booking: React.FC = () => {
   const [postBookLoadingPlayers, setPostBookLoadingPlayers] = useState(false);
   const [postBookInviteSendingId, setPostBookInviteSendingId] = useState<string | null>(null);
   const [postBookInviteSent, setPostBookInviteSent] = useState<string[]>([]);
+
+  // Mobile schedule view (inline, no navigation)
+  const [showMobileSchedule, setShowMobileSchedule] = useState(false);
 
   // Location entry confirmation & policies
   const [showLocationEntryModal, setShowLocationEntryModal] = useState(false);
@@ -1584,7 +1587,7 @@ const Booking: React.FC = () => {
     });
 
   return (
-    <div className="md:space-y-10 animate-in fade-in duration-700">
+    <div className="md:space-y-10 animate-in fade-in duration-700 bg-white md:bg-transparent min-h-screen">
       <Toast
         message={toast.message}
         type={toast.type}
@@ -1727,11 +1730,11 @@ const Booking: React.FC = () => {
         </div>
 
         {/* Back to Locations / Courts — mobile, shown when in a location detail */}
-        {!isSearchExpanded && urlLocationId && selectedLocation && (
+        {!isSearchExpanded && urlLocationId && selectedLocation && !showMobileSchedule && (
           <div className="px-4 pt-2 pb-2 flex items-center gap-3">
             {selectedCourt ? (
               <button
-                onClick={() => setSelectedCourt(null)}
+                onClick={() => { setSelectedCourt(null); setShowMobileSchedule(false); }}
                 className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
               >
                 <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
@@ -1750,11 +1753,25 @@ const Booking: React.FC = () => {
           </div>
         )}
 
+        {/* Mobile schedule header — shown when booking schedule is open */}
+        {!isSearchExpanded && showMobileSchedule && selectedCourt && (
+          <div className="px-4 pt-2 pb-2 flex items-center gap-3">
+            <button
+              onClick={() => setShowMobileSchedule(false)}
+              className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
+            >
+              <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+              Back to Court Details
+            </button>
+            <span className="text-xs font-bold text-slate-600 truncate ml-auto">Select Schedule</span>
+          </div>
+        )}
+
 
       </div>
 
       {/* ──────────── MAIN CONTAINER ──────────── */}
-      <div className="pb-0 md:pb-10">
+      <div className="pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
 
         {/* ──────────── DESKTOP HEADER ──────────── */}
         <div className="hidden md:block mb-6 lg:mb-8">
@@ -1787,7 +1804,7 @@ const Booking: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
           {/* ═══ LEFT COLUMN ═══ */}
-          <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'} transition-all duration-300`}>
+          <div className={`lg:col-span-2 xl:col-span-2 ${(urlLocationId || viewMode === 'list') ? 'block' : 'hidden md:block'} transition-all duration-300`}>
             {/* Desktop Search Bar — hidden when viewing location detail */}
             <form
               onSubmit={(e) => {
@@ -1947,21 +1964,12 @@ const Booking: React.FC = () => {
             )}
 
             {/* ─── List Container ─── */}
-            <div className="bg-white md:bg-white md:rounded-[32px] md:border md:border-slate-200/60 md:shadow-xl md:shadow-slate-200/40 overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-[calc(100vh-280px)] lg:h-[calc(100vh-300px)] animate-in fade-in slide-in-from-left-4 duration-500">
+            <div className={`bg-white md:rounded-[32px] md:border md:border-slate-200/60 md:shadow-xl md:shadow-slate-200/40 overflow-hidden flex flex-col md:h-[calc(100vh-280px)] lg:h-[calc(100vh-300px)] animate-in fade-in slide-in-from-left-4 duration-500 ${urlLocationId ? 'h-[calc(100vh-100px)]' : 'h-[calc(100vh-130px)]'}`}>
 
-              {selectedCourt ? (
+              {selectedCourt && !showMobileSchedule ? (
                 /* ─── Court Selected — Court Detail Info (left panel) ─── */
                 <div className="flex-1 overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="p-5 md:p-6 space-y-6">
-                    {/* Back button — returns to court list */}
-                    <button
-                      onClick={() => setSelectedCourt(null)}
-                      className="flex items-center gap-1.5 text-slate-400 text-[11px] font-black uppercase tracking-widest hover:text-[#1E40AF] transition-colors md:hidden"
-                    >
-                      <ChevronLeft size={14} />
-                      Back to Courts
-                    </button>
-
                     {/* Court name + type badge */}
                     <div>
                       <p className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-1.5">Court Details</p>
@@ -2060,6 +2068,183 @@ const Booking: React.FC = () => {
                         <p className="text-[10px] text-emerald-600 font-medium mt-0.5">This venue undergoes monthly inspections.</p>
                       </div>
                     </div>
+
+                    {/* Mobile Book Now button — opens inline schedule */}
+                    <button
+                      onClick={() => setShowMobileSchedule(true)}
+                      className="w-full py-4 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 md:hidden"
+                    >
+                      <CalendarCheck size={18} />
+                      Book This Court
+                    </button>
+                  </div>
+                </div>
+              ) : selectedCourt && showMobileSchedule ? (
+                /* ─── Mobile Schedule View (inline, no navigation) ─── */
+                <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500 md:hidden">
+                  {/* Header with back + court info */}
+                  <div className="px-4 py-3 border-b border-slate-100 bg-white shrink-0">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={14} className="text-[#1E40AF] shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-500 truncate">{selectedLocation?.name}</p>
+                        <p className="text-sm font-black text-slate-900 truncate">{selectedCourt.name}</p>
+                      </div>
+                      <span className={`shrink-0 ml-auto text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${selectedCourt.type === 'Indoor' ? 'bg-blue-50 text-[#1E40AF]' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {selectedCourt.type}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Schedule content */}
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="p-4 space-y-5">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Select Schedule</h3>
+                        <p className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mt-1">When will you be playing?</p>
+                      </div>
+
+                      {/* Future booking notice */}
+                      {(() => {
+                        const nowPH = getNowPH();
+                        const todayStr = toPhDateStr(nowPH);
+                        const selectedStr = toPhDateStr(selectedDate);
+                        if (selectedStr !== todayStr) {
+                          return (
+                            <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                              <CalendarIcon size={14} className="text-[#1E40AF] shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-[10px] font-black text-[#1E40AF] uppercase tracking-widest">Booking for Future Date</p>
+                                <p className="text-[11px] text-slate-500 font-bold mt-0.5">
+                                  Reservation for <span className="text-[#1E40AF]">{selectedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span>.
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {/* Date Selection */}
+                      <div>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                          <CalendarIcon size={14} className="text-[#1E40AF]" />
+                          Choose Date
+                        </h4>
+                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                          {Array.from({ length: 14 }).map((_, i) => {
+                            const nowPH = getNowPH();
+                            const date = new Date(nowPH);
+                            date.setDate(date.getDate() + i);
+                            const dateStr = toPhDateStr(date);
+                            const selectedStr = toPhDateStr(selectedDate);
+                            const isSelected = selectedStr === dateStr;
+                            const dayName = date.toLocaleDateString('en-US', { weekday: 'short', timeZone: PH_TIMEZONE });
+                            const dayNum = date.getDate();
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => { setSelectedDate(date); setSelectedSlot(null); setDailyLimitReached(false); }}
+                                className={`flex flex-col items-center justify-center min-w-[56px] h-[72px] rounded-xl transition-all duration-300 border-2 ${isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'}`}
+                              >
+                                <span className={`text-[9px] font-black uppercase mb-1 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>{dayName}</span>
+                                <span className="text-lg font-black tracking-tight leading-none">{dayNum}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Time Slots */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <Clock size={14} className="text-[#1E40AF]" />
+                            Choose Slot
+                          </h4>
+                          {isCheckingAvailability && (
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 rounded-lg">
+                              <Loader2 size={10} className="animate-spin text-[#1E40AF]" />
+                              <span className="text-[9px] font-black text-[#1E40AF] uppercase tracking-widest">Updating</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {dailyLimitReached && (
+                          <div className="mb-3 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2">
+                            <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-blue-700 leading-relaxed font-bold">
+                              Limit Reached: <span className="underline">1 hour/day</span> max at this venue.
+                            </p>
+                          </div>
+                        )}
+
+                        {selectedCourt.status === 'Coming Soon' || selectedCourt.status === 'Maintenance' ? (
+                          <div className="text-center py-8 rounded-xl border bg-slate-50/50 border-slate-100">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center text-lg bg-blue-100">
+                              {selectedCourt.status === 'Coming Soon' ? '🔜' : '🔧'}
+                            </div>
+                            <h4 className="text-xs font-black uppercase tracking-widest mb-1 text-[#1E40AF]">{selectedCourt.status}</h4>
+                            <p className="text-[10px] text-slate-500 font-medium max-w-[200px] mx-auto">
+                              {selectedCourt.status === 'Coming Soon' ? 'This court is not yet available for booking.' : 'This court is currently under maintenance.'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            {(selectedLocation?.opening_time && selectedLocation?.closing_time
+                              ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                              : TIME_SLOTS
+                            ).map(slot => {
+                              const isBlocked = blockedSlots.has(slot);
+                              const isBookedSlot = bookedSlots.has(slot);
+                              const isUserSlot = userBookedSlots.has(slot);
+                              const userSlotStatus = userBookedSlots.get(slot) || '';
+                              const isPast = isSlotInPast(slot, selectedDate);
+                              const isUnavailable = isBlocked || isBookedSlot || dailyLimitReached || isPast;
+                              return (
+                                <button
+                                  key={slot}
+                                  onClick={() => !isUnavailable && setSelectedSlot(slot)}
+                                  disabled={isUnavailable}
+                                  className={`py-3.5 px-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all border relative ${isUserSlot
+                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
+                                    : isPast ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                                      : isBlocked ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed'
+                                        : isBookedSlot ? 'bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed'
+                                          : selectedSlot === slot ? 'bg-[#1E40AF] text-white border-[#1E40AF] shadow-lg shadow-blue-900/20'
+                                            : dailyLimitReached ? 'bg-blue-50/50 text-blue-300 border-transparent cursor-not-allowed'
+                                              : 'bg-white text-slate-600 border-slate-100 hover:border-[#1E40AF] hover:text-[#1E40AF] shadow-sm'}`}
+                                >
+                                  <span className={isPast && !isUserSlot ? 'line-through opacity-50' : ''}>
+                                    {isUserSlot ? `Booked (${userSlotStatus})` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Slot Locked' : slotToRange(slot)}
+                                  </span>
+                                  {isUserSlot && <CheckCircle2 size={10} className="absolute top-1 right-1 text-emerald-500" />}
+                                  {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1 right-1 text-red-400" />}
+                                  {isBookedSlot && !isBlocked && !isUserSlot && <AlertCircle size={10} className="absolute top-1 right-1 text-blue-400" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sticky Confirm Booking footer */}
+                  <div className="shrink-0 px-4 py-3 border-t border-slate-100 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.04)] safe-area-bottom">
+                    {(() => {
+                      const currentActiveRole = localStorage.getItem('active_role');
+                      const isOwner = !!(user && selectedCourt?.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER');
+                      return (
+                        <button
+                          disabled={!selectedSlot || isBooked || isProcessing || dailyLimitReached || isOwner || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                          onClick={handleBooking}
+                          className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2.5 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : dailyLimitReached ? 'bg-blue-100 text-blue-500 border border-blue-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                        >
+                          {isProcessing ? <Loader2 className="animate-spin" size={18} /> : isBooked ? <><CheckCircle2 size={18} /> Confirmed</> : isOwner ? <><Ban size={16} /> Owner Restricted</> : dailyLimitReached ? <><Ban size={16} /> Limit Reached</> : selectedSlot && (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) ? <><Ban size={16} /> Slot Locked</> : <>Confirm Booking {String.fromCharCode(8594)}</>}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -2126,7 +2311,7 @@ const Booking: React.FC = () => {
                   </div>
 
                   {/* Scrollable list */}
-                  <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                  <div className="flex-1 overflow-y-auto px-0 md:px-1.5 py-1 md:py-1.5 space-y-1 md:space-y-1.5">
                     {isLoading || isLoadingLocationDetail ? (
                       Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
                     ) : urlLocationId ? (
@@ -2149,11 +2334,19 @@ const Booking: React.FC = () => {
                                   : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-500'
                                     : 'bg-blue-50 text-blue-500';
                           return (
-                            <div key={court.id} className="px-2 py-1">
+                            <div key={court.id}>
                               <button
-                                onClick={() => { if (!isCourtAvailable) return; setHeroCourtId(court.id); }}
+                                onClick={() => {
+                                  if (!isCourtAvailable) return;
+                                  setHeroCourtId(court.id);
+                                  // On mobile, directly select the court to show detail + booking
+                                  if (window.innerWidth < 768) {
+                                    const fullCourt = locationCourts.find(c => c.id === court.id);
+                                    if (fullCourt) setSelectedCourt(fullCourt);
+                                  }
+                                }}
                                 disabled={!isCourtAvailable}
-                                className={`w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                                className={`w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer active:bg-slate-50' : 'opacity-60 cursor-not-allowed'}`}
                               >
                                 {/* Left — Image */}
                                 <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
@@ -2244,13 +2437,13 @@ const Booking: React.FC = () => {
                         const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
                         const isAvailable = locStatus === 'Active';
                         return (
-                          <div key={location.id} className="px-2 py-1">
+                          <div key={location.id}>
                             <button
                               onClick={() => {
                                 triggerPulse(location.latitude, location.longitude);
                                 navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
                               }}
-                              className="w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200"
+                              className="w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 active:bg-slate-50"
                             >
                               {/* Left column — Image (fixed size) */}
                               <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
@@ -2331,7 +2524,7 @@ const Booking: React.FC = () => {
           </div>
 
           {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL / SCHEDULE ═══ */}
-          <div className={`lg:col-span-3 xl:col-span-3 transition-all duration-300 hidden md:block`}>
+          <div className={`lg:col-span-3 xl:col-span-3 transition-all duration-300 ${(urlLocationId || viewMode === 'list') ? 'hidden md:block' : viewMode === 'map' ? 'block' : 'hidden md:block'}`}>
             <div className="md:rounded-[32px] md:border md:border-slate-200/60 md:shadow-xl md:shadow-slate-200/40 overflow-hidden relative md:sticky md:top-8 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
               {/* ── Map — shown when no location is selected ── */}
@@ -2706,9 +2899,9 @@ const Booking: React.FC = () => {
           </div>
         </div>
 
-        {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
+        {/* ──────────── MOBILE BOTTOM BAR — hidden in location/court detail ──────────── */}
         {
-          isMobile && (
+          isMobile && !urlLocationId && (
             <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
               <div className="flex justify-center items-center gap-2 px-4 py-2.5">
                 <button
@@ -2730,71 +2923,11 @@ const Booking: React.FC = () => {
           )
         }
 
-        {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
+
+
+        {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL — hidden when mobile schedule is open ──────────── */}
         {
-          showFilters && (
-            <div className="fixed inset-0 z-[110] flex items-end md:hidden">
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
-              <div className="relative w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-                {/* Drawer handle */}
-                <div className="flex justify-center pt-3 pb-1">
-                  <div className="w-10 h-1 rounded-full bg-slate-300" />
-                </div>
-
-                <div className="px-5 pb-3 pt-2">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-lg font-bold text-slate-900">Filters</h2>
-                    <button onClick={() => setShowFilters(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
-                      <X size={20} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-6 pb-6">
-                    <section>
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Court Type</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
-                          <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
-                            <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
-                            <span className="text-sm font-medium text-slate-600">{type}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section>
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Access</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['Public Court', 'Private Court', 'Membership Required'].map(access => (
-                          <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
-                            <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
-                            <span className="text-sm font-medium text-slate-600">{access}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </section>
-                  </div>
-
-                  <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                    <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 px-3 py-2.5">
-                      Clear
-                    </button>
-                    <button
-                      onClick={() => setShowFilters(false)}
-                      className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-all shadow-md shadow-blue-200/50"
-                    >
-                      View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-        }
-
-        {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL ──────────── */}
-        {
-          showLocationEntryModal && !locationConfirmed && selectedLocation && ReactDOM.createPortal(
+          showLocationEntryModal && !locationConfirmed && !showMobileSchedule && selectedLocation && ReactDOM.createPortal(
             <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
               <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                 <div className="p-6 sm:p-8 text-center space-y-5">

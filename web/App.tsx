@@ -972,7 +972,9 @@ const NavigationHandler: React.FC<{
               location.pathname === '/terms' ||
               location.pathname === '/policy' ||
               location.pathname === '/messages' ||
-              location.pathname.startsWith('/groups')
+              location.pathname.startsWith('/groups') ||
+              location.pathname === '/booking' ||
+              location.pathname.startsWith('/booking')
               ? '' // full-bleed — these pages manage their own layout
               : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           )
