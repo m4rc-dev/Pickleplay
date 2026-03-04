@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -173,9 +173,18 @@ const Booking: React.FC = () => {
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [isFilterClosing, setIsFilterClosing] = useState(false);
+  const [filterPriceRange, setFilterPriceRange] = useState<[number, number]>([0, 2000]);
+  const [filterFreeOnly, setFilterFreeOnly] = useState(false);
+  const [filterAmenities, setFilterAmenities] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
   const isMobile = window.innerWidth < 768;
+
+  const handleCloseFilters = () => {
+    setIsFilterClosing(true);
+    setTimeout(() => { setShowFilters(false); setIsFilterClosing(false); }, 400);
+  };
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1457,6 +1466,18 @@ const Booking: React.FC = () => {
       c.location.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+  // Collect all unique amenities across locations for the filter sidebar
+  const allAvailableAmenities = React.useMemo(() => {
+    const set = new Set<string>();
+    locations.forEach(loc => {
+      if (Array.isArray(loc.amenities)) loc.amenities.forEach((a: string) => set.add(a));
+    });
+    courts.forEach(c => {
+      if (Array.isArray((c as any).amenities)) (c as any).amenities.forEach((a: string) => set.add(a));
+    });
+    return Array.from(set).sort();
+  }, [locations, courts]);
+
   // Get filtered locations (grouped by location) - this is what we'll display in the list
   const filteredLocations = locations
     .filter(loc => {
@@ -1477,7 +1498,35 @@ const Booking: React.FC = () => {
         if (!matchesLocation) return false;
         return filterType === 'All' || c.type === filterType;
       });
-      return locCourts.length > 0;
+      if (locCourts.length === 0) return false;
+
+      // Filter by free only
+      if (filterFreeOnly) {
+        const hasFree = locCourts.some((c: any) => !c.pricePerHour || c.pricePerHour === 0);
+        if (!hasFree) return false;
+      }
+
+      // Filter by price range
+      if (filterPriceRange[0] > 0 || filterPriceRange[1] < 2000) {
+        const prices = locCourts.map((c: any) => c.pricePerHour || 0).filter((p: number) => p > 0);
+        if (prices.length > 0) {
+          const minP = Math.min(...prices);
+          if (minP > filterPriceRange[1] || Math.max(...prices) < filterPriceRange[0]) return false;
+        }
+      }
+
+      // Filter by amenities
+      if (filterAmenities.length > 0) {
+        const locAm = new Set<string>();
+        if (Array.isArray(loc.amenities)) loc.amenities.forEach((a: string) => locAm.add(a.toLowerCase()));
+        locCourts.forEach((c: any) => {
+          if (Array.isArray(c.amenities)) c.amenities.forEach((a: string) => locAm.add(a.toLowerCase()));
+        });
+        const hasAll = filterAmenities.every(a => locAm.has(a.toLowerCase()));
+        if (!hasAll) return false;
+      }
+
+      return true;
     })
     .map(loc => {
       // Add court count for each location
@@ -1486,9 +1535,51 @@ const Booking: React.FC = () => {
           c.location.toLowerCase().includes(loc.name.toLowerCase());
         return matchesLocation && (filterType === 'All' || c.type === filterType);
       });
+
+      // Calculate distance if user location is available
+      let distance: number | undefined;
+      if (userLocation && loc.latitude && loc.longitude) {
+        distance = calculateDistance(userLocation.lat, userLocation.lng, loc.latitude, loc.longitude);
+      }
+
+      // Derive court type from location + courts
+      const ctSet = new Set<string>();
+      const rawLocCt = (loc.court_type || '').trim().toLowerCase();
+      if (rawLocCt.includes('both')) { ctSet.add('Indoor'); ctSet.add('Outdoor'); }
+      else if (rawLocCt.includes('outdoor')) ctSet.add('Outdoor');
+      else if (rawLocCt.includes('indoor')) ctSet.add('Indoor');
+      locCourts.forEach((c: any) => {
+        const ct = (c.type || '').toLowerCase();
+        if (ct.includes('indoor')) ctSet.add('Indoor');
+        if (ct.includes('outdoor')) ctSet.add('Outdoor');
+        if (ct.includes('both')) { ctSet.add('Indoor'); ctSet.add('Outdoor'); }
+      });
+      const derivedCourtType = ctSet.size === 0 ? 'Indoor'
+        : ctSet.has('Indoor') && ctSet.has('Outdoor') ? 'Indoor / Outdoor'
+        : ctSet.has('Outdoor') ? 'Outdoor' : 'Indoor';
+
+      // Aggregate amenities
+      const amenitiesSet = new Set<string>();
+      if (Array.isArray(loc.amenities)) loc.amenities.forEach((a: string) => amenitiesSet.add(a));
+      locCourts.forEach((c: any) => {
+        if (Array.isArray(c.amenities)) c.amenities.forEach((a: string) => amenitiesSet.add(a));
+      });
+
+      // Price range computation
+      const prices = locCourts.map((c: any) => c.pricePerHour || 0);
+      const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+      const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+      const hasFree = prices.some((p: number) => p === 0);
+
       return {
         ...loc,
-        court_count: locCourts.length
+        court_count: locCourts.length,
+        distance,
+        derived_court_type: derivedCourtType,
+        all_amenities: Array.from(amenitiesSet),
+        min_price: minPrice,
+        max_price: maxPrice,
+        has_free: hasFree
       };
     });
 
@@ -1502,8 +1593,8 @@ const Booking: React.FC = () => {
       />
       {/* ──────────── MOBILE HEADER BAR ──────────── */}
       <div className="md:hidden sticky top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 shadow-sm">
-        {/* Search row */}
-        <div className="px-4 pt-3 pb-2">
+        {/* Search row — hidden when viewing location detail */}
+        <div className={`px-4 pt-3 pb-2 transition-all duration-300 ${urlLocationId && selectedLocation ? 'hidden' : ''}`}>
           {isSearchExpanded ? (
             <div className="relative">
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
@@ -1558,7 +1649,12 @@ const Booking: React.FC = () => {
                         (loc.address && loc.address.toLowerCase().includes(q));
                     })
                     .slice(0, 8)
-                    .map((location) => (
+                    .map((location) => {
+                      const locCourts = courts.filter(c => c.location_id ? c.location_id === location.id : c.location.toLowerCase().includes(location.name.toLowerCase()));
+                      const dist = userLocation && location.latitude && location.longitude
+                        ? calculateDistance(userLocation.lat, userLocation.lng, location.latitude, location.longitude)
+                        : undefined;
+                      return (
                       <button
                         key={location.id}
                         onClick={() => {
@@ -1572,17 +1668,23 @@ const Booking: React.FC = () => {
                           setViewMode('map');
                           setIsSearchExpanded(false);
                         }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-none"
                       >
                         <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
                           <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-slate-900 font-semibold text-sm truncate">{location.name}</p>
-                          <p className="text-xs text-slate-400 truncate">{location.city} · {location.court_count || 0} court{location.court_count !== 1 ? 's' : ''}</p>
+                          <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {locCourts.length} {locCourts.length === 1 ? 'court' : 'courts'}
+                            {dist !== undefined && <span> · {dist.toFixed(1)} miles away</span>}
+                            {location.city && <span> · {location.city}</span>}
+                            {location.address && <span> · {location.address}</span>}
+                          </p>
                         </div>
                       </button>
-                    ))}
+                      );
+                    })}
                   {locations.length === 0 && (
                     <div className="px-4 py-6 text-center">
                       <p className="text-sm text-slate-400">No locations found</p>
@@ -1601,6 +1703,20 @@ const Booking: React.FC = () => {
                 <span className="text-sm text-slate-400 font-medium truncate">{searchQuery || 'Search courts or places...'}</span>
               </button>
               <button
+                onClick={() => setShowFilters(true)}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 transition-all relative ${
+                  (filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
+                    ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
+                }`}
+              >
+                <SlidersHorizontal size={18} />
+                {(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0) && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#a3e635] rounded-full flex items-center justify-center">
+                    <span className="text-[8px] font-black text-slate-900">{(filterType !== 'All' ? 1 : 0) + (filterFreeOnly ? 1 : 0) + filterAmenities.length}</span>
+                  </div>
+                )}
+              </button>
+              <button
                 onClick={() => navigate('/my-bookings')}
                 className="w-10 h-10 flex items-center justify-center bg-[#1E40AF] text-white rounded-xl shrink-0 hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/10"
               >
@@ -1610,43 +1726,31 @@ const Booking: React.FC = () => {
           )}
         </div>
 
-        {/* Back to Courts — mobile, shown when in a location detail */}
+        {/* Back to Locations / Courts — mobile, shown when in a location detail */}
         {!isSearchExpanded && urlLocationId && selectedLocation && (
-          <div className="px-4 pb-2">
-            <button
-              onClick={() => navigate('/booking')}
-              className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
-            >
-              <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-              Back to Courts
-            </button>
+          <div className="px-4 pt-2 pb-2 flex items-center gap-3">
+            {selectedCourt ? (
+              <button
+                onClick={() => setSelectedCourt(null)}
+                className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
+              >
+                <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                Back to Courts
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/booking')}
+                className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest transition-colors group"
+              >
+                <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                Back to Locations
+              </button>
+            )}
+            <span className="text-xs font-bold text-slate-600 truncate ml-auto">{selectedCourt ? selectedCourt.name : selectedLocation.name}</span>
           </div>
         )}
 
-        {/* Filter pills row */}
-        {!isSearchExpanded && (
-          <div className="px-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
-            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${filterType === type
-                  ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-900/20'
-                  : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-300'
-                  }`}
-              >
-                {type}
-              </button>
-            ))}
-            <button
-              onClick={handleNearMe}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-[#a3e635] text-slate-950 border border-lime-300 hover:bg-lime-500 transition-all font-black"
-            >
-              <Navigation size={12} fill="currentColor" />
-              Near Me
-            </button>
-          </div>
-        )}
+
       </div>
 
       {/* ──────────── MAIN CONTAINER ──────────── */}
@@ -1676,21 +1780,7 @@ const Booking: React.FC = () => {
             </button>
           </div>
 
-          {/* Desktop Filter Pills */}
-          <div className="flex flex-wrap gap-2 items-center">
-            {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`px-6 lg:px-8 py-2.5 lg:py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all duration-200 ${filterType === type
-                  ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/20'
-                  : 'bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-[#1E40AF]'
-                  }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
+
         </div>
 
         {/* ──────────── MAIN CONTENT GRID ──────────── */}
@@ -1698,14 +1788,14 @@ const Booking: React.FC = () => {
 
           {/* ═══ LEFT COLUMN ═══ */}
           <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'} transition-all duration-300`}>
-            {/* Desktop Search Bar */}
+            {/* Desktop Search Bar — hidden when viewing location detail */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSearch(searchQuery);
                 setShowDesktopSuggestions(false);
               }}
-              className="hidden md:flex gap-3 mb-5 relative"
+              className={`hidden md:flex gap-3 mb-5 relative transition-all duration-300 ${urlLocationId && selectedLocation ? 'opacity-0 max-h-0 overflow-hidden mb-0 pointer-events-none' : 'opacity-100 max-h-[100px]'}`}
             >
               <div className="relative flex-1 group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#1E40AF] transition-colors" size={18} />
@@ -1772,7 +1862,7 @@ const Booking: React.FC = () => {
 
                     {filteredLocations.length > 0 && (
                       <>
-                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-blue-600 uppercase tracking-[0.15em]">Courts</p>
+                        <p className="px-5 pt-3 pb-1 text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em]">Courts</p>
                         <div className="max-h-[320px] overflow-y-auto">
                           {filteredLocations.slice(0, 10).map((location) => (
                             <button
@@ -1796,8 +1886,10 @@ const Booking: React.FC = () => {
                               <div className="flex-1 min-w-0">
                                 <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
                                 <p className="text-xs text-slate-400 truncate">
-                                  {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                                  {location.court_count || 0} {(location.court_count || 0) === 1 ? 'court' : 'courts'}
+                                  {location.distance !== undefined && <span> · {location.distance.toFixed(1)} miles away</span>}
                                   {location.city && <span> · {location.city}</span>}
+                                  {location.address && <span> · {location.address}</span>}
                                 </p>
                               </div>
                             </button>
@@ -1817,22 +1909,40 @@ const Booking: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={handleNearMe}
-                className="flex items-center gap-2 px-5 lg:px-6 py-3 bg-[#a3e635] text-slate-950 rounded-2xl font-bold text-xs uppercase tracking-wider hover:bg-lime-500 transition-all shadow-lg shadow-lime-400/20 shrink-0"
+                onClick={() => setShowFilters(true)}
+                className={`flex items-center gap-2 px-5 lg:px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shrink-0 relative ${
+                  (filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
+                    ? 'bg-[#1E40AF] text-white shadow-blue-900/20 hover:bg-blue-800'
+                    : 'bg-white text-slate-700 border border-slate-200 shadow-slate-200/50 hover:border-blue-300'
+                }`}
               >
-                <Navigation size={16} fill="currentColor" />
-                <span>Near Me</span>
+                <SlidersHorizontal size={16} />
+                <span>Filters</span>
+                {(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0) && (
+                  <div className="w-5 h-5 bg-[#a3e635] rounded-full flex items-center justify-center ml-1">
+                    <span className="text-[9px] font-black text-slate-900">{(filterType !== 'All' ? 1 : 0) + (filterFreeOnly ? 1 : 0) + filterAmenities.length}</span>
+                  </div>
+                )}
               </button>
             </form>
 
-            {/* ─── Back to Courts button (desktop, location detail view) ─── */}
-            {urlLocationId && selectedLocation && (
+            {/* ─── Navigation buttons (desktop, location detail view) ─── */}
+            {urlLocationId && selectedLocation && !selectedCourt && (
               <button
                 onClick={() => navigate('/booking')}
                 className="hidden md:flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest mb-4 transition-colors group"
               >
                 <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-                Back to Courts
+                Back to Locations
+              </button>
+            )}
+            {urlLocationId && selectedLocation && selectedCourt && (
+              <button
+                onClick={() => setSelectedCourt(null)}
+                className="hidden md:flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-[#1E40AF] uppercase tracking-widest mb-4 transition-colors group"
+              >
+                <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                Back to Courts at {selectedLocation.name}
               </button>
             )}
 
@@ -1843,13 +1953,13 @@ const Booking: React.FC = () => {
                 /* ─── Court Selected — Court Detail Info (left panel) ─── */
                 <div className="flex-1 overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="p-5 md:p-6 space-y-6">
-                    {/* Back button — returns to court detail, not all the way to list */}
+                    {/* Back button — returns to court list */}
                     <button
                       onClick={() => setSelectedCourt(null)}
-                      className="flex items-center gap-1.5 text-slate-400 text-[11px] font-black uppercase tracking-widest hover:text-[#1E40AF] transition-colors"
+                      className="flex items-center gap-1.5 text-slate-400 text-[11px] font-black uppercase tracking-widest hover:text-[#1E40AF] transition-colors md:hidden"
                     >
                       <ChevronLeft size={14} />
-                      Back to {selectedCourt.name}
+                      Back to Courts
                     </button>
 
                     {/* Court name + type badge */}
@@ -1956,59 +2066,37 @@ const Booking: React.FC = () => {
                 /* ─── Location List (matching GuestBooking) ─── */
                 <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
 
-                  {/* Location Detail Header — no back button, court detail panel has its own */}
+                  {/* Location Detail Header — mobile only (desktop shows hero in right column) */}
                   {urlLocationId && selectedLocation && (
-                    <div className="border-b border-slate-100 shrink-0">
+                    <div className="border-b border-slate-100 shrink-0 md:hidden">
                       {selectedLocation.image_url && (
-                        <div className="relative h-28 sm:h-36 md:h-44 w-full">
+                        <div className="relative h-28 sm:h-36 w-full">
                           <img
                             src={selectedLocation.image_url}
                             alt={selectedLocation.name}
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                          <div className="absolute bottom-2 left-3 right-3 md:bottom-3 md:left-4 md:right-4">
-                            <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white tracking-tight leading-tight drop-shadow-lg">{selectedLocation.name}</h2>
+                          <div className="absolute bottom-2 left-3 right-3">
+                            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight drop-shadow-lg">{selectedLocation.name}</h2>
                           </div>
                         </div>
                       )}
-
-                      <div className="p-3 md:p-4">
+                      <div className="p-3">
                         {!selectedLocation.image_url && (
-                          <>
-                            <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">{selectedLocation.name}</h2>
-                          </>
+                          <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">{selectedLocation.name}</h2>
                         )}
-                        <div className="flex items-center gap-1.5 text-xs md:text-sm text-slate-500 mb-2">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
                           <MapPin size={12} className="text-blue-500 shrink-0" />
                           <span className="font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
                             <img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" />
                             {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
                           </span>
-                          {(() => {
-                            const locStatus = selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed');
-                            const statusStyle = locStatus === 'Active' ? 'bg-emerald-50 text-emerald-700'
-                              : locStatus === 'Closed' ? 'bg-rose-50 text-rose-600'
-                                : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-600'
-                                  : 'bg-blue-50 text-blue-600';
-                            return (
-                              <span className={`inline-flex items-center px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold ${statusStyle}`}>
-                                {locStatus}
-                              </span>
-                            );
-                          })()}
-                          {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
-                            selectedLocation.amenities.slice(0, 3).map((amenity: string, i: number) => (
-                              <span key={i} className="inline-flex items-center bg-slate-100 text-slate-600 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
-                                {amenity}
-                              </span>
-                            ))
-                          )}
                           {selectedLocation.opening_time && selectedLocation.closing_time && (
-                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 md:px-2.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold">
+                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
                               <Clock size={10} />
                               {(() => {
                                 const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
@@ -2017,9 +2105,6 @@ const Booking: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        {selectedLocation.description && (
-                          <p className="text-xs md:text-sm text-slate-500 mt-1.5 leading-relaxed line-clamp-1 md:line-clamp-2">{selectedLocation.description}</p>
-                        )}
                       </div>
                     </div>
                   )}
@@ -2064,85 +2149,79 @@ const Booking: React.FC = () => {
                                   : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-500'
                                     : 'bg-blue-50 text-blue-500';
                           return (
-                            <div key={court.id} className="w-full p-2">
+                            <div key={court.id} className="px-2 py-1">
                               <button
                                 onClick={() => { if (!isCourtAvailable) return; setHeroCourtId(court.id); }}
-                                aria-expanded={expandedCourtId === court.id}
                                 disabled={!isCourtAvailable}
-                                className={`w-full group flex flex-col rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                                className={`w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                               >
-                                <div className="w-full h-32 bg-slate-100 overflow-hidden relative">
+                                {/* Left — Image */}
+                                <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
                                   <img
                                     src={court.imageUrl || '/images/home-images/pb2.jpg'}
                                     alt={court.name}
                                     className={`w-full h-full object-cover transition-transform duration-700 ${isCourtAvailable ? 'group-hover:scale-110' : 'grayscale'}`}
                                   />
-                                  <div className="absolute top-2.5 left-2.5 flex gap-1.5">
-                                    <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${court.type === 'Indoor' ? 'bg-blue-600/90 text-white' : 'bg-emerald-600/90 text-white'}`}>
-                                      {court.type}
-                                    </span>
-                                    {courtStatusLabel && (
-                                      <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${courtStatusStyle}`}>{courtStatusLabel}</span>
-                                    )}
-                                  </div>
-                                  {!isCourtAvailable && (
-                                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
-                                      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 border border-white/20">
-                                        <Ban size={20} className="text-white" />
-                                      </div>
+                                  {!isCourtAvailable && courtStatusLabel ? (
+                                    <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${courtStatusStyle}`}>{courtStatusLabel}</div>
+                                  ) : isCourtAvailable && (
+                                    <div className="absolute top-2 left-2">
+                                      <span className="bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest shadow-md shadow-lime-500/30">Available</span>
                                     </div>
                                   )}
+                                  {!isCourtAvailable && (
+                                    <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+                                  )}
+                                  {/* Price badge */}
+                                  <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
+                                    {court.pricePerHour != null && court.pricePerHour > 0 ? (
+                                      <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                        <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                      </div>
+                                    ) : court.pricePerHour === 0 ? (
+                                      <div className="bg-emerald-500 px-1.5 py-0.5 rounded-md shadow-md">
+                                        <span className="text-[9px] font-black text-white uppercase">Free</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <div className="p-3.5 text-left">
-                                  <p className={`font-black text-sm tracking-tight mb-0.5 line-clamp-1 ${isCourtAvailable ? 'text-slate-900 group-hover:text-[#1E40AF] transition-colors' : 'text-slate-400'}`}>{court.name}</p>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" /> {court.numCourts} Units</span>
-                                    <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
-                                    <span className="text-[10px] font-bold text-[#a3e635] uppercase tracking-wider">Book Now</span>
+
+                                {/* Right — Details */}
+                                <div className="flex-1 p-3 text-left flex flex-col min-w-0">
+                                  <p className={`font-black text-base tracking-tight mb-0.5 truncate ${isCourtAvailable ? 'text-slate-900 group-hover:text-[#1E40AF] transition-colors' : 'text-slate-400'}`}>{court.name}</p>
+                                  <div className="flex items-center gap-1 mb-2">
+                                    <MapPin size={12} className="text-slate-300 shrink-0" />
+                                    <p className="text-xs text-slate-400 truncate">{selectedLocation?.address || selectedLocation?.city || ''}</p>
+                                  </div>
+
+                                  {/* 2×2 Info Grid */}
+                                  <div className="grid grid-cols-2 gap-1.5 mt-auto">
+                                    <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                      <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
+                                      <span className="text-[11px] font-bold text-slate-600">{court.numCourts || 1} {(court.numCourts || 1) === 1 ? 'Court' : 'Courts'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                      <span className="text-[11px] font-bold text-slate-600">{(court.numCourts || 1) * 4} Players</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                      <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="1" /><line x1="12" y1="6" x2="12" y2="18" /><line x1="2" y1="12" x2="22" y2="12" /></svg>
+                                      <span className="text-[11px] font-bold text-slate-600 truncate">{court.type || 'Indoor'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                      <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                                      <span className="text-[11px] font-bold text-slate-600 truncate">
+                                        {Array.isArray(court.amenities) && court.amenities.length > 0
+                                          ? (court.amenities.length <= 2 ? court.amenities.join(', ') : `${court.amenities.length} Amenities`)
+                                          : 'No Amenities'
+                                        }
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </button>
-                              {expandedCourtId === court.id && (
-                                <div className="px-4 pb-4 -mt-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                                  <div className="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 sm:p-5">
-                                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Details</span>
-                                      <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{court.type}</span>
-                                      {typeof court.numCourts === 'number' && (
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">{court.numCourts} Units</span>
-                                      )}
-                                      {Array.isArray(court.amenities) && court.amenities.slice(0, 3).map((a, i) => (
-                                        <span key={i} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600">{a}</span>
-                                      ))}
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        onClick={() => navigate(`/court/${court.id}`)}
-                                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-widest shadow-md shadow-blue-200/50 active:scale-95 transition-all"
-                                      >
-                                        View Schedule
-                                      </button>
-                                      {isFullyBooked && (
-                                        <button
-                                          onClick={() => navigate(`/court/${court.id}?advance=true`)}
-                                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-widest shadow-md shadow-blue-200/50 hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition-all"
-                                        >
-                                          Book Future Dates
-                                        </button>
-                                      )}
-                                      <button
-                                        onClick={() => setExpandedCourtId(null)}
-                                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                                      >
-                                        Close
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                               {isFullyBooked && isLocationAvailable && (
-                                <div className="px-4 pb-3 -mt-1">
+                                <div className="px-2 pb-1 -mt-1">
                                   <button
                                     onClick={() => navigate(`/court/${court.id}?advance=true`)}
                                     className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-200/50 flex items-center justify-center gap-2"
@@ -2165,50 +2244,78 @@ const Booking: React.FC = () => {
                         const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
                         const isAvailable = locStatus === 'Active';
                         return (
-                          <div key={location.id} className="p-2">
+                          <div key={location.id} className="px-2 py-1">
                             <button
                               onClick={() => {
                                 triggerPulse(location.latitude, location.longitude);
                                 navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
                               }}
-                              className="w-full group flex flex-col rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200"
+                              className="w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200"
                             >
-                              <div className="w-full h-32 bg-slate-100 overflow-hidden relative">
+                              {/* Left column — Image (fixed size) */}
+                              <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
                                 <img
                                   src={location.hero_image || location.image_url || '/images/home-images/pb2.jpg'}
                                   alt={location.name}
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                                 {!isAvailable && (
-                                  <div className={`absolute top-2.5 right-2.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${locStatus === 'Closed' ? 'bg-rose-600 text-white'
-                                    : locStatus === 'Maintenance' ? 'bg-blue-600 text-white'
-                                      : 'bg-[#1E40AF] text-white'
-                                    }`}>{locStatus}</div>
+                                  <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
+                                    locStatus === 'Closed' ? 'bg-rose-500 text-white'
+                                    : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
+                                    : 'bg-blue-500 text-white'
+                                  }`}>{locStatus}</div>
                                 )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                              </div>
-                              <div className="p-3.5 text-left">
-                                <p className="font-black text-sm text-slate-900 tracking-tight mb-0.5 group-hover:text-[#1E40AF] transition-colors line-clamp-1">{location.name}</p>
-                                <div className="flex items-center gap-2.5">
-                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                    <MapPin size={10} className="text-[#1E40AF]" /> {location.city}
-                                  </span>
-                                  <div className="w-0.5 h-0.5 rounded-full bg-slate-200" />
-                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                                    <img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" /> {location.court_count} Court{location.court_count !== 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                <div className="mt-2.5 flex items-center justify-between">
-                                  {isAvailable ? (
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#a3e635]">Available Now</span>
-                                  ) : (
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${locStatus === 'Closed' ? 'text-rose-500'
-                                      : locStatus === 'Maintenance' ? 'text-blue-500'
-                                        : 'text-[#1E40AF]'
-                                      }`}>{locStatus}</span>
+                                {isAvailable && (
+                                  <div className="absolute top-2 left-2">
+                                    <span className="bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest shadow-md shadow-lime-500/30">Available</span>
+                                  </div>
+                                )}
+                                {/* Price range badge */}
+                                <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
+                                  {location.has_free && (
+                                    <div className="bg-emerald-500 px-1.5 py-0.5 rounded-md shadow-md">
+                                      <span className="text-[9px] font-black text-white uppercase">Free</span>
+                                    </div>
                                   )}
-                                  <div className="w-7 h-7 rounded-full bg-[#1E40AF]/5 flex items-center justify-center text-[#1E40AF] group-hover:bg-[#1E40AF] group-hover:text-white transition-all duration-300">
-                                    <ChevronLeft size={14} className="rotate-180" />
+                                  {location.max_price > 0 && (
+                                    <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                      <span className="text-[11px] font-black text-slate-900">₱{location.min_price > 0 ? location.min_price : location.max_price}{location.min_price > 0 && location.min_price !== location.max_price ? `-${location.max_price}` : ''}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Right column — Details */}
+                              <div className="flex-1 p-3 text-left flex flex-col min-w-0">
+                                <p className="font-black text-slate-900 text-base tracking-tight mb-0.5 group-hover:text-[#1E40AF] transition-colors truncate">{location.name}</p>
+                                <div className="flex items-center gap-1 mb-2">
+                                  <MapPin size={12} className="text-slate-300 shrink-0" />
+                                  <p className="text-xs text-slate-400 truncate">{location.address || location.city}</p>
+                                </div>
+
+                                {/* 2x2 Details Grid */}
+                                <div className="grid grid-cols-2 gap-1.5 mt-auto">
+                                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                    <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
+                                    <span className="text-[11px] font-bold text-slate-600">{location.court_count || 0} {(location.court_count || 0) === 1 ? 'Court' : 'Courts'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                    <span className="text-[11px] font-bold text-slate-600">{(location.court_count || 1) * 4} Players</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                    <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="1" /><line x1="12" y1="6" x2="12" y2="18" /><line x1="2" y1="12" x2="22" y2="12" /></svg>
+                                    <span className="text-[11px] font-bold text-slate-600 truncate">{location.derived_court_type || 'Indoor'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                                    <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                                    <span className="text-[11px] font-bold text-slate-600 truncate">
+                                      {location.all_amenities && location.all_amenities.length > 0
+                                        ? (location.all_amenities.length <= 2 ? location.all_amenities.join(', ') : `${location.all_amenities.length} Amenities`)
+                                        : 'No Amenities'
+                                      }
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -2227,10 +2334,10 @@ const Booking: React.FC = () => {
           <div className={`lg:col-span-3 xl:col-span-3 transition-all duration-300 hidden md:block`}>
             <div className="md:rounded-[32px] md:border md:border-slate-200/60 md:shadow-xl md:shadow-slate-200/40 overflow-hidden relative md:sticky md:top-8 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
-              {/* ── Map — always in DOM ── */}
+              {/* ── Map — shown when no location is selected ── */}
               <div
-                className="absolute inset-0 transition-opacity duration-300"
-                style={{ opacity: (!heroActiveCourt && !selectedCourt) ? 1 : 0, pointerEvents: (!heroActiveCourt && !selectedCourt) ? 'auto' : 'none' }}
+                className="absolute inset-0 transition-all duration-500 ease-out"
+                style={{ opacity: (!urlLocationId && !selectedCourt) ? 1 : 0, transform: (!urlLocationId && !selectedCourt) ? 'scale(1)' : 'scale(1.02)', pointerEvents: (!urlLocationId && !selectedCourt) ? 'auto' : 'none' }}
               >
                 {isLoading ? (
                   <div className="h-full bg-slate-50 flex items-center justify-center">
@@ -2241,9 +2348,107 @@ const Booking: React.FC = () => {
                 )}
               </div>
 
-              {/* ── Court Detail Panel ── */}
+              {/* ── Location Hero Panel — shown when location is selected but no court yet ── */}
               <div
-                className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-300"
+                className="absolute inset-0 flex flex-col overflow-hidden transition-all duration-500 ease-out"
+                style={{
+                  opacity: (urlLocationId && selectedLocation && !selectedCourt) ? 1 : 0,
+                  transform: (urlLocationId && selectedLocation && !selectedCourt) ? 'translateY(0)' : 'translateY(24px)',
+                  pointerEvents: (urlLocationId && selectedLocation && !selectedCourt) ? 'auto' : 'none',
+                }}
+              >
+                {selectedLocation && (
+                  <>
+                    {/* Full Hero Image with gradient + venue info overlay */}
+                    <div className="relative flex-1 min-h-0 overflow-hidden">
+                      <img
+                        src={selectedLocation.image_url || '/images/home-images/pb2.jpg'}
+                        alt={selectedLocation.name}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
+
+                      {/* Venue Details Overlay */}
+                      <div className="absolute bottom-0 left-0 right-0 p-5 lg:p-6 xl:p-8 z-10">
+                        {/* Venue Name */}
+                        <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-lg mb-2">{selectedLocation.name}</h2>
+
+                        {/* Address */}
+                        <div className="flex items-center gap-2 mb-4">
+                          <MapPin size={14} className="text-[#a3e635] shrink-0" />
+                          <p className="text-sm text-white/80 font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</p>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+                          {/* Courts */}
+                          <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
+                            <img src="/images/Ball.png" alt="courts" className="w-5 h-5 object-contain" />
+                            <div>
+                              <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Courts</p>
+                              <p className="text-sm font-black text-white">{locationCourts.length}</p>
+                            </div>
+                          </div>
+                          {/* Court Types */}
+                          <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
+                            <Building2 size={16} className="text-[#a3e635] shrink-0" />
+                            <div>
+                              <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Type</p>
+                              <p className="text-sm font-black text-white">
+                                {(() => {
+                                  const types = [...new Set(locationCourts.map(c => c.type))];
+                                  return types.join(' / ') || 'N/A';
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Hours */}
+                          {selectedLocation.opening_time && selectedLocation.closing_time && (
+                            <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
+                              <Clock size={16} className="text-[#a3e635] shrink-0" />
+                              <div>
+                                <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Hours</p>
+                                <p className="text-sm font-black text-white">
+                                  {(() => {
+                                    const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
+                                    return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
+                                  })()}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {/* Status */}
+                          <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${(selectedLocation.status || 'Active') === 'Active' ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50' : 'bg-rose-400'}`} />
+                            <div>
+                              <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Status</p>
+                              <p className="text-sm font-black text-white">{selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed')}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Amenities */}
+                        {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {selectedLocation.amenities.map((amenity: string, i: number) => (
+                              <span key={i} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white/15 backdrop-blur-sm text-white/90 border border-white/20">{amenity}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Description */}
+                        {selectedLocation.description && (
+                          <p className="text-xs text-white/60 font-medium leading-relaxed line-clamp-2 mb-1">{selectedLocation.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* ── Court Detail Panel — shown when a court card is clicked (hero preview) ── */}
+              <div
+                className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-500 ease-out"
                 style={{
                   opacity: (heroActiveCourt && selectedLocation && !selectedCourt) ? 1 : 0,
                   transform: (heroActiveCourt && selectedLocation && !selectedCourt) ? 'translateX(0)' : 'translateX(32px)',
@@ -2313,6 +2518,12 @@ const Booking: React.FC = () => {
                       )}
                       <div className="flex gap-2">
                         <button
+                          onClick={() => { setHeroCourtId(null); }}
+                          className="px-5 py-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase tracking-[0.15em] active:scale-95 transition-all"
+                        >
+                          Back
+                        </button>
+                        <button
                           onClick={() => { setSelectedCourt(heroActiveCourt); }}
                           className="flex-1 py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.15em] shadow-xl shadow-blue-900/20 active:scale-95 transition-all"
                         >
@@ -2326,11 +2537,12 @@ const Booking: React.FC = () => {
 
               {/* ── Select Schedule Panel ── */}
               <div
-                className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-300 z-20"
+                className="absolute inset-0 bg-white flex flex-col overflow-hidden z-20"
                 style={{
                   opacity: selectedCourt ? 1 : 0,
-                  transform: selectedCourt ? 'translateX(0)' : 'translateX(32px)',
+                  transform: selectedCourt ? 'translateY(0)' : 'translateY(24px)',
                   pointerEvents: selectedCourt ? 'auto' : 'none',
+                  transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
                 {selectedCourt && (
@@ -2817,6 +3029,182 @@ const Booking: React.FC = () => {
             document.body
           )
         }
+
+        {/* ──────────── FILTER SIDEBAR ──────────── */}
+        {showFilters && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: isFilterClosing ? 'none' : 'auto' }}>
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              style={{ transition: 'opacity 400ms cubic-bezier(0.4, 0, 0.2, 1)', opacity: isFilterClosing ? 0 : 1 }}
+              onClick={handleCloseFilters}
+            />
+            <div
+              className="absolute top-0 right-0 bottom-0 w-full max-w-md bg-white shadow-2xl flex flex-col"
+              style={{ transition: 'transform 400ms cubic-bezier(0.4, 0, 0.2, 1)', transform: isFilterClosing ? 'translateX(100%)' : 'translateX(0)' }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 tracking-tight">Filters</h2>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Refine your court search</p>
+                </div>
+                <button onClick={handleCloseFilters} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                  <X size={18} className="text-slate-600" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+                {/* Court Type */}
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Court Type</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['All', 'Indoor', 'Outdoor'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setFilterType(type)}
+                        className={`py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${filterType === type
+                          ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/20'
+                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Near Me */}
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Location</p>
+                  <button
+                    onClick={() => { handleNearMe(); handleCloseFilters(); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl hover:from-blue-100 hover:to-indigo-100 transition-all group"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-[#1E40AF] flex items-center justify-center shrink-0">
+                      <Navigation size={14} className="text-white" fill="currentColor" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-slate-900">Near Me</p>
+                      <p className="text-[10px] text-slate-400">Find courts closest to you</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Price Range */}
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Price Range</p>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">₱</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={filterPriceRange[1]}
+                        value={filterPriceRange[0]}
+                        onChange={(e) => setFilterPriceRange([Math.max(0, Number(e.target.value)), filterPriceRange[1]])}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-8 pr-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                        placeholder="Min"
+                      />
+                    </div>
+                    <span className="text-xs text-slate-300 font-bold">—</span>
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">₱</span>
+                      <input
+                        type="number"
+                        min={filterPriceRange[0]}
+                        max={10000}
+                        value={filterPriceRange[1]}
+                        onChange={(e) => setFilterPriceRange([filterPriceRange[0], Math.max(filterPriceRange[0], Number(e.target.value))])}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-8 pr-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                        placeholder="Max"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">₱{filterPriceRange[0]} — ₱{filterPriceRange[1]} per hour</p>
+                </div>
+
+                {/* Free Courts Toggle */}
+                <div>
+                  <button
+                    onClick={() => setFilterFreeOnly(!filterFreeOnly)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${filterFreeOnly
+                      ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+                      : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${filterFreeOnly ? 'bg-emerald-500' : 'bg-slate-200'}`}>
+                        <DollarSign size={16} className={filterFreeOnly ? 'text-white' : 'text-slate-400'} />
+                      </div>
+                      <div className="text-left">
+                        <p className={`text-sm font-bold ${filterFreeOnly ? 'text-emerald-700' : 'text-slate-700'}`}>Free Courts Only</p>
+                        <p className="text-[10px] text-slate-400">Show locations with free courts</p>
+                      </div>
+                    </div>
+                    <div className={`w-11 h-6 rounded-full transition-all relative ${filterFreeOnly ? 'bg-emerald-500' : 'bg-slate-200'}`}>
+                      <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-all ${filterFreeOnly ? 'left-[22px]' : 'left-0.5'}`} />
+                    </div>
+                  </button>
+                </div>
+
+                {/* Amenities */}
+                {allAvailableAmenities.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Amenities</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {allAvailableAmenities.map(amenity => {
+                        const isSelected = filterAmenities.includes(amenity);
+                        return (
+                          <button
+                            key={amenity}
+                            onClick={() => {
+                              setFilterAmenities(prev =>
+                                isSelected ? prev.filter(a => a !== amenity) : [...prev, amenity]
+                              );
+                            }}
+                            className={`text-left px-3 py-2 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2 ${isSelected
+                              ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-900/20'
+                              : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-white/20 border-white/40' : 'border-slate-300'}`}>
+                              {isSelected && <CheckCircle2 size={10} className="text-white" />}
+                            </div>
+                            <span className="truncate">{amenity}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-slate-100 px-5 py-3 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setFilterType('All');
+                    setFilterPriceRange([0, 2000]);
+                    setFilterFreeOnly(false);
+                    setFilterAmenities([]);
+                  }}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={handleCloseFilters}
+                  className="flex-1 py-3 rounded-xl bg-[#1E40AF] text-white text-sm font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors"
+                >
+                  Show Results ({filteredLocations.length})
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
         {/* ──────────── RECEIPT MODAL ──────────── */}
         {
