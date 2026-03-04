@@ -930,9 +930,9 @@ const GuestBooking: React.FC = () => {
         });
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+        <div className="min-h-screen bg-white md:bg-gradient-to-b md:from-slate-50 md:to-white">
             {/* ──────────── MOBILE HEADER BAR ──────────── */}
-            <div className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white border-b border-slate-200/60 shadow-sm">
+            <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-white border-b border-slate-200/60 shadow-sm">
                 {/* Search row — hidden when viewing location detail */}
                 <div className={`px-4 pt-3 pb-2 transition-all duration-300 ${urlLocationId && selectedLocation ? 'hidden' : ''}`}>
                     {isSearchExpanded ? (
@@ -1100,7 +1100,7 @@ const GuestBooking: React.FC = () => {
             </div>
 
             {/* ──────────── MAIN CONTAINER ──────────── */}
-            <div className="pt-[176px] sm:pt-[180px] md:pt-28 pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
+            <div className={`md:pt-28 pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto ${urlLocationId && selectedLocation ? 'pt-[100px] sm:pt-[104px]' : 'pt-[136px] sm:pt-[140px]'}`}>
 
                 {/* ──────────── DESKTOP HEADER ──────────── */}
                 <div className="hidden md:block mb-6 lg:mb-8">
@@ -1125,7 +1125,7 @@ const GuestBooking: React.FC = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
 
                     {/* ═══ LEFT COLUMN ═══ */}
-                    <div className={`lg:col-span-2 xl:col-span-2 ${viewMode === 'map' ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-2 xl:col-span-2 ${(urlLocationId || viewMode === 'list') ? 'block' : 'hidden md:block'}`}>
                         {/* Desktop Search Bar — hidden when viewing location detail */}
                         <form
                             onSubmit={(e) => {
@@ -1302,7 +1302,7 @@ const GuestBooking: React.FC = () => {
                         )}
 
                         {/* ─── List Container ─── */}
-                        <div className="bg-white md:bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col h-[calc(100vh-190px)] sm:h-[calc(100vh-190px)] md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)]">
+                        <div className={`bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)] ${urlLocationId ? 'h-[calc(100vh-100px)]' : 'h-[calc(100vh-150px)]'}`}>
 
                             {/* Location Detail Header — mobile only (desktop shows hero in right column) */}
                             {urlLocationId && selectedLocation && (
@@ -1364,7 +1364,7 @@ const GuestBooking: React.FC = () => {
                             </div>
 
                             {/* Scrollable list */}
-                            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                            <div className="flex-1 overflow-y-auto px-0 md:px-1.5 py-1 md:py-1.5 space-y-1 md:space-y-1.5">
                                 {isLoading || isLoadingLocationDetail ? (
                                     Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
                                 ) : urlLocationId ? (
@@ -1387,7 +1387,7 @@ const GuestBooking: React.FC = () => {
                                                             : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-500'
                                                                 : 'bg-blue-50 text-blue-500';
                                             return (
-                                                <div key={court.id} className="px-2 py-1">
+                                                <div key={court.id}>
                                                     <button
                                                         onClick={() => {
                                                             if (isCourtAvailable) {
@@ -1398,7 +1398,7 @@ const GuestBooking: React.FC = () => {
                                                             }
                                                         }}
                                                         disabled={!isCourtAvailable}
-                                                        className={`w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                                                        className={`w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer active:bg-slate-50' : 'opacity-60 cursor-not-allowed'}`}
                                                     >
                                                         {/* Left — Image */}
                                                         <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
@@ -1489,7 +1489,7 @@ const GuestBooking: React.FC = () => {
                                         const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
                                         const isAvailable = locStatus === 'Active';
                                         return (
-                                            <div key={location.id} className="w-full px-2 py-1">
+                                            <div key={location.id} className="w-full">
                                                 <button
                                                     onClick={() => {
                                                         if (googleMapRef.current && location.latitude && location.longitude) {
@@ -1499,7 +1499,7 @@ const GuestBooking: React.FC = () => {
                                                         }
                                                         navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
                                                     }}
-                                                    className="w-full group flex flex-row rounded-2xl overflow-hidden bg-white border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200"
+                                                    className="w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 active:bg-slate-50"
                                                 >
                                                     {/* Left column — Image (fixed size) */}
                                                     <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
@@ -1578,7 +1578,7 @@ const GuestBooking: React.FC = () => {
                     </div>
 
                     {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL ═══ */}
-                    <div className={`lg:col-span-3 xl:col-span-3 ${viewMode === 'list' ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-3 xl:col-span-3 ${(urlLocationId || viewMode === 'list') ? 'hidden md:block' : 'block'}`}>
                         <div className="md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
                             {/* ── Map — shown when no location is selected ── */}
@@ -1791,8 +1791,8 @@ const GuestBooking: React.FC = () => {
                 </div>
             </div>
 
-            {/* ──────────── MOBILE BOTTOM BAR ──────────── */}
-            {isMobile && (
+            {/* ──────────── MOBILE BOTTOM BAR — hidden in location/court detail ──────────── */}
+            {isMobile && !urlLocationId && (
                 <nav className="fixed bottom-14 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
                     <div className="flex justify-center items-center gap-2 px-4 py-2.5">
                         <button
@@ -1813,203 +1813,143 @@ const GuestBooking: React.FC = () => {
                 </nav>
             )}
 
-            {/* ──────────── MOBILE FILTERS DRAWER ──────────── */}
-            {showFilters && (
-                <div className="fixed inset-0 z-[110] flex items-end md:hidden">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
-                    <div className="relative w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-                        {/* Drawer handle */}
-                        <div className="flex justify-center pt-3 pb-1">
-                            <div className="w-10 h-1 rounded-full bg-slate-300" />
-                        </div>
 
-                        <div className="px-5 pb-3 pt-2">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-lg font-bold text-slate-900">Filters</h2>
-                                <button onClick={() => setShowFilters(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            <div className="space-y-6 pb-6">
-                                <section>
-                                    <h3 className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em] mb-4">Court Type</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {['Indoor Courts', 'Outdoor Courts', 'Lighted Courts', 'Dedicated Courts'].map(type => (
-                                            <label key={type} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
-                                                <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
-                                                <span className="text-sm font-medium text-slate-600">{type}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                <section>
-                                    <h3 className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.15em] mb-4">Access</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {['Public Court', 'Private Court', 'Membership Required'].map(access => (
-                                            <label key={access} className="flex items-center gap-2.5 p-3 bg-slate-50 rounded-xl group cursor-pointer hover:bg-blue-50 transition-colors">
-                                                <div className="w-4 h-4 border-2 border-slate-300 rounded group-hover:border-blue-500 transition-colors shrink-0"></div>
-                                                <span className="text-sm font-medium text-slate-600">{access}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </section>
-                            </div>
-
-                            <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                                <button onClick={() => setShowFilters(false)} className="text-sm font-bold text-slate-400 hover:text-slate-600 px-3 py-2.5">
-                                    Clear
-                                </button>
-                                <button
-                                    onClick={() => setShowFilters(false)}
-                                    className="flex-1 py-3 bg-[#1E40AF] text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
-                                >
-                                    View {urlLocationId ? locationCourts.length + ' Courts' : filteredLocations.length + ' Locations'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ──────────── COURT DETAIL MODAL ──────────── */}
             {showCourtDetails && heroActiveCourt && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 sm:p-4">
+                <div className="fixed inset-0 z-[200] flex flex-col">
                     <div
                         className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity duration-300"
                         onClick={() => setShowCourtDetails(false)}
                     />
-                    <div className="relative w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] bg-white sm:rounded-[40px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+                    <div className="relative w-full h-full bg-white flex flex-col animate-in slide-in-from-bottom-4 duration-500 overflow-hidden">
                         {/* Header Image Section */}
-                        <div className="relative h-64 sm:h-80 shrink-0">
+                        <div className="relative h-[40vh] min-h-[220px] shrink-0">
                             <img
-                                src={heroActiveCourt.imageUrl || selectedLocation?.image_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&q=80&w=1200'}
+                                src={heroActiveCourt.imageUrl || selectedLocation?.image_url || '/images/home-images/pb2.jpg'}
                                 alt={heroActiveCourt.name}
                                 className="w-full h-full object-cover"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-                            <button
-                                onClick={() => setShowCourtDetails(false)}
-                                className="absolute top-6 right-6 p-3 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white rounded-2xl transition-all z-20 group"
-                            >
-                                <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-                            </button>
+                            {/* Top bar: Back + Close */}
+                            <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-4 z-20">
+                                <button
+                                    onClick={() => { setShowCourtDetails(false); setHeroCourtId(null); }}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-white/20 backdrop-blur-md text-white rounded-xl text-xs font-bold hover:bg-white/30 transition-all"
+                                >
+                                    <ChevronLeft size={16} />
+                                    Back to Courts
+                                </button>
+                                <button
+                                    onClick={() => setShowCourtDetails(false)}
+                                    className="p-2.5 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white rounded-xl transition-all"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
 
-                            <div className="absolute bottom-10 left-8 right-8">
-                                <span className="inline-block px-3 py-1 rounded-full bg-[#a3e635] text-slate-900 text-[10px] font-black uppercase tracking-widest mb-4">
+                            <div className="absolute bottom-5 left-5 right-5">
+                                <span className="inline-block px-3 py-1 rounded-full bg-[#a3e635] text-slate-900 text-[10px] font-black uppercase tracking-widest mb-3">
                                     Court Detail
                                 </span>
-                                <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">{heroActiveCourt.name}</h2>
-                                <div className="flex items-center gap-2 mt-2 text-white/80">
-                                    <MapPin size={16} className="text-[#a3e635]" />
+                                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">{heroActiveCourt.name}</h2>
+                                <div className="flex items-center gap-2 mt-1.5 text-white/80">
+                                    <MapPin size={14} className="text-[#a3e635]" />
                                     <span className="text-sm font-bold">{selectedLocation?.name}, {selectedLocation?.city}</span>
                                 </div>
                             </div>
                         </div>
 
                         {/* Content Section */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            <div className="p-8 sm:p-12 space-y-12">
-                                {/* Top Stats */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
-                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-4">
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="p-5 space-y-6">
+                                {/* Top Stats — 2x2 grid maximized */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-3">
                                             <DollarSign className="text-[#1E40AF]" size={24} />
                                         </div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Rate</p>
-                                        <p className="text-xl font-black text-slate-900">₱{heroActiveCourt.pricePerHour}<span className="text-[10px] text-slate-400">/hr</span></p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Rate</p>
+                                        <p className="text-2xl font-black text-slate-900">{heroActiveCourt.pricePerHour > 0 ? `₱${heroActiveCourt.pricePerHour}` : 'Free'}<span className="text-[10px] text-slate-400">{heroActiveCourt.pricePerHour > 0 ? '/hr' : ''}</span></p>
                                     </div>
 
-                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
-                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4">
+                                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-3">
                                             <Activity className="text-emerald-600" size={24} />
                                         </div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Units</p>
-                                        <p className="text-xl font-black text-slate-900">{heroActiveCourt.numCourts} Units</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Units</p>
+                                        <p className="text-2xl font-black text-slate-900">{heroActiveCourt.numCourts} Units</p>
                                     </div>
 
-                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
-                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-4">
+                                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-3">
                                             <Star className="text-blue-500 fill-blue-500" size={24} />
                                         </div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Rating</p>
-                                        <p className="text-xl font-black text-slate-900">New</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Rating</p>
+                                        <p className="text-2xl font-black text-slate-900">New</p>
                                     </div>
 
-                                    <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
-                                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
+                                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-3">
                                             <CreditCard className="text-indigo-600" size={24} />
                                         </div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Type</p>
-                                        <p className="text-xl font-black text-slate-900">{heroActiveCourt.type}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Type</p>
+                                        <p className="text-2xl font-black text-slate-900">{heroActiveCourt.type}</p>
                                     </div>
                                 </div>
 
-                                {/* Main Details Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                    <div className="space-y-8">
-                                        <section>
-                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                <Info size={16} />
-                                                About this Court
-                                            </h3>
-                                            <p className="text-slate-600 leading-relaxed font-medium">
-                                                This premium {heroActiveCourt.type.toLowerCase()} facility is maintained daily to ensure professional playing standards. Located at {selectedLocation?.address}, it features state-of-the-art surfacing and amenities for all skill levels.
-                                            </p>
-                                        </section>
+                                {/* About */}
+                                <section>
+                                    <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                                        <Info size={14} />
+                                        About this Court
+                                    </h3>
+                                    <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                                        This premium {heroActiveCourt.type.toLowerCase()} facility is maintained daily to ensure professional playing standards. Located at {selectedLocation?.address}, it features state-of-the-art surfacing and amenities for all skill levels.
+                                    </p>
+                                </section>
 
-                                        <section>
-                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                <Funnel size={16} />
-                                                Available Amenities
-                                            </h3>
-                                            <div className="flex flex-wrap gap-2.5">
-                                                {Array.isArray(heroActiveCourt.amenities) && heroActiveCourt.amenities.map((a: string, i: number) => (
-                                                    <span key={i} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200/50">
-                                                        {a}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </section>
-                                    </div>
+                                {/* Amenities */}
+                                {Array.isArray(heroActiveCourt.amenities) && heroActiveCourt.amenities.length > 0 && (
+                                    <section>
+                                        <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                                            <CheckCircle size={14} />
+                                            Amenities
+                                        </h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            {heroActiveCourt.amenities.map((a: string, i: number) => (
+                                                <span key={i} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200/50">
+                                                    {a}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
 
-                                    <div className="space-y-8">
-                                        <section>
-                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                <MapPin size={16} />
-                                                Exact Location
-                                            </h3>
-                                            <div className="h-64 h- rounded-[32px] overflow-hidden shadow-lg border border-slate-100">
-                                                {selectedLocation?.latitude && selectedLocation?.longitude && (
-                                                    <MiniMap lat={selectedLocation.latitude} lng={selectedLocation.longitude} />
-                                                )}
+                                {/* Hours */}
+                                {selectedLocation?.opening_time && selectedLocation?.closing_time && (
+                                    <section>
+                                        <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                                            <Clock size={14} />
+                                            Operation Hours
+                                        </h3>
+                                        <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                                                <Clock className="text-blue-600" size={20} />
                                             </div>
-                                        </section>
-
-                                        <section>
-                                            <h3 className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                                                <Clock size={16} />
-                                                Operation Hours
-                                            </h3>
-                                            <div className="p-6 bg-blue-50/50 rounded-[32px] border border-blue-100 flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                                                    <Clock className="text-blue-600" size={24} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-900">{selectedLocation?.opening_time} — {selectedLocation?.closing_time}</p>
-                                                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Open Today</p>
-                                                </div>
+                                            <div>
+                                                <p className="text-sm font-black text-slate-900">{selectedLocation.opening_time} — {selectedLocation.closing_time}</p>
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Open Today</p>
                                             </div>
-                                        </section>
-                                    </div>
-                                </div>
+                                        </div>
+                                    </section>
+                                )}
                             </div>
                         </div>
 
-                        {/* Footer Action */}
-                        <div className="p-8 sm:p-10 bg-slate-50 border-t border-slate-100 shrink-0">
+                        {/* Footer Action — sticky bottom */}
+                        <div className="px-5 py-4 bg-white border-t border-slate-100 shrink-0 safe-area-bottom">
                             <button
                                 onClick={() => {
                                     setShowCourtDetails(false);
@@ -2017,9 +1957,9 @@ const GuestBooking: React.FC = () => {
                                     localStorage.setItem('auth_redirect', redirectUrl);
                                     setShowLoginModal(true);
                                 }}
-                                className="w-full py-5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                                className="w-full py-4 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
                             >
-                                <Lock size={20} />
+                                <Lock size={18} />
                                 Sign In to Book Now
                             </button>
                         </div>
