@@ -137,9 +137,13 @@ interface LocationWithDistance {
   region?: string;
   court_count?: number;
   imageUrl?: string;
-  avg_price?: number;
+  min_price?: number;
+  max_price?: number;
+  has_free?: boolean;
   avg_rating?: number;
   total_reviews?: number;
+  court_type?: string;
+  amenities?: any;
 }
 
 // Philippine regions mapping
@@ -246,10 +250,14 @@ const Home: React.FC = () => {
             id, name, base_price, latitude, longitude, location_id, image_url,
             locations (
               id,
+              name,
               address,
               city,
               latitude,
-              longitude
+              longitude,
+              court_type,
+              amenities,
+              image_url
             ),
             court_reviews (
               rating
@@ -281,7 +289,12 @@ const Home: React.FC = () => {
             rating: avgRating,
             reviewCount: reviews.length,
             imageUrl: c.image_url,
-            location_id: c.location_id
+            location_id: c.location_id,
+            location_name: loc?.name || '',
+            location_court_type: loc?.court_type || '',
+            location_amenities: Array.isArray(loc?.amenities) ? loc.amenities : [],
+            location_address: loc?.address || '',
+            location_image: loc?.image_url || ''
           };
         });
         setCourts(courtData);
@@ -295,9 +308,9 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('locations')
           .select(`
-            id, name, city, state, address, latitude, longitude, image_url, hero_image, status, is_active,
+            *,
             courts (
-              id, base_price,
+              id, base_price, court_type, amenities,
               court_reviews (
                 rating
               )
@@ -313,12 +326,31 @@ const Home: React.FC = () => {
           // Calculate aggregated data from courts
           let totalRating = 0;
           let totalReviews = 0;
-          let totalPrice = 0;
           let courtCount = 0;
+          const courtPrices: number[] = [];
+          const courtTypeSet = new Set<string>();
+          const allAmenities = new Set<string>();
+
+          // Add location-level amenities first
+          const locAmenities = (loc as any).amenities;
+          if (Array.isArray(locAmenities)) {
+            locAmenities.forEach((a: string) => allAmenities.add(a));
+          }
 
           courts.forEach((court: any) => {
             courtCount++;
-            if (court.base_price) totalPrice += court.base_price;
+            courtPrices.push(court.base_price || 0);
+
+            // Aggregate court types
+            const ct = (court.court_type || '').toLowerCase();
+            if (ct.includes('indoor')) courtTypeSet.add('Indoor');
+            if (ct.includes('outdoor')) courtTypeSet.add('Outdoor');
+            if (ct === 'both') { courtTypeSet.add('Indoor'); courtTypeSet.add('Outdoor'); }
+
+            // Aggregate amenities from each court
+            if (Array.isArray(court.amenities)) {
+              court.amenities.forEach((a: string) => allAmenities.add(a));
+            }
 
             const reviews = court.court_reviews || [];
             reviews.forEach((review: any) => {
@@ -326,6 +358,19 @@ const Home: React.FC = () => {
               totalReviews++;
             });
           });
+
+          // Location-level court_type is the PRIMARY source (set in Edit Location form)
+          const locCt = ((loc as any).court_type || '').trim().toLowerCase();
+          if (locCt.includes('both')) { courtTypeSet.add('Indoor'); courtTypeSet.add('Outdoor'); }
+          else if (locCt.includes('indoor')) courtTypeSet.add('Indoor');
+          else if (locCt.includes('outdoor')) courtTypeSet.add('Outdoor');
+
+          // Build the display court type string
+          const derivedCourtType = courtTypeSet.size === 0
+            ? 'Indoor'
+            : courtTypeSet.has('Indoor') && courtTypeSet.has('Outdoor')
+              ? 'Indoor / Outdoor'
+              : courtTypeSet.has('Outdoor') ? 'Outdoor' : 'Indoor';
 
           return {
             id: loc.id,
@@ -337,12 +382,16 @@ const Home: React.FC = () => {
             longitude: loc.longitude,
             region: getRegion(city),
             court_count: courtCount,
-            avg_price: courtCount > 0 ? Math.round(totalPrice / courtCount) : 0,
+            min_price: courtPrices.length > 0 ? Math.min(...courtPrices) : 0,
+            max_price: courtPrices.length > 0 ? Math.max(...courtPrices) : 0,
+            has_free: courtPrices.some(p => p === 0),
             avg_rating: totalReviews > 0 ? Math.round((totalRating / totalReviews) * 10) / 10 : 0,
             total_reviews: totalReviews,
             imageUrl: (loc as any).hero_image || loc.image_url,
             status: (loc as any).status,
-            is_active: (loc as any).is_active
+            is_active: (loc as any).is_active,
+            court_type: derivedCourtType,
+            amenities: Array.from(allAmenities)
           };
         });
         setLocations(locationData);
@@ -678,41 +727,89 @@ const Home: React.FC = () => {
           title = <span>Featured Locations <span className="text-lime-400">Near You.</span></span>;
         }
 
-        // Logic for selecting locations based on GPS
-        if (userCity && userCity !== 'Your Location') {
+        // Logic for selecting locations based on GPS — show nearby/province-wide
+        if (nearbyLocations.length > 0) {
+          // Use distance-sorted nearby locations (within ~80km radius for province coverage)
+          const MAX_DISTANCE_KM = 80;
+          const withinProvince = nearbyLocations.filter(loc => (loc.distance || 999) <= MAX_DISTANCE_KM);
+          featuredList = withinProvince.length > 0
+            ? [...withinProvince].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
+            : [...nearbyLocations].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+        } else if (userCity && userCity !== 'Your Location') {
+          // Fallback: filter by city/province name match
           const cityName = userCity.split(",")[0].trim().toLowerCase();
-
-          // Filter by city and sort by rating descending (5 to 1)
-          featuredList = locations
-            .filter(location => location.city.toLowerCase().includes(cityName))
+          featuredList = locationsPool
+            .filter(location => {
+              const locCity = location.city.toLowerCase();
+              const locRegion = (location.region || '').toLowerCase();
+              return locCity.includes(cityName) || cityName.includes(locCity) || locRegion.includes(cityName);
+            })
             .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+        }
 
-          // Fallback if no locations found in that specific city - show top 4 nearby/rated
-          if (featuredList.length === 0) {
-            featuredList = (nearbyLocations.length > 0 ? [...nearbyLocations] : allLocationsSorted)
-              .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
-              .slice(0, 4);
-          }
-        } else if (nearbyLocations.length > 0) {
-          // GPS enabled but city name not specific yet - show top 4 nearby
-          featuredList = [...nearbyLocations]
-            .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
-            .slice(0, 4);
-        } else {
-          // Fallback to top rated if nearby hasn't calculated yet
-          featuredList = allLocationsSorted.slice(0, 4);
+        // If still empty after GPS-based filtering, show all sorted by rating
+        if (featuredList.length === 0) {
+          featuredList = allLocationsSorted;
         }
       } else {
-        // Location OFF: Show top 4 rated locations across PH (5 to 1 stars)
+        // Location OFF: Show ALL locations across PH sorted by rating (5 to 1 stars)
         title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
-        featuredList = allLocationsSorted.slice(0, 4);
+        featuredList = allLocationsSorted;
       }
-    } else {
-      // Fallback to courts if no locations are available (temporary)
-      // No locations found; falling back to courts
-      const allCourtsSorted = [...courts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (courts.length > 0) {
+      // Fallback: group courts by location_id to build location-like entries
+      const locationMap = new Map<string, any>();
+      courts.forEach((court: any) => {
+        const locId = court.location_id || court.id;
+        if (!locationMap.has(locId)) {
+          // Derive court_type from location-level data
+          const rawCt = (court.location_court_type || '').trim().toLowerCase();
+          let ctDisplay = 'Indoor';
+          if (rawCt.includes('both')) ctDisplay = 'Indoor / Outdoor';
+          else if (rawCt.includes('outdoor')) ctDisplay = 'Outdoor';
+          else if (rawCt.includes('indoor')) ctDisplay = 'Indoor';
+
+          locationMap.set(locId, {
+            id: locId,
+            name: court.location_name || court.city || 'Unknown Venue',
+            city: court.city || '',
+            state: '',
+            address: court.location_address || (court.city ? `${court.city}${court.region ? `, ${court.region}` : ''}` : ''),
+            latitude: court.latitude,
+            longitude: court.longitude,
+            region: court.region || getRegion(court.city || ''),
+            court_count: 0,
+            min_price: Infinity,
+            max_price: 0,
+            has_free: false,
+            avg_rating: 0,
+            total_reviews: 0,
+            imageUrl: court.location_image || court.imageUrl,
+            court_type: ctDisplay,
+            amenities: court.location_amenities || [],
+            _totalRating: 0,
+            _totalReviews: 0
+          });
+        }
+        const loc = locationMap.get(locId);
+        loc.court_count += 1;
+        const courtPrice = court.base_price || 0;
+        if (courtPrice < loc.min_price) loc.min_price = courtPrice;
+        if (courtPrice > loc.max_price) loc.max_price = courtPrice;
+        if (courtPrice === 0) loc.has_free = true;
+        loc._totalRating += (court.rating || 0) * (court.reviewCount || 0);
+        loc._totalReviews += (court.reviewCount || 0);
+        if (court.imageUrl && !loc.imageUrl) loc.imageUrl = court.imageUrl;
+      });
+      // Finalize averages
+      locationMap.forEach((loc) => {
+        if (loc.min_price === Infinity) loc.min_price = 0;
+        loc.avg_rating = loc._totalReviews > 0 ? Math.round((loc._totalRating / loc._totalReviews) * 10) / 10 : 0;
+        loc.total_reviews = loc._totalReviews;
+      });
+      const grouped = Array.from(locationMap.values()).sort((a: any, b: any) => (b.avg_rating || 0) - (a.avg_rating || 0));
       title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
-      featuredList = allCourtsSorted.slice(0, 4);
+      featuredList = grouped;
     }
 
     return { title, featuredList };
@@ -899,15 +996,18 @@ const Home: React.FC = () => {
                             <div className="w-10 h-10 rounded-full flex items-center justify-center">
                               <img src="/images/PinMarker.png" alt="Pin" className="w-8 h-8 object-contain" />
                             </div>
-                            <div className="flex-1">
-                              <p className="text-slate-800 font-semibold text-[15px]">{location.name}</p>
-                              <p className="text-[13px] text-slate-400">
-                                {location.court_count || 0} {location.court_count === 1 ? 'court' : 'courts'}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-slate-800 font-semibold text-[15px] truncate">{location.name}</p>
+                              <p className="text-[13px] text-slate-400 truncate">
+                                {location.court_count || 0} {(location.court_count || 0) === 1 ? 'court' : 'courts'}
                                 {location.distance !== undefined && (
                                   <span> · {location.distance.toFixed(1)} miles away</span>
                                 )}
                                 {location.city && (
-                                  <span> · {location.city}{location.region ? `, ${location.region}` : ''}</span>
+                                  <span> · {location.city}</span>
+                                )}
+                                {location.address && (
+                                  <span> · {location.address}</span>
                                 )}
                               </p>
                             </div>
@@ -974,7 +1074,7 @@ const Home: React.FC = () => {
                   const container = document.getElementById('courts-carousel');
                   if (container) container.scrollBy({ left: -320, behavior: 'smooth' });
                 }}
-                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 -ml-6 hidden md:flex"
+                className="absolute -left-16 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 hidden md:flex"
               >
                 <ChevronLeft size={24} className="text-slate-700" />
               </button>
@@ -985,7 +1085,7 @@ const Home: React.FC = () => {
                   const container = document.getElementById('courts-carousel');
                   if (container) container.scrollBy({ left: 320, behavior: 'smooth' });
                 }}
-                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 -mr-6 hidden md:flex"
+                className="absolute -right-16 top-1/2 -translate-y-1/2 z-10 w-12 h-12 bg-white shadow-xl rounded-full flex items-center justify-center hover:bg-slate-50 transition-all border border-slate-200 hidden md:flex"
               >
                 <ChevronRight size={24} className="text-slate-700" />
               </button>
@@ -997,19 +1097,15 @@ const Home: React.FC = () => {
                 className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide snap-x snap-mandatory scroll-smooth"
                 onScroll={handleCarouselScroll}
               >
-                {featuredList.slice(0, 10).map((item, idx) => {
-                  // Check if item is a location (has court_count) or court (has base_price)
-                  const isLocation = item.hasOwnProperty('court_count');
-
+                {featuredList.map((item, idx) => {
                   return (
                     <div
                       key={idx}
                       className={`group relative flex-shrink-0 w-[280px] md:w-[320px] bg-white border border-slate-200/60 rounded-2xl shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 snap-start overflow-hidden animate-fade-in-up opacity-0`}
-                      style={{ animationDelay: `${(idx + 1) * 150}ms` }}
+                      style={{ animationDelay: `${Math.min((idx + 1) * 150, 1500)}ms` }}
                     >
-                      {isLocation ? (
-                        // Location Card Template
-                        <>
+                      {/* Location Card Template */}
+                      <>
                           <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
                             <img
                               src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
@@ -1017,20 +1113,34 @@ const Home: React.FC = () => {
                               className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
                             />
                             {/* Price Badge on Image */}
-                            <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                              <span className="text-lg font-black text-slate-900">₱{item.avg_price || 0}</span>
-                              <span className="text-xs font-semibold text-slate-500">/hr avg</span>
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                              {item.has_free && (
+                                <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
+                                  <span className="text-xs font-black text-white uppercase">Free</span>
+                                </div>
+                              )}
+                              {(item.max_price || 0) > 0 && (
+                                <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                                  <span className="text-lg font-black text-slate-900">₱{(item.min_price || 0) > 0 ? item.min_price : item.max_price}{(item.min_price || 0) > 0 && item.min_price !== item.max_price ? `-${item.max_price}` : ''}</span>
+                                  <span className="text-xs font-semibold text-slate-500">/hr</span>
+                                </div>
+                              )}
+                              {!item.has_free && (item.max_price || 0) === 0 && (
+                                <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
+                                  <span className="text-lg font-black text-white">FREE</span>
+                                </div>
+                              )}
                             </div>
                           </Link>
 
-                          <div className="p-4">
-                            {/* Rating Badge */}
-                            <div className="flex items-center gap-2 mb-3">
+                          <div className="p-4 flex flex-col flex-1">
+                            {/* Rating */}
+                            <div className="flex items-center gap-2 mb-2">
                               <div className="flex items-center gap-0.5">
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <svg
                                     key={star}
-                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.avg_rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
+                                    className={`w-3 h-3 ${star <= Math.round(item.avg_rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
                                     fill="currentColor"
                                     viewBox="0 0 24 24"
                                   >
@@ -1038,72 +1148,69 @@ const Home: React.FC = () => {
                                   </svg>
                                 ))}
                               </div>
-                              <span className="text-xs font-bold text-slate-600">
+                              <span className="text-xs font-bold text-slate-500">
                                 {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
                                 {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
                               </span>
                             </div>
-                            {/* Book Button */}
-                            <Link
-                              to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
-                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              Book Now
-                            </Link>
-                          </div>
-                        </>
-                      ) : (
-                        // Court Card Template (Fallback)
-                        <>
-                          <Link to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`} className="relative block overflow-hidden">
-                            <img
-                              src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
-                              alt={item.name}
-                              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                            <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                              <span className="text-lg font-black text-slate-900">₱{item.base_price ?? 0}</span>
-                              <span className="text-xs font-semibold text-slate-500">/hr</span>
-                            </div>
-                          </Link>
 
-                          <div className="p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="flex items-center gap-0.5">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <svg
-                                    key={star}
-                                    className={`w-3.5 h-3.5 ${star <= Math.round(item.rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" fill="currentColor" />
-                                  </svg>
-                                ))}
-                              </div>
-                              <span className="text-xs font-bold text-slate-600">
-                                {item.rating && item.rating > 0 ? `${item.rating}` : 'New'}
-                                {item.reviewCount && item.reviewCount > 0 ? ` (${item.reviewCount})` : ''}
-                              </span>
-                            </div>
-
-                            <Link to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`}>
-                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-2 line-clamp-1">
+                            {/* Location/Venue Name */}
+                            <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
+                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-1 line-clamp-1">
                                 {item.name}
                               </h5>
                             </Link>
 
-                            <p className="text-sm text-slate-500 flex items-center gap-1.5 mb-4">
-                              <MapPin size={14} className="text-slate-400" />
-                              <span className="line-clamp-1">{item.city}, {item.region || 'PH'}</span>
-                            </p>
+                            {/* Address */}
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <MapPin size={12} className="text-slate-300 shrink-0" />
+                              <p className="text-xs text-slate-400 truncate">
+                                {item.address || `${item.city}${item.state ? `, ${item.state}` : ''}`}
+                              </p>
+                            </div>
 
+                            {/* 2x2 Details Grid */}
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                              {/* Court Count */}
+                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                                <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
+                                <span className="text-[11px] font-bold text-slate-600">{item.court_count || 0} {(item.court_count || 0) === 1 ? 'Court' : 'Courts'}</span>
+                              </div>
+                              {/* Players */}
+                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                <span className="text-[11px] font-bold text-slate-600">{(item.court_count || 1) * 4} Players</span>
+                              </div>
+                              {/* Court Type — court/net icon */}
+                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                                <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="2" y="6" width="20" height="12" rx="1" />
+                                  <line x1="12" y1="6" x2="12" y2="18" />
+                                  <line x1="2" y1="12" x2="22" y2="12" />
+                                </svg>
+                                <span className="text-[11px] font-bold text-slate-600 truncate">{item.court_type || 'Indoor'}</span>
+                              </div>
+                              {/* Amenities — checklist/sparkle icon */}
+                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                                <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9 11l3 3L22 4" />
+                                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                                </svg>
+                                <span className="text-[11px] font-bold text-slate-600 truncate">
+                                  {Array.isArray(item.amenities) && item.amenities.length > 0
+                                    ? (item.amenities.length <= 2
+                                        ? item.amenities.join(', ')
+                                        : `${item.amenities.length} Amenities`)
+                                    : 'No Amenities'
+                                  }
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Book Button */}
                             <Link
-                              to={item.location_id ? `/booking?locationId=${item.location_id}&lat=${item.latitude}&lng=${item.longitude}&zoom=16` : `/court/${item.id}`}
-                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95"
+                              to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
+                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95 mt-auto"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1112,7 +1219,6 @@ const Home: React.FC = () => {
                             </Link>
                           </div>
                         </>
-                      )}
                     </div>
                   );
                 })}
@@ -1120,7 +1226,7 @@ const Home: React.FC = () => {
 
               {/* Scroll Indicator Dots */}
               <div className="flex justify-center gap-2 mt-4 md:hidden">
-                {featuredList.slice(0, Math.min(10, featuredList.length)).map((_, idx) => (
+                {featuredList.slice(0, Math.min(15, featuredList.length)).map((_, idx) => (
                   idx === activeCarouselIndex ? (
                     <img
                       key={idx}

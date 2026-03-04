@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, ArrowUpRight } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface ApiArticle {
@@ -85,31 +85,6 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   };
 }
 
-function formatTimeShort(dateStr: string) {
-  if (!dateStr) return '';
-  try {
-    const d = new Date(dateStr);
-    const hours = d.getHours();
-    const mins = d.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const h = hours % 12 || 12;
-    return `${h}:${String(mins).padStart(2, '0')} ${ampm}`;
-  } catch {
-    return '';
-  }
-}
-
-function formatFeaturedDate(dateStr: string) {
-  if (!dateStr) return '';
-  try {
-    const d = new Date(dateStr);
-    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-  } catch {
-    return dateStr;
-  }
-}
-
 function formatDateLong(dateStr: string) {
   if (!dateStr) return '';
   try {
@@ -119,168 +94,234 @@ function formatDateLong(dateStr: string) {
   }
 }
 
+/** Format body text into well-structured paragraphs with highlighted keywords */
+function formatArticleBody(body: string): string {
+  if (!body) return '';
+
+  // Keywords to highlight
+  const keywords = [
+    'Philippines', 'Filipino', 'Filipinos', 'Filipinas', 'Philippine',
+    'OFW', 'OFWs', 'Manila', 'Cebu', 'Davao',
+    'pickleball', 'Pickleball', 'PicklePlay',
+    'Olympic', 'Olympics', 'championship', 'Championship',
+    'victory', 'Victory', 'tournament', 'Tournament',
+    'world', 'World', 'international', 'International',
+    'national', 'National', 'global', 'Global',
+    'sports', 'Sports', 'athlete', 'athletes',
+    'women', 'Women', 'community', 'Community',
+  ];
+
+  // Check if body already has HTML tags
+  const hasHtml = /<[a-z][\s\S]*>/i.test(body);
+
+  if (hasHtml) {
+    // Body already has HTML — just add highlight styling
+    let html = body;
+    keywords.forEach(kw => {
+      // Only match text outside of HTML tags
+      const regex = new RegExp(`(?<=>|^)([^<]*?)\\b(${kw})\\b`, 'g');
+      html = html.replace(regex, (match, before, word) => {
+        return `${before}<strong class="text-slate-900 font-semibold">${word}</strong>`;
+      });
+    });
+    return html;
+  }
+
+  // Split into paragraphs
+  let paragraphs = body.split(/\n\n|\n/).filter(p => p.trim().length > 0);
+
+  // If no natural paragraphs, split long text into ~3-4 sentence chunks
+  if (paragraphs.length <= 1 && body.length > 300) {
+    const sentences = body.match(/[^.!?]+[.!?]+/g) || [body];
+    paragraphs = [];
+    let current = '';
+    sentences.forEach((s, i) => {
+      current += s;
+      if ((i + 1) % 3 === 0 || i === sentences.length - 1) {
+        paragraphs.push(current.trim());
+        current = '';
+      }
+    });
+  }
+
+  // Build HTML with highlighted keywords
+  const formatted = paragraphs.map((p, idx) => {
+    let html = p.trim();
+    // Escape HTML
+    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Bold highlight important keywords
+    keywords.forEach(kw => {
+      const regex = new RegExp(`\\b(${kw})\\b`, 'g');
+      html = html.replace(regex, '<strong class="text-slate-900 font-semibold">$1</strong>');
+    });
+
+    // First paragraph gets a drop-cap style
+    if (idx === 0) {
+      return `<p class="text-base md:text-lg leading-[1.9] text-slate-600 mb-7 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none">${html}</p>`;
+    }
+
+    return `<p class="text-base md:text-lg leading-[1.9] text-slate-600 mb-6">${html}</p>`;
+  }).join('');
+
+  return formatted;
+}
+
+
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
+  const formattedBody = formatArticleBody(article.body);
+
   return (
-    <div className="min-h-screen bg-[#F1F5F9] animate-fade-in pb-24 relative overflow-hidden">
-      {/* Background Accents */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[120px] -z-0 pointer-events-none"></div>
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[120px] -z-0 pointer-events-none"></div>
+    <div className="space-y-6 animate-in fade-in duration-700 pb-12">
+      {/* Back Button */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2.5 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+      >
+        <ArrowLeft size={16} />
+        Back to Newsfeed
+      </button>
 
-      {/* Header bar with back button */}
-      <div className="sticky top-0 z-50 bg-[#F1F5F9]/80 backdrop-blur-md border-b border-slate-200/50 mb-0">
-        <div className="max-w-4xl mx-auto px-6 h-20 flex items-center">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-blue-600 transition-all group"
-          >
-            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-            BACK TO NEWSFEED
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-6 pt-12">
-        {/* Main Content Card */}
-        <div className="bg-white rounded-[40px] shadow-sm border border-slate-200/60 overflow-hidden relative">
-          {/* Header Accents */}
-          <div className="p-8 md:p-12 pb-0">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20">
-                {article.category}
-              </span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Clock size={12} className="text-slate-300" />
-                {formatDateLong(article.date)}
-              </span>
-            </div>
-
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-[1.05] mb-8 uppercase">
-              {article.title}
-            </h1>
-
-            <div className="flex flex-wrap items-center gap-6 mb-10 pb-10 border-b border-slate-100">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm shadow-xl shadow-slate-900/10">
-                  {article.author.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Written by</p>
-                  <p className="text-base font-black text-slate-900 leading-none lowercase first-letter:uppercase">{article.author}</p>
-                </div>
-              </div>
-
-              <div className="h-10 w-px bg-slate-100 hidden sm:block"></div>
-
-              <div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Reading Time</p>
-                <p className="text-base font-black text-slate-900 leading-none">{article.readTime}</p>
-              </div>
-
-              <div className="ml-auto flex gap-2">
-                <button className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-2xl text-slate-500 hover:text-blue-600 transition-all border border-slate-100"><Share2 size={18} /></button>
-                <button className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-2xl text-slate-500 hover:text-blue-600 transition-all border border-slate-100"><Bookmark size={18} /></button>
-              </div>
-            </div>
+      {/* Article Content Card */}
+      <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+        {/* Category + Date Header */}
+        <div className="px-6 sm:px-8 md:px-12 pt-8 md:pt-10">
+          <div className="flex flex-wrap items-center gap-3 mb-5">
+            <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-600/20">
+              {article.category}
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Calendar size={12} className="text-slate-300" />
+              {formatDateLong(article.rawDate || article.date)}
+            </span>
           </div>
 
-          <div className="px-8 md:px-12 pb-12">
-            {/* Hero Image */}
-            <div className="aspect-[16/9] w-full rounded-[32px] overflow-hidden mb-12 shadow-2xl relative">
-              <img
-                src={article.image}
-                alt={article.title}
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
-              />
-              <div className="absolute inset-0 ring-1 ring-inset ring-black/10 rounded-[32px]"></div>
-            </div>
+          {/* Title */}
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-[1.1] mb-7 uppercase">
+            {article.title}
+          </h1>
 
-            {/* ── External Source Disclaimer Banner ── */}
-            <div className="bg-slate-950 rounded-[32px] p-8 md:p-10 mb-12 flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden shadow-2xl border border-white/5">
-              {/* Abstract decorations */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 blur-[100px] -translate-y-1/2 translate-x-1/4"></div>
-              <div className="absolute bottom-0 left-0 w-48 h-48 bg-lime-400/5 blur-[80px] translate-y-1/2 -translate-x-1/4"></div>
-
-              <div className="relative z-10 flex items-center gap-5">
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                  <ExternalLink size={24} className="text-lime-400" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-white text-sm md:text-base font-black uppercase tracking-widest">
-                    External News
-                  </p>
-                  <p className="text-slate-400 text-xs md:text-sm font-medium">
-                    This article was originally published on an external news site.
-                  </p>
-                </div>
+          {/* Author & Meta Row */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 mb-8 pb-8 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm shadow-lg">
+                {article.author.charAt(0).toUpperCase()}
               </div>
-
-              <a
-                href={article.sourceUrl || (article.slug ? `https://news.homes.ph/article/${article.slug}` : 'https://news.homes.ph/')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="relative z-10 bg-lime-400 hover:bg-lime-500 text-slate-950 px-10 py-5 rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest transition-all active:scale-95 shadow-xl shadow-lime-400/20 whitespace-nowrap"
-              >
-                VIEW ORIGINAL SOURCE
-              </a>
+              <div>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Written by</p>
+                <p className="text-sm font-black text-slate-900">{article.author}</p>
+              </div>
             </div>
 
-            {/* Article Content */}
+            <div className="h-8 w-px bg-slate-100 hidden sm:block" />
+
+            <div>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Reading Time</p>
+              <p className="text-sm font-black text-slate-900">{article.readTime}</p>
+            </div>
+
+            <div className="ml-auto flex gap-2">
+              <button className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
+                <Share2 size={16} />
+              </button>
+              <button className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
+                <Bookmark size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Hero Image */}
+        <div className="px-6 sm:px-8 md:px-12">
+          <div className="aspect-[16/9] w-full rounded-[20px] md:rounded-[24px] overflow-hidden mb-10 shadow-lg border border-slate-100">
+            <img
+              src={article.image}
+              alt={article.title}
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
+            />
+          </div>
+        </div>
+
+        {/* External Source Banner */}
+        <div className="px-6 sm:px-8 md:px-12">
+          <div className="bg-slate-900 rounded-[20px] md:rounded-[24px] p-5 sm:p-6 md:p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-52 h-52 bg-blue-600/10 blur-[70px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-lime-400/5 blur-[50px] translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+
+            <div className="relative z-10 flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                <ExternalLink size={18} className="text-lime-400" />
+              </div>
+              <div>
+                <p className="text-white text-sm font-black uppercase tracking-widest">External News</p>
+                <p className="text-slate-400 text-[11px] font-medium">This article was originally published on an external news site.</p>
+              </div>
+            </div>
+
+            <a
+              href={article.sourceUrl || (article.slug ? `https://news.homes.ph/article/${article.slug}` : 'https://news.homes.ph/')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative z-10 bg-lime-400 hover:bg-lime-500 text-slate-950 px-6 sm:px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg whitespace-nowrap flex items-center gap-2"
+            >
+              View Original Source <ArrowUpRight size={14} />
+            </a>
+          </div>
+        </div>
+
+        {/* Article Body */}
+        <div className="px-6 sm:px-8 md:px-12 pb-10">
+          <div className="max-w-3xl mx-auto">
             {article.body ? (
-              <div
-                className="prose prose-lg prose-slate max-w-none
-                  prose-headings:font-black prose-headings:tracking-tight prose-headings:text-slate-950 prose-headings:uppercase
-                  prose-p:text-slate-600 prose-p:leading-relaxed prose-p:text-lg prose-p:font-medium
-                  prose-a:text-blue-600 prose-a:font-black prose-a:no-underline hover:prose-a:underline
-                  prose-img:rounded-[32px] prose-img:shadow-2xl
-                  prose-blockquote:border-l-blue-600 prose-blockquote:bg-blue-50/50 prose-blockquote:rounded-3xl prose-blockquote:py-2 prose-blockquote:px-8 prose-blockquote:text-blue-900 prose-blockquote:font-black
-                  mb-12"
-                dangerouslySetInnerHTML={{ __html: article.body }}
-              />
+              <div className="article-body-content" dangerouslySetInnerHTML={{ __html: formattedBody }} />
             ) : (
-              <div className="text-slate-600 text-lg leading-relaxed mb-12 space-y-6 font-medium">
-                <p>{article.excerpt}</p>
+              <div className="space-y-6">
+                <p className="text-base md:text-lg leading-[1.9] text-slate-600">{article.excerpt}</p>
                 {article.sourceUrl && (
-                  <div className="pt-4">
-                    <a
-                      href={article.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20 active:scale-95"
-                    >
-                      READ FULL ARTICLE <ExternalLink size={14} />
-                    </a>
-                  </div>
+                  <a
+                    href={article.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
+                  >
+                    Read Full Article <ExternalLink size={14} />
+                  </a>
                 )}
               </div>
             )}
+          </div>
 
-            {article.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-10 border-t border-slate-50 mb-10">
-                {article.tags.map((tag, i) => (
-                  <span key={i} className="px-4 py-2 bg-slate-50 text-slate-500 hover:bg-slate-100 cursor-default rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors border border-slate-100">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                onClick={onBack}
-                className="flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all active:scale-95"
-              >
-                <ArrowLeft size={16} />
-                BACK TO STORIES
-              </button>
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-900 border-2 border-slate-100 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all active:scale-95"
-              >
-                BACK TO TOP
-              </button>
+          {/* Tags */}
+          {article.tags.length > 0 && (
+            <div className="max-w-3xl mx-auto flex flex-wrap gap-2 pt-8 mt-8 border-t border-slate-100">
+              <Tag size={14} className="text-slate-300 mt-1" />
+              {article.tags.map((tag, i) => (
+                <span key={i} className="px-3.5 py-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 cursor-default rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors border border-slate-100">
+                  #{tag}
+                </span>
+              ))}
             </div>
+          )}
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="px-6 sm:px-8 md:px-12 pb-8 md:pb-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
+            <button
+              onClick={onBack}
+              className="flex items-center justify-center gap-2.5 bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
+            >
+              <ArrowLeft size={16} />
+              Back to Stories
+            </button>
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center justify-center gap-2.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
+            >
+              Back to Top
+            </button>
           </div>
         </div>
       </div>
@@ -288,56 +329,45 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
   );
 };
 
-// ─── Section Header Component ──────────────────────────────────
-const SectionHeader: React.FC<{ icon: React.ReactNode; title: string; accent?: string; extra?: React.ReactNode }> = ({ icon, title, accent, extra }) => (
-  <div className="flex items-center justify-between mb-4">
-    <div className="flex items-center gap-2">
-      <span className="text-lime-500">{icon}</span>
-      <h2 className="text-sm font-black text-slate-900 uppercase tracking-tighter">{title}</h2>
-      {accent && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase">{accent}</span>}
-    </div>
-    {extra}
-  </div>
-);
 
 // ─── Skeleton ───────────────────────────────────────────────────
 const NewsSkeleton: React.FC = () => (
-  <div className="animate-pulse space-y-16">
-    {/* Hero Split Skeleton */}
-    <div className="flex flex-col lg:flex-row gap-8">
-      <div className="lg:w-2/3">
-        <div className="aspect-[16/9] md:aspect-[21/10] bg-slate-200 rounded-[40px]" />
+  <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+    <div>
+      <div className="h-10 bg-slate-200 rounded-xl w-64 mb-2 animate-pulse" />
+      <div className="h-5 bg-slate-100 rounded-lg w-80 animate-pulse" />
+    </div>
+    <div className="bg-white rounded-[32px] border border-slate-100 p-4 animate-pulse">
+      <div className="h-14 bg-slate-50 rounded-[20px] w-full" />
+    </div>
+    <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden animate-pulse">
+      <div className="flex flex-col lg:flex-row">
+        <div className="lg:w-3/5 aspect-[16/10] lg:aspect-auto bg-slate-100 min-h-[300px]" />
+        <div className="lg:w-2/5 p-10 space-y-4">
+          <div className="h-3 bg-slate-100 rounded w-20" />
+          <div className="h-8 bg-slate-100 rounded w-full" />
+          <div className="h-8 bg-slate-100 rounded w-3/4" />
+          <div className="h-4 bg-slate-100 rounded w-full" />
+          <div className="h-4 bg-slate-100 rounded w-2/3" />
+        </div>
       </div>
-      <div className="lg:w-1/3 space-y-6">
-        <div className="h-6 bg-slate-200 rounded-full w-32 mb-4" />
-        {[1, 2, 3].map(i => (
-          <div key={i} className="flex gap-4">
-            <div className="w-24 h-24 bg-slate-200 rounded-[20px] shrink-0" />
-            <div className="flex-1 space-y-2 py-2">
-              <div className="h-4 bg-slate-200 rounded w-3/4" />
-              <div className="h-3 bg-slate-200 rounded w-1/2" />
+    </div>
+    <div className="bg-white rounded-[32px] border border-slate-100 p-8 animate-pulse">
+      <div className="h-5 bg-slate-100 rounded w-32 mb-6" />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <div key={i} className="space-y-4 rounded-[24px] border border-slate-50 p-1">
+            <div className="aspect-[16/10] bg-slate-100 rounded-[20px]" />
+            <div className="px-4 pb-4 space-y-3">
+              <div className="h-3 bg-slate-100 rounded w-16" />
+              <div className="h-5 bg-slate-100 rounded w-full" />
+              <div className="h-4 bg-slate-100 rounded w-3/4" />
+              <div className="h-3 bg-slate-100 rounded w-1/3" />
             </div>
           </div>
         ))}
       </div>
     </div>
-
-    {/* Fresh Picks Row */}
-    <div className="space-y-6">
-      <div className="h-6 bg-slate-200 rounded-full w-40" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="space-y-4">
-            <div className="aspect-[4/3] bg-slate-200 rounded-[28px]" />
-            <div className="h-4 bg-slate-200 rounded w-full" />
-            <div className="h-4 bg-slate-200 rounded w-3/4" />
-          </div>
-        ))}
-      </div>
-    </div>
-
-    {/* Ad Banner Skeleton */}
-    <div className="h-[400px] bg-slate-200 rounded-[48px]" />
   </div>
 );
 
@@ -351,10 +381,13 @@ const News: React.FC = () => {
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<NormalizedArticle | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'all' | 'featured' | 'trending' | 'pro'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchArticles = useCallback(async (pageNum: number) => {
-    setLoading(true);
+    if (pageNum === 1) setLoading(true);
+    else setLoadingMore(true);
     setError(null);
     try {
       const response = await fetch(`/api/v1/news/articles?page=${pageNum}`);
@@ -375,6 +408,7 @@ const News: React.FC = () => {
       setError(err.message || 'Failed to load articles');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
@@ -391,280 +425,391 @@ const News: React.FC = () => {
     return imageErrors.has(article.id) ? FALLBACK_IMAGE : article.image;
   };
 
+  // ── Article Detail ──
   if (selectedArticle) {
     return <ArticleDetail article={selectedArticle} onBack={() => setSelectedArticle(null)} />;
   }
 
+  // Get unique categories
+  const categories = ['all', ...Array.from(new Set(articles.map(a => a.category.toLowerCase())))];
+
+  // Filter articles
+  const filteredArticles = articles.filter(a => {
+    const matchesSearch = !searchQuery ||
+      a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeCategory === 'all' || a.category.toLowerCase() === activeCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const featuredArticle = filteredArticles[0];
+  const gridArticles = filteredArticles.slice(1);
+
   // ── Error State ──
   if (error) {
     return (
-      <div className="bg-[#F8FAFC] min-h-screen py-20">
-        <div className="max-w-md mx-auto bg-white rounded-[40px] p-12 text-center shadow-xl border border-slate-100">
-          <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center mb-6 mx-auto">
-            <AlertCircle size={32} className="text-red-500" />
+      <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
+          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
+        </div>
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-5 mx-auto">
+            <AlertCircle size={28} className="text-red-500" />
           </div>
-          <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Unable to Load News</h3>
-          <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">{error}</p>
+          <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">Unable to Load News</h3>
+          <p className="text-slate-500 text-sm mb-6 font-medium">{error}</p>
           <button
             onClick={() => fetchArticles(page)}
-            className="w-full flex items-center justify-center gap-3 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 active:scale-95"
+            className="inline-flex items-center gap-2 px-6 py-3.5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg active:scale-95"
           >
-            <RefreshCw size={16} /> TRY AGAIN
+            <RefreshCw size={16} /> Try Again
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Loading Skeleton ──
+  // ── Loading ──
   if (loading) {
-    return (
-      <div className="bg-[#F8FAFC] min-h-screen pt-12 px-6">
-        <div className="max-w-[1500px] mx-auto">
-          <NewsSkeleton />
-        </div>
-      </div>
-    );
+    return <NewsSkeleton />;
   }
 
   // ── Empty State ──
   if (articles.length === 0) {
     return (
-      <div className="bg-[#F8FAFC] min-h-screen py-20">
-        <div className="max-w-md mx-auto bg-white rounded-[40px] p-12 text-center shadow-xl border border-slate-100">
-          <div className="w-24 h-24 rounded-[40px] bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center mb-8 mx-auto relative">
-            <Newspaper size={40} className="text-blue-600" />
+      <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
+          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
+        </div>
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-5 mx-auto">
+            <Newspaper size={28} className="text-blue-600" />
           </div>
-          <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">No Articles Found</h3>
-          <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
-            We couldn't find any articles at the moment. Please check back later for the latest updates.
-          </p>
+          <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">No Articles Found</h3>
+          <p className="text-slate-500 text-sm mb-6 font-medium">Check back later for the latest updates.</p>
           <button
             onClick={() => fetchArticles(page)}
-            className="w-full flex items-center justify-center gap-3 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl active:scale-95"
+            className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95"
           >
-            <RefreshCw size={16} /> REFRESH FEED
+            <RefreshCw size={16} /> Refresh Feed
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Layout Distribution (Matching Mockup) ──
-  const mainFeature = articles[0];
-  const topStack = articles.slice(1, 4);
-  const freshGrid = articles.slice(4, 8);
-  const middleBanner = articles[8] || articles[0];
-  const listContent = articles.slice(9, 13);
-  const bottomGrid = articles.slice(13, 17);
-
   return (
-    <div className="bg-[#F8FAFC] min-h-screen animate-fade-in font-sans pb-20">
-      {/* ── CINEMATIC TOP HERO (MATCHING MOCKUP TOP) ── */}
-      <section className="max-w-[1500px] mx-auto px-6 pt-10 pb-16">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Main Featured (Left side of mockup top) */}
-          <div className="lg:w-2/3 group cursor-pointer" onClick={() => setSelectedArticle(mainFeature)}>
-            <div className="relative aspect-[16/9] md:aspect-[21/10] rounded-[40px] overflow-hidden shadow-2xl border border-slate-200/50">
-              <img src={getArticleImage(mainFeature)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-              <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full">
-                <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg mb-4 inline-block">
-                  FEATURED STORY
-                </span>
-                <h2 className="text-3xl md:text-5xl font-black text-white leading-[1.1] uppercase tracking-tighter mb-4 group-hover:text-lime-400 transition-colors">
-                  {mainFeature?.title || "Loading main story..."}
-                </h2>
-                <div className="flex items-center gap-4 text-slate-300 text-xs font-bold uppercase tracking-widest">
-                  <span>{mainFeature?.author}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-lime-400" />
-                  <span>{mainFeature?.readTime}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Stack (Right side of mockup top) */}
-          <div className="lg:w-1/3 flex flex-col gap-6">
-            <SectionHeader title="TRENDING NEWS" icon={<Flame size={18} />} accent="HOT" />
-            <div className="space-y-6">
-              {topStack.map((article, idx) => (
-                <div key={article.id} className="flex gap-4 group cursor-pointer" onClick={() => setSelectedArticle(article)}>
-                  <div className="w-24 h-24 rounded-[20px] overflow-hidden shrink-0 border border-slate-100 shadow-sm">
-                    <img src={getArticleImage(article)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-blue-600 text-[9px] font-black uppercase tracking-widest">{article.category}</span>
-                    <h3 className="text-sm font-black text-slate-900 leading-tight line-clamp-2 uppercase group-hover:text-blue-600 transition-colors">
-                      {article.title}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">{article.date}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+      {/* ── Header ── */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
+          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories and community highlights.</p>
         </div>
-      </section>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fetchArticles(page)}
+            className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+          >
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+      </div>
 
-      {/* ── FRESH PICK GRID (MATCHING MOCKUP ROW 2) ── */}
-      <section className="max-w-[1500px] mx-auto px-6 py-12 border-y border-slate-200/60 bg-white shadow-sm">
-        <SectionHeader title="FRESH PICKS" icon={<Zap size={18} />} extra={<p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Updated 5m ago</p>} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {freshGrid.map((article) => (
-            <div key={article.id} className="group cursor-pointer space-y-4" onClick={() => setSelectedArticle(article)}>
-              <div className="aspect-[4/3] rounded-[28px] overflow-hidden border border-slate-100 shadow-md">
-                <img src={getArticleImage(article)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" />
-              </div>
-              <div>
-                <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 block">{article.category}</span>
-                <h3 className="text-base font-black text-slate-900 leading-snug line-clamp-2 uppercase group-hover:text-blue-600">
-                  {article.title}
-                </h3>
-              </div>
-            </div>
+      {/* ── Search + Category Filter Bar ── */}
+      <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Search articles by title, content, or author..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-transparent rounded-[20px] focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
+          {categories.slice(0, 6).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-5 py-3.5 rounded-[20px] font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${
+                activeCategory === cat
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                  : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100'
+              }`}
+            >
+              {cat === 'all' ? 'All News' : cat}
+            </button>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ── CLEAN ADS PORTION (HIGH-END INTEGRATED BANNER) ── */}
-      <section className="max-w-[1500px] mx-auto px-6 py-16">
-        <div className="bg-slate-900 rounded-[48px] p-8 md:p-16 flex flex-col lg:flex-row items-center justify-between gap-12 relative overflow-hidden shadow-2xl border border-white/5">
-          {/* Abstract glassmorphism decorations */}
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 blur-[130px] rounded-full" />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-lime-400/5 blur-[100px] rounded-full" />
-
-          <div className="relative z-10 lg:w-1/2 text-center lg:text-left">
-            <span className="bg-lime-400 text-slate-950 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-6 inline-block">
-              LIMITED PRO OFFER
-            </span>
-            <h2 className="text-4xl md:text-6xl font-black text-white leading-none uppercase tracking-tighter mb-6">
-              UPGRADE YOUR <br />
-              <span className="text-blue-400">PICKLE GAME.</span>
-            </h2>
-            <p className="text-slate-400 text-sm md:text-lg font-medium max-w-sm mb-8 leading-relaxed">
-              Get 20% off on all pro-level paddles and equipment. Dominate the court with the best gear.
-            </p>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20 active:scale-95">
-              SHOP THE PRO COLLECTION
-            </button>
-          </div>
-
-          <div className="relative z-10 lg:w-1/2 flex justify-center">
-            <div className="w-full max-w-md aspect-[4/3] rounded-[40px] bg-gradient-to-br from-blue-600 to-lime-400 p-1">
-              <div className="w-full h-full rounded-[38px] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center border border-white/10 hover:bg-slate-900/20 transition-all group overflow-hidden">
-                <img src="/images/home-images/pb11.jpg" className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt="Ads" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="bg-white/90 backdrop-blur-md px-6 py-4 rounded-3xl shadow-2xl">
-                    <p className="text-slate-950 font-black text-xl tracking-tighter uppercase whitespace-nowrap">PH POWER PACK</p>
+      {/* ── Featured Story Card ── */}
+      {featuredArticle && (
+        <div
+          className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden cursor-pointer group"
+          onClick={() => setSelectedArticle(featuredArticle)}
+        >
+          <div className="flex flex-col lg:flex-row">
+            <div className="lg:w-3/5 relative aspect-[16/10] lg:aspect-auto overflow-hidden">
+              <img
+                src={getArticleImage(featuredArticle)}
+                alt=""
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 min-h-[280px] lg:min-h-[360px]"
+                onError={() => handleImageError(featuredArticle.id)}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent lg:hidden" />
+              <div className="absolute top-4 left-4">
+                <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg">
+                  Featured
+                </span>
+              </div>
+              {/* Mobile title overlay */}
+              <div className="absolute bottom-0 left-0 right-0 p-6 lg:hidden">
+                <h2 className="text-xl font-black text-white leading-tight uppercase tracking-tight">
+                  {featuredArticle.title}
+                </h2>
+              </div>
+            </div>
+            <div className="lg:w-2/5 p-6 sm:p-8 lg:p-10 flex flex-col justify-center">
+              <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">{featuredArticle.category}</span>
+              <h2 className="hidden lg:block text-2xl xl:text-3xl font-black text-slate-900 tracking-tight leading-tight uppercase mb-4 group-hover:text-blue-600 transition-colors">
+                {featuredArticle.title}
+              </h2>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-3 mb-6">
+                {featuredArticle.excerpt}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-lime-400 font-black text-[9px]">
+                    {featuredArticle.author.charAt(0).toUpperCase()}
                   </div>
+                  <span>{featuredArticle.author}</span>
                 </div>
+                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                <span>{featuredArticle.date}</span>
+                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                <span className="flex items-center gap-1"><Clock size={10} /> {featuredArticle.readTime}</span>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      )}
 
-      {/* ── CONTENT SPLIT VIEW (MATCHING MOCKUP SECTION 4) ── */}
-      <section className="max-w-[1500px] mx-auto px-6 py-12">
-        <div className="flex flex-col lg:flex-row gap-12">
-          {/* Main List View (Left side) */}
-          <div className="lg:w-2/3 space-y-10">
-            <SectionHeader title="LATEST STORIES" icon={<Newspaper size={18} />} />
-            <div className="space-y-10">
-              {listContent.map((article) => (
-                <div key={article.id} className="flex flex-col md:flex-row gap-8 group cursor-pointer" onClick={() => setSelectedArticle(article)}>
-                  <div className="md:w-2/5 aspect-[16/10] rounded-[32px] overflow-hidden border border-slate-100 shadow-lg">
-                    <img src={getArticleImage(article)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
+      {/* ── Articles Grid ── */}
+      <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+        {/* Section Header */}
+        <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-50">
+          <div className="flex items-center gap-2">
+            <Newspaper size={18} className="text-blue-600" />
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+              {activeCategory === 'all' ? 'All Stories' : activeCategory}
+            </h2>
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full">{filteredArticles.length}</span>
+          </div>
+          {pagination && (
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              Page {pagination.current_page} of {pagination.last_page}
+            </span>
+          )}
+        </div>
+
+        {filteredArticles.length === 0 && searchQuery ? (
+          <div className="p-16 text-center">
+            <Search size={32} className="text-slate-200 mx-auto mb-4" />
+            <p className="text-sm font-bold text-slate-400">No articles match "{searchQuery}"</p>
+          </div>
+        ) : (
+          <div className="p-4 sm:p-6 md:p-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+              {gridArticles.map((article) => (
+                <div
+                  key={article.id}
+                  className="group cursor-pointer rounded-[20px] sm:rounded-[24px] border border-slate-100 hover:border-blue-200 bg-white hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col"
+                  onClick={() => setSelectedArticle(article)}
+                >
+                  {/* Image */}
+                  <div className="aspect-[16/10] overflow-hidden relative">
+                    <img
+                      src={getArticleImage(article)}
+                      alt=""
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={() => handleImageError(article.id)}
+                    />
+                    <div className="absolute top-3 left-3">
+                      <span className="bg-blue-600/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">
+                        {article.category}
+                      </span>
+                    </div>
                   </div>
-                  <div className="md:w-3/5 space-y-4">
-                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest inline-block">
-                      {article.category}
-                    </span>
-                    <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase group-hover:text-blue-600 transition-colors">
+
+                  {/* Content */}
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col">
+                    <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug uppercase tracking-tight mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
                       {article.title}
                     </h3>
-                    <p className="text-slate-500 text-sm font-medium line-clamp-2 leading-relaxed">
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium leading-relaxed line-clamp-2 mb-4 flex-1">
                       {article.excerpt}
                     </p>
-                    <div className="flex items-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest pt-2">
-                      <span>{article.author}</span>
-                      <span className="w-1 h-1 rounded-full bg-slate-300" />
-                      <span>{article.date}</span>
+                    <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-slate-50">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-slate-900 flex items-center justify-center text-lime-400 font-black text-[7px] sm:text-[8px]">
+                          {article.author.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">{article.author}</span>
+                      </div>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-300 uppercase">{article.date}</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => setPage(p => p + 1)}
-              className="w-full py-5 rounded-[24px] bg-white border-2 border-slate-100 text-slate-900 font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-50 transition-all shadow-sm"
-            >
-              LOAD MORE STORIES
-            </button>
           </div>
+        )}
+      </div>
 
-          {/* Sidebar / Leaderboard (Right side of mockup) */}
-          <div className="lg:w-1/3 space-y-10">
-            <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 blur-3xl" />
-              <SectionHeader title="TOP CONTRIBUTORS" icon={<Trophy size={18} />} />
-              <div className="space-y-6 mt-8">
-                {["Coach Mike", "Jojo Rivera", "Sara Lim", "Alex Tan"].map((name, i) => (
-                  <div key={i} className="flex items-center gap-4 group cursor-pointer hover:translate-x-1 transition-transform">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm shadow-lg">
-                      {name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900 uppercase">{name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Verified Contributor</p>
-                    </div>
-                    <div className="ml-auto">
-                      <Zap size={16} className="text-lime-500" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* ── Promo Banner ── */}
+      <div className="bg-slate-900 rounded-[32px] p-6 sm:p-8 md:p-12 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-10 relative overflow-hidden shadow-lg border border-white/5">
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-lime-400/5 blur-[80px] rounded-full pointer-events-none" />
 
-            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 blur-3xl -translate-y-1/2 translate-x-1/2" />
-              <div className="relative z-10">
-                <p className="text-[10px] font-black tracking-[0.3em] uppercase mb-4 opacity-70">Weekly Hub</p>
-                <h3 className="text-2xl font-black uppercase tracking-tighter mb-6 leading-none">JOIN OUR <br /><span className="text-lime-400 italic">VIBER COMMUNITY</span></h3>
-                <button className="bg-white text-blue-600 w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-950/20 active:scale-95 transition-all">
-                  JOIN CHANNEL
-                </button>
-              </div>
-            </div>
-          </div>
+        <div className="relative z-10 lg:w-1/2 text-center lg:text-left">
+          <span className="bg-lime-400 text-slate-950 px-3.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest mb-4 inline-block">
+            Limited Pro Offer
+          </span>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white leading-none uppercase tracking-tighter mb-4">
+            Upgrade Your <br />
+            <span className="text-blue-400">Pickle Game.</span>
+          </h2>
+          <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto lg:mx-0 mb-6 leading-relaxed">
+            Get 20% off on all pro-level paddles and equipment. Dominate the court with the best gear.
+          </p>
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95">
+            Shop the Pro Collection
+          </button>
         </div>
-      </section>
 
-      {/* ── BOTTOM GRID (MATCHING MOCKUP ROW 6) ── */}
-      <section className="max-w-[1500px] mx-auto px-6 py-20 pb-32">
-        <SectionHeader title="PEOPLE ALREADY PICKLED" icon={<UsersRound size={18} />} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {bottomGrid.map((article) => (
-            <div key={article.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group cursor-pointer h-full flex flex-col" onClick={() => setSelectedArticle(article)}>
-              <div className="aspect-square rounded-[24px] overflow-hidden mb-6">
-                <img src={getArticleImage(article)} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
-              </div>
-              <div className="flex-1">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">{article.date}</span>
-                <h3 className="text-lg font-black text-slate-900 leading-tight uppercase group-hover:text-blue-600 transition-colors">
-                  {article.title}
-                </h3>
-              </div>
-              <div className="pt-6 mt-auto">
-                <div className="flex items-center gap-3 text-xs font-black text-blue-600 uppercase tracking-widest">
-                  READ STORY <ArrowRight size={14} className="group-hover:translate-x-2 transition-transform" />
+        <div className="relative z-10 lg:w-1/2 flex justify-center">
+          <div className="w-full max-w-xs sm:max-w-sm aspect-[4/3] rounded-[24px] sm:rounded-[28px] bg-gradient-to-br from-blue-600 to-lime-400 p-1">
+            <div className="w-full h-full rounded-[22px] sm:rounded-[26px] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center border border-white/10 overflow-hidden group hover:bg-slate-900/20 transition-all relative">
+              <img src="/images/home-images/pb11.jpg" className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt="Ads" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-white/90 backdrop-blur-md px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl">
+                  <p className="text-slate-950 font-black text-base sm:text-lg tracking-tighter uppercase">PH Power Pack</p>
                 </div>
               </div>
             </div>
-          ))}
+          </div>
         </div>
-      </section>
+      </div>
+
+      {/* ── Bottom Cards Row ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Contributors Card */}
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-6 sm:p-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Trophy size={18} className="text-lime-500" />
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Top Contributors</h3>
+          </div>
+          <div className="space-y-4 sm:space-y-5">
+            {["Coach Mike", "Jojo Rivera", "Sara Lim", "Alex Tan"].map((name, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm shadow-md shrink-0">
+                  {name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-slate-900 uppercase truncate">{name}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Verified Contributor</p>
+                </div>
+                <Zap size={14} className="text-lime-500 shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Viber Community Card */}
+        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-[32px] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+          <div className="relative z-10">
+            <p className="text-[9px] font-black tracking-widest uppercase mb-3 opacity-70">Pickle Hub</p>
+            <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tighter mb-2 leading-none">Join Our</h3>
+            <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tighter mb-6 leading-none text-lime-400 italic">Viber Community</h3>
+            <button className="bg-white text-blue-600 w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-blue-50">
+              Join Channel
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Stats Card */}
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-6 sm:p-8 md:col-span-2 lg:col-span-1">
+          <div className="flex items-center gap-2 mb-6">
+            <TrendingUp size={18} className="text-blue-600" />
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Feed Stats</h3>
+          </div>
+          <div className="space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <Newspaper size={16} className="text-blue-600" />
+                <span className="text-xs font-bold text-slate-600">Total Articles</span>
+              </div>
+              <span className="text-lg font-black text-slate-900">{articles.length}</span>
+            </div>
+            <div className="flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <Tag size={16} className="text-emerald-600" />
+                <span className="text-xs font-bold text-slate-600">Categories</span>
+              </div>
+              <span className="text-lg font-black text-slate-900">{categories.length - 1}</span>
+            </div>
+            <div className="flex items-center justify-between p-3.5 sm:p-4 bg-slate-50 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <Flame size={16} className="text-orange-500" />
+                <span className="text-xs font-bold text-slate-600">Trending</span>
+              </div>
+              <span className="text-lg font-black text-slate-900">{Math.min(articles.length, 5)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Pagination ── */}
+      {pagination && pagination.last_page > 1 && (
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="flex items-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
+          >
+            <ChevronLeft size={16} /> Previous
+          </button>
+          <div className="flex items-center gap-2">
+            {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${
+                  page === p
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
+            disabled={page >= pagination.last_page}
+            className="flex items-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
+          >
+            Next <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
