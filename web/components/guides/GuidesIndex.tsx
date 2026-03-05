@@ -26,8 +26,8 @@ interface GuidesIndexProps {
 
 const GuidesIndex: React.FC<GuidesIndexProps> = ({ isLoggedIn }) => {
     useSEO({
-        title: 'Pickleball Guides & Quizzes',
-        description: 'Learn pickleball with guides, quizzes, and tutorials written by Philippine coaches. Skill rating, rules, tactics, and equipment guides.',
+        title: 'Pickleball Rules, Guides & Quizzes – Learn to Play',
+        description: 'Learn pickleball rules, tactics, equipment, and skill ratings with guides and quizzes for beginners and advanced players in the Philippines.',
         canonical: 'https://www.pickleplay.ph/guides',
     });
     const [guides, setGuides] = useState<Guide[]>([]);

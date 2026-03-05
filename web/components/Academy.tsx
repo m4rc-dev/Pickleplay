@@ -20,8 +20,8 @@ import {
 
 const Academy: React.FC = () => {
   useSEO({
-    title: 'Pickleball Play Guide',
-    description: 'Learn pickleball rules, strategies, and skill drills with our academy guides written by Philippine coaches. Perfect for all skill levels.',
+    title: 'How to Play Pickleball – Beginner\'s Guide Philippines',
+    description: 'Learn how to play pickleball step-by-step — rules, scoring, grips, and pro tactics — with beginner-friendly guides written by Philippine coaches.',
     canonical: 'https://www.pickleplay.ph/academy',
   });
   const [activeTab, setActiveTab] = useState<'basics' | 'rules' | 'tactics'>('basics');

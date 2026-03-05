@@ -151,8 +151,8 @@ interface LocationGroup {
 
 const Booking: React.FC = () => {
   useSEO({
-    title: 'Book a Pickleball Court',
-    description: 'Browse and reserve pickleball courts near you. Filter by city, skill level, and time slots on our interactive PH map.',
+    title: 'Find Pickleball Courts Near Me – Book Online',
+    description: 'Search for pickleball courts near you across the Philippines. Filter by city (Manila, Cebu, Davao), court type, and time — then book your slot instantly.',
     canonical: 'https://www.pickleplay.ph/booking',
   });
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
@@ -1559,7 +1559,7 @@ const Booking: React.FC = () => {
       });
       const derivedCourtType = ctSet.size === 0 ? 'Indoor'
         : ctSet.has('Indoor') && ctSet.has('Outdoor') ? 'Indoor / Outdoor'
-        : ctSet.has('Outdoor') ? 'Outdoor' : 'Indoor';
+          : ctSet.has('Outdoor') ? 'Outdoor' : 'Indoor';
 
       // Aggregate amenities
       const amenitiesSet = new Set<string>();
@@ -1658,34 +1658,34 @@ const Booking: React.FC = () => {
                         ? calculateDistance(userLocation.lat, userLocation.lng, location.latitude, location.longitude)
                         : undefined;
                       return (
-                      <button
-                        key={location.id}
-                        onClick={() => {
-                          setSearchQuery(location.name);
-                          if (googleMapRef.current && location.latitude && location.longitude) {
-                            googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
-                            smoothZoom(19);
-                            triggerPulse(location.latitude, location.longitude);
-                          }
-                          navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
-                          setViewMode('map');
-                          setIsSearchExpanded(false);
-                        }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-none"
-                      >
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
-                          <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
-                          <p className="text-[10px] text-slate-400 truncate">
-                            {locCourts.length} {locCourts.length === 1 ? 'court' : 'courts'}
-                            {dist !== undefined && <span> · {dist.toFixed(1)} miles away</span>}
-                            {location.city && <span> · {location.city}</span>}
-                            {location.address && <span> · {location.address}</span>}
-                          </p>
-                        </div>
-                      </button>
+                        <button
+                          key={location.id}
+                          onClick={() => {
+                            setSearchQuery(location.name);
+                            if (googleMapRef.current && location.latitude && location.longitude) {
+                              googleMapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+                              smoothZoom(19);
+                              triggerPulse(location.latitude, location.longitude);
+                            }
+                            navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                            setViewMode('map');
+                            setIsSearchExpanded(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-none"
+                        >
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                            <img src="/images/PinMarker.png" alt="Pin" className="w-6 h-6 object-contain" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-800 font-semibold text-sm truncate">{location.name}</p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {locCourts.length} {locCourts.length === 1 ? 'court' : 'courts'}
+                              {dist !== undefined && <span> · {dist.toFixed(1)} miles away</span>}
+                              {location.city && <span> · {location.city}</span>}
+                              {location.address && <span> · {location.address}</span>}
+                            </p>
+                          </div>
+                        </button>
                       );
                     })}
                   {locations.length === 0 && (
@@ -1707,10 +1707,9 @@ const Booking: React.FC = () => {
               </button>
               <button
                 onClick={() => setShowFilters(true)}
-                className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 transition-all relative ${
-                  (filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
+                className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 transition-all relative ${(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
                     ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
-                }`}
+                  }`}
               >
                 <SlidersHorizontal size={18} />
                 {(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0) && (
@@ -1927,11 +1926,10 @@ const Booking: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowFilters(true)}
-                className={`flex items-center gap-2 px-5 lg:px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shrink-0 relative ${
-                  (filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
+                className={`flex items-center gap-2 px-5 lg:px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shrink-0 relative ${(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
                     ? 'bg-[#1E40AF] text-white shadow-blue-900/20 hover:bg-blue-800'
                     : 'bg-white text-slate-700 border border-slate-200 shadow-slate-200/50 hover:border-blue-300'
-                }`}
+                  }`}
               >
                 <SlidersHorizontal size={16} />
                 <span>Filters</span>
@@ -2394,7 +2392,7 @@ const Booking: React.FC = () => {
                                       <span className="text-[11px] font-bold text-slate-600">{court.numCourts || 1} {(court.numCourts || 1) === 1 ? 'Court' : 'Courts'}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                                       <span className="text-[11px] font-bold text-slate-600">{(court.numCourts || 1) * 4} Players</span>
                                     </div>
                                     <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
@@ -2453,11 +2451,10 @@ const Booking: React.FC = () => {
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                                 {!isAvailable && (
-                                  <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${
-                                    locStatus === 'Closed' ? 'bg-rose-500 text-white'
-                                    : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
-                                    : 'bg-blue-500 text-white'
-                                  }`}>{locStatus}</div>
+                                  <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${locStatus === 'Closed' ? 'bg-rose-500 text-white'
+                                      : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
+                                        : 'bg-blue-500 text-white'
+                                    }`}>{locStatus}</div>
                                 )}
                                 {isAvailable && (
                                   <div className="absolute top-2 left-2">
@@ -2494,7 +2491,7 @@ const Booking: React.FC = () => {
                                     <span className="text-[11px] font-bold text-slate-600">{location.court_count || 0} {(location.court_count || 0) === 1 ? 'Court' : 'Courts'}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                                     <span className="text-[11px] font-bold text-slate-600">{(location.court_count || 1) * 4} Players</span>
                                   </div>
                                   <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
@@ -3200,7 +3197,7 @@ const Booking: React.FC = () => {
                         className={`py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${filterType === type
                           ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/20'
                           : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-100'
-                        }`}
+                          }`}
                       >
                         {type}
                       </button>
@@ -3265,7 +3262,7 @@ const Booking: React.FC = () => {
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${filterFreeOnly
                       ? 'bg-emerald-50 border-emerald-200 shadow-sm'
                       : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${filterFreeOnly ? 'bg-emerald-500' : 'bg-slate-200'}`}>
@@ -3300,7 +3297,7 @@ const Booking: React.FC = () => {
                             className={`text-left px-3 py-2 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2 ${isSelected
                               ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-900/20'
                               : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100'
-                            }`}
+                              }`}
                           >
                             <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-white/20 border-white/40' : 'border-slate-300'}`}>
                               {isSelected && <CheckCircle2 size={10} className="text-white" />}

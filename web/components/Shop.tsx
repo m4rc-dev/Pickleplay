@@ -76,8 +76,8 @@ interface ShopProps {
 
 const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantity, onRemoveFromCart }) => {
   useSEO({
-    title: 'Pickleball Pro Shop',
-    description: 'Shop paddles, balls, apparel, and pickleball gear curated for Philippine players. Fast delivery across the Philippines.',
+    title: 'Pickleball Paddles & Gear Philippines – Pro Shop',
+    description: 'Shop pickleball paddles, balls, shoes, and apparel in the Philippines. Gear curated for PH players with fast nationwide delivery.',
     canonical: 'https://www.pickleplay.ph/shop',
   });
   const [activeCategory, setActiveCategory] = useState<string>('All');

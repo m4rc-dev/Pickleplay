@@ -176,10 +176,10 @@ const CourtDetail: React.FC = () => {
 
     // ── SEO: updates title/description once court data is loaded ──
     useSEO({
-        title: court ? `${court.name} – Book This Court` : 'Court Details',
+        title: court ? `${court.name} – Book This Pickleball Court` : 'Pickleball Court Details',
         description: court
-            ? `Book a slot at ${court.name} in ${court.location}. View available times, pricing, and amenities.`
-            : 'View pickleball court details and book your slot on PicklePlay Philippines.',
+            ? `Book a pickleball court at ${court.name} in ${court.location}. Check available time slots, hourly pricing, and court amenities. Easy online booking on PicklePlay Philippines.`
+            : 'View pickleball court details, check availability, and book your slot on PicklePlay Philippines.',
         canonical: courtId ? `https://www.pickleplay.ph/court/${courtId}` : undefined,
     });
 

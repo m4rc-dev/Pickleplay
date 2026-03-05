@@ -166,8 +166,8 @@ const getRegion = (city: string): string => {
 
 const Home: React.FC = () => {
   useSEO({
-    title: 'PicklePlay Philippines – Book Courts & Play Pickleball',
-    description: 'Find and book pickleball courts across the Philippines. Join tournaments, track rankings, connect with players, and grow your game — all in one place.',
+    title: 'PicklePlay Philippines – Find Pickleball Courts Near You & Play',
+    description: 'Find pickleball courts near you across the Philippines. Learn how to play pickleball, book courts in Manila, Cebu, Davao, join tournaments, and connect with players — all in one place.',
     canonical: 'https://www.pickleplay.ph/',
   });
   const [searchQuery, setSearchQuery] = useState('');
@@ -1106,119 +1106,119 @@ const Home: React.FC = () => {
                     >
                       {/* Location Card Template */}
                       <>
-                          <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
-                            <img
-                              src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
-                              alt={item.name}
-                              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                            {/* Price Badge on Image */}
-                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                              {item.has_free && (
-                                <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
-                                  <span className="text-xs font-black text-white uppercase">Free</span>
-                                </div>
-                              )}
-                              {(item.max_price || 0) > 0 && (
-                                <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-                                  <span className="text-lg font-black text-slate-900">₱{(item.min_price || 0) > 0 ? item.min_price : item.max_price}{(item.min_price || 0) > 0 && item.min_price !== item.max_price ? `-${item.max_price}` : ''}</span>
-                                  <span className="text-xs font-semibold text-slate-500">/hr</span>
-                                </div>
-                              )}
-                              {!item.has_free && (item.max_price || 0) === 0 && (
-                                <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
-                                  <span className="text-lg font-black text-white">FREE</span>
-                                </div>
-                              )}
+                        <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`} className="relative block overflow-hidden">
+                          <img
+                            src={item.imageUrl || COURT_IMAGES[idx % COURT_IMAGES.length]}
+                            alt={item.name}
+                            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          {/* Price Badge on Image */}
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                            {item.has_free && (
+                              <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
+                                <span className="text-xs font-black text-white uppercase">Free</span>
+                              </div>
+                            )}
+                            {(item.max_price || 0) > 0 && (
+                              <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                                <span className="text-lg font-black text-slate-900">₱{(item.min_price || 0) > 0 ? item.min_price : item.max_price}{(item.min_price || 0) > 0 && item.min_price !== item.max_price ? `-${item.max_price}` : ''}</span>
+                                <span className="text-xs font-semibold text-slate-500">/hr</span>
+                              </div>
+                            )}
+                            {!item.has_free && (item.max_price || 0) === 0 && (
+                              <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
+                                <span className="text-lg font-black text-white">FREE</span>
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+
+                        <div className="p-4 flex flex-col flex-1">
+                          {/* Rating */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  className={`w-3 h-3 ${star <= Math.round(item.avg_rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
+                                  fill="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" fill="currentColor" />
+                                </svg>
+                              ))}
                             </div>
+                            <span className="text-xs font-bold text-slate-500">
+                              {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
+                              {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
+                            </span>
+                          </div>
+
+                          {/* Location/Venue Name */}
+                          <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
+                            <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-1 line-clamp-1">
+                              {item.name}
+                            </h5>
                           </Link>
 
-                          <div className="p-4 flex flex-col flex-1">
-                            {/* Rating */}
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="flex items-center gap-0.5">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <svg
-                                    key={star}
-                                    className={`w-3 h-3 ${star <= Math.round(item.avg_rating || 0) ? 'text-lime-400' : 'text-slate-200'}`}
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path d="M13.849 4.22c-.684-1.626-3.014-1.626-3.698 0L8.397 8.387l-4.552.361c-1.775.14-2.495 2.331-1.142 3.477l3.468 2.937-1.06 4.392c-.413 1.713 1.472 3.067 2.992 2.149L12 19.35l3.897 2.354c1.52.918 3.405-.436 2.992-2.15l-1.06-4.39 3.468-2.938c1.353-1.146.633-3.336-1.142-3.477l-4.552-.36-1.754-4.17Z" fill="currentColor" />
-                                  </svg>
-                                ))}
-                              </div>
-                              <span className="text-xs font-bold text-slate-500">
-                                {item.avg_rating && item.avg_rating > 0 ? `${item.avg_rating}` : 'New'}
-                                {item.total_reviews && item.total_reviews > 0 ? ` (${item.total_reviews})` : ''}
+                          {/* Address */}
+                          <div className="flex items-center gap-1.5 mb-3">
+                            <MapPin size={12} className="text-slate-300 shrink-0" />
+                            <p className="text-xs text-slate-400 truncate">
+                              {item.address || `${item.city}${item.state ? `, ${item.state}` : ''}`}
+                            </p>
+                          </div>
+
+                          {/* 2x2 Details Grid */}
+                          <div className="grid grid-cols-2 gap-2 mb-4">
+                            {/* Court Count */}
+                            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                              <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
+                              <span className="text-[11px] font-bold text-slate-600">{item.court_count || 0} {(item.court_count || 0) === 1 ? 'Court' : 'Courts'}</span>
+                            </div>
+                            {/* Players */}
+                            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                              <span className="text-[11px] font-bold text-slate-600">{(item.court_count || 1) * 4} Players</span>
+                            </div>
+                            {/* Court Type — court/net icon */}
+                            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                              <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="6" width="20" height="12" rx="1" />
+                                <line x1="12" y1="6" x2="12" y2="18" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                              </svg>
+                              <span className="text-[11px] font-bold text-slate-600 truncate">{item.court_type || 'Indoor'}</span>
+                            </div>
+                            {/* Amenities — checklist/sparkle icon */}
+                            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
+                              <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M9 11l3 3L22 4" />
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                              </svg>
+                              <span className="text-[11px] font-bold text-slate-600 truncate">
+                                {Array.isArray(item.amenities) && item.amenities.length > 0
+                                  ? (item.amenities.length <= 2
+                                    ? item.amenities.join(', ')
+                                    : `${item.amenities.length} Amenities`)
+                                  : 'No Amenities'
+                                }
                               </span>
                             </div>
-
-                            {/* Location/Venue Name */}
-                            <Link to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}>
-                              <h5 className="text-lg font-black text-slate-900 tracking-tight leading-snug hover:text-blue-600 transition-colors mb-1 line-clamp-1">
-                                {item.name}
-                              </h5>
-                            </Link>
-
-                            {/* Address */}
-                            <div className="flex items-center gap-1.5 mb-3">
-                              <MapPin size={12} className="text-slate-300 shrink-0" />
-                              <p className="text-xs text-slate-400 truncate">
-                                {item.address || `${item.city}${item.state ? `, ${item.state}` : ''}`}
-                              </p>
-                            </div>
-
-                            {/* 2x2 Details Grid */}
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-                              {/* Court Count */}
-                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
-                                <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
-                                <span className="text-[11px] font-bold text-slate-600">{item.court_count || 0} {(item.court_count || 0) === 1 ? 'Court' : 'Courts'}</span>
-                              </div>
-                              {/* Players */}
-                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
-                                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                                <span className="text-[11px] font-bold text-slate-600">{(item.court_count || 1) * 4} Players</span>
-                              </div>
-                              {/* Court Type — court/net icon */}
-                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
-                                <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="2" y="6" width="20" height="12" rx="1" />
-                                  <line x1="12" y1="6" x2="12" y2="18" />
-                                  <line x1="2" y1="12" x2="22" y2="12" />
-                                </svg>
-                                <span className="text-[11px] font-bold text-slate-600 truncate">{item.court_type || 'Indoor'}</span>
-                              </div>
-                              {/* Amenities — checklist/sparkle icon */}
-                              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-2">
-                                <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M9 11l3 3L22 4" />
-                                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                                </svg>
-                                <span className="text-[11px] font-bold text-slate-600 truncate">
-                                  {Array.isArray(item.amenities) && item.amenities.length > 0
-                                    ? (item.amenities.length <= 2
-                                        ? item.amenities.join(', ')
-                                        : `${item.amenities.length} Amenities`)
-                                    : 'No Amenities'
-                                  }
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Book Button */}
-                            <Link
-                              to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
-                              className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95 mt-auto"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              Book Now
-                            </Link>
                           </div>
-                        </>
+
+                          {/* Book Button */}
+                          <Link
+                            to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
+                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95 mt-auto"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Book Now
+                          </Link>
+                        </div>
+                      </>
                     </div>
                   );
                 })}
