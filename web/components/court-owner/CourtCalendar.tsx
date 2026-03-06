@@ -125,9 +125,9 @@ const EventModal: React.FC<{
 
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+            <div className="bg-white w-full max-w-lg max-h-[95vh] flex flex-col rounded-[32px] shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
                 {/* Header */}
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
                     <div>
                         <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
                             {editingEvent ? 'Edit Event' : 'Block Time'}
@@ -137,6 +137,7 @@ const EventModal: React.FC<{
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
                         className="p-2 rounded-full bg-slate-100 text-slate-400 hover:text-slate-900 hover:bg-slate-200 transition-colors"
                     >
@@ -145,7 +146,7 @@ const EventModal: React.FC<{
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
                     {/* Court Selection */}
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
@@ -320,7 +321,7 @@ const CourtCalendar: React.FC = () => {
         message: string;
         onConfirm: () => void;
         variant: 'warning' | 'danger' | 'info';
-    }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+    }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
 
     // Confirm dialog helpers
     const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'warning' | 'danger' | 'info' = 'warning') => {
@@ -328,7 +329,7 @@ const CourtCalendar: React.FC = () => {
     };
 
     const closeConfirm = () => {
-        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' });
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'warning' });
     };
 
     const handleConfirm = () => {
@@ -377,7 +378,16 @@ const CourtCalendar: React.FC = () => {
                 });
             } else {
                 // Create new event
-                await createCourtEvent(eventData);
+                await createCourtEvent(
+                    eventData.court_id!,
+                    eventData.title!,
+                    eventData.description,
+                    eventData.start_datetime!,
+                    eventData.end_datetime!,
+                    eventData.event_type!,
+                    eventData.blocks_bookings,
+                    eventData.color
+                );
             }
             fetchData();
             setEditingEvent(null);
