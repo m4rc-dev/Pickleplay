@@ -1708,7 +1708,7 @@ const Booking: React.FC = () => {
               <button
                 onClick={() => setShowFilters(true)}
                 className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 transition-all relative ${(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
-                    ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
+                  ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
                   }`}
               >
                 <SlidersHorizontal size={18} />
@@ -1770,7 +1770,7 @@ const Booking: React.FC = () => {
       </div>
 
       {/* ──────────── MAIN CONTAINER ──────────── */}
-      <div className="pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto">
+      <div className="pb-0 md:pb-10 max-w-[1600px] mx-auto">
 
         {/* ──────────── DESKTOP HEADER ──────────── */}
         <div className="hidden md:block mb-6 lg:mb-8">
@@ -1927,8 +1927,8 @@ const Booking: React.FC = () => {
                 type="button"
                 onClick={() => setShowFilters(true)}
                 className={`flex items-center gap-2 px-5 lg:px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shrink-0 relative ${(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
-                    ? 'bg-[#1E40AF] text-white shadow-blue-900/20 hover:bg-blue-800'
-                    : 'bg-white text-slate-700 border border-slate-200 shadow-slate-200/50 hover:border-blue-300'
+                  ? 'bg-[#1E40AF] text-white shadow-blue-900/20 hover:bg-blue-800'
+                  : 'bg-white text-slate-700 border border-slate-200 shadow-slate-200/50 hover:border-blue-300'
                   }`}
               >
                 <SlidersHorizontal size={16} />
@@ -2452,8 +2452,8 @@ const Booking: React.FC = () => {
                                 />
                                 {!isAvailable && (
                                   <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${locStatus === 'Closed' ? 'bg-rose-500 text-white'
-                                      : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
-                                        : 'bg-blue-500 text-white'
+                                    : locStatus === 'Maintenance' ? 'bg-blue-500 text-white'
+                                      : 'bg-blue-500 text-white'
                                     }`}>{locStatus}</div>
                                 )}
                                 {isAvailable && (

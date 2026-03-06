@@ -535,120 +535,126 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 items-start">
-          <div className="lg:col-span-2 space-y-8">
-              <>
-                <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm">
-                  <form onSubmit={handlePost} className="space-y-4">
-                    <div className="flex gap-4">
-                      <img src={currentUserProfile?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=John"} className="w-12 h-12 rounded-2xl bg-slate-100" />
-                      <textarea
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                        placeholder="Share your latest match update or drill tip..."
-                        className="flex-1 bg-slate-50 border-none rounded-3xl p-5 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none h-28"
-                      />
-                    </div>
+          <div className="lg:col-span-2 space-y-5">
+            <>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <form onSubmit={handlePost} className="space-y-4">
+                  <div className="flex gap-4">
+                    <img src={currentUserProfile?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=John"} className="w-12 h-12 rounded-2xl bg-slate-100" />
+                    <textarea
+                      value={newPostContent}
+                      onChange={(e) => setNewPostContent(e.target.value)}
+                      placeholder="Share your latest match update or drill tip..."
+                      className="flex-1 bg-slate-50 border-none rounded-3xl p-5 text-sm font-medium outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none h-28"
+                    />
+                  </div>
 
-                    {imagePreview && (
-                      <div className="relative inline-block ml-16">
-                        <img src={imagePreview} className="w-48 rounded-2xl border border-slate-100 shadow-sm" />
-                        <button
-                          type="button"
-                          onClick={removeImage}
-                          className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg hover:bg-rose-600 transition-all"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                      <div className="flex gap-2">
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleImageSelect}
-                          accept="image/*"
-                          className="hidden"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className={`p-3 rounded-xl transition-all ${imagePreview ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}`}
-                        >
-                          <ImageIcon size={20} />
-                        </button>
-                        <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><Sparkles size={20} /></button>
-                      </div>
+                  {imagePreview && (
+                    <div className="relative inline-block ml-16">
+                      <img src={imagePreview} className="w-48 rounded-2xl border border-slate-100 shadow-sm" />
                       <button
-                        type="submit"
-                        disabled={(!newPostContent.trim() && !selectedFile) || isPosting}
-                        className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2"
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg hover:bg-rose-600 transition-all"
                       >
-                        {isPosting ? 'POSTING...' : 'PUBLISH POST'} <Send size={14} />
+                        <X size={14} />
                       </button>
                     </div>
-                  </form>
-                </div>
-
-                {/* Featured News in Feed */}
-                {newsArticles.length > 0 && (
-                  <Link to="/news" className="block bg-slate-900 rounded-[48px] overflow-hidden shadow-2xl relative group border border-slate-800 transition-all hover:shadow-indigo-500/10">
-                    <div className="aspect-[21/9] w-full relative">
-                      <img src={newsArticles[0].image} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                    </div>
-                    <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full">
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">FEATURED NEWS</span>
-                        <span className="text-white/60 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
-                          <Calendar size={12} className="text-lime-400" /> {newsArticles[0].date}
-                        </span>
-                      </div>
-                      <h3 className="text-2xl md:text-3xl font-black text-white tracking-tighter leading-tight mb-4 group-hover:text-lime-400 transition-colors">
-                        {newsArticles[0].title}
-                      </h3>
-                      <p className="text-slate-300 text-sm font-medium leading-relaxed line-clamp-2 mb-6 opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0">
-                        {newsArticles[0].excerpt}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white font-black text-[10px]">
-                            {newsArticles[0].author.charAt(0)}
-                          </div>
-                          <span className="text-[10px] text-white/80 font-black uppercase tracking-widest">{newsArticles[0].author}</span>
-                        </div>
-                        <span className="text-[10px] font-black text-lime-400 uppercase tracking-widest flex items-center gap-2">
-                          READ STORY <ArrowRight size={14} />
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                )}
-
-                <div className="space-y-8">
-                  {isLoading ? (
-                    Array(3).fill(0).map((_, i) => <PostSkeleton key={i} />)
-                  ) : (
-                    filteredPosts.map(post => (
-                      <PostCard
-                        key={post.id}
-                        post={post}
-                        onLike={() => handleLike(post.id)}
-                        isExpanded={expandedComments[post.id]}
-                        onToggleComments={() => toggleComments(post.id)}
-                        postsState={posts}
-                        setPostsState={setPosts}
-                        currentUserId={currentUserId}
-                        currentUserProfile={currentUserProfile}
-                        onSelectTag={setSelectedTag}
-                        onFollowTag={handleToggleFollowTag}
-                        followedTags={followedTags}
-                      />
-                    ))
                   )}
-                </div>
-              </>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                    <div className="flex gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageSelect}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`p-3 rounded-xl transition-all ${imagePreview ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}`}
+                      >
+                        <ImageIcon size={20} />
+                      </button>
+                      <button type="button" className="p-3 text-slate-400 hover:bg-slate-50 hover:text-indigo-600 rounded-xl transition-all"><Sparkles size={20} /></button>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={(!newPostContent.trim() && !selectedFile) || isPosting}
+                      className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isPosting ? 'POSTING...' : 'PUBLISH POST'} <Send size={14} />
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Featured News in Feed */}
+              {newsArticles.length > 0 && (
+                <Link to="/news" className="block bg-slate-900 rounded-[48px] overflow-hidden shadow-2xl relative group border border-slate-800 transition-all hover:shadow-indigo-500/10">
+                  <div className="aspect-[21/9] w-full relative">
+                    <img src={newsArticles[0].image} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+                  </div>
+                  <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="bg-lime-400 text-slate-950 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">FEATURED NEWS</span>
+                      <span className="text-white/60 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                        <Calendar size={12} className="text-lime-400" /> {newsArticles[0].date}
+                      </span>
+                    </div>
+                    <h3 className="text-2xl md:text-3xl font-black text-white tracking-tighter leading-tight mb-4 group-hover:text-lime-400 transition-colors">
+                      {newsArticles[0].title}
+                    </h3>
+                    <p className="text-slate-300 text-sm font-medium leading-relaxed line-clamp-2 mb-6 opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0">
+                      {newsArticles[0].excerpt}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white font-black text-[10px]">
+                          {newsArticles[0].author.charAt(0)}
+                        </div>
+                        <span className="text-[10px] text-white/80 font-black uppercase tracking-widest">{newsArticles[0].author}</span>
+                      </div>
+                      <span className="text-[10px] font-black text-lime-400 uppercase tracking-widest flex items-center gap-2">
+                        READ STORY <ArrowRight size={14} />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                {isLoading ? (
+                  <div className="divide-y divide-slate-100">
+                    {Array(3).fill(0).map((_, i) => <PostSkeleton key={i} />)}
+                  </div>
+                ) : filteredPosts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <p className="text-sm font-semibold text-slate-400">No posts yet. Be the first to share!</p>
+                  </div>
+                ) : (
+                  filteredPosts.map(post => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      onLike={() => handleLike(post.id)}
+                      isExpanded={expandedComments[post.id]}
+                      onToggleComments={() => toggleComments(post.id)}
+                      postsState={posts}
+                      setPostsState={setPosts}
+                      currentUserId={currentUserId}
+                      currentUserProfile={currentUserProfile}
+                      onSelectTag={setSelectedTag}
+                      onFollowTag={handleToggleFollowTag}
+                      followedTags={followedTags}
+                    />
+                  ))
+                )}
+              </div>
+            </>
           </div>
 
           {/* RIGHT SIDEBAR — News, Events & My Squads (all tabs) */}

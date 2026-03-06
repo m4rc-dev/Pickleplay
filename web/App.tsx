@@ -439,7 +439,7 @@ const NavigationHandler: React.FC<{
   const handleNotificationClick = (notification: Notification) => {
     const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
     const squadTypes = ['squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'];
-    
+
     if (notification.type === 'FOLLOW' && notification.actor?.id) {
       navigate(`/profile/${notification.actor.id}`);
     } else if (invitationTypes.includes(notification.type as string)) {
@@ -972,9 +972,7 @@ const NavigationHandler: React.FC<{
               location.pathname === '/terms' ||
               location.pathname === '/policy' ||
               location.pathname === '/messages' ||
-              location.pathname.startsWith('/groups') ||
-              location.pathname === '/booking' ||
-              location.pathname.startsWith('/booking')
+              location.pathname.startsWith('/groups')
               ? '' // full-bleed — these pages manage their own layout
               : 'p-4 md:p-8 lg:p-14 max-w-[1920px] mx-auto w-full'
           )
@@ -985,12 +983,12 @@ const NavigationHandler: React.FC<{
                 isTwoFactorPending
                   ? <Navigate to="/verify-2fa" replace />
                   : role === 'guest'
-                      ? <Home />
-                      : role === 'PLAYER'
-                        ? <Navigate to="/booking" replace />
-                        : role === 'ADMIN'
-                          ? <Navigate to="/admin" replace />
-                          : <Navigate to="/dashboard" replace />
+                    ? <Home />
+                    : role === 'PLAYER'
+                      ? <Navigate to="/booking" replace />
+                      : role === 'ADMIN'
+                        ? <Navigate to="/admin" replace />
+                        : <Navigate to="/dashboard" replace />
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
@@ -1334,11 +1332,11 @@ const App: React.FC = () => {
         } else if (session.user) {
           // Fallback: Create profile if missing
           const baseUsername = ((session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'player') as string)
-                .toLowerCase()
-                .trim()
-                .replace(/\s+/g, '_')
-                .replace(/[^a-z0-9_]/g, '')
-                .slice(0, 22) || 'player';
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .slice(0, 22) || 'player';
 
           let profileCreated = false;
           for (let attempt = 0; attempt < 5; attempt++) {
