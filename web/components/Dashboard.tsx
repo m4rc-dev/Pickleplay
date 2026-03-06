@@ -937,7 +937,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               </button>
             )}
             {userRole !== 'ADMIN' && (
-              <button className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm">
+              <button
+                onClick={() => {
+                  if (userRole === 'PLAYER') navigate('/my-bookings');
+                  else if (userRole === 'COACH') navigate('/schedule');
+                  else if (userRole === 'COURT_OWNER') navigate('/bookings-admin');
+                }}
+                className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm"
+              >
                 <History size={16} /> Logs
               </button>
             )}
