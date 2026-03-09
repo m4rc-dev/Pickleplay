@@ -2000,7 +2000,7 @@ const Booking: React.FC = () => {
                         {selectedCourt.pricePerHour > 0 ? (
                           <p className="text-lg font-black text-slate-900">₱{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>
                         ) : (
-                          <p className="text-lg font-black text-emerald-500">FREE</p>
+                          <p className="text-lg font-black text-[#a3e635]">FREE</p>
                         )}
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
@@ -2370,8 +2370,8 @@ const Booking: React.FC = () => {
                                         <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
                                       </div>
                                     ) : court.pricePerHour === 0 ? (
-                                      <div className="bg-emerald-500 px-1.5 py-0.5 rounded-md shadow-md">
-                                        <span className="text-[9px] font-black text-white uppercase">Free</span>
+                                      <div className="bg-[#a3e635] backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                        <span className="text-[11px] font-black text-slate-900">FREE</span>
                                       </div>
                                     ) : null}
                                   </div>
@@ -2403,7 +2403,7 @@ const Booking: React.FC = () => {
                                       <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                                       <span className="text-[11px] font-bold text-slate-600 truncate">
                                         {Array.isArray(court.amenities) && court.amenities.length > 0
-                                          ? (court.amenities.length <= 2 ? court.amenities.join(', ') : `${court.amenities.length} Amenities`)
+                                          ? court.amenities.join(', ')
                                           : 'No Amenities'
                                         }
                                       </span>
@@ -2463,14 +2463,13 @@ const Booking: React.FC = () => {
                                 )}
                                 {/* Price range badge */}
                                 <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
-                                  {location.has_free && (
-                                    <div className="bg-emerald-500 px-1.5 py-0.5 rounded-md shadow-md">
-                                      <span className="text-[9px] font-black text-white uppercase">Free</span>
-                                    </div>
-                                  )}
-                                  {location.max_price > 0 && (
+                                  {location.max_price > 0 ? (
                                     <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
                                       <span className="text-[11px] font-black text-slate-900">₱{location.min_price > 0 ? location.min_price : location.max_price}{location.min_price > 0 && location.min_price !== location.max_price ? `-${location.max_price}` : ''}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-[#a3e635] backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                      <span className="text-[11px] font-black text-slate-900">FREE</span>
                                     </div>
                                   )}
                                 </div>
@@ -2502,7 +2501,7 @@ const Booking: React.FC = () => {
                                     <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                                     <span className="text-[11px] font-bold text-slate-600 truncate">
                                       {location.all_amenities && location.all_amenities.length > 0
-                                        ? (location.all_amenities.length <= 2 ? location.all_amenities.join(', ') : `${location.all_amenities.length} Amenities`)
+                                        ? location.all_amenities.join(', ')
                                         : 'No Amenities'
                                       }
                                     </span>

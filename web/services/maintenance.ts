@@ -9,6 +9,7 @@ export interface MaintenanceSettings {
   message: string;
   updated_at: string;
   updated_by: string | null;
+  soft_launch_enabled?: boolean;
 }
 
 export const getMaintenanceStatus = async (): Promise<MaintenanceSettings | null> => {
@@ -23,6 +24,43 @@ export const getMaintenanceStatus = async (): Promise<MaintenanceSettings | null
     return null;
   }
   return data as MaintenanceSettings;
+};
+
+export const updateSoftLaunchStatus = async (
+  softLaunchEnabled: boolean
+): Promise<{ success: boolean; error?: string }> => {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: existing } = await supabase
+    .from('maintenance_settings')
+    .select('id')
+    .limit(1)
+    .single();
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from('maintenance_settings')
+      .update({
+        soft_launch_enabled: softLaunchEnabled,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id || null,
+      })
+      .eq('id', existing.id);
+    if (error) return { success: false, error: error.message };
+  } else {
+    const { error } = await supabase
+      .from('maintenance_settings')
+      .insert({
+        enabled: false,
+        message: '',
+        soft_launch_enabled: softLaunchEnabled,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id || null,
+      });
+    if (error) return { success: false, error: error.message };
+  }
+
+  return { success: true };
 };
 
 export const updateMaintenanceStatus = async (
