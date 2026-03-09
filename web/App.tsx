@@ -107,6 +107,7 @@ import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
 import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures, DEFAULT_FEATURES_PER_ROLE } from './services/maintenance';
 import MaintenanceScreen from './components/MaintenanceScreen';
+import SoftLaunchWelcome from './components/SoftLaunchWelcome';
 import FeatureUnavailable from './components/FeatureUnavailable';
 // Fix: Import UserRole from the centralized types.ts file.
 import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
@@ -328,6 +329,7 @@ const NavigationHandler: React.FC<{
   isMaintenanceMode: boolean;
   maintenanceChecked: boolean;
   maintenanceMessage: string;
+  isSoftLaunchMode: boolean;
   enabledFeatures: Set<string>;
   featuresLoaded: boolean;
   isActualAdmin: boolean;
@@ -342,7 +344,7 @@ const NavigationHandler: React.FC<{
     isSwitchingRole, roleSwitchTarget, handleRoleSwitch,
     showUsernameModal, setShowUsernameModal, isUpdatingUsername,
     initialNameForModal, handleConfirmUsername,
-    isMaintenanceMode, maintenanceChecked, maintenanceMessage, enabledFeatures, featuresLoaded, isActualAdmin
+    isMaintenanceMode, maintenanceChecked, maintenanceMessage, isSoftLaunchMode, enabledFeatures, featuresLoaded, isActualAdmin
   } = props;
 
   const role = currentUserId ? rawRole : 'guest';
@@ -985,13 +987,14 @@ const NavigationHandler: React.FC<{
                   : role === 'guest'
                     ? <Home />
                     : role === 'PLAYER'
-                      ? <Navigate to="/booking" replace />
+                      ? (isSoftLaunchMode ? <SoftLaunchWelcome userName={userName || undefined} /> : <Navigate to="/booking" replace />)
                       : role === 'ADMIN'
                         ? <Navigate to="/admin" replace />
                         : <Navigate to="/dashboard" replace />
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/welcome" element={<SoftLaunchWelcome userName={userName || undefined} />} />
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
@@ -1009,7 +1012,7 @@ const NavigationHandler: React.FC<{
               <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <Tournaments userRole={role} /> : <Navigate to="/" />} />
               <Route path="/tournaments/:id" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : role !== 'guest' ? <TournamentPage /> : <Navigate to="/" />} />
               <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <FeatureUnavailable featureName="coaches" /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/login" />} />
               <Route path="/groups" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Groups /> : <Navigate to="/" />} />
               <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
               <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
@@ -1112,6 +1115,7 @@ const App: React.FC = () => {
 
   // Maintenance & feature access
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [isSoftLaunchMode, setIsSoftLaunchMode] = useState(false);
   const [maintenanceChecked, setMaintenanceChecked] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('');
   const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set());
@@ -1150,7 +1154,7 @@ const App: React.FC = () => {
           // If session is null here the user genuinely logged out elsewhere — let onAuthStateChange handle it
         });
         getMaintenanceStatus().then(m => {
-          if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); }
+          if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); setIsSoftLaunchMode(m.soft_launch_enabled ?? false); }
         });
         const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
         if (r !== 'guest') {
@@ -1162,7 +1166,7 @@ const App: React.FC = () => {
 
     const pollMaintenance = () => {
       getMaintenanceStatus().then(m => {
-        if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); }
+        if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); setIsSoftLaunchMode(m.soft_launch_enabled ?? false); }
       });
     };
     const pollInterval = setInterval(pollMaintenance, 15000);
@@ -1431,7 +1435,7 @@ const App: React.FC = () => {
         if (isAdmin) { localStorage.setItem('is_actual_admin', 'true'); setIsActualAdmin(true); }
         else { localStorage.removeItem('is_actual_admin'); }
 
-        if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); }
+        if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); setIsSoftLaunchMode(maintenanceResult.soft_launch_enabled ?? false); }
         setMaintenanceChecked(true);
 
         setRole(dbActiveRole);
@@ -1651,8 +1655,8 @@ const App: React.FC = () => {
     const maintenanceSub = supabase
       .channel('maintenance_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance_settings' }, (payload: any) => {
-        const row = payload.new as { enabled: boolean; message: string };
-        if (row && row.enabled !== undefined) { setIsMaintenanceMode(row.enabled); setMaintenanceMessage(row.message || ''); }
+        const row = payload.new as { enabled: boolean; message: string; soft_launch_enabled?: boolean };
+        if (row && row.enabled !== undefined) { setIsMaintenanceMode(row.enabled); setMaintenanceMessage(row.message || ''); setIsSoftLaunchMode(row.soft_launch_enabled ?? false); }
       })
       .subscribe();
     return () => { supabase.removeChannel(maintenanceSub); };
@@ -2196,6 +2200,7 @@ const App: React.FC = () => {
           isMaintenanceMode={isMaintenanceMode}
           maintenanceChecked={maintenanceChecked}
           maintenanceMessage={maintenanceMessage}
+          isSoftLaunchMode={isSoftLaunchMode}
           enabledFeatures={enabledFeatures}
           featuresLoaded={featuresLoaded}
           isActualAdmin={isActualAdmin}

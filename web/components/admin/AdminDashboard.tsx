@@ -67,6 +67,7 @@ import { approveTournament, rejectTournament, featureTournament, mapTournament }
 import {
   getMaintenanceStatus,
   updateMaintenanceStatus,
+  updateSoftLaunchStatus,
   getAllFeatureAccess,
   toggleFeatureAccess,
   setAllFeaturesForRole,
@@ -145,6 +146,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [maintenanceMessage, setMaintenanceMessage] = useState('We are currently performing scheduled maintenance. Please check back shortly.');
   const [maintenanceLastUpdated, setMaintenanceLastUpdated] = useState<string | null>(null);
   const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+  const [softLaunchEnabled, setSoftLaunchEnabled] = useState(false);
+  const [softLaunchSaving, setSoftLaunchSaving] = useState(false);
   const [featureMatrix, setFeatureMatrix] = useState<Record<string, Record<string, boolean>>>({});
   const [featureAccessLoading, setFeatureAccessLoading] = useState(false);
   const [featureToggling, setFeatureToggling] = useState<string | null>(null);
@@ -1344,6 +1347,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
             setMaintenanceLastUpdated={setMaintenanceLastUpdated}
             maintenanceSaving={maintenanceSaving}
             setMaintenanceSaving={setMaintenanceSaving}
+            softLaunchEnabled={softLaunchEnabled}
+            setSoftLaunchEnabled={setSoftLaunchEnabled}
             featureMatrix={featureMatrix}
             setFeatureMatrix={setFeatureMatrix}
             featureAccessLoading={featureAccessLoading}
@@ -1574,6 +1579,152 @@ const SecurityToggle: React.FC<{
   </div>
 );
 
+// Soft Launch Card Component
+const SoftLaunchCard: React.FC<{
+  softLaunchEnabled: boolean;
+  setSoftLaunchEnabled: (v: boolean) => void;
+  logAdminAction: (action: string, targetId: string, targetName: string, details: string, eventType?: 'AUDIT' | 'SECURITY') => Promise<void>;
+}> = ({ softLaunchEnabled, setSoftLaunchEnabled, logAdminAction }) => {
+  const [saving, setSaving] = useState(false);
+
+  const handleToggle = async () => {
+    const newVal = !softLaunchEnabled;
+    setSaving(true);
+    try {
+      const result = await updateSoftLaunchStatus(newVal);
+      if (result.success) {
+        setSoftLaunchEnabled(newVal);
+        await logAdminAction(
+          newVal ? 'SOFT_LAUNCH_ENABLED' : 'SOFT_LAUNCH_DISABLED',
+          'system',
+          'Soft Launch Mode',
+          `Soft launch ${newVal ? 'enabled' : 'disabled'}`,
+          'AUDIT'
+        );
+      } else {
+        alert('Failed to update: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Soft launch toggle error:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[36px] md:rounded-[48px] border border-slate-200/80 shadow-[0_2px_24px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Top accent bar */}
+      <div className={`h-1 transition-colors duration-500 ${softLaunchEnabled ? 'bg-gradient-to-r from-emerald-400 via-lime-400 to-emerald-400' : 'bg-slate-200'}`} />
+
+      <div className="p-6 md:p-10">
+        {/* Header row */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6 md:mb-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+                Soft Launch Mode
+              </h2>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest transition-colors ${
+                softLaunchEnabled
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                  : 'bg-slate-100 text-slate-400 border border-slate-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${softLaunchEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                {softLaunchEnabled ? 'Active' : 'Off'}
+              </span>
+            </div>
+            <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-md">
+              Logged-in players see a welcome page instead of booking — perfect for pre-launch.
+            </p>
+          </div>
+        </div>
+
+        {/* Content grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 md:gap-6">
+          {/* Toggle section */}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Toggle button */}
+            <button
+              onClick={saving ? undefined : handleToggle}
+              disabled={saving}
+              className={`w-full group flex items-center justify-between p-4 md:p-5 rounded-2xl border transition-all duration-300 ${
+                saving
+                  ? 'bg-slate-50 border-slate-100 opacity-60 cursor-wait'
+                  : softLaunchEnabled
+                    ? 'bg-emerald-50/50 border-emerald-200/60 hover:border-emerald-300 hover:shadow-md'
+                    : 'bg-slate-50 border-slate-100 hover:border-slate-200 hover:shadow-md hover:bg-white'
+              }`}
+            >
+              <div className="text-left">
+                <p className="font-extrabold text-slate-900 text-sm tracking-tight">
+                  {saving ? 'Updating...' : softLaunchEnabled ? 'Disable Soft Launch' : 'Enable Soft Launch'}
+                </p>
+                <p className="text-[12px] text-slate-500 font-medium mt-0.5">
+                  {softLaunchEnabled ? 'Players will be redirected to booking as normal' : 'Players will see a welcome page instead of booking'}
+                </p>
+              </div>
+              <div className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 shrink-0 ml-4 ${softLaunchEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${softLaunchEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+            </button>
+
+            {/* What happens explainer */}
+            <div className="bg-slate-50 rounded-2xl p-4 md:p-5 space-y-3">
+              <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">What players will see</p>
+              <div className="space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-sm mt-0.5">🏓</span>
+                  <p className="text-slate-600 text-[13px] leading-relaxed">
+                    {softLaunchEnabled
+                      ? 'A welcome page with your logo, warm greeting, and profile setup prompt'
+                      : 'Normal booking page — players can browse and book courts immediately'
+                    }
+                  </p>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="text-sm mt-0.5">👤</span>
+                  <p className="text-slate-600 text-[13px] leading-relaxed">
+                    {softLaunchEnabled
+                      ? 'Admins, coaches, and court owners are NOT affected — only players'
+                      : 'All roles use their standard landing pages'
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview card */}
+          <div className="lg:col-span-2">
+            <div className="rounded-2xl md:rounded-3xl overflow-hidden border border-slate-200/80 shadow-sm h-full flex flex-col">
+              <div className={`flex-1 p-5 md:p-6 flex flex-col items-center justify-center text-center transition-colors duration-500 ${
+                softLaunchEnabled
+                  ? 'bg-gradient-to-br from-emerald-50/80 to-lime-50/60'
+                  : 'bg-slate-50'
+              }`}>
+                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="h-10 md:h-12 object-contain rounded-lg mb-3" />
+                <p className="text-sm font-extrabold text-slate-900 tracking-tight mb-1">
+                  {softLaunchEnabled ? 'Welcome Page' : 'Booking Page'}
+                </p>
+                <p className="text-[12px] text-slate-500 font-medium leading-relaxed">
+                  {softLaunchEnabled
+                    ? 'Personalized greeting + profile setup'
+                    : 'Standard court booking flow'}
+                </p>
+              </div>
+              <div className="px-4 py-3 bg-white border-t border-slate-100">
+                <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest text-center">
+                  Player landing preview
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // â”€â”€â”€ Website Maintenance & Feature Access Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const MaintenanceTab: React.FC<{
   maintenanceEnabled: boolean;
@@ -1584,6 +1735,8 @@ const MaintenanceTab: React.FC<{
   setMaintenanceLastUpdated: (v: string | null) => void;
   maintenanceSaving: boolean;
   setMaintenanceSaving: (v: boolean) => void;
+  softLaunchEnabled: boolean;
+  setSoftLaunchEnabled: (v: boolean) => void;
   featureMatrix: Record<string, Record<string, boolean>>;
   setFeatureMatrix: (v: Record<string, Record<string, boolean>>) => void;
   featureAccessLoading: boolean;
@@ -1596,6 +1749,7 @@ const MaintenanceTab: React.FC<{
   maintenanceMessage, setMaintenanceMessage,
   maintenanceLastUpdated, setMaintenanceLastUpdated,
   maintenanceSaving, setMaintenanceSaving,
+  softLaunchEnabled, setSoftLaunchEnabled,
   featureMatrix, setFeatureMatrix,
   featureAccessLoading, setFeatureAccessLoading,
   featureToggling, setFeatureToggling,
@@ -1638,6 +1792,7 @@ const MaintenanceTab: React.FC<{
         setMaintenanceEnabled(maint.enabled);
         setMaintenanceMessage(maint.message || '');
         setMaintenanceLastUpdated(maint.updated_at);
+        setSoftLaunchEnabled(maint.soft_launch_enabled ?? false);
       }
       setFeatureMatrix(buildAccessMatrix(access));
     } catch (err) {
@@ -1930,6 +2085,13 @@ const MaintenanceTab: React.FC<{
           </div>
         </div>
       </div>
+
+      {/* Soft Launch Card */}
+      <SoftLaunchCard
+        softLaunchEnabled={softLaunchEnabled}
+        setSoftLaunchEnabled={setSoftLaunchEnabled}
+        logAdminAction={logAdminAction}
+      />
 
       {/* â”€â”€ Role-Based Feature Access Matrix â”€â”€ */}
       <div className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-200 shadow-sm">

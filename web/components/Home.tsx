@@ -23,10 +23,7 @@ import {
   GraduationCap,
   Play,
   Facebook,
-  Instagram,
-  Twitter,
   Mail,
-  Phone,
   Calendar,
   X,
   Clock
@@ -72,18 +69,18 @@ const POPULAR_PLACES = [
   "Bacolod", "Dumaguete", "Pasig", "Angeles City"
 ];
 
-const FAQ_ITEMS = [
+const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
   {
     question: "What is Pickleplay?",
     answer: "Pickleplay is the premier digital platform for the Philippine pickleball community, connecting players, coaches, and court owners. We provide a seamless ecosystem for booking courts, finding coaches, joining tournaments, and staying updated with the latest news."
   },
   {
     question: "I'm a new pickleball player. How do I get started?",
-    answer: "Getting started is easy! We recommend checking out our 'How to Play' guides in the Academy section and finding a local coach or clinic through our platform. You can also use our court locator to find 'dink spots' near you where beginners are always welcome."
+    answer: <>Getting started is easy! We recommend checking out our 'How to Play' guides in the Academy section and finding a local coach or clinic through our platform. You can also use our <Link to="/booking" className="text-blue-600 font-bold hover:underline">Court Locator</Link> to find 'dink spots' near you where beginners are always welcome.</>
   },
   {
     question: "How do I book a court?",
-    answer: "Simply use our 'Locate' search on the homepage or head to the 'Booking' page. You can filter by region (Luzon, Visayas, Mindanao) or city, view available time slots, and book your court in just a few clicks."
+    answer: <>Simply use our '<a href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-blue-600 font-bold hover:underline cursor-pointer">LOCATE</a>' search on the homepage or head to the '<Link to="/booking" className="text-blue-600 font-bold hover:underline">BOOKING</Link>' page. You can filter by region (Luzon, Visayas, Mindanao) or city, view available time slots, and book your court in just a few clicks.</>
   },
   {
     question: "Can I host my own tournaments?",
@@ -91,7 +88,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "What equipment do I need?",
-    answer: "To start playing, you'll need a pickleball paddle, some pickleballs (indoor or outdoor depending on the court), and standard court shoes. Many venues also offer equipment rentals. Check out our 'Pro Shop' for high-quality gear curated for PH players."
+    answer: <>To start playing, you'll need a pickleball paddle, some pickleballs (indoor or outdoor depending on the court), and standard court shoes. Many venues also offer equipment rentals. Check out our '<Link to="/shop" className="text-blue-600 font-bold hover:underline">PRO SHOP</Link>' for high-quality gear curated for PH players.</>
   }
 ];
 
@@ -826,13 +823,13 @@ const Home: React.FC = () => {
         {/* Overlapping player faces and user count - Desktop: Corner positioning, Mobile: Hidden (moved below title) */}
         <div className="hidden md:flex absolute left-6 md:left-12 lg:left-24 bottom-8 md:bottom-14 z-40 items-center gap-3 select-none">
           <div className="flex -space-x-4">
-            {playerFaces.map((face, idx) => (
+            {playerFaces.slice(0, 3).map((face, idx) => (
               <img
                 key={idx}
                 src={face}
                 alt={`Player ${idx + 1}`}
                 className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white shadow-md object-cover"
-                style={{ zIndex: playerFaces.length - idx }}
+                style={{ zIndex: 3 - idx }}
               />
             ))}
           </div>
@@ -872,13 +869,13 @@ const Home: React.FC = () => {
           {/* Mobile-only Player Badge */}
           <div className="flex md:hidden items-center gap-3 mb-6 animate-slide-up">
             <div className="flex -space-x-3">
-              {playerFaces.map((face, idx) => (
+              {playerFaces.slice(0, 3).map((face, idx) => (
                 <img
                   key={idx}
                   src={face}
                   alt={`Player ${idx + 1}`}
                   className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
-                  style={{ zIndex: playerFaces.length - idx }}
+                  style={{ zIndex: 3 - idx }}
                 />
               ))}
             </div>
@@ -891,9 +888,9 @@ const Home: React.FC = () => {
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
           <div className="flex flex-wrap justify-center gap-6 animate-fade-in-up opacity-0 delay-300 w-full px-4">
-            <form onSubmit={handleSearch} className="relative group w-full max-w-2xl">
-              <div className="relative flex items-center bg-white/15 border border-white/30 backdrop-blur-xl rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
-                <Search className="ml-3 md:ml-6 text-white/50" size={18} />
+            <form onSubmit={handleSearch} className="relative group w-full max-w-4xl">
+              <div className="relative flex items-center bg-white border border-slate-200 rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
+                <Search className="ml-3 md:ml-6 text-slate-400" size={18} />
                 <input
                   type="text"
                   placeholder="Find courts..."
@@ -904,13 +901,13 @@ const Home: React.FC = () => {
                     getUserLocation();
                   }}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="flex-1 min-w-0 bg-transparent border-none text-white px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-white/40"
+                  className="flex-1 min-w-0 bg-transparent border-none text-slate-900 px-2 md:px-6 text-base md:text-xl font-medium outline-none placeholder:text-slate-400"
                 />
                 <button
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white h-11 md:h-12 px-4 md:px-10 rounded-full font-black flex items-center justify-center transition-all active:scale-95 whitespace-nowrap text-xs md:text-lg flex-shrink-0"
                 >
-                  FIND
+                  LOCATE
                 </button>
               </div>
 
@@ -1114,20 +1111,14 @@ const Home: React.FC = () => {
                           />
                           {/* Price Badge on Image */}
                           <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                            {item.has_free && (
-                              <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
-                                <span className="text-xs font-black text-white uppercase">Free</span>
-                              </div>
-                            )}
-                            {(item.max_price || 0) > 0 && (
+                            {(item.max_price || 0) > 0 ? (
                               <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
                                 <span className="text-lg font-black text-slate-900">₱{(item.min_price || 0) > 0 ? item.min_price : item.max_price}{(item.min_price || 0) > 0 && item.min_price !== item.max_price ? `-${item.max_price}` : ''}</span>
                                 <span className="text-xs font-semibold text-slate-500">/hr</span>
                               </div>
-                            )}
-                            {!item.has_free && (item.max_price || 0) === 0 && (
-                              <div className="bg-emerald-500 px-2.5 py-1.5 rounded-full shadow-lg">
-                                <span className="text-lg font-black text-white">FREE</span>
+                            ) : (
+                              <div className="bg-[#a3e635] backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
+                                <span className="text-lg font-black text-slate-900">FREE</span>
                               </div>
                             )}
                           </div>
@@ -1198,9 +1189,7 @@ const Home: React.FC = () => {
                               </svg>
                               <span className="text-[11px] font-bold text-slate-600 truncate">
                                 {Array.isArray(item.amenities) && item.amenities.length > 0
-                                  ? (item.amenities.length <= 2
-                                    ? item.amenities.join(', ')
-                                    : `${item.amenities.length} Amenities`)
+                                  ? item.amenities.join(', ')
                                   : 'No Amenities'
                                 }
                               </span>
@@ -1210,11 +1199,8 @@ const Home: React.FC = () => {
                           {/* Book Button */}
                           <Link
                             to={`/booking?locationId=${item.id}&lat=${item.latitude}&lng=${item.longitude}&zoom=14&loc=${encodeURIComponent(item.city)}`}
-                            className="flex items-center justify-center gap-2 w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95 mt-auto"
+                            className="flex items-center justify-center w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-xl text-sm px-4 py-2.5 transition-all active:scale-95 mt-auto"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
                             Book Now
                           </Link>
                         </div>
@@ -1600,99 +1586,61 @@ const Home: React.FC = () => {
         </div>
       </section >
 
-      {/* Marquee */}
-      <div className="bg-slate-950 py-3 md:py-4 border-y border-white/10 overflow-hidden relative animate-fade-in opacity-0 delay-300">
-        <div className="animate-marquee whitespace-nowrap flex items-center gap-12 md:gap-24">
-          {[...PARTNERS, ...PARTNERS].map((partner, i) => (
-            <span key={i} className="text-white/5 font-black text-4xl md:text-6xl tracking-tighter italic select-none uppercase">{partner}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* FAQ Section */}
-      <section id="faq" className="py-12 md:py-32 bg-slate-50 px-4 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0 delay-400">
-        <div className="max-w-4xl mx-auto">
-          {/* Section Header */}
-          <div className="text-center mb-8 md:mb-16 animate-fade-in-up opacity-0">
-            <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase mb-3 md:mb-4">
-              Frequently Asked Questions
-            </h2>
-            <p className="text-slate-600 text-sm md:text-base font-medium max-w-2xl mx-auto leading-relaxed">
-              Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
-            </p>
-          </div>
-
-          {/* Accordion List */}
-          <div className="space-y-3 md:space-y-4">
-            {FAQ_ITEMS.map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-white border-2 border-slate-100 rounded-2xl md:rounded-3xl overflow-hidden shadow-sm transition-all duration-300"
-              >
-                <button
-                  onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
-                  className="w-full text-left px-4 py-4 md:px-6 md:py-5 flex items-center justify-between gap-3 group"
-                >
-                  <span className="text-base md:text-lg font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
-                    {item.question}
-                  </span>
-                  <div className={`w-8 h-8 md:w-10 md:h-10 flex-shrink-0 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
-                    <Plus size={activeFaqIndex === idx ? 18 : 14} className="md:w-5 md:h-5 transition-transform" />
-                  </div>
-                </button>
-                <div
-                  className={`transition-all duration-500 ease-in-out border-t border-slate-50 ${activeFaqIndex === idx ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}
-                >
-                  <div className="px-4 py-4 md:px-8 md:py-6 text-slate-500 text-sm md:text-base font-medium leading-relaxed bg-slate-50/50">
-                    {item.answer}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-
-
-
-      {/* Final CTA */}
-      <section className="bg-slate-900 py-20 md:py-32 relative overflow-hidden animate-fade-in opacity-0 delay-500">
-        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32 text-center relative z-10">
-          <div className="absolute top-0 right-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-blue-600/20 blur-[120px]"></div>
-          <div className="absolute bottom-0 left-0 w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-lime-400/10 blur-[120px]"></div>
-          <div className="relative z-10 space-y-8 md:space-y-10 animate-fade-in-up opacity-0">
+      {/* Final CTA / Download Section */}
+      <section className="py-20 md:py-32 relative overflow-hidden animate-fade-in opacity-0 delay-500" style={{ backgroundColor: '#03091F', boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25)' }}>
+        {/* Lime green gradient – full section, behind image */}
+        <div
+          className="absolute inset-0 z-[1] pointer-events-none"
+          style={{
+            background: 'linear-gradient(359.7deg, #93DC25 -266.77%, rgba(124, 207, 0, 0) 99.75%)',
+          }}
+        />
+        {/* Desktop-only: Phone mockup image on the right – flush to bottom, in front of gradient */}
+        <img
+          src="/images/DOWNLOAD APP.png"
+          alt="PicklePlay App Preview"
+          className="hidden lg:block absolute z-[2] pointer-events-none object-contain object-bottom"
+          style={{
+            width: '44%',
+            height: '100%',
+            right: '2%',
+            bottom: '0',
+          }}
+        />
+        <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32 text-center lg:text-left relative z-10">
+          <div className="relative z-10 space-y-6 md:space-y-8 animate-fade-in-up opacity-0 lg:max-w-[50%]">
             <h2 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">READY TO <br /><span className="text-lime-400 italic">DOMINATE PH?</span></h2>
-            <div className="flex flex-col items-center gap-8 md:gap-12">
+            <div className="flex flex-col items-center lg:items-start gap-6 md:gap-8">
               <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-14 md:h-20 px-8 md:px-14 rounded-2xl md:rounded-[28px] font-black text-base md:text-lg uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-lime-400/20 group flex items-center gap-4">
                 JOIN PH NETWORK
                 <ArrowRight className="group-hover:translate-x-2 transition-transform" />
               </button>
 
-              <div className="space-y-8">
-                <div className="flex flex-wrap gap-4 justify-center">
-                  <a href="#" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 text-white px-8 py-5 rounded-[24px] transition-all hover:-translate-y-1 active:scale-95 group text-left">
-                    <svg className="w-8 h-8 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+              <div className="space-y-5">
+                <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+                  <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 text-white/50 px-8 py-5 rounded-[24px] opacity-60 cursor-not-allowed text-left relative">
+                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
                     </svg>
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Available on</span>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Available Soon</span>
                       <span className="text-lg font-black tracking-tight -mt-0.5">App Store</span>
                     </div>
-                  </a>
-                  <a href="#" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 text-white px-8 py-5 rounded-[24px] transition-all hover:-translate-y-1 active:scale-95 group text-left">
-                    <svg className="w-8 h-8 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
+                  </div>
+                  <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 text-white/50 px-8 py-5 rounded-[24px] opacity-60 cursor-not-allowed text-left relative">
+                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198l2.807 1.626a1 1 0 010 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658L16.802 8.99l-2.303 2.303-8.635-8.635z" />
                     </svg>
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Get it on</span>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Available Soon</span>
                       <span className="text-lg font-black tracking-tight -mt-0.5">Google Play</span>
                     </div>
-                  </a>
+                  </div>
                 </div>
-                <div className="pt-8 border-t border-white/5">
-                  <p className="text-white text-sm font-black uppercase tracking-[0.2em]">Join 2,500+ PH Players</p>
+                <div className="pt-5 border-t border-white/5">
+                  <p className="text-white text-sm font-black uppercase tracking-[0.2em]">Join {totalUsers.toLocaleString()}+ PH Players</p>
                   <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Early access registration open</p>
+                  <p className="text-slate-400 text-xs font-medium mt-3 max-w-md mx-auto md:mx-0 leading-relaxed">Our mobile app is currently in development. In the meantime, enjoy the full PicklePlay experience right here on our website!</p>
                 </div>
               </div>
             </div>
@@ -1700,78 +1648,243 @@ const Home: React.FC = () => {
         </div>
       </section >
 
-      <footer className="py-10 md:py-24 px-6 md:px-24 lg:px-32 border-t border-slate-100 bg-white animate-fade-in opacity-0 delay-700">
+      {/* FAQ Section */}
+      <section id="faq" className="bg-[#F8FAFC] relative overflow-hidden animate-fade-in opacity-0 delay-400">
+        {/* ── MOBILE / TABLET LAYOUT ── */}
+        <div className="lg:hidden py-12 px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8 animate-fade-in-up opacity-0">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase mb-3">
+                Frequently Asked Questions
+              </h2>
+              <p className="text-slate-600 text-sm font-medium max-w-2xl mx-auto leading-relaxed">
+                Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {FAQ_ITEMS.map((item, idx) => (
+                <div key={idx} className="bg-white border-2 border-slate-100 rounded-2xl overflow-hidden shadow-sm transition-all duration-300">
+                  <button
+                    onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
+                    className="w-full text-left px-4 py-4 flex items-center justify-between gap-3 group"
+                  >
+                    <span className="text-base font-black text-slate-900 tracking-tight transition-colors group-hover:text-blue-600">
+                      {item.question}
+                    </span>
+                    <div className={`w-8 h-8 flex-shrink-0 rounded-full border-2 border-slate-100 flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-blue-600 border-blue-600 text-white rotate-45' : 'bg-white text-blue-500 group-hover:border-blue-200'}`}>
+                      <Plus size={activeFaqIndex === idx ? 18 : 14} className="transition-transform" />
+                    </div>
+                  </button>
+                  <div className={`transition-all duration-500 ease-in-out border-t border-slate-50 ${activeFaqIndex === idx ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+                    <div className="px-4 py-4 text-slate-500 text-sm font-medium leading-relaxed bg-slate-50/50">
+                      {item.answer}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── DESKTOP LAYOUT – exact Figma positioning ── */}
+        <div className="hidden lg:block relative max-w-[1920px] mx-auto" style={{ height: '1163px' }}>
+          {/* Left: Image group — absolutely positioned, never moves */}
+          <div
+            className="absolute z-10 pointer-events-none"
+            style={{
+              left: '0',
+              top: '0',
+              width: '59.3%',   /* 1139/1920 */
+              height: '100%',
+            }}
+          >
+            {/* Lime green rectangle – top card */}
+            <div
+              className="absolute"
+              style={{
+                left: '23.56%',   /* 268.32/1139 */
+                top: '11.95%',    /* (4765-4626)/1163 ≈ 139/1163 but relative to group: 139/1139 */
+                width: '50.97%',  /* 580.51/1139 */
+                height: '43.71%', /* 497.89/1139 */
+                background: 'rgba(199, 255, 20, 0.5)',
+                borderRadius: '25px 25px 0px 0px',
+              }}
+            />
+            {/* Blue rectangle – bottom card */}
+            <div
+              className="absolute"
+              style={{
+                left: '23.56%',
+                top: '55.92%',    /* 636.89/1139 */
+                width: '50.97%',
+                height: '41.39%', /* 471.4/1139 */
+                background: 'rgba(0, 79, 255, 0.63)',
+                boxShadow: 'inset 0px 4px 4px rgba(0, 0, 0, 0.25)',
+                borderRadius: '25px',
+              }}
+            />
+            {/* FAQ Image – fills the entire 1139×1139 group */}
+            <img
+              src="/images/FAQ.png"
+              alt="Pickleball Players"
+              className="absolute inset-0 w-full h-full"
+              style={{
+                objectFit: 'contain',
+                objectPosition: 'bottom center',
+                filter: 'drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.25))',
+              }}
+            />
+          </div>
+
+          {/* Right: Title + Description + Accordion — positioned per Figma coords */}
+          <div
+            className="absolute"
+            style={{
+              left: '49.2%',    /* 945/1920 */
+              right: '3%',
+              top: '0',
+              height: '100%',
+            }}
+          >
+            {/* FREQUENTLY — top: (4834-4665)/1163 ≈ 14.5% */}
+            <h2
+              className="absolute font-black uppercase tracking-tighter text-center w-full"
+              style={{ top: '14.5%', left: '0', right: '0' }}
+            >
+              <span className="block text-[#9AE600]" style={{ fontSize: 'clamp(60px, 6.67vw, 128px)', lineHeight: '1.2' }}>
+                FREQUENTLY
+              </span>
+            </h2>
+
+            {/* ASKED QUESTIONS — top: (4958-4665)/1163 ≈ 25.2% */}
+            <h2
+              className="absolute font-black uppercase tracking-tighter text-center w-full"
+              style={{ top: '25.2%', left: '0', right: '0' }}
+            >
+              <span className="block text-[#0A57A7]" style={{ fontSize: 'clamp(40px, 4.17vw, 80px)', lineHeight: '1.2' }}>
+                ASKED QUESTIONS
+              </span>
+            </h2>
+
+            {/* Description — top: (5072-4665)/1163 ≈ 35% */}
+            <p
+              className="absolute text-[#0A57A7] font-bold text-center"
+              style={{
+                top: '35%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '90%',
+                maxWidth: '693px',
+                fontSize: 'clamp(14px, 1.04vw, 20px)',
+                lineHeight: '1.2',
+              }}
+            >
+              Pickleplay makes it easy to play more pickleball, whether you're finding your first game or running your own events. Here are answers to the questions we hear most from players and organizers.
+            </p>
+
+            {/* Accordion — starts at top: (5219-4665)/1163 ≈ 47.6% */}
+            <div
+              className="absolute"
+              style={{
+                top: '47.6%',
+                left: '0',
+                right: '0',
+                maxWidth: '760px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+            >
+              <div className="space-y-[22px]">
+                {FAQ_ITEMS.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-[20px] overflow-hidden"
+                    style={{ background: '#D9D9D9', backdropFilter: 'blur(2px)' }}
+                  >
+                    <button
+                      onClick={() => setActiveFaqIndex(activeFaqIndex === idx ? null : idx)}
+                      className="w-full text-left px-6 flex items-center justify-between gap-4 group"
+                      style={{ height: '70px' }}
+                    >
+                      <span className="text-base lg:text-lg font-black text-slate-900 tracking-tight transition-colors group-hover:text-[#155DFC]">
+                        {item.question}
+                      </span>
+                      <div className={`w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center transition-all duration-300 ${activeFaqIndex === idx ? 'bg-[#155DFC] text-white rotate-45' : 'bg-white/60 text-[#155DFC] group-hover:bg-white'}`}>
+                        <Plus size={18} className="transition-transform" />
+                      </div>
+                    </button>
+                    <div className={`transition-all duration-500 ease-in-out overflow-hidden ${activeFaqIndex === idx ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                      <div className="px-6 pb-4 pt-1 text-slate-700 text-sm lg:text-base font-medium leading-relaxed">
+                        {item.answer}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="py-8 md:py-14 px-6 md:px-24 lg:px-32 border-t border-blue-800 animate-fade-in opacity-0 delay-700" style={{ backgroundColor: '#0A57A7' }}>
         <div className="max-w-[1800px] mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-16 mb-10 md:mb-20 animate-fade-in-up opacity-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 mb-8 md:mb-12 animate-fade-in-up opacity-0">
             {/* Brand Section */}
-            <div className="space-y-3 md:space-y-6">
-              <div className="flex items-center gap-2 md:gap-3 text-slate-950 font-black text-xl md:text-2xl tracking-tighter uppercase">
-                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-8 h-8 md:w-10 md:h-10 object-contain rounded-xl" />
+            <div className="space-y-3 md:space-y-4">
+              <div className="flex items-center gap-2 md:gap-3 text-white font-black text-xl md:text-2xl tracking-tighter uppercase">
+                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-10 h-10 md:w-14 md:h-14 object-contain rounded-xl shadow-lg shadow-white/20 ring-2 ring-white/30" />
                 <div className="flex flex-col leading-none">
-                  <span className="text-xl md:text-2xl">PICKLEPLAY</span>
-                  <span className="text-xs md:text-sm tracking-wider text-blue-600">PHILIPPINES</span>
+                  <span className="text-xl md:text-2xl text-white">PICKLEPLAY</span>
+                  <span className="text-xs md:text-sm tracking-wider text-lime-400 font-black">PHILIPPINES</span>
                 </div>
               </div>
-              <p className="text-slate-500 text-xs md:text-sm leading-relaxed max-w-xs font-medium">
+              <p className="text-blue-100/70 text-xs md:text-sm leading-relaxed max-w-xs font-medium">
                 The premier destination for the Philippine pickleball community. Join the movement, find your squad, and dominate the court.
               </p>
               <div className="flex gap-3 md:gap-4 pt-1 md:pt-2">
-                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                <a href="https://www.facebook.com/pickleplayofficial" target="_blank" rel="noopener noreferrer" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-white/10 flex items-center justify-center text-white/70 hover:bg-white hover:text-[#0A57A7] transition-all">
                   <Facebook size={16} className="md:w-[18px] md:h-[18px]" />
-                </a>
-                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                  <Instagram size={16} className="md:w-[18px] md:h-[18px]" />
-                </a>
-                <a href="#" className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                  <Twitter size={16} className="md:w-[18px] md:h-[18px]" />
                 </a>
               </div>
             </div>
 
             {/* Quick Links */}
             <div>
-              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Platform</h4>
-              <ul className="space-y-2 md:space-y-4">
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Booking System</a></li>
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Academy Classes</a></li>
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Community Hub</a></li>
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Pro Shop</a></li>
+              <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest mb-4 md:mb-6">Platform</h4>
+              <ul className="space-y-2 md:space-y-3">
+                <li><Link to="/booking" className="text-xs md:text-sm font-bold text-blue-100/70 hover:text-lime-400 transition-colors">Booking System</Link></li>
+                <li><Link to="/community" className="text-xs md:text-sm font-bold text-blue-100/70 hover:text-lime-400 transition-colors">Community Hub</Link></li>
+                <li><Link to="/shop" className="text-xs md:text-sm font-bold text-blue-100/70 hover:text-lime-400 transition-colors">Pro Shop</Link></li>
               </ul>
             </div>
 
             {/* Legal Section */}
             <div>
-              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Legal & Policy</h4>
-              <ul className="space-y-2 md:space-y-4">
-                <li><a href="/policy" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Privacy Policy</a></li>
-                <li><a href="/terms" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">PH Partners Agreement</a></li>
-                <li><a href="#" className="text-xs md:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">Cookie Settings</a></li>
+              <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest mb-4 md:mb-6">Legal & Policy</h4>
+              <ul className="space-y-2 md:space-y-3">
+                <li><a href="/policy" className="text-xs md:text-sm font-bold text-blue-100/70 hover:text-lime-400 transition-colors">Privacy Policy</a></li>
+                <li><a href="/terms" className="text-xs md:text-sm font-bold text-blue-100/70 hover:text-lime-400 transition-colors">Terms of Service</a></li>
               </ul>
             </div>
 
             {/* Contact Section */}
             <div>
-              <h4 className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase tracking-widest mb-4 md:mb-8">Contact Us</h4>
-              <ul className="space-y-2 md:space-y-4">
+              <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest mb-4 md:mb-6">Contact Us</h4>
+              <ul className="space-y-2 md:space-y-3">
                 <li className="flex items-start gap-2 md:gap-3">
-                  <MapPin size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0 mt-0.5" />
-                  <span className="text-xs md:text-sm font-bold text-slate-500">Cebu City, Philippines</span>
+                  <MapPin size={14} className="md:w-[18px] md:h-[18px] text-lime-400 shrink-0 mt-0.5" />
+                  <span className="text-xs md:text-sm font-bold text-blue-100/70">Cebu City, Philippines</span>
                 </li>
                 <li className="flex items-center gap-2 md:gap-3">
-                  <Mail size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0" />
-                  <span className="text-xs md:text-sm font-bold text-slate-500">hello@pickleballph.com</span>
-                </li>
-                <li className="flex items-center gap-2 md:gap-3">
-                  <Phone size={14} className="md:w-[18px] md:h-[18px] text-blue-600 shrink-0" />
-                  <span className="text-xs md:text-sm font-bold text-slate-500">+63 (2) 123 4567</span>
+                  <Mail size={14} className="md:w-[18px] md:h-[18px] text-lime-400 shrink-0" />
+                  <span className="text-xs md:text-sm font-bold text-blue-100/70">phpickleplay@gmail.com</span>
                 </li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-6 md:pt-10 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6">
-            <p className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em]">
+          <div className="pt-4 md:pt-6 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4">
+            <p className="text-[9px] md:text-[10px] text-blue-200/50 font-black uppercase tracking-[0.2em] md:tracking-[0.3em]">
               © 2026 PICKLEBALL PHILIPPINES LTD. ALL RIGHTS RESERVED.
             </p>
           </div>
