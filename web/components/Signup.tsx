@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { canAttemptSignup } from '../services/rateLimiter';
 import {
     Eye,
     EyeOff,
@@ -195,14 +196,22 @@ const Signup: React.FC = () => {
         setError(null);
         try {
             const referralCode = searchParams.get('ref');
+            const referralType = searchParams.get('type');
             if (referralCode) localStorage.setItem('referral_code', referralCode);
+            if (referralType === 'court-owner') localStorage.setItem('referral_type', 'court-owner');
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
             localStorage.setItem('terms_accepted_at', new Date().toISOString());
-            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-            const callbackUrl = referralCode
+            const appUrl = 'https://www.pickleplay.ph';
+            let callbackUrl = referralCode
                 ? `${appUrl}/auth/callback?ref=${referralCode}`
                 : `${appUrl}/auth/callback`;
-            const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
+            if (referralType === 'court-owner') callbackUrl += `${callbackUrl.includes('?') ? '&' : '?'}type=court-owner`;
+            const oauthOptions: any = { redirectTo: callbackUrl };
+            // Force Facebook to request email permission
+            if (provider === 'facebook') {
+                oauthOptions.scopes = 'email';
+            }
+            const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: oauthOptions });
             if (authError) throw authError;
         } catch (err: any) {
             setError(err.message || `Failed to sign in with ${provider}.`);
@@ -215,10 +224,17 @@ const Signup: React.FC = () => {
         if (!agreedToTerms) { setError('You must agree to the Terms & Conditions before signing up.'); return; }
         if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
         if (password.length < 8) { setError('Password must be at least 8 characters long.'); return; }
+        if (!canAttemptSignup()) {
+            setError('Too many signup attempts. Please wait a few minutes before trying again.');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
             const referralCode = searchParams.get('ref');
+            const referralType = searchParams.get('type');
+            if (referralCode) localStorage.setItem('referral_code', referralCode);
+            if (referralType === 'court-owner') localStorage.setItem('referral_type', 'court-owner');
 
             const { data, error: authError } = await supabase.auth.signUp({
                 email, password,
@@ -286,7 +302,7 @@ const Signup: React.FC = () => {
     const handleSendResetEmail = async () => {
         setSendingReset(true);
         try {
-            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+            const appUrl = 'https://www.pickleplay.ph';
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: `${appUrl}/login`,
             });

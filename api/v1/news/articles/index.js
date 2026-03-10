@@ -1,4 +1,31 @@
+// ── Simple in-memory rate limiter for serverless ──
+const ipHits = new Map();
+const RATE_WINDOW = 60_000; // 1 minute
+const RATE_MAX = 30;        // 30 requests per minute per IP
+
+function isRateLimited(ip) {
+    const now = Date.now();
+    const entry = ipHits.get(ip);
+    if (!entry || now - entry.start > RATE_WINDOW) {
+        ipHits.set(ip, { start: now, count: 1 });
+        return false;
+    }
+    entry.count++;
+    return entry.count > RATE_MAX;
+}
+
 export default async function handler(req, res) {
+    // Only allow GET
+    if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // Rate limit by IP
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    if (isRateLimited(clientIp)) {
+        return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+
     const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
     const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 

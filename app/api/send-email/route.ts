@@ -3,7 +3,43 @@ import type { NextRequest } from 'next/server';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ── Simple in-memory rate limiter ──
+const ipHits = new Map<string, { start: number; count: number }>();
+const RATE_WINDOW = 60_000; // 1 minute
+const RATE_MAX = 5;         // 5 emails per minute per IP
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const entry = ipHits.get(ip);
+    if (!entry || now - entry.start > RATE_WINDOW) {
+        ipHits.set(ip, { start: now, count: 1 });
+        return false;
+    }
+    entry.count++;
+    return entry.count > RATE_MAX;
+}
+
+const ALLOWED_ORIGINS = [
+    'https://www.pickleplay.ph',
+    'https://pickleplay.ph',
+    'https://pickleplay.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+];
+
 export async function POST(request: NextRequest) {
+  // CORS origin check
+  const origin = request.headers.get('origin') || '';
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // Rate limit by IP
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (isRateLimited(clientIp)) {
+      return Response.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });
+  }
+
   try {
     const { email, subject, code } = await request.json();
 

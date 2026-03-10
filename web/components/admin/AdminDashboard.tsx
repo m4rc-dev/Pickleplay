@@ -1702,7 +1702,7 @@ const SoftLaunchCard: React.FC<{
                   ? 'bg-gradient-to-br from-emerald-50/80 to-lime-50/60'
                   : 'bg-slate-50'
               }`}>
-                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="h-10 md:h-12 object-contain rounded-lg mb-3" />
+                <img src="/images/PLAYER_001.png" alt="PicklePlay Player" className="h-24 md:h-32 object-contain mb-3" />
                 <p className="text-sm font-extrabold text-slate-900 tracking-tight mb-1">
                   {softLaunchEnabled ? 'Welcome Page' : 'Booking Page'}
                 </p>
@@ -1726,6 +1726,8 @@ const SoftLaunchCard: React.FC<{
 };
 
 // â”€â”€â”€ Website Maintenance & Feature Access Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
 const MaintenanceTab: React.FC<{
   maintenanceEnabled: boolean;
   setMaintenanceEnabled: (v: boolean) => void;

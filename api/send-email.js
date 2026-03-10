@@ -2,10 +2,49 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ── Simple in-memory rate limiter for serverless ──
+const ipHits = new Map();
+const RATE_WINDOW = 60_000; // 1 minute
+const RATE_MAX = 5;         // 5 emails per minute per IP
+
+function isRateLimited(ip) {
+    const now = Date.now();
+    const entry = ipHits.get(ip);
+    if (!entry || now - entry.start > RATE_WINDOW) {
+        ipHits.set(ip, { start: now, count: 1 });
+        return false;
+    }
+    entry.count++;
+    return entry.count > RATE_MAX;
+}
+
+const ALLOWED_ORIGINS = [
+    'https://www.pickleplay.ph',
+    'https://pickleplay.ph',
+    'https://pickleplay.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+];
+
 export default async function handler(req, res) {
+    // CORS check
+    const origin = req.headers.origin || '';
+    if (ALLOWED_ORIGINS.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+
     // Only allow POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // Rate limit by IP
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    if (isRateLimited(clientIp)) {
+        return res.status(429).json({ error: 'Too many requests. Please wait a moment.' });
     }
 
     try {

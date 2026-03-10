@@ -676,7 +676,7 @@ const NavigationHandler: React.FC<{
                     const nextRole: UserRole = role === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER';
                     await handleRoleSwitch(nextRole);
                     // Navigation is handled via state change/Navigate in Routes or explicitly here
-                    if (nextRole === 'PLAYER') navigate('/booking');
+                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : '/booking');
                     else navigate('/dashboard');
                   }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
@@ -727,7 +727,7 @@ const NavigationHandler: React.FC<{
                             onClick={async () => {
                               await handleRoleSwitch('PLAYER');
                               setIsRoleDropdownOpen(false);
-                              navigate('/booking');
+                              navigate(isSoftLaunchMode ? '/' : '/booking');
                             }}
                             className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === 'PLAYER'
                               ? 'bg-lime-400 text-slate-900'
@@ -772,7 +772,7 @@ const NavigationHandler: React.FC<{
                   <button onClick={async () => {
                     const nextRole: UserRole = role === 'PLAYER' ? 'COACH' : 'PLAYER';
                     await handleRoleSwitch(nextRole);
-                    if (nextRole === 'PLAYER') navigate('/booking');
+                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : '/booking');
                     else navigate('/dashboard');
                   }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
@@ -1261,6 +1261,25 @@ const App: React.FC = () => {
               // console.log('🎉 Successfully linked referral!');
               // console.log('🎉 Points should be awarded by database trigger');
               localStorage.removeItem('referral_code');
+
+              // If this is a court-owner referral, award bonus points to the referrer
+              const pendingRefType = localStorage.getItem('referral_type');
+              if (pendingRefType === 'court-owner') {
+                // Award 25 bonus points for court owner referral
+                const { data: referrerProfile } = await supabase
+                  .from('profiles')
+                  .select('points')
+                  .eq('id', referrer.id)
+                  .single();
+                if (referrerProfile) {
+                  await supabase
+                    .from('profiles')
+                    .update({ points: (referrerProfile.points || 0) + 25 })
+                    .eq('id', referrer.id);
+                }
+                // Keep referral_type in localStorage — Dashboard will read it to auto-open modal
+              }
+
               // console.log('✅ Removed referral_code from localStorage');
             } else {
               console.error('❌ Failed to link referral:', linkError);
@@ -1334,6 +1353,13 @@ const App: React.FC = () => {
           dbRoles = (profileRes.data.roles as UserRole[]) || ['PLAYER'];
           consolidatedRoles = [...dbRoles];
         } else if (session.user) {
+          // Block profile creation for users without an email (e.g. anonymous auth or Facebook without email)
+          if (!session.user.email) {
+            console.warn('⚠️ No email on authenticated user — skipping profile creation. Signing out.');
+            await supabase.auth.signOut();
+            setRole('guest');
+            return;
+          }
           // Fallback: Create profile if missing
           const baseUsername = ((session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'player') as string)
             .toLowerCase()
