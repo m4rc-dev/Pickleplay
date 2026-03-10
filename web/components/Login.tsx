@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase, createSession, getSecuritySettings } from '../services/supabase';
+import { canAttemptLogin, canRequestPasswordReset } from '../services/rateLimiter';
 import {
     Eye,
     EyeOff,
@@ -40,6 +41,11 @@ const Login: React.FC = () => {
         const emailParam = searchParams.get('email');
         if (emailParam && !email) {
             setEmail(decodeURIComponent(emailParam));
+        }
+        // Show error if redirected from OAuth without email
+        const errorParam = searchParams.get('error');
+        if (errorParam === 'email_required') {
+            setError('Your social account does not have a verified email address. Please sign up with an email and password instead, or use a social account that has an email.');
         }
     }, []);
     const redirectUrl = searchParams.get('redirect') || '/';
@@ -82,11 +88,16 @@ const Login: React.FC = () => {
             const referralCode = searchParams.get('ref');
             if (referralCode) localStorage.setItem('referral_code', referralCode);
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
-            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+            const appUrl = 'https://www.pickleplay.ph';
             const callbackUrl = referralCode
                 ? `${appUrl}/auth/callback?ref=${referralCode}`
                 : `${appUrl}/auth/callback`;
-            const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: callbackUrl } });
+            const oauthOptions: any = { redirectTo: callbackUrl };
+            // Force Facebook to request email permission
+            if (provider === 'facebook') {
+                oauthOptions.scopes = 'email';
+            }
+            const { error: authError } = await supabase.auth.signInWithOAuth({ provider, options: oauthOptions });
             if (authError) throw authError;
         } catch (err: any) {
             setError(err.message || `Failed to sign in with ${provider}.`);
@@ -96,6 +107,10 @@ const Login: React.FC = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canAttemptLogin()) {
+            setError('Too many login attempts. Please wait a few minutes before trying again.');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -137,10 +152,14 @@ const Login: React.FC = () => {
             setError('Please enter your email address first.');
             return;
         }
+        if (!canRequestPasswordReset()) {
+            setError('Too many password reset requests. Please wait 10 minutes.');
+            return;
+        }
         setSendingReset(true);
         setError(null);
         try {
-            const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+            const appUrl = 'https://www.pickleplay.ph';
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: `${appUrl}/login`,
             });

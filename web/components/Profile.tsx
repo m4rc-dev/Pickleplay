@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getOrCreateConversation, checkMutualFollow } from '../services/directMessages';
 import {
   User,
@@ -40,7 +40,12 @@ import {
   QrCode,
   Smartphone,
   Trophy,
-  MessageCircle
+  MessageCircle,
+  Building2,
+  Copy,
+  Share2,
+  ExternalLink,
+  Users
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
@@ -278,6 +283,7 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [savedVisibility, setSavedVisibility] = useState('public');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'privacy' | 'security' | 'preferences' | 'billing' | 'stats'>('profile');
+  const location = useLocation();
   const [selectedLanguage, setSelectedLanguage] = useState(localStorage.getItem('preferredLanguage') || 'en');
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -286,6 +292,15 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Auto-select tab from URL query param (e.g. /profile?tab=referral)
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab) {
+      setActiveTab(tab as any);
+    }
+  }, [location.search]);
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
@@ -314,6 +329,20 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   // QR Code state (for mobile app deep link)
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+
+  // Court Owner Referral QR Code state
+  const [courtOwnerQrDataUrl, setCourtOwnerQrDataUrl] = useState<string | null>(null);
+  const [showCourtOwnerQrModal, setShowCourtOwnerQrModal] = useState(false);
+
+  // Player Referral QR Code state (with PicklePlayLogo overlay)
+  const [playerQrDataUrl, setPlayerQrDataUrl] = useState<string | null>(null);
+
+  // Referral tab mode toggle & share
+  const [referralMode, setReferralMode] = useState<'player' | 'court-owner'>('player');
+  const [showQrEnlargeModal, setShowQrEnlargeModal] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
 
   // Avatar upload state
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -887,7 +916,7 @@ Never share them with anyone.`;
           type: 'profile',
           userId: profileId,
           deepLink: `pickleplay://profile/${profileId}`,
-          webUrl: `${import.meta.env.VITE_APP_URL || window.location.origin}/#/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
+          webUrl: `${'https://www.pickleplay.ph'}/#/profile${profileId !== 'player-current' ? `/${profileId}` : ''}`,
           generatedAt: new Date().toISOString()
         });
 
@@ -907,6 +936,456 @@ Never share them with anyone.`;
 
     generateProfileQR();
   }, [profileId]);
+
+  // Generate Court Owner Referral QR code with PicklePlayLogo overlay
+  useEffect(() => {
+    const generateCourtOwnerQR = async () => {
+      if (!profileData?.referral_code) return;
+      try {
+        const referralLink = `${'https://www.pickleplay.ph'}/signup?ref=${profileData.referral_code}&type=court-owner`;
+
+        // Generate base QR code
+        const qrDataUrl = await QRCodeLib.toDataURL(referralLink, {
+          width: 400,
+          margin: 3,
+          color: { dark: '#0f172a', light: '#ffffff' },
+          errorCorrectionLevel: 'H'
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 400;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Draw QR code
+        const qrImg = new Image();
+        qrImg.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          qrImg.onload = () => resolve();
+          qrImg.onerror = reject;
+          qrImg.src = qrDataUrl;
+        });
+        ctx.drawImage(qrImg, 0, 0, 400, 400);
+
+        // Overlay PicklePlayLogo at center
+        const centerX = 200;
+        const centerY = 200;
+        const logoSize = 80;
+        try {
+          const logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          await new Promise<void>((resolve, reject) => {
+            logoImg.onload = () => resolve();
+            logoImg.onerror = reject;
+            logoImg.src = '/images/PicklePlayLogo.jpg';
+          });
+          // White circle background
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2 + 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          // Clip circle and draw logo
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(logoImg, centerX - logoSize / 2, centerY - logoSize / 2, logoSize, logoSize);
+          ctx.restore();
+        } catch {
+          // Fallback: blue circle with PP
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2 + 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2, 0, Math.PI * 2);
+          ctx.fillStyle = '#155DFC';
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('PP', centerX, centerY);
+        }
+
+        setCourtOwnerQrDataUrl(canvas.toDataURL('image/png'));
+      } catch (error) {
+        console.error('Error generating court owner referral QR:', error);
+      }
+    };
+
+    generateCourtOwnerQR();
+  }, [profileData?.referral_code]);
+
+  // Generate Player Referral QR code with PicklePlayLogo.jpg overlay
+  useEffect(() => {
+    const generatePlayerQR = async () => {
+      if (!profileData?.referral_code) return;
+      try {
+        const referralLink = `https://www.pickleplay.ph/signup?ref=${profileData.referral_code}`;
+        const qrDataUrl = await QRCodeLib.toDataURL(referralLink, {
+          width: 400,
+          margin: 3,
+          color: { dark: '#0f172a', light: '#ffffff' },
+          errorCorrectionLevel: 'H'
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 400;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Draw QR code
+        const qrImg = new Image();
+        qrImg.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          qrImg.onload = () => resolve();
+          qrImg.onerror = reject;
+          qrImg.src = qrDataUrl;
+        });
+        ctx.drawImage(qrImg, 0, 0, 400, 400);
+
+        // Overlay PicklePlayLogo.jpg at center
+        const centerX = 200;
+        const centerY = 200;
+        const logoSize = 80;
+        try {
+          const logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          await new Promise<void>((resolve, reject) => {
+            logoImg.onload = () => resolve();
+            logoImg.onerror = reject;
+            logoImg.src = '/images/PicklePlayLogo.jpg';
+          });
+          // White circle background
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2 + 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          // Clip circle and draw logo
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(logoImg, centerX - logoSize / 2, centerY - logoSize / 2, logoSize, logoSize);
+          ctx.restore();
+        } catch {
+          // Fallback: blue circle with PP
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2 + 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, logoSize / 2, 0, Math.PI * 2);
+          ctx.fillStyle = '#155DFC';
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('PP', centerX, centerY);
+        }
+
+        setPlayerQrDataUrl(canvas.toDataURL('image/png'));
+      } catch (error) {
+        console.error('Error generating player referral QR:', error);
+      }
+    };
+
+    generatePlayerQR();
+  }, [profileData?.referral_code]);
+
+  // Generate a beautiful share story image (1080x1920 = 9:16 for stories)
+  const generateShareImage = useCallback(async (mode: 'player' | 'court-owner') => {
+    setIsGeneratingShare(true);
+    try {
+      const qrSrc = mode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl;
+      if (!qrSrc) return;
+
+      const W = 1080;
+      const H = 1920;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // ─── BACKGROUND: PLAYER_002.jpg (already 9:16) ───
+      try {
+        const bgImg = new Image();
+        bgImg.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          bgImg.onload = () => resolve();
+          bgImg.onerror = reject;
+          bgImg.src = '/images/PLAYER_002.jpg';
+        });
+        const scale = Math.max(W / bgImg.width, H / bgImg.height);
+        const sw = bgImg.width * scale;
+        const sh = bgImg.height * scale;
+        ctx.drawImage(bgImg, (W - sw) / 2, (H - sh) / 2, sw, sh);
+      } catch {
+        const grad = ctx.createLinearGradient(0, 0, W, H);
+        grad.addColorStop(0, '#0f172a');
+        grad.addColorStop(0.5, '#1e293b');
+        grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // ─── GRADIENT OVERLAY: bottom-heavy for text readability ───
+      const overlay = ctx.createLinearGradient(0, 0, 0, H);
+      overlay.addColorStop(0, 'rgba(15, 23, 42, 0.30)');
+      overlay.addColorStop(0.3, 'rgba(15, 23, 42, 0.20)');
+      overlay.addColorStop(0.5, 'rgba(15, 23, 42, 0.50)');
+      overlay.addColorStop(1, 'rgba(15, 23, 42, 0.93)');
+      ctx.fillStyle = overlay;
+      ctx.fillRect(0, 0, W, H);
+
+      // ─── ACCENT LINE at very top ───
+      const accentGrad = ctx.createLinearGradient(0, 0, W, 0);
+      accentGrad.addColorStop(0, '#155DFC');
+      accentGrad.addColorStop(1, '#84cc16');
+      ctx.fillStyle = accentGrad;
+      ctx.fillRect(0, 0, W, 6);
+
+      // ─── LOGO at top center ───
+      try {
+        const logoImg = new Image();
+        logoImg.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          logoImg.onload = () => resolve();
+          logoImg.onerror = reject;
+          logoImg.src = '/images/PicklePlayLogo.jpg';
+        });
+        const logoS = 110;
+        const logoY = 160;
+        // Glow
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,255,255,0.3)';
+        ctx.shadowBlur = 35;
+        ctx.beginPath();
+        ctx.arc(W / 2, logoY, logoS / 2 + 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.restore();
+        // Logo clipped circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(W / 2, logoY, logoS / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(logoImg, W / 2 - logoS / 2, logoY - logoS / 2, logoS, logoS);
+        ctx.restore();
+      } catch {}
+
+      // ─── "PICKLEPLAY" brand text ───
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = '900 26px system-ui, -apple-system, sans-serif';
+      ctx.letterSpacing = '10px';
+      ctx.fillText('PICKLEPLAY', W / 2, 248);
+      ctx.letterSpacing = '0px';
+
+      // ─── BADGE ───
+      const badgeY = 310;
+      const badgeText = mode === 'court-owner' ? 'COURT OWNER INVITE' : 'PLAYER INVITE';
+      ctx.font = '900 20px system-ui, -apple-system, sans-serif';
+      ctx.letterSpacing = '4px';
+      const badgeW = ctx.measureText(badgeText).width + 60;
+      ctx.letterSpacing = '0px';
+      // Glass badge bg
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      roundRect(ctx, (W - badgeW) / 2, badgeY, badgeW, 44, 22);
+      ctx.fill();
+      ctx.strokeStyle = mode === 'court-owner' ? 'rgba(132,204,22,0.5)' : 'rgba(21,93,252,0.5)';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, (W - badgeW) / 2, badgeY, badgeW, 44, 22);
+      ctx.stroke();
+      ctx.fillStyle = mode === 'court-owner' ? '#84cc16' : '#60a5fa';
+      ctx.font = '900 18px system-ui, -apple-system, sans-serif';
+      ctx.letterSpacing = '4px';
+      ctx.fillText(badgeText, W / 2, badgeY + 22);
+      ctx.letterSpacing = '0px';
+
+      // ─── MAIN HEADLINE (FAQ style: bold, uppercase, tight tracking) ───
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 52px system-ui, -apple-system, sans-serif';
+      if (mode === 'court-owner') {
+        ctx.fillText('ARE YOU A', W / 2, 440);
+        ctx.fillText('COURT OWNER?', W / 2, 505);
+        // Highlight line in lime
+        ctx.fillStyle = '#84cc16';
+        ctx.font = '900 48px system-ui, -apple-system, sans-serif';
+        ctx.fillText('I\u0027D LIKE TO INVITE YOU', W / 2, 585);
+      } else {
+        ctx.fillText('ARE YOU A', W / 2, 440);
+        ctx.fillText('PICKLEBALL PLAYER?', W / 2, 505);
+        // Highlight line in blue
+        ctx.fillStyle = '#60a5fa';
+        ctx.font = '900 48px system-ui, -apple-system, sans-serif';
+        ctx.fillText('I\u0027D LOVE YOU TO JOIN', W / 2, 585);
+      }
+
+      // ─── SUB TEXT ───
+      ctx.fillStyle = 'rgba(255,255,255,0.50)';
+      ctx.font = '400 26px system-ui, -apple-system, sans-serif';
+      if (mode === 'court-owner') {
+        ctx.fillText('Get instant access on PicklePlay', W / 2, 660);
+      } else {
+        ctx.fillText('Join the PH pickleball community', W / 2, 660);
+      }
+
+      // ─── LARGE QR CODE with white card ───
+      const qrSize = 480;
+      const cardPadX = 40;
+      const cardPadTop = 36;
+      const cardPadBot = 80;
+      const cardW = qrSize + cardPadX * 2;
+      const cardH = qrSize + cardPadTop + cardPadBot;
+      const cardX = (W - cardW) / 2;
+      const cardY = 730;
+
+      // Glass card background
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      roundRect(ctx, cardX, cardY, cardW, cardH, 36);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, cardX, cardY, cardW, cardH, 36);
+      ctx.stroke();
+      ctx.restore();
+
+      // White inner container for QR
+      const innerPad = 14;
+      ctx.fillStyle = '#ffffff';
+      roundRect(ctx, (W - qrSize - innerPad * 2) / 2, cardY + cardPadTop - 6, qrSize + innerPad * 2, qrSize + innerPad * 2, 24);
+      ctx.fill();
+
+      // Draw QR code
+      const qrImg = new Image();
+      qrImg.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        qrImg.onload = () => resolve();
+        qrImg.onerror = reject;
+        qrImg.src = qrSrc;
+      });
+      ctx.drawImage(qrImg, (W - qrSize) / 2, cardY + cardPadTop, qrSize, qrSize);
+
+      // "Scan to join" inside card
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.font = '700 22px system-ui, -apple-system, sans-serif';
+      ctx.letterSpacing = '2px';
+      ctx.fillText('SCAN TO JOIN PICKLEPLAY', W / 2, cardY + cardPadTop + qrSize + 46);
+      ctx.letterSpacing = '0px';
+
+      // ─── DECORATIVE DOTS (blue & lime) ───
+      [[120, 750, 7, '#155DFC'], [960, 800, 5, '#84cc16'], [150, 1300, 4, '#84cc16'], [930, 1270, 6, '#155DFC'], [100, 440, 3, '#60a5fa'], [980, 490, 4, '#84cc16']].forEach(([dx, dy, dr, c]) => {
+        ctx.fillStyle = (c as string) + '40';
+        ctx.beginPath();
+        ctx.arc(dx as number, dy as number, dr as number, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // ─── BOTTOM SECTION ───
+      // Separator
+      const sepGrad = ctx.createLinearGradient(140, 0, W - 140, 0);
+      sepGrad.addColorStop(0, 'rgba(21,93,252,0.0)');
+      sepGrad.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+      sepGrad.addColorStop(1, 'rgba(132,204,22,0.0)');
+      ctx.fillStyle = sepGrad;
+      ctx.fillRect(140, H - 260, W - 280, 1);
+
+      // Tagline
+      ctx.fillStyle = 'rgba(255,255,255,0.40)';
+      ctx.font = '700 22px system-ui, -apple-system, sans-serif';
+      ctx.letterSpacing = '3px';
+      ctx.fillText('PHILIPPINE PICKLEBALL COMMUNITY', W / 2, H - 190);
+      ctx.letterSpacing = '0px';
+
+      // Brand mark
+      ctx.fillStyle = 'rgba(255,255,255,0.20)';
+      ctx.font = '600 20px system-ui, -apple-system, sans-serif';
+      ctx.fillText('www.pickleplay.ph', W / 2, H - 130);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      setShareImageUrl(dataUrl);
+      setShowShareModal(true);
+    } catch (error) {
+      console.error('Error generating share image:', error);
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  }, [courtOwnerQrDataUrl, playerQrDataUrl, profileData]);
+
+  // Helper: rounded rectangle
+  function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // Share to Facebook/Instagram story
+  const handleShareStory = useCallback(async (platform: 'facebook' | 'instagram') => {
+    if (!shareImageUrl) return;
+    try {
+      // Convert data URL to blob
+      const response = await fetch(shareImageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'pickleplay-invite.png', { type: 'image/png' });
+
+      // Try Web Share API first (works great on mobile)
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Join PicklePlay!',
+          text: referralMode === 'court-owner'
+            ? "I'd love to invite you to join PicklePlay as a Court Owner! Scan the QR code or use the link sticker."
+            : "I'd love to invite you to join PicklePlay! Scan the QR code or use the link sticker.",
+        });
+        return;
+      }
+
+      // Fallback: Download image then open platform
+      const a = document.createElement('a');
+      a.href = shareImageUrl;
+      a.download = 'pickleplay-invite.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setTimeout(() => {
+        if (platform === 'facebook') {
+          window.open('https://www.facebook.com/stories/create', '_blank');
+        } else {
+          window.open('https://www.instagram.com/', '_blank');
+        }
+        setProfileMessage({ type: 'success', text: 'Image downloaded! Upload to your story & add a link sticker.' });
+        setTimeout(() => setProfileMessage(null), 5000);
+      }, 500);
+    } catch (error) {
+      console.error('Share error:', error);
+      // Final fallback: just download
+      const a = document.createElement('a');
+      a.href = shareImageUrl;
+      a.download = 'pickleplay-invite.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setProfileMessage({ type: 'success', text: 'Image saved! Share it to your story.' });
+      setTimeout(() => setProfileMessage(null), 3000);
+    }
+  }, [shareImageUrl, referralMode, profileData]);
 
   useEffect(() => {
     const fetchPreferenceOptions = async () => {
@@ -1945,14 +2424,16 @@ Never share them with anyone.`;
         <div className="lg:col-span-2">
           {/* Dashboard Tab */}
           {activeTab === 'referral' && (
-            <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-sm space-y-12 animate-in fade-in duration-500">
+            <div className="bg-white p-6 md:p-10 rounded-[48px] border border-slate-200 shadow-sm space-y-8 animate-in fade-in duration-500">
+
+              {/* ─── Header with Points ─── */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">AFFILIATION PROGRAM</p>
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Share & <span className="text-blue-600">Earn.</span></h2>
-                  <p className="text-slate-500 font-medium max-w-md">Invite your pickleball community to PicklePlay and earn rewards for every signup and activity.</p>
+                  <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Share & <span className="text-blue-600">Earn.</span></h2>
+                  <p className="text-slate-500 font-medium max-w-md text-sm">Invite players and court owners to PicklePlay and earn rewards for every signup.</p>
                 </div>
-                <div className="bg-blue-50 p-8 rounded-[40px] text-center border border-blue-100 min-w-[200px]">
+                <div className="bg-blue-50 p-6 md:p-8 rounded-[32px] text-center border border-blue-100 min-w-[180px]">
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Your Total Points</p>
                   <div className="flex items-center justify-center gap-3">
                     <Sparkles size={24} className="text-blue-600" />
@@ -1961,53 +2442,254 @@ Never share them with anyone.`;
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Your Referral Link</h3>
-                    <div className="relative group">
-                      <div className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-6 pr-32 font-bold text-slate-600 text-sm truncate">
-                        {`${import.meta.env.VITE_APP_URL || window.location.origin}/signup?ref=${profileData?.referral_code || '...'}`}
+              {/* ─── Toggle: Player / Court Owner ─── */}
+              <div className="flex items-center justify-center">
+                <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex gap-1">
+                  <button
+                    onClick={() => setReferralMode('player')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                      referralMode === 'player'
+                        ? 'bg-white text-blue-600 shadow-md'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <Users size={14} />
+                    Player Invite
+                  </button>
+                  <button
+                    onClick={() => setReferralMode('court-owner')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                      referralMode === 'court-owner'
+                        ? 'bg-white text-emerald-600 shadow-md'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <Building2 size={14} />
+                    Court Owner Invite
+                  </button>
+                </div>
+              </div>
+
+              {/* ─── UNIFIED REFERRAL CARD ─── */}
+              <div className={`relative overflow-hidden rounded-[40px] p-8 md:p-10 shadow-2xl transition-all duration-500 ${
+                referralMode === 'court-owner'
+                  ? 'bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-500 shadow-blue-200/50'
+                  : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 shadow-slate-300/50'
+              }`}>
+                {/* Decorative circles */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                <div className="absolute top-1/2 right-10 w-20 h-20 bg-white/5 rounded-full" />
+
+                <div className="relative z-10">
+                  {/* Card header */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                    <div>
+                      <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.15em] mb-4 ${
+                        referralMode === 'court-owner'
+                          ? 'bg-white/15 text-white'
+                          : 'bg-white/15 text-white'
+                      }`}>
+                        {referralMode === 'court-owner' ? <Building2 size={12} /> : <Users size={12} />}
+                        {referralMode === 'court-owner' ? 'Court Owner Referral' : 'Player Referral'}
                       </div>
-                      <button
-                        onClick={() => {
-                          const link = `${import.meta.env.VITE_APP_URL || window.location.origin}/signup?ref=${profileData?.referral_code}`;
-                          navigator.clipboard.writeText(link);
-                          setProfileMessage({ type: 'success', text: 'Link copied to clipboard!' });
-                          setTimeout(() => setProfileMessage(null), 3000);
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-slate-900 text-white h-12 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95"
-                      >
-                        Copy Link
-                      </button>
+                      <h2 className="text-2xl md:text-3xl font-black text-white tracking-tighter uppercase mb-2">
+                        {referralMode === 'court-owner' ? (
+                          <>Invite Court <span className="text-lime-300">Owners.</span></>
+                        ) : (
+                          <>Invite <span className="text-blue-300">Players.</span></>
+                        )}
+                      </h2>
+                      <p className="text-white/70 font-medium max-w-md text-sm leading-relaxed">
+                        {referralMode === 'court-owner'
+                          ? 'Know a court owner or facility manager? Invite them and earn +25 bonus points! Instant access — no documents needed.'
+                          : 'Invite your friends to join the Philippine pickleball community on PicklePlay and earn points for every signup!'}
+                      </p>
                     </div>
+                    {referralMode === 'court-owner' && (
+                      <div className="bg-white/15 backdrop-blur-sm p-5 rounded-[28px] text-center min-w-[140px] border border-white/20">
+                        <p className="text-[9px] font-black text-white/80 uppercase tracking-widest mb-1.5">Bonus</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <Building2 size={18} className="text-lime-300" />
+                          <span className="text-3xl font-black text-white">+25</span>
+                        </div>
+                        <p className="text-[8px] font-bold text-white/50 uppercase tracking-wider mt-1">Per Court Owner</p>
+                      </div>
+                    )}
+                    {referralMode === 'player' && (
+                      <div className="bg-white/15 backdrop-blur-sm p-5 rounded-[28px] text-center min-w-[140px] border border-white/20">
+                        <p className="text-[9px] font-black text-white/80 uppercase tracking-widest mb-1.5">Earn Up To</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <Sparkles size={18} className="text-blue-300" />
+                          <span className="text-3xl font-black text-white">+10</span>
+                        </div>
+                        <p className="text-[8px] font-bold text-white/50 uppercase tracking-wider mt-1">Per Signup</p>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-8 flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center font-black text-blue-600">
-                      {profileData?.referral_code || '...'}
+
+                  {/* Content grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* QR Code */}
+                    <div className="bg-white/10 backdrop-blur-sm p-6 md:p-8 rounded-[32px] border border-white/20 flex flex-col items-center text-center">
+                      <h3 className="text-xs font-black text-white uppercase tracking-widest mb-5">Referral QR Code</h3>
+                      {(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl) ? (
+                        <div className="bg-white p-3 rounded-2xl shadow-xl mb-4">
+                          <img
+                            src={(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl)!}
+                            alt={`${referralMode === 'court-owner' ? 'Court Owner' : 'Player'} Referral QR`}
+                            className="w-44 h-44"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-44 h-44 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+                          <QrCode size={48} className="text-white/40" />
+                        </div>
+                      )}
+                      <p className="text-[10px] font-bold text-white/60 mb-4">
+                        QR code includes PicklePlay logo
+                      </p>
+                      <div className="flex gap-2 w-full max-w-[260px]">
+                        <button
+                          onClick={() => setShowQrEnlargeModal(true)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all border border-white/20"
+                        >
+                          <ZoomIn size={11} />
+                          Enlarge
+                        </button>
+                        {(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl) && (
+                          <a
+                            href={(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl)!}
+                            download={`pickleplay-${referralMode}-referral-${profileData?.referral_code || 'qr'}.png`}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-[9px] uppercase tracking-widest transition-all border border-white/20"
+                          >
+                            <Download size={11} />
+                            Save
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unique Referral Hash</p>
+
+                    {/* Right side: Link + How it Works */}
+                    <div className="space-y-5">
+                      {/* Referral Link */}
+                      <div className="bg-white/10 backdrop-blur-sm p-6 rounded-[32px] border border-white/20">
+                        <h3 className="text-xs font-black text-white uppercase tracking-widest mb-3">
+                          {referralMode === 'court-owner' ? 'Court Owner Link' : 'Referral Link'}
+                        </h3>
+                        <div className="relative">
+                          <div className="w-full bg-white/10 border border-white/20 rounded-2xl py-3.5 pl-4 pr-24 font-bold text-white/80 text-[11px] truncate">
+                            {referralMode === 'court-owner'
+                              ? `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code || '...'}&type=court-owner`
+                              : `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code || '...'}`
+                            }
+                          </div>
+                          <button
+                            onClick={() => {
+                              const link = referralMode === 'court-owner'
+                                ? `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code}&type=court-owner`
+                                : `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code}`;
+                              navigator.clipboard.writeText(link);
+                              setProfileMessage({ type: 'success', text: 'Link copied to clipboard!' });
+                              setTimeout(() => setProfileMessage(null), 3000);
+                            }}
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${
+                              referralMode === 'court-owner'
+                                ? 'bg-white text-blue-600 hover:bg-lime-300 hover:text-blue-800'
+                                : 'bg-white text-slate-900 hover:bg-blue-100'
+                            }`}
+                          >
+                            Copy Link
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Share to Stories */}
+                      <div className="bg-white/10 backdrop-blur-sm p-6 rounded-[32px] border border-white/20">
+                        <h3 className="text-xs font-black text-white uppercase tracking-widest mb-3">Share to Stories</h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => generateShareImage(referralMode)}
+                            disabled={isGeneratingShare}
+                            className="flex-1 inline-flex items-center justify-center gap-2 h-11 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                          >
+                            {isGeneratingShare ? <Loader2 size={14} className="animate-spin" /> : (
+                              <>
+                                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                Facebook
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => generateShareImage(referralMode)}
+                            disabled={isGeneratingShare}
+                            className="flex-1 inline-flex items-center justify-center gap-2 h-11 bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50"
+                          >
+                            {isGeneratingShare ? <Loader2 size={14} className="animate-spin" /> : (
+                              <>
+                                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                                Instagram
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* How it Works */}
+                      <div className="bg-white/10 backdrop-blur-sm p-6 rounded-[32px] border border-white/20 space-y-3">
+                        <h3 className="text-xs font-black text-white uppercase tracking-widest">How It Works</h3>
+                        <div className="space-y-2.5">
+                          {(referralMode === 'court-owner'
+                            ? [
+                                { step: '1', text: 'Share your QR code or link with a court owner' },
+                                { step: '2', text: 'They sign up as a player first' },
+                                { step: '3', text: 'Auto-directed to upgrade as Court Owner' },
+                                { step: '4', text: 'Instant approval — no documents needed!' }
+                              ]
+                            : [
+                                { step: '1', text: 'Share your QR code or referral link' },
+                                { step: '2', text: 'Your friend signs up on PicklePlay' },
+                                { step: '3', text: 'You both earn points automatically' },
+                                { step: '4', text: 'More referrals = more rewards!' }
+                              ]
+                          ).map((item) => (
+                            <div key={item.step} className="flex items-center gap-3">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                referralMode === 'court-owner'
+                                  ? 'bg-lime-300 text-blue-900'
+                                  : 'bg-blue-400 text-white'
+                              }`}>
+                                {item.step}
+                              </div>
+                              <p className="text-white/80 text-xs font-semibold">{item.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="bg-white p-8 rounded-[40px] border border-slate-200 space-y-6">
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Points Package</h3>
-                  <div className="space-y-4">
-                    {[
-                      { label: 'Friend Signup', points: 10, icon: <UserPlus size={16} /> },
-                      { label: 'Friend Booking', points: 8, icon: <Calendar size={16} /> },
-                      { label: 'Friend Purchase', points: 5, icon: <ShoppingBag size={16} /> },
-                      { label: 'Friend Review', points: 3, icon: <Star size={16} /> }
-                    ].map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                        <div className="flex items-center gap-3 text-slate-600">
-                          {item.icon}
-                          <span className="text-xs font-bold uppercase tracking-widest">{item.label}</span>
-                        </div>
-                        <span className="font-black text-blue-600">+{item.points} pts</span>
+              {/* ─── Points Package ─── */}
+              <div className="bg-white p-8 rounded-[40px] border border-slate-200 space-y-6">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Points Package</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { label: 'Friend Signup', points: 10, icon: <UserPlus size={16} /> },
+                    { label: 'Court Owner Referral', points: 25, icon: <Building2 size={16} /> },
+                    { label: 'Friend Booking', points: 8, icon: <Calendar size={16} /> },
+                    { label: 'Friend Purchase', points: 5, icon: <ShoppingBag size={16} /> },
+                    { label: 'Friend Review', points: 3, icon: <Star size={16} /> }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                      <div className="flex items-center gap-3 text-slate-600">
+                        {item.icon}
+                        <span className="text-xs font-bold uppercase tracking-widest">{item.label}</span>
                       </div>
-                    ))}
-                  </div>
+                      <span className="font-black text-blue-600">+{item.points} pts</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -3413,6 +4095,166 @@ Never share them with anyone.`;
                     Download QR Code
                   </a>
                 </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Unified QR Code Enlarged Modal */}
+          {showQrEnlargeModal && (referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl) && ReactDOM.createPortal(
+            <div
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl flex items-center justify-center z-[9999] p-4 cursor-pointer animate-in fade-in duration-300"
+              onClick={() => setShowQrEnlargeModal(false)}
+            >
+              <div
+                className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 cursor-default"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl ${referralMode === 'court-owner' ? 'bg-indigo-50' : 'bg-blue-50'}`}>
+                      {referralMode === 'court-owner' ? <Building2 size={20} className="text-indigo-600" /> : <Users size={20} className="text-blue-600" />}
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-950">{referralMode === 'court-owner' ? 'Court Owner Referral' : 'Player Referral'}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Share this QR Code</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowQrEnlargeModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                  >
+                    <X size={18} className="text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center gap-6">
+                  <div className="bg-white border-2 border-slate-100 rounded-2xl p-5 shadow-inner">
+                    <img
+                      src={(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl)!}
+                      alt="Referral QR Code"
+                      className="w-64 h-64"
+                    />
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <p className="text-sm text-slate-600 font-medium">
+                      {referralMode === 'court-owner'
+                        ? <>Share with court owners to invite them to <span className="font-bold text-slate-900">PicklePlay</span></>
+                        : <>Share with friends to invite them to <span className="font-bold text-slate-900">PicklePlay</span></>
+                      }
+                    </p>
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                      referralMode === 'court-owner' ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'
+                    }`}>
+                      {referralMode === 'court-owner' ? <Building2 size={12} /> : <Users size={12} />}
+                      {referralMode === 'court-owner' ? 'Instant Court Owner Access' : 'Player Invitation'}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 w-full">
+                    <a
+                      href={(referralMode === 'court-owner' ? courtOwnerQrDataUrl : playerQrDataUrl)!}
+                      download={`pickleplay-${referralMode}-referral-${profileData?.referral_code || 'qr'}.png`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 h-12 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                    >
+                      <Download size={16} />
+                      Download
+                    </a>
+                    <button
+                      onClick={() => {
+                        const link = referralMode === 'court-owner'
+                          ? `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code}&type=court-owner`
+                          : `https://www.pickleplay.ph/signup?ref=${profileData?.referral_code}`;
+                        navigator.clipboard.writeText(link);
+                        setProfileMessage({ type: 'success', text: 'Referral link copied!' });
+                        setTimeout(() => setProfileMessage(null), 3000);
+                      }}
+                      className={`flex-1 inline-flex items-center justify-center gap-2 h-12 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${
+                        referralMode === 'court-owner' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      <Copy size={16} />
+                      Copy Link
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Share Story Image Modal */}
+          {showShareModal && shareImageUrl && ReactDOM.createPortal(
+            <div
+              className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[9999] p-4 cursor-pointer animate-in fade-in duration-300"
+              onClick={() => setShowShareModal(false)}
+            >
+              <div
+                className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 cursor-default max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl">
+                      <Share2 size={20} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-950">Share to Story</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Choose a platform</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowShareModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                  >
+                    <X size={18} className="text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Story image preview */}
+                <div className="bg-slate-100 rounded-2xl p-3 mb-5">
+                  <img
+                    src={shareImageUrl}
+                    alt="Share preview"
+                    className="w-full rounded-xl shadow-lg"
+                    style={{ maxHeight: '360px', objectFit: 'contain' }}
+                  />
+                </div>
+
+                {/* Share buttons */}
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => handleShareStory('facebook')}
+                    className="w-full flex items-center justify-center gap-3 h-14 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    Share to Facebook Story
+                  </button>
+                  <button
+                    onClick={() => handleShareStory('instagram')}
+                    className="w-full flex items-center justify-center gap-3 h-14 bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                    Share to Instagram Story
+                  </button>
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+                    <div className="relative flex justify-center"><span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Or</span></div>
+                  </div>
+                  <a
+                    href={shareImageUrl}
+                    download={`pickleplay-${referralMode}-invite-${profileData?.referral_code || 'share'}.png`}
+                    className="w-full flex items-center justify-center gap-3 h-14 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+                  >
+                    <Download size={18} />
+                    Download Image
+                  </a>
+                </div>
+
+                <p className="text-center text-[10px] font-bold text-slate-400 mt-4">
+                  Upload the image to your story, then add a link sticker with your referral URL
+                </p>
               </div>
             </div>,
             document.body

@@ -142,6 +142,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
 
+  // Court Owner Referral auto-upgrade state
+  const [isCourtOwnerReferral, setIsCourtOwnerReferral] = useState(false);
+
+  // Auto-open Pro Upgrade modal if user arrived via court-owner referral
+  useEffect(() => {
+    const referralType = localStorage.getItem('referral_type');
+    if (referralType === 'court-owner' && userRole === 'PLAYER' && !authorizedProRoles?.includes('COURT_OWNER')) {
+      setIsCourtOwnerReferral(true);
+      setApplicationType('court_owner');
+      setAccessCodeValue('REFERRAL-COURT-OWNER');
+      // Small delay to let the dashboard render first
+      const timer = setTimeout(() => setShowSubmitConfirm(true), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [userRole, authorizedProRoles]);
+
   const fetchUserData = () => {
     if (userRole === 'PLAYER') {
       fetchPlayerLessons();
@@ -1520,6 +1536,56 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) return;
 
+                // ─── COURT OWNER REFERRAL: Instant upgrade path ───
+                if (isCourtOwnerReferral && applicationType === 'court_owner') {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('roles')
+                    .eq('id', user.id)
+                    .single();
+
+                  const currentRoles = profile?.roles || ['PLAYER'];
+                  if (!currentRoles.includes('COURT_OWNER')) {
+                    currentRoles.push('COURT_OWNER');
+                  }
+
+                  const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({
+                      roles: currentRoles,
+                      active_role: 'COURT_OWNER'
+                    })
+                    .eq('id', user.id);
+
+                  if (updateError) throw updateError;
+
+                  // Create trial subscription
+                  await createTrialSubscription(user.id);
+
+                  // Record as approved application
+                  await supabase.from('professional_applications').insert({
+                    profile_id: user.id,
+                    requested_role: 'COURT_OWNER',
+                    status: 'APPROVED',
+                    experience_summary: 'Court Owner Referral — auto-approved via player referral link',
+                    document_url: 'N/A — referral-based approval',
+                    processed_at: new Date().toISOString()
+                  });
+
+                  // Clean up referral type from localStorage
+                  localStorage.removeItem('referral_type');
+
+                  setShowStatusModal({
+                    show: true,
+                    type: 'success',
+                    title: 'Welcome, Court Owner!',
+                    message: 'You have been granted Court Owner access via referral! THE PAGE WILL REFRESH AUTOMATICALLY.'
+                  });
+                  setShowSubmitConfirm(false);
+                  setTimeout(() => window.location.reload(), 3000);
+                  return;
+                }
+
                 // 1. Check if it's an access code submission
                 if (accessCodeValue.trim()) {
                   const { data: codeData, error: codeError } = await supabase
@@ -1642,17 +1708,34 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <div className="space-y-6">
                 {/* Header */}
                 <div className="text-center mb-8">
-                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100/50 text-blue-600">
-                    <Award size={32} />
+                  <div className={`w-16 h-16 ${isCourtOwnerReferral ? 'bg-indigo-50' : 'bg-blue-50'} rounded-2xl flex items-center justify-center mx-auto mb-4 border ${isCourtOwnerReferral ? 'border-indigo-100/50' : 'border-blue-100/50'} ${isCourtOwnerReferral ? 'text-indigo-600' : 'text-blue-600'}`}>
+                    {isCourtOwnerReferral ? <Building2 size={32} /> : <Award size={32} />}
                   </div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Become a Professional</h3>
-                  <p className="text-slate-500 text-sm font-medium mt-1">Unlock pro features and grow your pickleball presence.</p>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">
+                    {isCourtOwnerReferral ? 'Court Owner Upgrade' : 'Become a Professional'}
+                  </h3>
+                  <p className="text-slate-500 text-sm font-medium mt-1">
+                    {isCourtOwnerReferral
+                      ? 'You were invited as a court owner! Confirm to get instant access.'
+                      : 'Unlock pro features and grow your pickleball presence.'}
+                  </p>
+                  {isCourtOwnerReferral && (
+                    <div className="mt-3 inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.15em]">
+                      <CheckCircle2 size={12} />
+                      Referral — No Documents Required
+                    </div>
+                  )}
                 </div>
 
                 {/* Application Type */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Application Type</label>
                   <div className="relative">
+                    {isCourtOwnerReferral ? (
+                      <div className="w-full px-5 py-4 rounded-2xl border-2 border-indigo-200 bg-indigo-50 font-black text-indigo-700 cursor-not-allowed">
+                        Court Owner / Facility
+                      </div>
+                    ) : (
                     <select
                       name="applicationType"
                       required
@@ -1668,11 +1751,28 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                         <option value="court_owner">Court Owner / Facility</option>
                       )}
                     </select>
-                    <PlusCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                    )}
+                    {!isCourtOwnerReferral && <PlusCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />}
                   </div>
                 </div>
 
-                {/* Access Code */}
+                {/* Access Code — show as read-only for referral, editable for normal */}
+                {isCourtOwnerReferral ? (
+                  <div className="space-y-2">
+                    <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
+                      Access Code
+                      <span className="text-[9px] font-bold text-emerald-500 normal-case italic">
+                        Auto-Applied via Referral
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <div className="w-full px-5 py-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 font-mono font-black text-sm text-emerald-600 uppercase">
+                        REFERRAL-COURT-OWNER
+                      </div>
+                      <CheckCircle2 className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-2">
                   <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
                     Access Code (Promotional)
@@ -1692,8 +1792,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                     <Key className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   </div>
                 </div>
+                )}
 
-                {/* File Upload Zone */}
+                {/* File Upload Zone — hidden for court owner referrals */}
+                {!isCourtOwnerReferral && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1 relative">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
@@ -1791,6 +1893,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Footer Buttons */}
                 <div className="flex gap-3 pt-4">
@@ -1800,6 +1903,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       setShowSubmitConfirm(false);
                       setAccessCodeValue('');
                       setSelectedFiles([]);
+                      if (isCourtOwnerReferral) {
+                        setIsCourtOwnerReferral(false);
+                        localStorage.removeItem('referral_type');
+                      }
                     }}
                     className="flex-1 py-4 bg-slate-100 text-slate-900 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-slate-200"
                   >
@@ -1808,9 +1915,9 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <button
                     type="submit"
                     disabled={isSubmittingReview}
-                    className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50"
+                    className={`flex-1 py-4 ${isCourtOwnerReferral ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl disabled:opacity-50`}
                   >
-                    {isSubmittingReview ? 'Submitting...' : 'Apply Now'}
+                    {isSubmittingReview ? 'Submitting...' : isCourtOwnerReferral ? 'Confirm & Upgrade' : 'Apply Now'}
                   </button>
                 </div>
               </div>

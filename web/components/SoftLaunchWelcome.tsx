@@ -52,63 +52,63 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
 
         {/* ─── DESKTOP: 2-column layout ─── */}
         <div className="hidden lg:grid lg:grid-cols-12 lg:gap-6 xl:gap-10 items-center min-h-[80vh]">
-          {/* Left column — FAQ image (7 of 12 cols) */}
-          <div className="lg:col-span-7 flex items-center justify-center">
-            <div className="relative w-full">
+          {/* Left column — Player image (5 of 12 cols) */}
+          <div className="lg:col-span-5 flex items-center justify-center animate-scale-in">
+            <div className="relative w-full max-w-[580px] mx-auto">
               <div className="absolute -inset-6 bg-gradient-to-br from-[#155DFC]/5 via-transparent to-emerald-400/5 rounded-[48px] blur-3xl" />
               <img
-                src="/images/FAQ.png"
-                alt="PicklePlay"
+                src="/images/PLAYER_001.png"
+                alt="PicklePlay Player"
                 className="relative w-full object-contain drop-shadow-sm rounded-3xl"
               />
             </div>
           </div>
 
-          {/* Right column — Content (5 of 12 cols) */}
-          <div className="lg:col-span-5 space-y-8 max-w-md">
+          {/* Right column — Content (7 of 12 cols) */}
+          <div className="lg:col-span-7 space-y-8 max-w-2xl">
             {/* Logo + badge */}
-            <div className="space-y-4">
+            <div className="space-y-4 text-center animate-fade-slide-up" style={{ animationDelay: '0.2s' }}>
               <img
                 src="/images/PicklePlayLogo.jpg"
                 alt="PicklePlay"
-                className="h-14 object-contain rounded-xl"
+                className="h-24 object-contain rounded-xl mx-auto"
               />
-              <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.15em]">
+              <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full text-[11px] font-extrabold uppercase tracking-[0.15em]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Soft Launch
               </div>
             </div>
 
             {/* Greeting */}
-            <div className="space-y-3">
-              <h1 className="text-4xl xl:text-5xl font-black text-slate-900 tracking-tight leading-[1.08]">
+            <div className="space-y-3 text-center animate-fade-slide-up" style={{ animationDelay: '0.35s' }}>
+              <h1 className="text-5xl xl:text-6xl font-black text-slate-900 tracking-tight leading-[1.08]">
                 Welcome,{' '}
                 <span className="bg-gradient-to-r from-[#155DFC] to-[#6C3AED] bg-clip-text text-transparent">
                   {firstName}
                 </span>
               </h1>
-              <p className="text-slate-500 text-[15px] font-medium leading-relaxed">
+              <p className="text-slate-500 text-[17px] font-medium leading-relaxed">
                 You're among the first to join the Philippine pickleball community on PicklePlay.
               </p>
             </div>
 
             {/* Info card */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-6 space-y-4 shadow-[0_1px_12px_rgba(0,0,0,0.03)]">
-              <h3 className="text-[15px] font-extrabold text-slate-900 tracking-tight">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-7 space-y-4 shadow-[0_1px_12px_rgba(0,0,0,0.03)] animate-fade-slide-up" style={{ animationDelay: '0.5s' }}>
+              <h3 className="text-[17px] font-extrabold text-slate-900 tracking-tight">
                 We're getting everything ready
               </h3>
 
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
-                  <img src="/images/PinMarker.png" alt="" className="w-6 h-6 object-contain shrink-0 mt-0.5" />
-                  <p className="text-slate-600 text-[13px] leading-relaxed">
+                  <img src="/images/PinMarker.png" alt="" className="w-7 h-7 object-contain shrink-0 mt-0.5" />
+                  <p className="text-slate-600 text-[15px] leading-relaxed">
                     <strong className="text-slate-800">Court booking isn't available yet</strong> — we're onboarding courts and venues across the Philippines.
                   </p>
                 </div>
                 <div className="w-full h-px bg-slate-100" />
                 <div className="flex items-start gap-3">
-                  <img src="/images/Ball.png" alt="" className="w-6 h-6 object-contain shrink-0 mt-0.5" />
-                  <p className="text-slate-600 text-[13px] leading-relaxed">
+                  <img src="/images/Ball.png" alt="" className="w-7 h-7 object-contain shrink-0 mt-0.5" />
+                  <p className="text-slate-600 text-[15px] leading-relaxed">
                     Set up your profile, explore the platform, and get ready to play. Every early member helps shape PicklePlay!
                   </p>
                 </div>
@@ -116,22 +116,22 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
             </div>
 
             {/* Buttons */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center gap-4 animate-fade-slide-up" style={{ animationDelay: '0.65s' }}>
               <Link
                 to="/profile"
-                className="flex-1 flex items-center justify-center bg-[#155DFC] hover:bg-[#1249D1] text-white font-extrabold text-xs uppercase tracking-widest px-6 py-3.5 rounded-xl shadow-lg shadow-blue-600/15 transition-all duration-200 active:scale-[0.98]"
+                className="flex-1 max-w-[220px] flex items-center justify-center bg-[#155DFC] hover:bg-[#1249D1] text-white font-extrabold text-[13px] uppercase tracking-widest px-6 py-4 rounded-xl shadow-lg shadow-blue-600/15 transition-all duration-200 active:scale-[0.98]"
               >
                 Set Up Profile
               </Link>
               <Link
-                to="/news"
-                className="flex-1 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 font-extrabold text-xs uppercase tracking-widest px-6 py-3.5 rounded-xl border border-slate-200 transition-all duration-200 active:scale-[0.98]"
+                to="/profile?tab=referral"
+                className="flex-1 max-w-[280px] flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 font-extrabold text-[11px] uppercase tracking-widest px-5 py-4 rounded-xl border border-slate-200 transition-all duration-200 active:scale-[0.98]"
               >
-                Explore News
+                Invite Player & Court Owner
               </Link>
             </div>
 
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em]">
+            <p className="text-center text-slate-400 text-[11px] font-bold uppercase tracking-[0.15em] animate-fade-slide-up" style={{ animationDelay: '0.75s' }}>
               Thank you for believing in PH Pickleball
             </p>
           </div>
@@ -140,11 +140,11 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
         {/* ─── MOBILE: Single column ─── */}
         <div className="lg:hidden space-y-6">
           {/* Logo + Badge */}
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-4 animate-fade-slide-up">
             <img
               src="/images/PicklePlayLogo.jpg"
               alt="PicklePlay"
-              className="h-16 object-contain rounded-xl mx-auto"
+              className="h-24 object-contain rounded-xl mx-auto"
             />
             <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-[0.15em]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -153,7 +153,7 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
           </div>
 
           {/* Greeting */}
-          <div className="text-center space-y-2.5">
+          <div className="text-center space-y-2.5 animate-fade-slide-up" style={{ animationDelay: '0.15s' }}>
             <h1 className="text-[1.85rem] font-black text-slate-900 tracking-tight leading-[1.1]">
               Welcome,{' '}
               <span className="bg-gradient-to-r from-[#155DFC] to-[#6C3AED] bg-clip-text text-transparent">
@@ -166,7 +166,7 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
           </div>
 
           {/* Info card */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 overflow-hidden shadow-[0_1px_12px_rgba(0,0,0,0.03)]">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 overflow-hidden shadow-[0_1px_12px_rgba(0,0,0,0.03)] animate-fade-slide-up" style={{ animationDelay: '0.3s' }}>
             <div className="h-0.5 bg-gradient-to-r from-[#155DFC] via-[#6C3AED] to-emerald-400" />
             <div className="p-5 space-y-4">
               <h3 className="text-[15px] font-extrabold text-slate-900 tracking-tight">
@@ -191,7 +191,7 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
           </div>
 
           {/* Buttons */}
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 animate-fade-slide-up" style={{ animationDelay: '0.45s' }}>
             <Link
               to="/profile"
               className="w-full flex items-center justify-center bg-[#155DFC] hover:bg-[#1249D1] text-white font-extrabold text-[13px] uppercase tracking-widest px-6 py-4 rounded-2xl shadow-lg shadow-blue-600/15 transition-all duration-200 active:scale-[0.97]"
@@ -199,14 +199,14 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
               Set Up Your Profile
             </Link>
             <Link
-              to="/news"
-              className="w-full flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 font-extrabold text-[13px] uppercase tracking-widest px-6 py-4 rounded-2xl border border-slate-200 transition-all duration-200 active:scale-[0.97]"
+              to="/profile?tab=referral"
+              className="w-full flex items-center justify-center bg-white hover:bg-slate-50 text-slate-600 font-extrabold text-[11px] uppercase tracking-widest px-6 py-4 rounded-2xl border border-slate-200 transition-all duration-200 active:scale-[0.97]"
             >
-              Explore News
+              Invite Player & Court Owner
             </Link>
           </div>
 
-          <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] pb-4">
+          <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] pb-4 animate-fade-slide-up" style={{ animationDelay: '0.55s' }}>
             Thank you for believing in PH Pickleball
           </p>
         </div>
@@ -222,6 +222,34 @@ const SoftLaunchWelcome: React.FC<{ userName?: string }> = ({ userName }) => {
         }
         .animate-float-slow {
           animation: float-slow 20s ease-in-out infinite;
+        }
+        @keyframes fadeSlideUp {
+          from {
+            opacity: 0;
+            transform: translateY(28px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.92);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-fade-slide-up {
+          opacity: 0;
+          animation: fadeSlideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .animate-scale-in {
+          opacity: 0;
+          animation: scaleIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
       `}</style>
     </div>

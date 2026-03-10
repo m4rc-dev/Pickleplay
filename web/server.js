@@ -1,5 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import slowDown from 'express-slow-down';
+import hpp from 'hpp';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
@@ -15,6 +19,17 @@ const PORT = 5001;
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WEB_AUTH_REDIRECT_URL = process.env.WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL;
+
+// ═══════════════════════════════════════════════════════════════
+// 🛡️  SECURITY: Allowed origins (update for your domains)
+// ═══════════════════════════════════════════════════════════════
+const ALLOWED_ORIGINS = [
+  'https://www.pickleplay.ph',
+  'https://pickleplay.ph',
+  'https://pickleplay.vercel.app',
+  'http://localhost:3000',      // local dev
+  'http://localhost:5173',      // Vite dev
+];
 
 let supabaseAdmin = null;
 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -45,9 +60,94 @@ if (process.env.RESEND_API_KEY) {
 const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// ═══════════════════════════════════════════════════════════════
+// 🛡️  SECURITY MIDDLEWARE — DDoS / Abuse Protection
+// ═══════════════════════════════════════════════════════════════
+
+// 1. Trust proxy (required behind Vercel/Cloudflare/Nginx)
+app.set('trust proxy', 1);
+
+// 2. Security headers via Helmet
+app.use(helmet({
+  contentSecurityPolicy: false,       // Let the SPA handle its own CSP
+  crossOriginEmbedderPolicy: false,   // Allow embedding (maps, OAuth popups)
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// 3. HTTP Parameter Pollution protection
+app.use(hpp());
+
+// 4. CORS — strict origin whitelist
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    console.warn(`🚫 CORS blocked origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  maxAge: 86400, // Cache preflight for 24h — reduces OPTIONS flood
+}));
+
+// 5. Body parser with strict size limit (prevents large-payload attacks)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+// 6. Global rate limiter — 200 requests per IP per minute
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,     // 1 minute
+  max: 200,                 // 200 requests per window
+  standardHeaders: true,    // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false,
+  message: { error: 'Too many requests — please slow down.', retryAfter: 60 },
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+});
+app.use(globalLimiter);
+
+// 7. Speed limiter — progressively slow down repeat offenders
+const speedLimiter = slowDown({
+  windowMs: 60 * 1000,     // 1 minute
+  delayAfter: 100,          // Start slowing after 100 requests
+  delayMs: (hits) => (hits - 100) * 100, // Add 100ms per request over limit
+});
+app.use(speedLimiter);
+
+// 8. Strict rate limiters for sensitive endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 15,                     // 15 auth attempts per 15 min
+  message: { error: 'Too many authentication attempts. Please try again in 15 minutes.' },
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+});
+
+const emailLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute
+  max: 5,                     // 5 emails per minute per IP
+  message: { error: 'Too many email requests. Please wait a moment.' },
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+});
+
+const accountCreationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 10,                     // 10 account creations per IP per hour
+  message: { error: 'Too many account creation attempts. Please try again later.' },
+  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
+});
+
+// 9. Block suspicious user-agents and empty requests
+app.use((req, res, next) => {
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  // Block known attack tools and bots (not search engines)
+  const blockedAgents = ['sqlmap', 'nikto', 'nmap', 'masscan', 'zgrab', 'dirbuster', 'gobuster', 'nuclei', 'httpx-toolkit'];
+  if (blockedAgents.some(agent => ua.includes(agent))) {
+    console.warn(`🚫 Blocked suspicious UA: ${ua} from ${req.ip}`);
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -133,7 +233,7 @@ app.get('/api/v1/news/articles/:id', async (req, res) => {
 });
 
 // Send email endpoint
-app.post('/api/send-email', async (req, res) => {
+app.post('/api/send-email', emailLimiter, async (req, res) => {
   try {
     const { email, subject, code } = req.body;
 
@@ -210,7 +310,7 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 // ─── Create Guest Account & Send Credentials ────────────────
-app.post('/api/auth/create-guest-account', async (req, res) => {
+app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, res) => {
   try {
     const { guestEmail, guestFirstName, guestLastName, referenceId, locationName, locationAddress, courtName, date, startTime, endTime, totalPrice } = req.body;
 
@@ -590,7 +690,7 @@ app.post('/api/auth/create-guest-account', async (req, res) => {
 });
 
 // ─── Set Guest Password (for pre-created accounts via Signup flow) ────────────────
-app.post('/api/auth/set-guest-password', async (req, res) => {
+app.post('/api/auth/set-guest-password', authLimiter, async (req, res) => {
   try {
     const { email, newPassword } = req.body;
 
@@ -694,7 +794,7 @@ const requireSupabaseAdmin = () => {
 };
 
 // ─── QR Login Endpoints ───────────────────────────────────────
-app.post('/api/auth/qr/start', async (_req, res) => {
+app.post('/api/auth/qr/start', authLimiter, async (_req, res) => {
   try {
     const guard = requireSupabaseAdmin();
     if (!guard.ok) return res.status(500).json({ error: guard.message });

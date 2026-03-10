@@ -17,6 +17,7 @@ const AuthCallback: React.FC = () => {
                 // Extract referral code from URL query parameters if present
                 const urlParams = new URLSearchParams(window.location.search);
                 const referralCode = urlParams.get('ref');
+                const referralType = urlParams.get('type');
                 console.log('🔍 AuthCallback: Referral code from URL:', referralCode);
 
                 if (referralCode) {
@@ -25,6 +26,12 @@ const AuthCallback: React.FC = () => {
                     console.log('✅ AuthCallback: Stored referral_code in localStorage');
                 } else {
                     console.log('ℹ️ AuthCallback: No referral code in URL');
+                }
+
+                // Store court-owner referral type if present
+                if (referralType === 'court-owner') {
+                    localStorage.setItem('referral_type', 'court-owner');
+                    console.log('✅ AuthCallback: Stored referral_type=court-owner in localStorage');
                 }
 
                 // Verify localStorage
@@ -70,6 +77,14 @@ const AuthCallback: React.FC = () => {
 
                 if (session?.user) {
                     console.log('✅ AuthCallback: User found:', session.user.id);
+
+                    // 1.5 Block accounts without email (e.g. Facebook OAuth without email permission)
+                    if (!session.user.email) {
+                        console.warn('⚠️ AuthCallback: User has no email — signing out and redirecting');
+                        await supabase.auth.signOut();
+                        navigate('/login?error=email_required');
+                        return;
+                    }
 
                     // 2. Handle MFA check
                     const settings = await getSecuritySettings(session.user.id);
