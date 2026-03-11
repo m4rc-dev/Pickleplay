@@ -141,6 +141,7 @@ const Signup: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [highlightTerms, setHighlightTerms] = useState(false);
     const [showTermsModal, setShowTermsModal] = useState(false);
     const [alreadyRegistered, setAlreadyRegistered] = useState(false);
     const [resetEmailSent, setResetEmailSent] = useState(false);
@@ -770,10 +771,10 @@ const Signup: React.FC = () => {
                             {/* Terms */}
                             <div className="flex items-start gap-2.5 pt-1 animate-fade-in-up animate-stagger-4">
                                 <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-slate-400 text-blue-600 focus:ring-blue-600/20" />
-                                    <span className="text-xs text-slate-700 font-medium leading-relaxed">
+                                    <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className={`w-4 h-4 mt-0.5 rounded focus:ring-blue-600/20 transition-all ${highlightTerms ? 'border-rose-500 text-rose-600 scale-110 shadow-sm shadow-rose-500/50' : 'border-slate-400 text-blue-600'}`} />
+                                    <span className={`text-xs font-medium leading-relaxed transition-all ${highlightTerms ? 'text-rose-600 font-bold' : 'text-slate-700'}`}>
                                         I agree to the{' '}
-                                        <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-blue-600 font-bold hover:text-blue-700 underline underline-offset-2 transition-colors">
+                                        <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className={`${highlightTerms ? 'text-rose-700' : 'text-blue-600 hover:text-blue-700'} font-bold underline underline-offset-2 transition-colors`}>
                                             Terms & Privacy Policy
                                         </button>
                                     </span>
@@ -804,12 +805,16 @@ const Signup: React.FC = () => {
                         {/* Google */}
                         <button
                             type="button"
-                            onClick={() => handleSocialLogin('google')}
-                            disabled={!agreedToTerms}
-                            className={`w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group animate-fade-in delay-700 ${agreedToTerms
-                                ? 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
-                                : 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed'
-                                }`}
+                            onClick={(e) => {
+                                if (!agreedToTerms) {
+                                    e.preventDefault();
+                                    setHighlightTerms(true);
+                                    setTimeout(() => setHighlightTerms(false), 2000);
+                                    return;
+                                }
+                                handleSocialLogin('google');
+                            }}
+                            className="w-full flex items-center justify-center gap-3 border rounded-xl py-3 transition-all active:scale-[0.97] group animate-fade-in delay-700 bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300 shadow-sm"
                         >
                             <GoogleIcon />
                         </button>

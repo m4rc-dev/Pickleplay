@@ -1211,12 +1211,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
 
                   <div className="relative z-10">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">
-                      PRO UPGRADE.
+                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none mb-2">
+                      DO YOU HAVE A COURT?
                     </h3>
-                    <p className="text-lime-50 text-sm mb-6 leading-relaxed font-medium">
+                    <div className="inline-block bg-lime-400 text-slate-900 font-black px-3 py-1 rounded-full text-[10px] uppercase tracking-widest mb-4 shadow-lg shadow-lime-900/20">
+                      Enroll it now
+                    </div>
+                    <p className="text-blue-50 text-sm mb-6 leading-relaxed font-medium">
                       {authorizedProRoles.length === 0
-                        ? "Get certified as a coach or register your court facility to join our network."
+                        ? "Register your court facility to join our network, or get certified as a coach."
                         : `You are already a ${authorizedProRoles[0].replace('_', ' ')}. Apply for another role to expand your business.`}
                     </p>
                     <button
