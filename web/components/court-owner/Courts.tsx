@@ -171,7 +171,7 @@ const Courts: React.FC = () => {
                     city: newCity,
                     num_courts: newNumCourts,
                     surface_type: newSurface,
-                    base_price: newPrice,
+                    base_price: 0,
                     cleaning_time_minutes: newCleaningTime,
                     amenities: newAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     latitude: previewCoords?.lat,
@@ -207,7 +207,6 @@ const Courts: React.FC = () => {
                     city: newCity,
                     num_courts: newNumCourts,
                     surface_type: newSurface,
-                    base_price: newPrice,
                     cleaning_time_minutes: newCleaningTime,
                     amenities: newAmenities.split(',').map(a => a.trim()).filter(Boolean),
                     latitude: previewCoords?.lat,
@@ -630,18 +629,12 @@ const Courts: React.FC = () => {
                                                 className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
                                             />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hourly Price (₱)</label>
-                                            <input
-                                                required
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                value={newPrice}
-                                                onChange={e => setNewPrice(Number(e.target.value))}
-                                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm"
-                                            />
-                                        </div>
+                                    </div>
+
+                                    {/* Price info */}
+                                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">💰 Pricing</p>
+                                        <p className="text-xs font-medium text-blue-700">Manage time-based pricing in <span className="font-black">Court Pricing</span>.</p>
                                     </div>
 
                                     {/* Cleaning Time Section */}
