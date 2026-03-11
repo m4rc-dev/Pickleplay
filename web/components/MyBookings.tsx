@@ -630,7 +630,7 @@ const MyBookings: React.FC = () => {
 
     return (
         <>
-            <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-20">
+            <div className="max-w-[1600px] mx-auto space-y-8 animate-fade-in pb-20">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
@@ -641,7 +641,7 @@ const MyBookings: React.FC = () => {
                     </div>
                     <button
                         onClick={() => navigate('/booking')}
-                        className="px-10 py-5 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-900 transition-all shadow-2xl shadow-slate-200/50 flex items-center gap-3"
+                        className="px-10 py-5 bg-blue-600 text-white font-black text-xs uppercase tracking-[0.3em] rounded-2xl hover:bg-blue-700 transition-all shadow-2xl shadow-slate-200/50 flex items-center gap-3"
                     >
                         <Calendar size={20} /> Book A Court
                     </button>
@@ -855,7 +855,7 @@ const MyBookings: React.FC = () => {
                                                     {b.total_price > 0 ? <p className="text-sm font-black text-slate-900">₱{b.total_price}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
                                                 </div>
                                                 <div className="col-span-1">{getStatusBadge(b)}</div>
-                                                <div className="col-span-2 flex items-center justify-end">
+                                                <div className="col-span-3 flex items-center justify-end">
                                                     <div className="relative">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setOpenActionsMenuId(openActionsMenuId === b.id ? null : b.id); }}
@@ -1561,7 +1561,7 @@ const MyBookings: React.FC = () => {
                                         <label className="text-[0.6rem] font-extrabold uppercase tracking-widest text-slate-400 ml-1">Recommended Friends</label>
                                         {inviteLoadingFollowed ? (
                                             <div className="flex gap-2 overflow-x-auto pb-1">
-                                                {[1,2,3].map(i => (
+                                                {[1, 2, 3].map(i => (
                                                     <div key={i} className="flex-shrink-0 w-16 flex flex-col items-center gap-1.5 animate-pulse">
                                                         <div className="w-12 h-12 rounded-2xl bg-slate-100" />
                                                         <div className="h-2 w-10 bg-slate-100 rounded" />
@@ -1580,11 +1580,10 @@ const MyBookings: React.FC = () => {
                                                                 setInviteSearchQuery('');
                                                                 setInviteSearchError('');
                                                             }}
-                                                            className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-2 py-2 rounded-2xl border-2 transition-all ${
-                                                                isSelected
-                                                                    ? 'border-violet-500 bg-violet-50'
-                                                                    : 'border-transparent bg-slate-50 hover:bg-violet-50 hover:border-violet-200'
-                                                            }`}
+                                                            className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-2 py-2 rounded-2xl border-2 transition-all ${isSelected
+                                                                ? 'border-violet-500 bg-violet-50'
+                                                                : 'border-transparent bg-slate-50 hover:bg-violet-50 hover:border-violet-200'
+                                                                }`}
                                                         >
                                                             <div className="relative">
                                                                 {fp.avatar_url ? (

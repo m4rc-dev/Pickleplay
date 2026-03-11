@@ -1616,7 +1616,7 @@ const Booking: React.FC = () => {
                   }}
                   className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400"
                 />
-                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-[#1E40AF] font-bold text-xs shrink-0">
+                <button onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }} className="text-blue-600 font-bold text-xs shrink-0">
                   Cancel
                 </button>
               </div>
@@ -1708,7 +1708,7 @@ const Booking: React.FC = () => {
               <button
                 onClick={() => setShowFilters(true)}
                 className={`w-10 h-10 flex items-center justify-center rounded-xl shrink-0 transition-all relative ${(filterType !== 'All' || filterFreeOnly || filterAmenities.length > 0)
-                  ? 'bg-[#1E40AF] text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/10' : 'bg-white border border-slate-200 text-slate-600'
                   }`}
               >
                 <SlidersHorizontal size={18} />
@@ -1720,7 +1720,7 @@ const Booking: React.FC = () => {
               </button>
               <button
                 onClick={() => navigate('/my-bookings')}
-                className="w-10 h-10 flex items-center justify-center bg-[#1E40AF] text-white rounded-xl shrink-0 hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/10"
+                className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-xl shrink-0 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/10"
               >
                 <ClipboardList size={18} />
               </button>
@@ -1776,20 +1776,20 @@ const Booking: React.FC = () => {
         <div className="hidden md:block mb-6 lg:mb-8">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-5">
             <div>
-              <p className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.3em] mb-2">
+              <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">
                 {urlLocationId && selectedLocation ? 'Location / Detail' : 'Courts / Live'}
               </p>
               <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
                 {urlLocationId && selectedLocation
-                  ? <>Book a <span className="text-[#1E40AF]">Court at {selectedLocation.name}.</span></>
-                  : <>Book a <span className="text-[#1E40AF]">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
+                  ? <>Book a <span className="text-blue-600">Court at {selectedLocation.name}.</span></>
+                  : <>Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
                 }
               </h1>
             </div>
             {/* My Bookings Button */}
             <button
               onClick={() => navigate('/my-bookings')}
-              className="flex items-center gap-2.5 px-6 py-3 bg-[#1E40AF] hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-blue-900/10 shrink-0"
+              className="flex items-center gap-2.5 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-blue-900/10 shrink-0"
             >
               <ClipboardList size={18} />
               My Bookings
