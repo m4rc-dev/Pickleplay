@@ -2,16 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck, Banknote, QrCode, Upload } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { isTimeSlotBlocked, getCourtBlockingEvents } from '../services/courtEvents';
-import { autoCancelLateBookings, checkDailyBookingLimit } from '../services/bookings';
+import { autoCancelLateBookings } from '../services/bookings';
 import { sendInvitation, searchPlayerForInvite } from '../services/invitations';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
 import Toast, { ToastType } from './ui/Toast';
+import { getSlotPrices, PricingRule, fetchCourtPricingRules, getSlotPrice } from '../services/courtPricingService';
 
 // Always use hourly slots for simplicity
 const ALL_HOUR_SLOTS = [
@@ -43,6 +44,33 @@ const slotToRange = (slot: string): string => {
   const endPeriod = endH >= 12 ? 'PM' : 'AM';
   const endH12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
   return `${slot} - ${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+};
+
+/** Convert a slot like '08:00 AM' to a 24-hour number (0–23) */
+const slotTo24 = (slot: string): number => {
+  const [time, period] = slot.split(' ');
+  let [h] = time.split(':').map(Number);
+  if (period === 'PM' && h !== 12) h += 12;
+  else if (period === 'AM' && h === 12) h = 0;
+  return h;
+};
+
+/** Build the display range for multiple consecutive slots, e.g. '08:00 AM - 11:00 AM (3 hrs)' */
+const slotsToRange = (slots: string[]): string => {
+  if (slots.length === 0) return '';
+  if (slots.length === 1) return slotToRange(slots[0]);
+  const sorted = [...slots].sort((a, b) => slotTo24(a) - slotTo24(b));
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const [time, period] = last.split(' ');
+  let [h, m] = time.split(':').map(Number);
+  if (period === 'PM' && h !== 12) h += 12;
+  else if (period === 'AM' && h === 12) h = 0;
+  const endH = (h + 1) % 24;
+  const endPeriod = endH >= 12 ? 'PM' : 'AM';
+  const endH12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
+  const endStr = `${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+  return `${first} - ${endStr} (${sorted.length} hr${sorted.length > 1 ? 's' : ''})`;
 };
 
 // ─── Philippine Time Helpers (Asia/Manila, UTC+8) ───
@@ -157,7 +185,7 @@ const Booking: React.FC = () => {
   });
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [isBooked, setIsBooked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -197,7 +225,6 @@ const Booking: React.FC = () => {
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
-  const [dailyLimitReached, setDailyLimitReached] = useState(false);
   // Accordion state for courts list (expand details inline without leaving page)
   const [expandedCourtId, setExpandedCourtId] = useState<string | null>(null);
   // Hero expansion: when a court is clicked, animate it to the top header area
@@ -234,6 +261,22 @@ const Booking: React.FC = () => {
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type, isVisible: true });
   };
+
+  // Payment Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'maya' | null>(null);
+  const [ownerPaymentMethods, setOwnerPaymentMethods] = useState<any[]>([]);
+  const [selectedQRMethod, setSelectedQRMethod] = useState<any | null>(null);
+  const [showQRPaymentStep, setShowQRPaymentStep] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const proofInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic pricing state
+  const [slotPrices, setSlotPrices] = useState<Map<string, number>>(new Map());
+  const [pricingRulesCache, setPricingRulesCache] = useState<PricingRule[]>([]);
+  const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
 
 
   const getUserLocation = () => {
@@ -502,6 +545,21 @@ const Booking: React.FC = () => {
           };
         });
         setLocationCourts(mappedCourts);
+
+        // Fetch pricing rules for all courts to build price ranges
+        const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
+        for (const court of mappedCourts) {
+          try {
+            const rules = await fetchCourtPricingRules(court.id);
+            if (rules.length > 0) {
+              const rulePrices = rules.map(r => r.price_per_hour);
+              rangesMap.set(court.id, { min: Math.min(...rulePrices), max: Math.max(...rulePrices), hasRules: true });
+            } else {
+              rangesMap.set(court.id, { min: 0, max: 0, hasRules: false });
+            }
+          } catch { rangesMap.set(court.id, { min: 0, max: 0, hasRules: false }); }
+        }
+        setCourtPriceRanges(rangesMap);
       } catch (err) {
         console.error('Error fetching location detail:', err);
       } finally {
@@ -659,18 +717,8 @@ const Booking: React.FC = () => {
       // 0. Auto-cancel late bookings first to free up slots immediately
       await autoCancelLateBookings();
 
-      // 0.5 Check daily booking limit (1 booking per player per day per court location)
-      const courtLocationId = court.location_id || court.locationId;
+      // Get current user for identifying their bookings
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser) {
-        const { hasReachedLimit } = await checkDailyBookingLimit(currentUser.id, targetDateStr, courtLocationId);
-        setDailyLimitReached(hasReachedLimit);
-        if (hasReachedLimit) {
-          setSelectedSlot(null);
-        }
-      } else {
-        setDailyLimitReached(false);
-      }
 
       // 1. Fetch court events (blocking events from owner)
       const { data: events } = await getCourtBlockingEvents(court.id);
@@ -760,6 +808,26 @@ const Booking: React.FC = () => {
   // Check availability when a court or date is selected
   useEffect(() => {
     checkCourtAvailability(selectedCourt, selectedDate);
+  }, [selectedCourt, selectedDate]);
+
+  // Fetch dynamic pricing for slots whenever court or date changes
+  useEffect(() => {
+    if (!selectedCourt) {
+      setSlotPrices(new Map());
+      setPricingRulesCache([]);
+      return;
+    }
+    const loadPricing = async () => {
+      const rules = await fetchCourtPricingRules(selectedCourt.id);
+      setPricingRulesCache(rules);
+      const dateStr = toPhDateStr(selectedDate);
+      const slotsToPrice = selectedLocation?.opening_time && selectedLocation?.closing_time
+        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+        : TIME_SLOTS;
+      const prices = await getSlotPrices(selectedCourt.id, dateStr, slotsToPrice, selectedCourt.pricePerHour);
+      setSlotPrices(prices);
+    };
+    loadPricing();
   }, [selectedCourt, selectedDate]);
 
   // Polling: Auto-refresh availability every 5 seconds for real-time updates across all players
@@ -1052,12 +1120,132 @@ const Booking: React.FC = () => {
     }
   }, [locations, courts, filterType, searchQuery, isMapLoaded]);
 
+  /** Get the price for the currently selected slot (dynamic pricing aware) */
+  const getSelectedSlotPrice = (): number => {
+    if (!selectedCourt) return 0;
+    const slot = selectedSlots[0] || null;
+    if (slot && slotPrices.has(slot)) {
+      const price = slotPrices.get(slot)!;
+      if (price === 0) {
+        const range = courtPriceRanges.get(selectedCourt.id);
+        if (range?.hasRules && range.min > 0) return range.min;
+      }
+      return price;
+    }
+    const range = courtPriceRanges.get(selectedCourt.id);
+    if (range?.hasRules && range.min > 0) return range.min;
+    return selectedCourt.pricePerHour;
+  };
+
+  /** Get total price for ALL selected slots */
+  const getSelectedSlotsTotal = (): number => {
+    if (!selectedCourt || selectedSlots.length === 0) return 0;
+    let total = 0;
+    for (const slot of selectedSlots) {
+      if (slotPrices.has(slot)) {
+        const price = slotPrices.get(slot)!;
+        if (price === 0) {
+          const range = courtPriceRanges.get(selectedCourt.id);
+          total += (range?.hasRules && range.min > 0) ? range.min : selectedCourt.pricePerHour;
+        } else {
+          total += price;
+        }
+      } else {
+        const range = courtPriceRanges.get(selectedCourt.id);
+        total += (range?.hasRules && range.min > 0) ? range.min : selectedCourt.pricePerHour;
+      }
+    }
+    return total;
+  };
+
+  /** Toggle a slot in/out of the selection, ensuring all selected slots remain consecutive & available */
+  const toggleSlotSelection = (slot: string, allSlots: string[], blockedSet: Set<string>, bookedSet: Set<string>) => {
+    const slotH = slotTo24(slot);
+    setSelectedSlots(prev => {
+      // If already selected, deselect it (and any slots that would become non-consecutive)
+      if (prev.includes(slot)) {
+        // Remove this slot — keep only the largest consecutive group still connected
+        const remaining = prev.filter(s => s !== slot);
+        if (remaining.length === 0) return [];
+        // Sort remaining by hour
+        const sorted = remaining.sort((a, b) => slotTo24(a) - slotTo24(b));
+        // Find two groups: those before the removed slot and those after
+        const before = sorted.filter(s => slotTo24(s) < slotH);
+        const after = sorted.filter(s => slotTo24(s) > slotH);
+        // Keep the larger group (or the one that's still consecutive)
+        return before.length >= after.length ? before : after;
+      }
+      // Adding a new slot — must be adjacent to an existing selection (or first pick)
+      if (prev.length === 0) return [slot];
+      const prevHours = prev.map(slotTo24).sort((a, b) => a - b);
+      const minH = prevHours[0];
+      const maxH = prevHours[prevHours.length - 1];
+      // Must be exactly 1 hour before minH or 1 hour after maxH
+      if (slotH !== minH - 1 && slotH !== maxH + 1) {
+        // Not adjacent — start a new selection with just this slot
+        return [slot];
+      }
+      // Check that all slots between new min and new max are available
+      const newMin = Math.min(minH, slotH);
+      const newMax = Math.max(maxH, slotH);
+      for (let h = newMin; h <= newMax; h++) {
+        const s = allSlots.find(sl => slotTo24(sl) === h);
+        if (!s || blockedSet.has(s) || bookedSet.has(s)) {
+          // Can't bridge — start fresh with just this slot
+          return [slot];
+        }
+      }
+      return [...prev, slot];
+    });
+  };
+
   const handleBooking = async () => {
-    if (selectedCourt && selectedSlot) {
-      setIsProcessing(true);
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+    if (!selectedCourt || selectedSlots.length === 0) return;
+
+    // Fetch owner payment methods before showing modal
+    try {
+      const { data: courtData } = await supabase
+        .from('courts')
+        .select('owner_id, location_id')
+        .eq('id', selectedCourt.id)
+        .single();
+      if (courtData) {
+        const { data: methods } = await supabase
+          .from('court_owner_payment_methods')
+          .select('*')
+          .eq('owner_id', courtData.owner_id)
+          .eq('is_active', true);
+        const locationMethods = (methods || []).filter((m: any) => m.location_id === courtData.location_id);
+        const globalMethods = (methods || []).filter((m: any) => !m.location_id);
+        setOwnerPaymentMethods(locationMethods.length > 0 ? locationMethods : globalMethods);
+      }
+    } catch (err) {
+      console.error('Error fetching payment methods:', err);
+      setOwnerPaymentMethods([]);
+    }
+
+    setPaymentMethod(null);
+    setSelectedQRMethod(null);
+    setShowQRPaymentStep(false);
+    setProofFile(null);
+    setProofPreview(null);
+    setReferenceNumber('');
+    setShowPaymentModal(true);
+  };
+
+  const confirmBookingWithPayment = async () => {
+    if (!selectedCourt || selectedSlots.length === 0 || !paymentMethod) return;
+
+    // QR payment validation
+    if ((paymentMethod === 'gcash' || paymentMethod === 'maya') && !proofFile) {
+      alert('📸 Please upload your payment proof screenshot.');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
         // 0.5 COURT OWNER CHECK - Owners cannot book their own courts (unless in Player Mode)
         const currentActiveRole = localStorage.getItem('active_role');
@@ -1077,17 +1265,6 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // 1.5 DAILY BOOKING LIMIT - Max 1 hour per player per day per court location (Philippine Time)
-        const courtLocId = selectedCourt.location_id || selectedCourt.locationId;
-        const targetDateStr_check = toPhDateStr(selectedDate);
-        const { hasReachedLimit } = await checkDailyBookingLimit(user.id, targetDateStr_check, courtLocId);
-        if (hasReachedLimit) {
-          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
-          setDailyLimitReached(true);
-          setIsProcessing(false);
-          return;
-        }
-
         // 2. USER BOOKING LIMIT - Max 5 pending bookings
         const { data: userBookings, error: userBookingsError } = await supabase
           .from('bookings')
@@ -1103,8 +1280,13 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // Calculate end time (assuming 1 hour slot)
-        const [time, period] = selectedSlot.split(' ');
+        // Calculate start/end time from selected slots (multi-hour support)
+        const sortedSlots = [...selectedSlots].sort((a, b) => slotTo24(a) - slotTo24(b));
+        const firstSlot = sortedSlots[0];
+        const lastSlot = sortedSlots[sortedSlots.length - 1];
+        const numHours = sortedSlots.length;
+
+        const [time, period] = firstSlot.split(' ');
         let [hours, minutes] = time.split(':').map(Number);
 
         if (period === 'PM' && hours !== 12) {
@@ -1116,7 +1298,7 @@ const Booking: React.FC = () => {
         const startDateTime = new Date(selectedDate);
         startDateTime.setHours(hours, minutes, 0, 0);
 
-        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+        const endDateTime = new Date(startDateTime.getTime() + numHours * 60 * 60 * 1000); // Add N hours
 
         const formatTime = (date: Date) => {
           const h = date.getHours().toString().padStart(2, '0');
@@ -1146,38 +1328,7 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // 3.5 FINAL DAILY LIMIT GUARD — scoped to this court location
-        const guardLocationId = selectedCourt.location_id || selectedCourt.locationId;
-        let guardQuery = supabase
-          .from('bookings')
-          .select('id, courts!inner(location_id)')
-          .eq('player_id', user.id)
-          .eq('date', targetDateStr)
-          .neq('status', 'cancelled');
-
-        if (guardLocationId) {
-          guardQuery = guardQuery.eq('courts.location_id', guardLocationId);
-        }
-
-        const { data: playerDayBookings, error: playerDayError } = await guardQuery;
-
-        if (playerDayError) {
-          console.error('Daily limit guard query failed:', playerDayError);
-          alert('🚫 Could not verify your booking limit for this location. Please try again.');
-          setIsProcessing(false);
-          return;
-        }
-
-        if (playerDayBookings && playerDayBookings.length > 0) {
-          console.log('DAILY LIMIT GUARD: Player already has', playerDayBookings.length, 'booking(s) at this location on', targetDateStr);
-          alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
-          setDailyLimitReached(true);
-          setSelectedSlot(null);
-          setIsProcessing(false);
-          return;
-        }
-
-        // 3.6. COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
+        // 3.5 COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
         const isBlocked = await isTimeSlotBlocked(
           selectedCourt.id,
           startDateTime.toISOString(),
@@ -1191,6 +1342,10 @@ const Booking: React.FC = () => {
         }
 
         // 4. Create Booking
+        const isQRPayment = paymentMethod === 'gcash' || paymentMethod === 'maya';
+
+        const totalPrice = getSelectedSlotsTotal();
+
         const { data: bookingData, error: bookingError } = await supabase
           .from('bookings')
           .insert({
@@ -1199,15 +1354,41 @@ const Booking: React.FC = () => {
             date: targetDateStr,
             start_time: startTimeFormatted,
             end_time: endTimeFormatted,
-            total_price: selectedCourt.pricePerHour,
+            total_price: totalPrice,
             status: 'pending',
             payment_status: 'unpaid',
-            payment_method: 'cash'
+            payment_method: paymentMethod,
+            payment_proof_status: isQRPayment ? 'proof_submitted' : null,
           })
           .select()
           .single();
 
         if (bookingError) throw bookingError;
+
+        // Upload proof and create payment record for QR payments
+        if (isQRPayment && proofFile && bookingData) {
+          const proofPath = `${user.id}/${bookingData.id}_proof.png`;
+          const { error: proofUploadError } = await supabase.storage
+            .from('payment-proofs')
+            .upload(proofPath, proofFile, { upsert: true });
+
+          let proofUrl = '';
+          if (!proofUploadError) {
+            const { data: urlData } = supabase.storage.from('payment-proofs').getPublicUrl(proofPath);
+            proofUrl = urlData.publicUrl;
+          }
+
+          await supabase.from('booking_payments').insert({
+            booking_id: bookingData.id,
+            player_id: user.id,
+            payment_type: paymentMethod,
+            account_name: selectedQRMethod?.account_name || '',
+            reference_number: referenceNumber || null,
+            proof_image_url: proofUrl,
+            amount: totalPrice,
+            status: 'pending',
+          });
+        }
 
         // 2. Create Notifications
         const locationName = selectedLocation?.name || selectedCourt.location || '';
@@ -1221,7 +1402,7 @@ const Booking: React.FC = () => {
             actor_id: user.id,
             type: 'BOOKING',
             title: 'Booking Confirmed',
-            message: `You successfully booked ${courtAndLocation} on ${targetDateStr} for ${slotToRange(selectedSlot)}. Status: Pending approval.`,
+            message: `You successfully booked ${courtAndLocation} on ${targetDateStr} for ${slotsToRange(sortedSlots)}. Status: Pending approval.`,
             booking_id: bookingData.id
           });
 
@@ -1240,7 +1421,7 @@ const Booking: React.FC = () => {
               actor_id: user.id,
               type: 'BOOKING',
               title: 'New Booking Request',
-              message: `has booked ${courtAndLocation} for ${slotToRange(selectedSlot)} on ${targetDateStr}. Tap to review and confirm.`,
+              message: `has booked ${courtAndLocation} for ${slotsToRange(sortedSlots)} on ${targetDateStr}. Tap to review and confirm.`,
               booking_id: bookingData.id
             });
 
@@ -1256,12 +1437,9 @@ const Booking: React.FC = () => {
         // Update cooldown timestamp
         setLastBookingTime(Date.now());
 
-        // Player just used their daily 1-hour limit
-        setDailyLimitReached(true);
-
         // Update booked slots to reflect the new booking
-        if (selectedSlot) {
-          setBookedSlots(prev => new Set([...prev, selectedSlot]));
+        if (selectedSlots.length > 0) {
+          setBookedSlots(prev => new Set([...prev, ...selectedSlots]));
         }
 
         // Fetch player name for receipt
@@ -1272,6 +1450,7 @@ const Booking: React.FC = () => {
           .single();
 
         // Prepare receipt data
+        const pricePerHour = numHours > 0 ? Math.round(totalPrice / numHours) : totalPrice;
         setReceiptData({
           id: bookingData.id,
           courtName: selectedCourt.name,
@@ -1280,13 +1459,16 @@ const Booking: React.FC = () => {
           date: targetDateStr,
           startTime: startTimeFormatted,
           endTime: endTimeFormatted,
-          pricePerHour: selectedCourt.pricePerHour,
-          totalPrice: selectedCourt.pricePerHour,
+          pricePerHour: pricePerHour,
+          totalPrice: totalPrice,
           playerName: profileData?.full_name || profileData?.username || 'Guest',
-          status: 'pending'
+          status: 'pending',
+          paymentMethod: paymentMethod === 'gcash' ? 'GCash' : paymentMethod === 'maya' ? 'Maya' : 'Cash',
+          paymentStatus: isQRPayment ? 'proof_submitted' : 'unpaid',
         });
 
-        // Show success modal first
+        // Hide payment modal, show success modal
+        setShowPaymentModal(false);
         setShowSuccessModal(true);
         setIsBooked(true);
 
@@ -1312,9 +1494,9 @@ const Booking: React.FC = () => {
         setPostBookLoadingPlayers(false);
 
         // Clear slot selection immediately
-        setSelectedSlot(null);
+        setSelectedSlots([]);
 
-        // Re-check availability and daily limit so the UI updates immediately
+        // Re-check availability so the UI updates immediately
         checkCourtAvailability(selectedCourt, selectedDate);
       } catch (err: any) {
         console.error('Booking error:', err);
@@ -1323,7 +1505,7 @@ const Booking: React.FC = () => {
         if (err.message?.includes('unique_court_booking') || err.code === '23505') {
           alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
           // Refresh availability to show updated slots
-          setSelectedSlot(null);
+          setSelectedSlots([]);
           checkCourtAvailability(selectedCourt, selectedDate);
         } else {
           alert(`Booking failed: ${err.message}`);
@@ -1331,7 +1513,6 @@ const Booking: React.FC = () => {
       } finally {
         setIsProcessing(false);
       }
-    }
   };
 
   const handleNearMe = () => {
@@ -1997,11 +2178,16 @@ const Booking: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                        {selectedCourt.pricePerHour > 0 ? (
-                          <p className="text-lg font-black text-slate-900">₱{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>
-                        ) : (
-                          <p className="text-lg font-black text-[#a3e635]">FREE</p>
-                        )}
+                        {(() => {
+                          const range = courtPriceRanges.get(selectedCourt.id);
+                          if (range?.hasRules) {
+                            return <p className="text-lg font-black text-slate-900">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>;
+                          }
+                          if (selectedCourt.pricePerHour > 0) {
+                            return <p className="text-lg font-black text-slate-900">₱{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>;
+                          }
+                          return <p className="text-sm font-bold text-slate-400 italic">Not Set</p>;
+                        })()}
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Capacity</p>
@@ -2142,7 +2328,7 @@ const Booking: React.FC = () => {
                             return (
                               <button
                                 key={i}
-                                onClick={() => { setSelectedDate(date); setSelectedSlot(null); setDailyLimitReached(false); }}
+                                onClick={() => { setSelectedDate(date); setSelectedSlots([]); }}
                                 className={`flex flex-col items-center justify-center min-w-[56px] h-[72px] rounded-xl transition-all duration-300 border-2 ${isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'}`}
                               >
                                 <span className={`text-[9px] font-black uppercase mb-1 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>{dayName}</span>
@@ -2168,15 +2354,6 @@ const Booking: React.FC = () => {
                           )}
                         </div>
 
-                        {dailyLimitReached && (
-                          <div className="mb-3 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2">
-                            <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-blue-700 leading-relaxed font-bold">
-                              Limit Reached: <span className="underline">1 hour/day</span> max at this venue.
-                            </p>
-                          </div>
-                        )}
-
                         {selectedCourt.status === 'Coming Soon' || selectedCourt.status === 'Maintenance' ? (
                           <div className="text-center py-8 rounded-xl border bg-slate-50/50 border-slate-100">
                             <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center text-lg bg-blue-100">
@@ -2189,39 +2366,48 @@ const Booking: React.FC = () => {
                           </div>
                         ) : (
                           <div className="grid grid-cols-2 gap-2">
-                            {(selectedLocation?.opening_time && selectedLocation?.closing_time
-                              ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                              : TIME_SLOTS
-                            ).map(slot => {
-                              const isBlocked = blockedSlots.has(slot);
-                              const isBookedSlot = bookedSlots.has(slot);
-                              const isUserSlot = userBookedSlots.has(slot);
-                              const userSlotStatus = userBookedSlots.get(slot) || '';
-                              const isPast = isSlotInPast(slot, selectedDate);
-                              const isUnavailable = isBlocked || isBookedSlot || dailyLimitReached || isPast;
-                              return (
-                                <button
-                                  key={slot}
-                                  onClick={() => !isUnavailable && setSelectedSlot(slot)}
-                                  disabled={isUnavailable}
-                                  className={`py-3.5 px-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all border relative ${isUserSlot
-                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
-                                    : isPast ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
-                                      : isBlocked ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed'
-                                        : isBookedSlot ? 'bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed'
-                                          : selectedSlot === slot ? 'bg-[#1E40AF] text-white border-[#1E40AF] shadow-lg shadow-blue-900/20'
-                                            : dailyLimitReached ? 'bg-blue-50/50 text-blue-300 border-transparent cursor-not-allowed'
+                            {(() => {
+                              const allSlots = selectedLocation?.opening_time && selectedLocation?.closing_time
+                                ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                                : TIME_SLOTS;
+                              return allSlots.map(slot => {
+                                const isBlocked = blockedSlots.has(slot);
+                                const isBookedSlot = bookedSlots.has(slot);
+                                const isUserSlot = userBookedSlots.has(slot);
+                                const userSlotStatus = userBookedSlots.get(slot) || '';
+                                const isPast = isSlotInPast(slot, selectedDate);
+                                const isUnavailable = isBlocked || isBookedSlot || isPast;
+                                const isSelected = selectedSlots.includes(slot);
+                                const slotPrice = slotPrices.get(slot) ?? selectedCourt?.pricePerHour ?? 0;
+                                const courtRange = courtPriceRanges.get(selectedCourt?.id || '');
+                                return (
+                                  <button
+                                    key={slot}
+                                    onClick={() => !isUnavailable && toggleSlotSelection(slot, allSlots, blockedSlots, bookedSlots)}
+                                    disabled={isUnavailable}
+                                    className={`py-3.5 px-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all border relative ${isUserSlot
+                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
+                                      : isPast ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                                        : isBlocked ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed'
+                                          : isBookedSlot ? 'bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed'
+                                            : isSelected ? 'bg-[#1E40AF] text-white border-[#1E40AF] shadow-lg shadow-blue-900/20'
                                               : 'bg-white text-slate-600 border-slate-100 hover:border-[#1E40AF] hover:text-[#1E40AF] shadow-sm'}`}
-                                >
-                                  <span className={isPast && !isUserSlot ? 'line-through opacity-50' : ''}>
-                                    {isUserSlot ? `Booked (${userSlotStatus})` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Slot Locked' : slotToRange(slot)}
-                                  </span>
-                                  {isUserSlot && <CheckCircle2 size={10} className="absolute top-1 right-1 text-emerald-500" />}
-                                  {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1 right-1 text-red-400" />}
-                                  {isBookedSlot && !isBlocked && !isUserSlot && <AlertCircle size={10} className="absolute top-1 right-1 text-blue-400" />}
-                                </button>
-                              );
-                            })}
+                                  >
+                                    <span className={`flex flex-col items-center gap-0.5 ${isPast && !isUserSlot ? 'line-through opacity-50' : ''}`}>
+                                      <span>{isUserSlot ? `Booked (${userSlotStatus})` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Slot Locked' : slotToRange(slot)}</span>
+                                      {!isUserSlot && (
+                                        <span className={`text-[11px] font-black normal-case tracking-normal ${isUnavailable ? 'opacity-50' : ''} ${isSelected ? 'text-blue-200' : slotPrice > 0 ? 'text-emerald-600' : courtRange?.hasRules ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                          {slotPrice > 0 ? `₱${slotPrice}/hr` : courtRange?.hasRules ? `₱${courtRange.min}/hr` : '—'}
+                                        </span>
+                                      )}
+                                    </span>
+                                    {isUserSlot && <CheckCircle2 size={10} className="absolute top-1 right-1 text-emerald-500" />}
+                                    {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1 right-1 text-red-400" />}
+                                    {isBookedSlot && !isBlocked && !isUserSlot && <AlertCircle size={10} className="absolute top-1 right-1 text-blue-400" />}
+                                  </button>
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </div>
@@ -2235,11 +2421,11 @@ const Booking: React.FC = () => {
                       const isOwner = !!(user && selectedCourt?.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER');
                       return (
                         <button
-                          disabled={!selectedSlot || isBooked || isProcessing || dailyLimitReached || isOwner || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                          disabled={selectedSlots.length === 0 || isBooked || isProcessing || isOwner}
                           onClick={handleBooking}
-                          className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2.5 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : dailyLimitReached ? 'bg-blue-100 text-blue-500 border border-blue-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                          className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2.5 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed'}`}
                         >
-                          {isProcessing ? <Loader2 className="animate-spin" size={18} /> : isBooked ? <><CheckCircle2 size={18} /> Confirmed</> : isOwner ? <><Ban size={16} /> Owner Restricted</> : dailyLimitReached ? <><Ban size={16} /> Limit Reached</> : selectedSlot && (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) ? <><Ban size={16} /> Slot Locked</> : <>Confirm Booking {String.fromCharCode(8594)}</>}
+                          {isProcessing ? <Loader2 className="animate-spin" size={18} /> : isBooked ? <><CheckCircle2 size={18} /> Confirmed</> : isOwner ? <><Ban size={16} /> Owner Restricted</> : selectedSlots.length > 0 ? <>{`Confirm ${selectedSlots.length} hr${selectedSlots.length > 1 ? 's' : ''} — ₱${getSelectedSlotsTotal()}`} {String.fromCharCode(8594)}</> : <>Select Time Slots</>}
                         </button>
                       );
                     })()}
@@ -2365,15 +2551,28 @@ const Booking: React.FC = () => {
                                   )}
                                   {/* Price badge */}
                                   <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
-                                    {court.pricePerHour != null && court.pricePerHour > 0 ? (
-                                      <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                        <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
-                                      </div>
-                                    ) : court.pricePerHour === 0 ? (
-                                      <div className="bg-[#a3e635] backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                        <span className="text-[11px] font-black text-slate-900">FREE</span>
-                                      </div>
-                                    ) : null}
+                                    {(() => {
+                                      const range = courtPriceRanges.get(court.id);
+                                      if (range?.hasRules) {
+                                        return (
+                                          <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                            <span className="text-[11px] font-black text-slate-900">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                          </div>
+                                        );
+                                      }
+                                      if (court.pricePerHour != null && court.pricePerHour > 0) {
+                                        return (
+                                          <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                            <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                          </div>
+                                        );
+                                      }
+                                      return (
+                                        <div className="bg-slate-100/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                          <span className="text-[10px] font-bold text-slate-500 italic">Price Not Set</span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
 
@@ -2672,19 +2871,22 @@ const Booking: React.FC = () => {
                     {/* Details + CTAs */}
                     <div className="shrink-0 flex flex-col gap-2.5 p-4 bg-white border-t border-slate-100">
                       <div className="flex gap-2">
-                        {heroActiveCourt.pricePerHour != null && (
-                          <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-[#1E40AF] rounded-xl text-white">
+                        <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-[#1E40AF] rounded-xl text-white">
                             <Navigation size={14} className="text-[#a3e635] shrink-0" />
                             <div>
                               <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest leading-none">Rate</p>
-                              {heroActiveCourt.pricePerHour > 0 ? (
-                                <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>
-                              ) : (
-                                <p className="text-lg font-black leading-tight text-[#a3e635]">FREE</p>
-                              )}
+                              {(() => {
+                                const range = courtPriceRanges.get(heroActiveCourt.id);
+                                if (range?.hasRules) {
+                                  return <p className="text-lg font-black leading-tight">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
+                                }
+                                if (heroActiveCourt.pricePerHour > 0) {
+                                  return <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
+                                }
+                                return <p className="text-sm font-bold leading-tight text-blue-300 italic">Not Set</p>;
+                              })()}
                             </div>
                           </div>
-                        )}
                         {selectedLocation.opening_time && selectedLocation.closing_time && (
                           <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-slate-50 rounded-xl border border-slate-100">
                             <Clock size={14} className="text-slate-400 shrink-0" />
@@ -2785,7 +2987,7 @@ const Booking: React.FC = () => {
                               return (
                                 <button
                                   key={i}
-                                  onClick={() => { setSelectedDate(date); setSelectedSlot(null); setDailyLimitReached(false); }}
+                                  onClick={() => { setSelectedDate(date); setSelectedSlots([]); }}
                                   className={`flex flex-col items-center justify-center min-w-[64px] h-20 rounded-2xl transition-all duration-300 border-2 ${isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-xl shadow-blue-900/20' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'}`}
                                 >
                                   <span className={`text-[9px] font-black uppercase mb-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>{dayName}</span>
@@ -2811,15 +3013,6 @@ const Booking: React.FC = () => {
                             )}
                           </div>
 
-                          {dailyLimitReached && (
-                            <div className="mb-4 p-3.5 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-2.5">
-                              <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                              <p className="text-[10px] text-blue-700 leading-relaxed font-bold">
-                                Limit Reached: <span className="underline">1 hour/day</span> max at this venue.
-                              </p>
-                            </div>
-                          )}
-
                           {selectedCourt.status === 'Coming Soon' || selectedCourt.status === 'Maintenance' ? (
                             <div className="text-center py-10 rounded-3xl border bg-slate-50/50 border-slate-100 animate-in zoom-in-95 duration-500">
                               <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center text-xl ${selectedCourt.status === 'Coming Soon' ? 'bg-blue-100' : 'bg-blue-100'}`}>
@@ -2832,39 +3025,48 @@ const Booking: React.FC = () => {
                             </div>
                           ) : (
                             <div className="grid grid-cols-2 gap-2.5">
-                              {(selectedLocation?.opening_time && selectedLocation?.closing_time
-                                ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                                : TIME_SLOTS
-                              ).map(slot => {
-                                const isBlocked = blockedSlots.has(slot);
-                                const isBookedSlot = bookedSlots.has(slot);
-                                const isUserSlot = userBookedSlots.has(slot);
-                                const userSlotStatus = userBookedSlots.get(slot) || '';
-                                const isPast = isSlotInPast(slot, selectedDate);
-                                const isUnavailable = isBlocked || isBookedSlot || dailyLimitReached || isPast;
-                                return (
-                                  <button
-                                    key={slot}
-                                    onClick={() => !isUnavailable && setSelectedSlot(slot)}
-                                    disabled={isUnavailable}
-                                    className={`py-4 px-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all border relative ${isUserSlot
-                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
-                                      : isPast ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
-                                        : isBlocked ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed'
-                                          : isBookedSlot ? 'bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed'
-                                            : selectedSlot === slot ? 'bg-[#1E40AF] text-white border-[#1E40AF] shadow-xl shadow-blue-900/20'
-                                              : dailyLimitReached ? 'bg-blue-50/50 text-blue-300 border-transparent cursor-not-allowed'
+                              {(() => {
+                                const allSlots = selectedLocation?.opening_time && selectedLocation?.closing_time
+                                  ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                                  : TIME_SLOTS;
+                                return allSlots.map(slot => {
+                                  const isBlocked = blockedSlots.has(slot);
+                                  const isBookedSlot = bookedSlots.has(slot);
+                                  const isUserSlot = userBookedSlots.has(slot);
+                                  const userSlotStatus = userBookedSlots.get(slot) || '';
+                                  const isPast = isSlotInPast(slot, selectedDate);
+                                  const isUnavailable = isBlocked || isBookedSlot || isPast;
+                                  const isSelected = selectedSlots.includes(slot);
+                                  const slotPrice = slotPrices.get(slot) ?? selectedCourt?.pricePerHour ?? 0;
+                                  const courtRange = courtPriceRanges.get(selectedCourt?.id || '');
+                                  return (
+                                    <button
+                                      key={slot}
+                                      onClick={() => !isUnavailable && toggleSlotSelection(slot, allSlots, blockedSlots, bookedSlots)}
+                                      disabled={isUnavailable}
+                                      className={`py-4 px-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all border relative ${isUserSlot
+                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default'
+                                        : isPast ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                                          : isBlocked ? 'bg-red-50 text-red-500 border-red-100 cursor-not-allowed'
+                                            : isBookedSlot ? 'bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed'
+                                              : isSelected ? 'bg-[#1E40AF] text-white border-[#1E40AF] shadow-xl shadow-blue-900/20'
                                                 : 'bg-white text-slate-600 border-slate-100 hover:border-[#1E40AF] hover:text-[#1E40AF] shadow-sm hover:shadow-md'}`}
-                                  >
-                                    <span className={isPast && !isUserSlot ? 'line-through opacity-50' : ''}>
-                                      {isUserSlot ? `Booked (${userSlotStatus})` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Slot Locked' : slotToRange(slot)}
-                                    </span>
-                                    {isUserSlot && <CheckCircle2 size={10} className="absolute top-1.5 right-1.5 text-emerald-500" />}
-                                    {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1.5 right-1.5 text-red-400" />}
-                                    {isBookedSlot && !isBlocked && !isUserSlot && <AlertCircle size={10} className="absolute top-1.5 right-1.5 text-blue-400" />}
-                                  </button>
-                                );
-                              })}
+                                    >
+                                      <span className={`flex flex-col items-center gap-0.5 ${isPast && !isUserSlot ? 'line-through opacity-50' : ''}`}>
+                                        <span>{isUserSlot ? `Booked (${userSlotStatus})` : isPast ? slotToRange(slot) : isBlocked || isBookedSlot ? 'Slot Locked' : slotToRange(slot)}</span>
+                                        {!isUserSlot && (
+                                          <span className={`text-[11px] font-black normal-case tracking-normal ${isUnavailable ? 'opacity-50' : ''} ${isSelected ? 'text-blue-200' : slotPrice > 0 ? 'text-emerald-600' : courtRange?.hasRules ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {slotPrice > 0 ? `₱${slotPrice}/hr` : courtRange?.hasRules ? `₱${courtRange.min}/hr` : '—'}
+                                          </span>
+                                        )}
+                                      </span>
+                                      {isUserSlot && <CheckCircle2 size={10} className="absolute top-1.5 right-1.5 text-emerald-500" />}
+                                      {isBlocked && !isUserSlot && <Ban size={10} className="absolute top-1.5 right-1.5 text-red-400" />}
+                                      {isBookedSlot && !isBlocked && !isUserSlot && <AlertCircle size={10} className="absolute top-1.5 right-1.5 text-blue-400" />}
+                                    </button>
+                                  );
+                                });
+                              })()}
                             </div>
                           )}
                         </div>
@@ -2878,11 +3080,11 @@ const Booking: React.FC = () => {
                         const isOwner = !!(user && selectedCourt?.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER');
                         return (
                           <button
-                            disabled={!selectedSlot || isBooked || isProcessing || dailyLimitReached || isOwner || (selectedSlot ? (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) : false)}
+                            disabled={selectedSlots.length === 0 || isBooked || isProcessing || isOwner}
                             onClick={handleBooking}
-                            className={`w-full py-5 rounded-[22px] font-black text-[13px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : dailyLimitReached ? 'bg-blue-100 text-blue-500 border border-blue-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                            className={`w-full py-5 rounded-[22px] font-black text-[13px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'}`}
                           >
-                            {isProcessing ? <Loader2 className="animate-spin" size={20} /> : isBooked ? <><CheckCircle2 size={20} /> Confirmed</> : isOwner ? <><Ban size={18} /> Owner Restricted</> : dailyLimitReached ? <><Ban size={18} /> Limit Reached</> : selectedSlot && (blockedSlots.has(selectedSlot) || bookedSlots.has(selectedSlot)) ? <><Ban size={18} /> Slot Locked</> : <>Confirm Booking {String.fromCharCode(8594)}</>}
+                            {isProcessing ? <Loader2 className="animate-spin" size={20} /> : isBooked ? <><CheckCircle2 size={20} /> Confirmed</> : isOwner ? <><Ban size={18} /> Owner Restricted</> : selectedSlots.length > 0 ? <>{`Confirm ${selectedSlots.length} hr${selectedSlots.length > 1 ? 's' : ''} — ₱${getSelectedSlotsTotal()}`} {String.fromCharCode(8594)}</> : <>Select Time Slots</>}
                           </button>
                         );
                       })()}
@@ -2980,6 +3182,181 @@ const Booking: React.FC = () => {
           )
         }
 
+        {/* ──────────── PAYMENT METHOD MODAL ──────────── */}
+        {showPaymentModal && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { if (!isProcessing) setShowPaymentModal(false); }} />
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
+
+              {!showQRPaymentStep ? (
+                <>
+                  <div className="text-center space-y-1">
+                    <h2 className="text-2xl font-bold text-slate-900">Payment Method</h2>
+                    <p className="text-sm text-slate-500">Select how you want to pay.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {ownerPaymentMethods.map((method: any) => (
+                      <button
+                        key={method.id}
+                        onClick={() => { setPaymentMethod(method.payment_type); setSelectedQRMethod(method); }}
+                        className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
+                          paymentMethod === method.payment_type && selectedQRMethod?.id === method.id
+                            ? 'bg-blue-50 border-blue-500'
+                            : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${
+                          method.payment_type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'
+                        }`}>
+                          {method.payment_type === 'gcash' ? 'G' : 'M'}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-900">{method.payment_type === 'gcash' ? 'GCash' : 'Maya'}</p>
+                          <p className="text-[11px] font-medium text-slate-400">{method.account_name}</p>
+                        </div>
+                        {paymentMethod === method.payment_type && selectedQRMethod?.id === method.id && (
+                          <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                            <CheckCircle2 size={14} />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+
+                    <button
+                      onClick={() => { setPaymentMethod('cash'); setSelectedQRMethod(null); }}
+                      className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
+                        paymentMethod === 'cash' ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        <Banknote size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-900">Cash Payment</p>
+                        <p className="text-[11px] font-medium text-slate-400">Walk-in payment</p>
+                      </div>
+                      {paymentMethod === 'cash' && (
+                        <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                          <CheckCircle2 size={14} />
+                        </div>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setShowPaymentModal(false)}
+                      className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
+                          setShowQRPaymentStep(true);
+                        } else {
+                          confirmBookingWithPayment();
+                        }
+                      }}
+                      disabled={!paymentMethod || isProcessing}
+                      className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                    >
+                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : paymentMethod === 'gcash' || paymentMethod === 'maya' ? 'Next' : 'Confirm Booking'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-center space-y-1">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Pay via {paymentMethod === 'gcash' ? 'GCash' : 'Maya'}
+                    </h2>
+                    <p className="text-sm text-slate-500">Scan the QR code, then upload your proof of payment.</p>
+                  </div>
+
+                  {selectedQRMethod && (
+                    <div className="bg-slate-50 rounded-xl p-4 flex flex-col items-center gap-3">
+                      <div className="bg-white rounded-xl border border-slate-200 p-3 w-56 h-56">
+                        <img src={selectedQRMethod.qr_code_url} alt="QR Code" className="w-full h-full object-contain" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-slate-700">{selectedQRMethod.account_name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                          {selectedQRMethod.payment_type === 'gcash' ? 'GCash' : 'Maya'}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 rounded-lg px-3 py-1.5">
+                        <p className="text-sm font-black text-blue-700">₱{getSelectedSlotsTotal()}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Reference Number (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1234567890"
+                      value={referenceNumber}
+                      onChange={e => setReferenceNumber(e.target.value)}
+                      className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Payment Proof Screenshot *</label>
+                    <div
+                      onClick={() => proofInputRef.current?.click()}
+                      className="w-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all"
+                    >
+                      {proofPreview ? (
+                        <img src={proofPreview} alt="Proof Preview" className="max-h-40 object-contain rounded-lg" />
+                      ) : (
+                        <>
+                          <Upload size={20} className="text-slate-300" />
+                          <p className="text-xs font-bold text-slate-400">Tap to upload screenshot</p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      ref={proofInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setProofFile(file);
+                          setProofPreview(URL.createObjectURL(file));
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setShowQRPaymentStep(false)}
+                      className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={confirmBookingWithPayment}
+                      disabled={!proofFile || isProcessing}
+                      className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                    >
+                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Submit & Book'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+
         {/* ──────────── SUCCESS MODAL ──────────── */}
         {
           showSuccessModal && ReactDOM.createPortal(
@@ -2989,7 +3366,7 @@ const Booking: React.FC = () => {
                 if (e.target === e.currentTarget) {
                   setShowSuccessModal(false);
                   setIsBooked(false);
-                  setSelectedSlot(null);
+                  setSelectedSlots([]);
                   setSelectedCourt(null);
                   setSelectedLocation(null);
                   navigate('/booking');
@@ -3141,7 +3518,7 @@ const Booking: React.FC = () => {
                       onClick={() => {
                         setShowSuccessModal(false);
                         setIsBooked(false);
-                        setSelectedSlot(null);
+                        setSelectedSlots([]);
                         setSelectedCourt(null);
                         setSelectedLocation(null);
                         setPostBookInviteQuery(''); setPostBookAllPlayers([]); setPostBookInviteSent([]);
@@ -3343,7 +3720,7 @@ const Booking: React.FC = () => {
               onClose={() => {
                 setShowReceipt(false);
                 setIsBooked(false);
-                setSelectedSlot(null);
+                setSelectedSlots([]);
                 setSelectedCourt(null);
                 setSelectedLocation(null);
                 navigate('/booking');

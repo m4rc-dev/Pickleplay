@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield } from 'lucide-react';
+import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield, DollarSign } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
 import { uploadCourtImage, uploadCourtPhoto } from '../../../services/locations';
 import { Location, LocationClosure, LocationClosureReason, CourtStatus } from '../../../types';
@@ -934,8 +934,6 @@ const LocationsList: React.FC = () => {
     const handleAddCourt = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!courtLocationId) { alert('Please select a location.'); return; }
-        if (!isCourtFree && courtPrice < 1) { alert('Please set a price of at least ₱1, or toggle "Free".'); return; }
-        const finalPrice = isCourtFree ? 0 : courtPrice;
         setIsCourtSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -957,7 +955,7 @@ const LocationsList: React.FC = () => {
                     location_id: courtLocationId,
                     name: courtName,
                     surface_type: courtSurface,
-                    base_price: finalPrice,
+                    base_price: 0,
                     court_type: courtType,
                     is_active: courtStatus === 'Available',
                     status: courtStatus,
@@ -982,8 +980,6 @@ const LocationsList: React.FC = () => {
         e.preventDefault();
         if (!editingCourt) return;
         if (!courtLocationId) { alert('Please select a location.'); return; }
-        if (!isCourtFree && courtPrice < 1) { alert('Please set a price of at least ₱1, or toggle "Free".'); return; }
-        const finalPrice = isCourtFree ? 0 : courtPrice;
         setIsCourtSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -1004,7 +1000,6 @@ const LocationsList: React.FC = () => {
                     location_id: courtLocationId,
                     name: courtName,
                     surface_type: courtSurface,
-                    base_price: finalPrice,
                     court_type: courtType,
                     is_active: courtStatus === 'Available',
                     status: courtStatus,
@@ -1895,9 +1890,11 @@ const LocationsList: React.FC = () => {
                                                 <span className="text-xs font-bold text-slate-500">{court.surface_type || '—'}</span>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className="text-sm font-black text-slate-900">
-                                                    {(court.base_price || 0) === 0 ? <span className="text-emerald-600">Free</span> : `₱${court.base_price}`}
-                                                </span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
+                                                    className="text-xs font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
+                                                    Set Pricing
+                                                </button>
                                             </td>
                                             <td className="px-6 py-5 text-center">
                                                 <div className="flex flex-col items-center gap-1.5">
@@ -1935,6 +1932,10 @@ const LocationsList: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                                    <button onClick={() => navigate(`/court-pricing?court=${court.id}`)}
+                                                        className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Set Pricing">
+                                                        <DollarSign size={16} />
+                                                    </button>
                                                     <button onClick={() => openEditCourtModal(court)}
                                                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit Court">
                                                         <Pencil size={16} />
@@ -2004,9 +2005,11 @@ const LocationsList: React.FC = () => {
                                 </div>
                                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                                    <p className="text-sm font-black text-slate-900">
-                                        {(viewingCourt.base_price || 0) === 0 ? <span className="text-emerald-600">Free</span> : `₱${viewingCourt.base_price}/hr`}
-                                    </p>
+                                    <button
+                                        onClick={() => { setViewingCourt(null); navigate(`/court-pricing?court=${viewingCourt.id}`); }}
+                                        className="text-sm font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
+                                        Manage Pricing
+                                    </button>
                                 </div>
                                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
@@ -2310,25 +2313,12 @@ const LocationsList: React.FC = () => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
-                                        <div className="flex items-center gap-3">
-                                            <button type="button"
-                                                onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
-                                                className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
-                                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
-                                                    }`}>
-                                                🎉 Free
-                                            </button>
-                                            {!isCourtFree && (
-                                                <input required type="number" min="1" step="1" value={courtPrice}
-                                                    onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
-                                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                                            )}
-                                            {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
-                                        </div>
-                                    </div>
+                                </div>
+
+                                {/* Price info */}
+                                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">💰 Pricing</p>
+                                    <p className="text-xs font-medium text-blue-700">Set time-based pricing in <span className="font-black">Court Pricing</span> after adding the court.</p>
                                 </div>
 
                                 {/* Court Photo Upload */}
@@ -2550,25 +2540,12 @@ const LocationsList: React.FC = () => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Price (₱/hr)</label>
-                                        <div className="flex items-center gap-3">
-                                            <button type="button"
-                                                onClick={() => { setIsCourtFree(!isCourtFree); if (!isCourtFree) setCourtPrice(0); }}
-                                                className={`shrink-0 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${isCourtFree
-                                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-emerald-300 hover:text-emerald-500'
-                                                    }`}>
-                                                🎉 Free
-                                            </button>
-                                            {!isCourtFree && (
-                                                <input required type="number" min="1" step="1" value={courtPrice}
-                                                    onChange={e => setCourtPrice(Number(e.target.value))} placeholder="Min ₱1"
-                                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm" />
-                                            )}
-                                            {isCourtFree && <span className="text-emerald-600 font-black text-sm">Free to book!</span>}
-                                        </div>
-                                    </div>
+                                </div>
+
+                                {/* Price info */}
+                                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">💰 Pricing</p>
+                                    <p className="text-xs font-medium text-blue-700">Manage time-based pricing in <span className="font-black">Court Pricing</span>.</p>
                                 </div>
 
                                 {/* Court Photo Upload (Edit) */}

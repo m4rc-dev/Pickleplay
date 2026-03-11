@@ -20,16 +20,19 @@ import {
     AlertCircle,
     Ban,
     CreditCard,
-    Banknote
+    Banknote,
+    Upload,
+    QrCode,
+    Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Court, CourtReview } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { getCourtReviews } from '../services/reviews';
-import { checkDailyBookingLimit } from '../services/bookings';
 import { MessageSquare, X, CircleCheck } from 'lucide-react';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
+import { getSlotPrices, PricingRule, fetchCourtPricingRules, getSlotPrice } from '../services/courtPricingService';
 
 const ALL_HOUR_SLOTS = [
     '12:00 AM', '01:00 AM', '02:00 AM', '03:00 AM', '04:00 AM', '05:00 AM',
@@ -61,6 +64,33 @@ const slotToRange = (slot: string): string => {
     const endPeriod = endH >= 12 ? 'PM' : 'AM';
     const endH12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
     return `${slot} - ${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+};
+
+/** Convert a slot like '08:00 AM' to a 24-hour number (0–23) */
+const slotTo24 = (slot: string): number => {
+    const [time, period] = slot.split(' ');
+    let [h] = time.split(':').map(Number);
+    if (period === 'PM' && h !== 12) h += 12;
+    else if (period === 'AM' && h === 12) h = 0;
+    return h;
+};
+
+/** Build display range for multiple consecutive slots */
+const slotsToRange = (slots: string[]): string => {
+    if (slots.length === 0) return '';
+    if (slots.length === 1) return slotToRange(slots[0]);
+    const sorted = [...slots].sort((a, b) => slotTo24(a) - slotTo24(b));
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const [time, period] = last.split(' ');
+    let [h, m] = time.split(':').map(Number);
+    if (period === 'PM' && h !== 12) h += 12;
+    else if (period === 'AM' && h === 12) h = 0;
+    const endH = (h + 1) % 24;
+    const endPeriod = endH >= 12 ? 'PM' : 'AM';
+    const endH12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
+    const endStr = `${endH12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${endPeriod}`;
+    return `${first} - ${endStr} (${sorted.length} hr${sorted.length > 1 ? 's' : ''})`;
 };
 
 // ─── Philippine Time Helpers (Asia/Manila, UTC+8) ───
@@ -129,7 +159,7 @@ const CourtDetail: React.FC = () => {
     const [locationName, setLocationName] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-    const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+    const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
     const [isBooked, setIsBooked] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -141,7 +171,6 @@ const CourtDetail: React.FC = () => {
     const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
     const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
     const [user, setUser] = useState<any>(null);
-    const [dailyLimitReached, setDailyLimitReached] = useState(false);
     const [userBookedSlots, setUserBookedSlots] = useState<Map<string, string>>(new Map());
     const [reviews, setReviews] = useState<CourtReview[]>([]);
     const [averageRating, setAverageRating] = useState<number>(0);
@@ -166,13 +195,26 @@ const CourtDetail: React.FC = () => {
     const [selectedBookingForReceipt, setSelectedBookingForReceipt] = useState<any | null>(null);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online' | null>(null);
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'gcash' | 'maya' | null>(null);
+
+    // QR Payment State
+    const [ownerPaymentMethods, setOwnerPaymentMethods] = useState<any[]>([]);
+    const [selectedQRMethod, setSelectedQRMethod] = useState<any | null>(null);
+    const [showQRPaymentStep, setShowQRPaymentStep] = useState(false);
+    const [proofFile, setProofFile] = useState<File | null>(null);
+    const [proofPreview, setProofPreview] = useState<string | null>(null);
+    const [referenceNumber, setReferenceNumber] = useState('');
+    const proofInputRef = useRef<HTMLInputElement>(null);
 
     // Location entry confirmation & policies
     const [showLocationEntryModal, setShowLocationEntryModal] = useState(true);
     const [locationConfirmed, setLocationConfirmed] = useState(false);
     const [locationPolicies, setLocationPolicies] = useState<LocationPolicy[]>([]);
     const [isLoadingPolicies, setIsLoadingPolicies] = useState(false);
+
+    // Dynamic pricing state
+    const [slotPrices, setSlotPrices] = useState<Map<string, number>>(new Map());
+    const [pricingRulesCache, setPricingRulesCache] = useState<PricingRule[]>([]);
 
     // ── SEO: updates title/description once court data is loaded ──
     useSEO({
@@ -324,6 +366,19 @@ const CourtDetail: React.FC = () => {
         }
     }, [court, selectedDate]);
 
+    // Fetch dynamic pricing for slots whenever court or date changes
+    useEffect(() => {
+        if (!court) return;
+        const loadPricing = async () => {
+            const rules = await fetchCourtPricingRules(court.id);
+            setPricingRulesCache(rules);
+            const dateStr = toPhDateStr(selectedDate);
+            const prices = await getSlotPrices(court.id, dateStr, activeTimeSlots, court.pricePerHour);
+            setSlotPrices(prices);
+        };
+        loadPricing();
+    }, [court, selectedDate, activeTimeSlots.length]);
+
     const checkAvailability = async () => {
         if (!court) return;
         setIsCheckingAvailability(true);
@@ -345,17 +400,8 @@ const CourtDetail: React.FC = () => {
         }
 
         try {
-            // Check daily booking limit (1 booking per user per day per court location)
+            // Get current user for identifying their bookings
             const { data: { user: currentUser } } = await supabase.auth.getUser();
-            if (currentUser) {
-                const { hasReachedLimit } = await checkDailyBookingLimit(currentUser.id, targetDateStr, court.locationId);
-                setDailyLimitReached(hasReachedLimit);
-                if (hasReachedLimit) {
-                    setSelectedSlot(null);
-                }
-            } else {
-                setDailyLimitReached(false);
-            }
 
             // Fetch bookings — include player_id and status to identify user's own slots
             const { data: bookingsData } = await supabase
@@ -576,13 +622,80 @@ const CourtDetail: React.FC = () => {
     const currentActiveRole = localStorage.getItem('active_role');
     const isCourtOwner = !!(user && court && court.ownerId && user.id === court.ownerId && currentActiveRole !== 'PLAYER');
 
+    /** Get the price for first selected slot (dynamic pricing aware) */
+    const getSelectedSlotPrice = (): number => {
+        if (!court) return 0;
+        const slot = selectedSlots[0] || null;
+        if (slot && slotPrices.has(slot)) {
+            const price = slotPrices.get(slot)!;
+            if (price === 0 && pricingRulesCache.length > 0) {
+                const minRulePrice = Math.min(...pricingRulesCache.map(r => r.price_per_hour));
+                if (minRulePrice > 0) return minRulePrice;
+            }
+            return price;
+        }
+        if (pricingRulesCache.length > 0) {
+            const minRulePrice = Math.min(...pricingRulesCache.map(r => r.price_per_hour));
+            if (minRulePrice > 0) return minRulePrice;
+        }
+        return court.pricePerHour;
+    };
+
+    /** Get total price for ALL selected slots */
+    const getSelectedSlotsTotal = (): number => {
+        if (!court || selectedSlots.length === 0) return 0;
+        let total = 0;
+        for (const s of selectedSlots) {
+            if (slotPrices.has(s)) {
+                const price = slotPrices.get(s)!;
+                if (price === 0 && pricingRulesCache.length > 0) {
+                    total += Math.min(...pricingRulesCache.map(r => r.price_per_hour));
+                } else {
+                    total += price;
+                }
+            } else if (pricingRulesCache.length > 0) {
+                total += Math.min(...pricingRulesCache.map(r => r.price_per_hour));
+            } else {
+                total += court.pricePerHour;
+            }
+        }
+        return total;
+    };
+
+    /** Toggle slot selection — consecutive only */
+    const toggleSlotSelection = (slot: string) => {
+        const slotH = slotTo24(slot);
+        setSelectedSlots(prev => {
+            if (prev.includes(slot)) {
+                const remaining = prev.filter(s => s !== slot);
+                if (remaining.length === 0) return [];
+                const sorted = remaining.sort((a, b) => slotTo24(a) - slotTo24(b));
+                const before = sorted.filter(s => slotTo24(s) < slotH);
+                const after = sorted.filter(s => slotTo24(s) > slotH);
+                return before.length >= after.length ? before : after;
+            }
+            if (prev.length === 0) return [slot];
+            const prevHours = prev.map(slotTo24).sort((a, b) => a - b);
+            const minH = prevHours[0];
+            const maxH = prevHours[prevHours.length - 1];
+            if (slotH !== minH - 1 && slotH !== maxH + 1) return [slot];
+            const newMin = Math.min(minH, slotH);
+            const newMax = Math.max(maxH, slotH);
+            for (let h = newMin; h <= newMax; h++) {
+                const s = activeTimeSlots.find(sl => slotTo24(sl) === h);
+                if (!s || blockedSlots.has(s) || bookedSlots.has(s)) return [slot];
+            }
+            return [...prev, slot];
+        });
+    };
+
     const handleBooking = async () => {
         if (!user) {
             navigate('/login');
             return;
         }
 
-        if (!selectedSlot) return;
+        if (selectedSlots.length === 0) return;
 
         // Court owners cannot book their own courts (unless in Player Mode)
         if (isCourtOwner) {
@@ -590,35 +703,63 @@ const CourtDetail: React.FC = () => {
             return;
         }
 
-        // Check daily limit before even showing the confirmation modal
-        const targetDateStr = toPhDateStr(selectedDate);
-        const { hasReachedLimit } = await checkDailyBookingLimit(user.id, targetDateStr, court?.locationId);
-        if (hasReachedLimit) {
-            setDailyLimitReached(true);
-            setSelectedSlot(null);
-            alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
-            return;
-        }
-
-        // Check if slot is in the past
-        if (isSlotInPast(selectedSlot, selectedDate)) {
+        // Check if first slot is in the past
+        if (isSlotInPast(selectedSlots[0], selectedDate)) {
             alert('⏰ This time slot has already passed. Please select a future time.');
-            setSelectedSlot(null);
+            setSelectedSlots([]);
             return;
         }
 
         setShowConfirmModal(true);
     };
 
-    const handleConfirmDetails = () => {
+    const handleConfirmDetails = async () => {
         setShowConfirmModal(false);
+        // Fetch owner payment methods for this court
+        if (court) {
+            try {
+                const { data: courtData } = await supabase
+                    .from('courts')
+                    .select('owner_id, location_id')
+                    .eq('id', court.id)
+                    .single();
+                if (courtData) {
+                    let query = supabase
+                        .from('court_owner_payment_methods')
+                        .select('*')
+                        .eq('owner_id', courtData.owner_id)
+                        .eq('is_active', true);
+                    const { data: methods } = await query;
+                    // Filter: location-specific first, then global
+                    const locationMethods = (methods || []).filter(m => m.location_id === courtData.location_id);
+                    const globalMethods = (methods || []).filter(m => !m.location_id);
+                    setOwnerPaymentMethods(locationMethods.length > 0 ? locationMethods : globalMethods);
+                }
+            } catch (err) {
+                console.error('Error fetching payment methods:', err);
+                setOwnerPaymentMethods([]);
+            }
+        }
+        setPaymentMethod(null);
+        setSelectedQRMethod(null);
+        setShowQRPaymentStep(false);
+        setProofFile(null);
+        setProofPreview(null);
+        setReferenceNumber('');
         setShowPaymentModal(true);
     };
 
     const confirmBooking = async () => {
-        if (court && selectedSlot && user && paymentMethod === 'cash') {
-            setIsProcessing(true);
-            try {
+        if (!court || selectedSlots.length === 0 || !user || !paymentMethod) return;
+
+        // QR payment validation
+        if ((paymentMethod === 'gcash' || paymentMethod === 'maya') && !proofFile) {
+            alert('📸 Please upload your payment proof screenshot.');
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
                 // ── GUARD 0: Court owner cannot book (unless in Player Mode) ──
                 const activeRole = localStorage.getItem('active_role');
                 if (user.id === court.ownerId && activeRole !== 'PLAYER') {
@@ -629,61 +770,30 @@ const CourtDetail: React.FC = () => {
                 }
 
                 // ── GUARD 1: Past slot check ──
-                if (isSlotInPast(selectedSlot, selectedDate)) {
+                if (isSlotInPast(selectedSlots[0], selectedDate)) {
                     alert('⏰ This time slot has already passed. Please select a future time.');
                     setIsProcessing(false);
                     return;
                 }
 
-                // ── GUARD 2: Daily limit check (1 booking per user per day per court location) ──
-                const targetDateStr = toPhDateStr(selectedDate);
-                const { hasReachedLimit } = await checkDailyBookingLimit(user.id, targetDateStr, court.locationId);
-                if (hasReachedLimit) {
-                    alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
-                    setDailyLimitReached(true);
-                    setSelectedSlot(null);
-                    setShowPaymentModal(false);
-                    setIsProcessing(false);
-                    return;
-                }
+                // Calculate start/end from selected slots (multi-hour)
+                const sortedSlots = [...selectedSlots].sort((a, b) => slotTo24(a) - slotTo24(b));
+                const firstSlot = sortedSlots[0];
+                const numHours = sortedSlots.length;
 
-                // ── GUARD 3: Final DB check right before insert — scoped to this location ──
-                let guardQuery = supabase
-                    .from('bookings')
-                    .select('id, courts!inner(location_id)')
-                    .eq('player_id', user.id)
-                    .eq('date', targetDateStr)
-                    .neq('status', 'cancelled');
-
-                if (court.locationId) {
-                    guardQuery = guardQuery.eq('courts.location_id', court.locationId);
-                }
-
-                const { data: playerDayBookings, error: playerDayError } = await guardQuery;
-
-                if (playerDayError) {
-                    alert('🚫 Could not verify your booking limit for this location. Please try again.');
-                    setIsProcessing(false);
-                    return;
-                }
-
-                if (playerDayBookings && playerDayBookings.length > 0) {
-                    alert('🚫 You already have a booking at this court location for today. Each player is limited to 1 booking per court location per day.');
-                    setDailyLimitReached(true);
-                    setSelectedSlot(null);
-                    setShowPaymentModal(false);
-                    setIsProcessing(false);
-                    return;
-                }
-
-                const [time, period] = selectedSlot.split(' ');
+                const [time, period] = firstSlot.split(' ');
                 let [hours, minutes] = time.split(':').map(Number);
                 if (period === 'PM' && hours !== 12) hours += 12;
                 else if (period === 'AM' && hours === 12) hours = 0;
 
                 const startDateTime = new Date(selectedDate);
                 startDateTime.setHours(hours, minutes, 0, 0);
-                const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+                const endDateTime = new Date(startDateTime.getTime() + numHours * 60 * 60 * 1000);
+
+                const targetDateStr = toPhDateStr(selectedDate);
+                const isQRPayment = paymentMethod === 'gcash' || paymentMethod === 'maya';
+
+                const totalPrice = getSelectedSlotsTotal();
 
                 const { data: bookingData, error: bookingError } = await supabase
                     .from('bookings')
@@ -693,15 +803,41 @@ const CourtDetail: React.FC = () => {
                         date: targetDateStr,
                         start_time: startDateTime.toTimeString().split(' ')[0],
                         end_time: endDateTime.toTimeString().split(' ')[0],
-                        total_price: court.pricePerHour,
+                        total_price: totalPrice,
                         status: 'pending',
-                        payment_status: 'unpaid',
-                        payment_method: 'cash'
+                        payment_status: isQRPayment ? 'unpaid' : 'unpaid',
+                        payment_method: paymentMethod,
+                        payment_proof_status: isQRPayment ? 'proof_submitted' : null,
                     })
                     .select()
                     .single();
 
                 if (bookingError) throw bookingError;
+
+                // Upload proof and create payment record for QR payments
+                if (isQRPayment && proofFile && bookingData) {
+                    const proofPath = `${user.id}/${bookingData.id}_proof.png`;
+                    const { error: proofUploadError } = await supabase.storage
+                        .from('payment-proofs')
+                        .upload(proofPath, proofFile, { upsert: true });
+
+                    let proofUrl = '';
+                    if (!proofUploadError) {
+                        const { data: urlData } = supabase.storage.from('payment-proofs').getPublicUrl(proofPath);
+                        proofUrl = urlData.publicUrl;
+                    }
+
+                    await supabase.from('booking_payments').insert({
+                        booking_id: bookingData.id,
+                        player_id: user.id,
+                        payment_type: paymentMethod,
+                        account_name: selectedQRMethod?.account_name || '',
+                        reference_number: referenceNumber || null,
+                        proof_image_url: proofUrl,
+                        amount: totalPrice,
+                        status: 'pending',
+                    });
+                }
 
                 // Fetch player name for receipt
                 const { data: profile } = await supabase
@@ -710,6 +846,7 @@ const CourtDetail: React.FC = () => {
                     .eq('id', user.id)
                     .maybeSingle();
 
+                const pricePerHour = numHours > 0 ? Math.round(totalPrice / numHours) : totalPrice;
                 setSelectedBookingForReceipt({
                     id: bookingData.id,
                     courtName: court.name,
@@ -718,20 +855,19 @@ const CourtDetail: React.FC = () => {
                     date: targetDateStr,
                     startTime: startDateTime.toTimeString().split(' ')[0],
                     endTime: endDateTime.toTimeString().split(' ')[0],
-                    pricePerHour: court.pricePerHour,
-                    totalPrice: court.pricePerHour,
+                    pricePerHour: pricePerHour,
+                    totalPrice: totalPrice,
                     playerName: profile?.full_name || profile?.username || 'Guest',
                     status: 'pending',
                     confirmedAt: null,
-                    paymentMethod: 'Cash',
-                    paymentStatus: 'unpaid'
+                    paymentMethod: paymentMethod === 'gcash' ? 'GCash' : paymentMethod === 'maya' ? 'Maya' : 'Cash',
+                    paymentStatus: isQRPayment ? 'proof_submitted' : 'unpaid'
                 });
 
                 setIsBooked(true);
-                setDailyLimitReached(true);
                 setShowPaymentModal(false);
                 setShowSuccessModal(true);
-                setSelectedSlot(null);
+                setSelectedSlots([]);
                 checkAvailability(); // Refresh the dots
             } catch (err: any) {
                 console.error('Booking error:', err);
@@ -739,11 +875,10 @@ const CourtDetail: React.FC = () => {
             } finally {
                 setIsProcessing(false);
             }
-        }
     };
 
     const bookAnother = () => {
-        setSelectedSlot(null);
+        setSelectedSlots([]);
         setIsBooked(false);
         setShowSuccessModal(false);
         navigate('/booking');
@@ -856,8 +991,18 @@ const CourtDetail: React.FC = () => {
                                 <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100">
                                     <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Price</p>
                                     <div className="flex items-baseline gap-0.5">
-                                        <span className="text-lg sm:text-xl font-black text-slate-950">₱{court.pricePerHour}</span>
-                                        <span className="text-[9px] font-medium text-slate-400">/hr</span>
+                                        {(() => {
+                                            if (pricingRulesCache.length > 0) {
+                                                const rulePrices = pricingRulesCache.map(r => r.price_per_hour);
+                                                const mn = Math.min(...rulePrices);
+                                                const mx = Math.max(...rulePrices);
+                                                return <><span className="text-lg sm:text-xl font-black text-slate-950">{mn === mx ? `₱${mn}` : `₱${mn}–₱${mx}`}</span><span className="text-[9px] font-medium text-slate-400">/hr</span></>;
+                                            }
+                                            if (court.pricePerHour > 0) {
+                                                return <><span className="text-lg sm:text-xl font-black text-slate-950">₱{court.pricePerHour}</span><span className="text-[9px] font-medium text-slate-400">/hr</span></>;
+                                            }
+                                            return <span className="text-sm font-bold text-slate-400 italic">Not Set</span>;
+                                        })()}
                                     </div>
                                 </div>
                                 <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100">
@@ -1018,8 +1163,7 @@ const CourtDetail: React.FC = () => {
                                                         if (isUnavailable && !isDateClosed) return;
                                                         // Allow clicking closed dates to see the closure notice
                                                         setSelectedDate(date);
-                                                        setSelectedSlot(null);
-                                                        setDailyLimitReached(false);
+                                                        setSelectedSlots([]);
                                                         setIsBooked(false);
                                                     }}
                                                     disabled={isDateFullyBooked && !isDateClosed}
@@ -1083,21 +1227,22 @@ const CourtDetail: React.FC = () => {
                                             const isUserSlot = userBookedSlots.has(slot);
                                             const userSlotStatus = userBookedSlots.get(slot) || '';
                                             const isPast = isSlotInPast(slot, selectedDate);
-                                            const isOccupied = isBlocked || isBookedSlot || dailyLimitReached || isPast;
-                                            const isSelected = selectedSlot === slot;
+                                            const isOccupied = isBlocked || isBookedSlot || isPast;
+                                            const isSelected = selectedSlots.includes(slot);
+                                            const slotPrice = slotPrices.get(slot) ?? court.pricePerHour;
+                                            const hasDynamicPrice = slotPrices.has(slot) && slotPrice !== court.pricePerHour;
 
                                             return (
                                                 <button
                                                     key={slot}
                                                     disabled={isOccupied}
-                                                    onClick={() => setSelectedSlot(slot)}
+                                                    onClick={() => toggleSlotSelection(slot)}
                                                     title={
                                                         isUserSlot ? `Your Slot – ${userSlotStatus}`
                                                             : isBlocked ? 'Court Locked In by Owner'
                                                                 : isPast ? 'This time has passed'
-                                                                    : dailyLimitReached ? 'Limit reached at this location (1/day)'
-                                                                        : isBookedSlot ? 'Booked by another player'
-                                                                            : 'Available'
+                                                                    : isBookedSlot ? 'Booked by another player'
+                                                                        : `Available – ₱${slotPrice}/hr`
                                                     }
                                                     className={`py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all ${isUserSlot
                                                         ? 'bg-emerald-50 border-emerald-300 text-emerald-600 cursor-default'
@@ -1118,31 +1263,37 @@ const CourtDetail: React.FC = () => {
                                                             ? '🔒 Court Locked In'
                                                             : isBookedSlot
                                                                 ? 'Court Locked In'
-                                                                : slotToRange(slot)
+                                                                : (
+                                                                    <span className="flex flex-col items-center gap-0.5">
+                                                                        <span>{slotToRange(slot)}</span>
+                                                                        <span className={`text-[11px] font-black ${isOccupied ? 'opacity-50' : ''} ${isSelected ? 'text-blue-300' : slotPrice > 0 ? 'text-emerald-600' : pricingRulesCache.length > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                                            {slotPrice > 0 ? `₱${slotPrice}/hr` : pricingRulesCache.length > 0 ? `₱${Math.min(...pricingRulesCache.map(r => r.price_per_hour))}/hr` : '—'}
+                                                                        </span>
+                                                                    </span>
+                                                                )
                                                     }
                                                 </button>
                                             );
                                         })}
                                     </div>
-
-                                    {/* Daily Limit Banner */}
-                                    {dailyLimitReached && (
-                                        <div className="mt-3 p-3 bg-blue-50 rounded-xl border border-blue-200 flex items-start gap-2">
-                                            <AlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                                            <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
-                                                You've already booked <span className="font-bold">1 hour</span> at this court location today. Each player is limited to <span className="font-bold">1 booking per court location per day</span>. Choose a different location/date or cancel your existing booking.
-                                            </p>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Price Summary */}
-                                {selectedSlot && (
+                                {selectedSlots.length > 0 && (
                                     <div className="p-4 bg-slate-900 rounded-xl text-white">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Total Price</span>
-                                            <span className="text-xl font-black">₱{court.pricePerHour}</span>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">{selectedSlots.length} hr{selectedSlots.length > 1 ? 's' : ''} selected</span>
+                                            <span className="text-xl font-black">₱{getSelectedSlotsTotal()}</span>
                                         </div>
+                                        <div className="text-[10px] text-slate-400 font-medium mb-1.5">
+                                            {slotsToRange(selectedSlots)}
+                                        </div>
+                                        {pricingRulesCache.length > 0 && getSelectedSlotPrice() !== court.pricePerHour && (
+                                            <div className="flex items-center gap-1.5 text-[10px] font-medium text-blue-300 mb-1.5">
+                                                <DollarSign size={10} className="text-blue-400" />
+                                                Time-based pricing applied for this slot
+                                            </div>
+                                        )}
                                         <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
                                             <CheckCircle2 size={11} className="text-emerald-400" />
                                             Includes gear storage & locker usage
@@ -1152,14 +1303,12 @@ const CourtDetail: React.FC = () => {
 
                                 <button
                                     onClick={handleBooking}
-                                    disabled={!selectedSlot || isProcessing || isBooked || dailyLimitReached || isCourtOwner}
+                                    disabled={selectedSlots.length === 0 || isProcessing || isBooked || isCourtOwner}
                                     className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${isBooked
                                         ? 'bg-emerald-500 text-white'
                                         : isCourtOwner
                                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                                            : dailyLimitReached
-                                                ? 'bg-blue-100 text-blue-500 border border-blue-200 cursor-not-allowed'
-                                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
+                                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 disabled:opacity-40 disabled:shadow-none'
                                         }`}
                                 >
                                     {isProcessing ? <Loader2 size={18} className="animate-spin" /> : (
@@ -1173,14 +1322,14 @@ const CourtDetail: React.FC = () => {
                                                 <Ban size={16} />
                                                 Court Owner Cannot Book
                                             </>
-                                        ) : dailyLimitReached ? (
+                                        ) : selectedSlots.length > 0 ? (
                                             <>
-                                                <Ban size={16} />
-                                                Limit Reached (1/location/day)
+                                                {`Confirm ${selectedSlots.length} hr${selectedSlots.length > 1 ? 's' : ''} — ₱${getSelectedSlotsTotal()}`}
+                                                <ArrowRight size={16} />
                                             </>
                                         ) : (
                                             <>
-                                                {user ? 'Proceed to Book' : 'Login to Book'}
+                                                {user ? 'Select Time Slots' : 'Login to Book'}
                                                 <ArrowRight size={16} />
                                             </>
                                         )
@@ -1233,16 +1382,16 @@ const CourtDetail: React.FC = () => {
                             <div className="flex justify-between items-center text-sm">
                                 <span className="font-medium text-slate-400">Time Slot</span>
                                 <span className="font-bold text-slate-900">
-                                    {selectedSlot ? slotToRange(selectedSlot) : ''}
+                                    {selectedSlots.length > 0 ? slotsToRange(selectedSlots) : ''}
                                 </span>
                             </div>
                             <div className="flex justify-between items-center text-sm">
                                 <span className="font-medium text-slate-400">Duration</span>
-                                <span className="font-bold text-slate-900">1 Hour</span>
+                                <span className="font-bold text-slate-900">{selectedSlots.length} Hour{selectedSlots.length > 1 ? 's' : ''}</span>
                             </div>
                             <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
                                 <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total</span>
-                                <span className="text-xl font-black text-slate-950">₱{court.pricePerHour}</span>
+                                <span className="text-xl font-black text-slate-950">₱{getSelectedSlotsTotal()}</span>
                             </div>
                         </div>
 
@@ -1267,66 +1416,185 @@ const CourtDetail: React.FC = () => {
             {/* Payment Modal */}
             {showPaymentModal && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
-                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6">
-                        <div className="text-center space-y-1">
-                            <h2 className="text-2xl font-bold text-slate-900">Payment Method</h2>
-                            <p className="text-sm text-slate-500">Select how you want to pay.</p>
-                        </div>
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { if (!isProcessing) setShowPaymentModal(false); }} />
+                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
 
-                        <div className="space-y-3">
-                            {/* Online Payment (Disabled) */}
-                            <div className="opacity-40 cursor-not-allowed">
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400">
-                                        <CreditCard size={20} />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-slate-900">Online Payment</p>
-                                        <p className="text-[11px] font-medium text-red-500">Coming soon</p>
-                                    </div>
+                        {!showQRPaymentStep ? (
+                            <>
+                                <div className="text-center space-y-1">
+                                    <h2 className="text-2xl font-bold text-slate-900">Payment Method</h2>
+                                    <p className="text-sm text-slate-500">Select how you want to pay.</p>
                                 </div>
-                            </div>
 
-                            {/* Cash Payment */}
-                            <button
-                                onClick={() => setPaymentMethod('cash')}
-                                className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${paymentMethod === 'cash'
-                                    ? 'bg-blue-50 border-blue-500'
-                                    : 'bg-white border-slate-200 hover:border-blue-300'
-                                    }`}
-                            >
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                                    }`}>
-                                    <Banknote size={20} />
+                                <div className="space-y-3">
+                                    {/* GCash / Maya QR Options */}
+                                    {ownerPaymentMethods.map(method => (
+                                        <button
+                                            key={method.id}
+                                            onClick={() => {
+                                                setPaymentMethod(method.payment_type);
+                                                setSelectedQRMethod(method);
+                                            }}
+                                            className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
+                                                paymentMethod === method.payment_type && selectedQRMethod?.id === method.id
+                                                    ? 'bg-blue-50 border-blue-500'
+                                                    : 'bg-white border-slate-200 hover:border-blue-300'
+                                            }`}
+                                        >
+                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${
+                                                method.payment_type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'
+                                            }`}>
+                                                {method.payment_type === 'gcash' ? 'G' : 'M'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-sm font-bold text-slate-900">
+                                                    {method.payment_type === 'gcash' ? 'GCash' : 'Maya'}
+                                                </p>
+                                                <p className="text-[11px] font-medium text-slate-400">{method.account_name}</p>
+                                            </div>
+                                            {paymentMethod === method.payment_type && selectedQRMethod?.id === method.id && (
+                                                <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                                                    <CheckCircle2 size={14} />
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))}
+
+                                    {/* Cash Payment */}
+                                    <button
+                                        onClick={() => { setPaymentMethod('cash'); setSelectedQRMethod(null); }}
+                                        className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
+                                            paymentMethod === 'cash'
+                                                ? 'bg-blue-50 border-blue-500'
+                                                : 'bg-white border-slate-200 hover:border-blue-300'
+                                        }`}
+                                    >
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                            paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
+                                        }`}>
+                                            <Banknote size={20} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-slate-900">Cash Payment</p>
+                                            <p className="text-[11px] font-medium text-slate-400">Walk-in payment</p>
+                                        </div>
+                                        {paymentMethod === 'cash' && (
+                                            <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                                                <CheckCircle2 size={14} />
+                                            </div>
+                                        )}
+                                    </button>
                                 </div>
-                                <div className="flex-1">
-                                    <p className="text-sm font-bold text-slate-900">Cash Payment</p>
-                                    <p className="text-[11px] font-medium text-slate-400">Walk-in payment</p>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setShowPaymentModal(false)}
+                                        className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
+                                    >
+                                        Back
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
+                                                setShowQRPaymentStep(true);
+                                            } else {
+                                                confirmBooking();
+                                            }
+                                        }}
+                                        disabled={!paymentMethod || isProcessing}
+                                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                                    >
+                                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : paymentMethod === 'gcash' || paymentMethod === 'maya' ? 'Next' : 'Confirm Booking'}
+                                    </button>
                                 </div>
-                                {paymentMethod === 'cash' && (
-                                    <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
-                                        <CheckCircle2 size={14} />
+                            </>
+                        ) : (
+                            <>
+                                {/* Step 2: QR Code Display + Proof Upload */}
+                                <div className="text-center space-y-1">
+                                    <h2 className="text-xl font-bold text-slate-900">
+                                        Pay via {paymentMethod === 'gcash' ? 'GCash' : 'Maya'}
+                                    </h2>
+                                    <p className="text-sm text-slate-500">Scan the QR code, then upload your proof of payment.</p>
+                                </div>
+
+                                {selectedQRMethod && (
+                                    <div className="bg-slate-50 rounded-xl p-4 flex flex-col items-center gap-3">
+                                        <div className="bg-white rounded-xl border border-slate-200 p-3 w-56 h-56">
+                                            <img src={selectedQRMethod.qr_code_url} alt="QR Code" className="w-full h-full object-contain" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs font-bold text-slate-700">{selectedQRMethod.account_name}</p>
+                                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                                                {selectedQRMethod.payment_type === 'gcash' ? 'GCash' : 'Maya'}
+                                            </p>
+                                        </div>
+                                        <div className="bg-blue-50 rounded-lg px-3 py-1.5">
+                                            <p className="text-sm font-black text-blue-700">₱{getSelectedSlotsTotal()}</p>
+                                        </div>
                                     </div>
                                 )}
-                            </button>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                onClick={() => setShowPaymentModal(false)}
-                                className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
-                            >
-                                Back
-                            </button>
-                            <button
-                                onClick={confirmBooking}
-                                disabled={!paymentMethod || isProcessing}
-                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                            >
-                                {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Confirm Booking'}
-                            </button>
-                        </div>
+                                {/* Reference Number */}
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Reference Number (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 1234567890"
+                                        value={referenceNumber}
+                                        onChange={e => setReferenceNumber(e.target.value)}
+                                        className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                                    />
+                                </div>
+
+                                {/* Proof Upload */}
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Payment Proof Screenshot *</label>
+                                    <div
+                                        onClick={() => proofInputRef.current?.click()}
+                                        className="w-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all"
+                                    >
+                                        {proofPreview ? (
+                                            <img src={proofPreview} alt="Proof Preview" className="max-h-40 object-contain rounded-lg" />
+                                        ) : (
+                                            <>
+                                                <Upload size={20} className="text-slate-300" />
+                                                <p className="text-xs font-bold text-slate-400">Tap to upload screenshot</p>
+                                            </>
+                                        )}
+                                    </div>
+                                    <input
+                                        ref={proofInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                setProofFile(file);
+                                                setProofPreview(URL.createObjectURL(file));
+                                            }
+                                        }}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setShowQRPaymentStep(false)}
+                                        className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all"
+                                    >
+                                        Back
+                                    </button>
+                                    <button
+                                        onClick={confirmBooking}
+                                        disabled={!proofFile || isProcessing}
+                                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                                    >
+                                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Submit & Book'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>,
                 document.body)}
@@ -1395,8 +1663,22 @@ const CourtDetail: React.FC = () => {
                         </div>
                         <div className="space-y-1">
                             <h2 className="text-2xl font-bold text-slate-900">Booked Successfully!</h2>
-                            <p className="text-sm text-slate-500">Your court time has been reserved. Check "My Bookings" for details.</p>
+                            <p className="text-sm text-slate-500">
+                                {selectedBookingForReceipt?.paymentStatus === 'proof_submitted'
+                                    ? 'Your booking is confirmed. Payment proof is awaiting verification by the court owner.'
+                                    : 'Your court time has been reserved. Check "My Bookings" for details.'
+                                }
+                            </p>
                         </div>
+
+                        {selectedBookingForReceipt?.paymentStatus === 'proof_submitted' && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Payment Status</p>
+                                <p className="text-xs text-amber-800 font-medium">
+                                    Your {selectedBookingForReceipt.paymentMethod} proof has been submitted and is pending verification.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Policy Reminder after booking */}
                         {locationPolicies.length > 0 && (
@@ -1429,7 +1711,7 @@ const CourtDetail: React.FC = () => {
                                 onClick={() => {
                                     setShowSuccessModal(false);
                                     setIsBooked(false);
-                                    setSelectedSlot(null);
+                                    setSelectedSlots([]);
                                     navigate('/booking');
                                 }}
                                 className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl text-sm hover:bg-slate-800 transition-all"

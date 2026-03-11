@@ -27,6 +27,8 @@ import {
   Globe,
   Mail,
   Lock,
+  CreditCard,
+  DollarSign,
   Eye,
   EyeOff,
   GraduationCap,
@@ -94,6 +96,7 @@ import Schedule from './components/coach/Schedule';
 import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
+import Transactions from './components/court-owner/Transactions';
 import TournamentsManager from './components/court-owner/TournamentsManager';
 import TournamentHub from './components/court-owner/TournamentHub';
 import TournamentPage from './components/tournaments/TournamentPage';
@@ -101,6 +104,7 @@ import CourtCalendar from './components/court-owner/CourtCalendar';
 import LocationsList from './components/court-owner/location/LocationsList';
 import LocationDetailPage from './components/court-owner/location/LocationDetailPage';
 import LocationPolicies from './components/court-owner/LocationPolicies';
+import CourtPricing from './components/court-owner/CourtPricing';
 import Achievements from './components/Achievements';
 import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
@@ -499,6 +503,8 @@ const NavigationHandler: React.FC<{
       '/bookings-admin': 'bookings-admin', '/court-calendar': 'court-calendar',
       '/tournaments-admin': 'tournaments-admin', '/revenue': 'revenue',
       '/court-policies': 'court-policies',
+      '/transactions': 'transactions',
+      '/court-pricing': 'court-pricing',
     };
     const currentPath = location.pathname;
     const matchedFeature = Object.entries(PATH_FEATURE_MAP).find(([path]) =>
@@ -658,6 +664,8 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-pricing" icon={<DollarSign size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -933,6 +941,8 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/court-pricing" icon={<DollarSign size={22} />} label="Court Pricing" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
@@ -1040,6 +1050,8 @@ const NavigationHandler: React.FC<{
               <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : role !== 'guest' ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
               <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : (role === 'COURT_OWNER' || role === 'ADMIN') ? <TournamentHub /> : <Navigate to="/" />} />
               <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
+              <Route path="/transactions" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Transactions /> : <Navigate to="/" />} />
+              <Route path="/court-pricing" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtPricing /> : <Navigate to="/" />} />
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />

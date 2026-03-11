@@ -5,6 +5,7 @@ import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Load
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
+import { fetchCourtPricingRules, getSlotPrices, PricingRule } from '../services/courtPricingService';
 
 const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
     const mapRef = useRef<HTMLDivElement>(null);
@@ -99,6 +100,9 @@ const GuestBooking: React.FC = () => {
     const heroActiveCourt = heroCourtId ? (locationCourts.find(c => c.id === heroCourtId) ?? null) : null;
     const [showCourtDetails, setShowCourtDetails] = useState(false);
 
+    // Dynamic pricing state
+    const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
+
     // Distance calculation helper (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
         const R = 3958.8; // Radius of the earth in miles
@@ -111,6 +115,35 @@ const GuestBooking: React.FC = () => {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     };
+
+    // Fetch dynamic pricing ranges for all courts in the selected location
+    useEffect(() => {
+        if (locationCourts.length === 0) return;
+        const loadPriceRanges = async () => {
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const newRanges = new Map<string, { min: number; max: number; hasRules: boolean }>();
+            for (const court of locationCourts) {
+                try {
+                    const rules = await fetchCourtPricingRules(court.id);
+                    if (rules.length > 0) {
+                        const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
+                            ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                            : TIME_SLOTS;
+                        const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
+                        const vals = Array.from(prices.values()) as number[];
+                        newRanges.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules: true });
+                    } else {
+                        newRanges.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+                    }
+                } catch {
+                    newRanges.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+                }
+            }
+            setCourtPriceRanges(newRanges);
+        };
+        loadPriceRanges();
+    }, [locationCourts, selectedLocation]);
 
     const getUserLocation = () => {
         if (gpsEnabled === true && userLocation) return;
@@ -1415,15 +1448,33 @@ const GuestBooking: React.FC = () => {
                                                             )}
                                                             {/* Price badge */}
                                                             <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
-                                                                {court.pricePerHour != null && court.pricePerHour > 0 ? (
-                                                                    <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                                                        <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
-                                                                    </div>
-                                                                ) : court.pricePerHour === 0 ? (
-                                                                    <div className="bg-[#a3e635] backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                                                        <span className="text-[11px] font-black text-slate-900">FREE</span>
-                                                                    </div>
-                                                                ) : null}
+                                                                {(() => {
+                                                                    const range = courtPriceRanges.get(court.id);
+                                                                    if (range && range.hasRules && range.max > 0) {
+                                                                        return (
+                                                                            <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                                                                {range.min === range.max ? (
+                                                                                    <><span className="text-[11px] font-black text-slate-900">₱{range.min}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span></>
+                                                                                ) : (
+                                                                                    <><span className="text-[11px] font-black text-slate-900">₱{range.min}–₱{range.max}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span></>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    } else if (court.pricePerHour != null && court.pricePerHour > 0) {
+                                                                        return (
+                                                                            <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                                                                <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
+                                                                            </div>
+                                                                        );
+                                                                    } else {
+                                                                        return (
+                                                                            <div className="bg-slate-100/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
+                                                                                <span className="text-[10px] font-bold text-slate-500 italic">Price Not Set</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })()}
                                                             </div>
                                                         </div>
 
@@ -1728,11 +1779,18 @@ const GuestBooking: React.FC = () => {
                                                         <Navigation size={14} className="text-[#a3e635] shrink-0" />
                                                         <div>
                                                             <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest leading-none">Rate</p>
-                                                            {heroActiveCourt.pricePerHour > 0 ? (
-                                                                <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>
-                                                            ) : (
-                                                                <p className="text-lg font-black leading-tight text-[#a3e635]">FREE</p>
-                                                            )}
+                                                            {(() => {
+                                                                const range = courtPriceRanges.get(heroActiveCourt.id);
+                                                                if (range && range.hasRules && range.max > 0) {
+                                                                    return range.min === range.max
+                                                                        ? <p className="text-lg font-black leading-tight">₱{range.min}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>
+                                                                        : <p className="text-lg font-black leading-tight">₱{range.min}–₱{range.max}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
+                                                                } else if (heroActiveCourt.pricePerHour > 0) {
+                                                                    return <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
+                                                                } else {
+                                                                    return <p className="text-sm font-bold leading-tight text-blue-300 italic">Not Set</p>;
+                                                                }
+                                                            })()}
                                                         </div>
                                                     </div>
                                                 )}
@@ -1865,7 +1923,18 @@ const GuestBooking: React.FC = () => {
                                             <DollarSign className="text-blue-600" size={24} />
                                         </div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Rate</p>
-                                        <p className="text-2xl font-black text-slate-900">{heroActiveCourt.pricePerHour > 0 ? `₱${heroActiveCourt.pricePerHour}` : <span className="text-[#a3e635]">FREE</span>}<span className="text-[10px] text-slate-400">{heroActiveCourt.pricePerHour > 0 ? '/hr' : ''}</span></p>
+                                        {(() => {
+                                            const range = courtPriceRanges.get(heroActiveCourt.id);
+                                            if (range && range.hasRules && range.max > 0) {
+                                                return range.min === range.max
+                                                    ? <p className="text-2xl font-black text-slate-900">₱{range.min}<span className="text-[10px] text-slate-400">/hr</span></p>
+                                                    : <p className="text-2xl font-black text-slate-900">₱{range.min}–₱{range.max}<span className="text-[10px] text-slate-400">/hr</span></p>;
+                                            } else if (heroActiveCourt.pricePerHour > 0) {
+                                                return <p className="text-2xl font-black text-slate-900">₱{heroActiveCourt.pricePerHour}<span className="text-[10px] text-slate-400">/hr</span></p>;
+                                            } else {
+                                                return <p className="text-lg font-bold text-slate-400 italic">Not Set</p>;
+                                            }
+                                        })()}
                                     </div>
 
                                     <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
