@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  X, Trophy, Calendar, MapPin, Users, DollarSign, Clock, CheckCircle2,
+  X, Trophy, Calendar, MapPin, Users, PhilippinePeso, Clock, CheckCircle2,
   XCircle, Star, Building2, FileText, Megaphone, Award, Shield, Eye,
   AlertCircle, TrendingUp, User, Grid3x3, Timer, Flag, Loader2
 } from 'lucide-react';
@@ -245,10 +245,10 @@ const AdminTournamentDetail: React.FC<Props> = ({ tournamentId, isOpen, onClose,
                   {tournament.registrationDeadline && <InfoRow label="Reg. Deadline" value={new Date(tournament.registrationDeadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} icon={<Flag size={12}/>} />}
                 </InfoCard>
 
-                <InfoCard title="Financial" icon={<DollarSign size={15}/>} color="green">
+                <InfoCard title="Financial" icon={<PhilippinePeso size={15}/>} color="green">
                   {tournament.prizePool
                     ? <>
-                        <InfoRow label="Prize Pool" value={tournament.prizePool} icon={<DollarSign size={12}/>} />
+                        <InfoRow label="Prize Pool" value={tournament.prizePool} icon={<PhilippinePeso size={12}/>} />
                         {tournament.prizes && <InfoRow label="Distribution" value={tournament.prizes} />}
                       </>
                     : <p className="text-xs text-slate-400 italic">No prize pool set.</p>

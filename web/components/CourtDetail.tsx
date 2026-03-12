@@ -7,7 +7,7 @@ import {
     ChevronLeft,
     Calendar as CalendarIcon,
     Clock,
-    DollarSign,
+    PhilippinePeso,
     Activity,
     CheckCircle2,
     Loader2,
@@ -1290,7 +1290,7 @@ const CourtDetail: React.FC = () => {
                                         </div>
                                         {pricingRulesCache.length > 0 && getSelectedSlotPrice() !== court.pricePerHour && (
                                             <div className="flex items-center gap-1.5 text-[10px] font-medium text-blue-300 mb-1.5">
-                                                <DollarSign size={10} className="text-blue-400" />
+                                                <PhilippinePeso size={10} className="text-blue-400" />
                                                 Time-based pricing applied for this slot
                                             </div>
                                         )}

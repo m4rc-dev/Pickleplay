@@ -17,7 +17,7 @@ import {
   Database,
   Trophy,
   Calendar,
-  DollarSign,
+  PhilippinePeso,
   MapPin,
   Settings,
   ChevronLeft,
@@ -47,6 +47,8 @@ import {
 } from 'lucide-react';
 import QRCodeGenerator from '../QRCodeGenerator';
 import AdminTournamentDetail from './AdminTournamentDetail';
+import AdminVerificationPanel from './AdminVerificationPanel.tsx';
+import AdminIDTrainingPanel from './AdminIDTrainingPanel';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import {
   BarChart,
@@ -110,12 +112,13 @@ interface AdminDashboardProps {
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
   currentAdminRole?: UserRole;
+  initialTab?: AdminTab;
 }
 
-type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes' | 'terms' | 'maintenance';
+type AdminTab = 'overview' | 'applications' | 'users' | 'tournaments' | 'security' | 'staff' | 'audit' | 'codes' | 'qr-codes' | 'terms' | 'maintenance' | 'verifications' | 'id-training';
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onApprove, onReject, currentAdminRole = 'ADMIN' }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onApprove, onReject, currentAdminRole = 'ADMIN', initialTab }) => {
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab || 'overview');
   const [userSearch, setUserSearch] = useState('');
   const [userList, setUserList] = useState<PlatformUser[]>(MOCK_USERS);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -140,6 +143,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [platformSettings, setPlatformSettings] = useState<Record<string, any>>({});
   const [accessCodes, setAccessCodes] = useState<any[]>([]);
+  const [currentAdminUserId, setCurrentAdminUserId] = useState<string>('');
 
   // Maintenance & Feature Access state
   const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
@@ -218,6 +222,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
     if (currentAdminRole === 'ADMIN') {
       fetchAdminData();
     }
+    // Fetch current admin user ID for verification panel
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentAdminUserId(user.id);
+    });
   }, [currentAdminRole]);
 
   const fetchAdminData = async () => {
@@ -684,6 +692,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="Overview" />
                 <TabButton active={activeTab === 'tournaments'} onClick={() => setActiveTab('tournaments')} label="Tournaments" icon={<Trophy size={14} />} />
                 <TabButton active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} label="Apps" badge={pendingApps.length} />
+                <TabButton active={activeTab === 'verifications'} onClick={() => setActiveTab('verifications')} label="Verifications" icon={<Shield size={14} />} />
+                <TabButton active={activeTab === 'id-training'} onClick={() => setActiveTab('id-training')} label="ID Training" icon={<Eye size={14} />} />
                 <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} label="Users" />
                 <TabButton active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Security" icon={<Lock size={14} />} />
                 <TabButton active={activeTab === 'codes'} onClick={() => setActiveTab('codes')} label="Codes" icon={<Key size={14} />} />
@@ -863,7 +873,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                     </p>
                     {t.prizePool && (
                       <p className="text-xs text-slate-500 flex items-center gap-2 font-bold uppercase tracking-widest">
-                        <DollarSign size={14} className="text-green-600" /> {t.prizePool}
+                        <PhilippinePeso size={14} className="text-green-600" /> {t.prizePool}
                       </p>
                     )}
                   </div>
@@ -980,6 +990,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'verifications' && (
+          <div className="animate-slide-up">
+            <AdminVerificationPanel currentAdminId={currentAdminUserId} />
+          </div>
+        )}
+
+        {activeTab === 'id-training' && (
+          <div className="animate-slide-up">
+            <AdminIDTrainingPanel />
           </div>
         )}
 

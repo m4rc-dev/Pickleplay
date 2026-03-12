@@ -326,7 +326,7 @@ const Transactions: React.FC = () => {
 
       const payment = payments.find(p => p.id === paymentId);
       if (payment) {
-        await supabase.from('bookings').update({ payment_status: 'paid', payment_proof_status: 'payment_verified' }).eq('id', payment.booking_id);
+        await supabase.from('bookings').update({ status: 'confirmed', payment_status: 'paid', payment_proof_status: 'payment_verified' }).eq('id', payment.booking_id);
       }
 
       await fetchPayments(user.id);
@@ -703,9 +703,16 @@ const Transactions: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-900 truncate">{player?.full_name || player?.username || 'Player'}</p>
-                      <p className="text-[10px] text-slate-400 font-medium truncate">
-                        {court?.name}{location ? ` • ${location.name}` : ''}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[10px] text-slate-400 font-medium truncate">
+                          {court?.name}{location ? ` • ${location.name}` : ''}
+                        </p>
+                        {booking?.date && payment.created_at && booking.date > payment.created_at.slice(0, 10) && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
+                            Advanced
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-black text-slate-900">₱{payment.amount}</p>
@@ -740,15 +747,19 @@ const Transactions: React.FC = () => {
                       {payment.proof_image_url && (
                         <div>
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Proof of Payment</span>
-                          <div
-                            className="relative w-full max-w-sm rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:shadow-md transition-shadow"
+                          <button
                             onClick={() => setProofViewUrl(payment.proof_image_url)}
+                            className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group w-full max-w-sm"
                           >
-                            <img src={payment.proof_image_url} alt="Payment Proof" className="w-full h-auto" />
-                            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
-                              <Eye size={24} className="text-white opacity-0 hover:opacity-100 drop-shadow-lg" />
+                            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
+                              <Eye size={18} className="text-blue-500" />
                             </div>
-                          </div>
+                            <div className="text-left flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition-colors">View Receipt Image</p>
+                              <p className="text-[10px] text-slate-400 font-medium">Tap to view proof of payment</p>
+                            </div>
+                            <ChevronDown size={14} className="text-slate-300 -rotate-90 group-hover:text-blue-400 transition-colors" />
+                          </button>
                         </div>
                       )}
 
@@ -779,10 +790,15 @@ const Transactions: React.FC = () => {
                         </div>
                       )}
 
-                      {payment.status === 'verified' && payment.verified_at && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold">
-                          <CheckCircle2 size={12} />
-                          Verified on {new Date(payment.verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {payment.status === 'verified' && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100">
+                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                          <span className="text-xs font-bold text-emerald-700">Payment Verified</span>
+                          {payment.verified_at && (
+                            <span className="text-[10px] text-emerald-500 font-medium ml-auto">
+                              {new Date(payment.verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
