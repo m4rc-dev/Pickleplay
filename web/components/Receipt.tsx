@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer, Download, CheckCircle2, QrCode, AlertCircle, Clock, Banknote } from 'lucide-react';
+import { X, Printer, Download, CheckCircle2, QrCode, AlertCircle, Clock, Banknote, Trophy } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { toPng } from 'html-to-image';
 
@@ -125,6 +125,8 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
     };
 
     const isConfirmed = bookingData.status === 'confirmed';
+    const isPaid = bookingData.paymentStatus === 'paid';
+    const isCompleted = isConfirmed && isPaid;
 
     const modalContent = (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[9999] p-4 overflow-y-auto">
@@ -132,19 +134,21 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                 {/* Header - Hidden when printing */}
                 <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 print:hidden shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isConfirmed ? 'bg-emerald-50' : 'bg-blue-50'}`}>
-                            {isConfirmed ? (
-                                <CheckCircle2 className="text-emerald-600" size={22} />
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isCompleted ? 'bg-emerald-50' : isConfirmed ? 'bg-blue-50' : 'bg-blue-50'}`}>
+                            {isCompleted ? (
+                                <Trophy className="text-emerald-600" size={22} />
+                            ) : isConfirmed ? (
+                                <CheckCircle2 className="text-blue-600" size={22} />
                             ) : (
                                 <Clock className="text-blue-600 animate-pulse" size={22} />
                             )}
                         </div>
                         <div>
                             <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                                {isConfirmed ? 'Booking Confirmed' : 'Booking Pending'}
+                                {isCompleted ? 'Booking Completed' : isConfirmed ? 'Booking Confirmed' : 'Booking Pending'}
                             </h2>
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                                {isConfirmed ? 'Your digital pass is ready' : 'Waiting for owner confirmation'}
+                                {isCompleted ? 'Payment verified • Enjoy your game!' : isConfirmed ? 'Your digital pass is ready' : 'Waiting for owner confirmation'}
                             </p>
                         </div>
                     </div>
@@ -172,11 +176,13 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                 </div>
 
                                 {/* Status Banner */}
-                                <div className={`mb-3 md:mb-5 p-2 md:p-3 rounded-xl border-2 text-center font-black uppercase tracking-[0.15em] text-[10px] md:text-xs ${isConfirmed
+                                <div className={`mb-3 md:mb-5 p-2 md:p-3 rounded-xl border-2 text-center font-black uppercase tracking-[0.15em] text-[10px] md:text-xs ${isCompleted
                                     ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                    : 'bg-blue-50 border-blue-100 text-blue-600'
+                                    : isConfirmed
+                                        ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                        : 'bg-amber-50 border-amber-100 text-amber-600'
                                     }`}>
-                                    STATUS: {bookingData.status?.toUpperCase() || 'PENDING'}
+                                    STATUS: {isCompleted ? 'COMPLETED' : isConfirmed ? 'CONFIRMED' : 'PENDING'}
                                 </div>
 
                                 {/* Receipt Info Grid */}
@@ -187,7 +193,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1 md:mb-2">Issue Date</p>
-                                        <p className="text-xs md:text-sm font-black text-slate-900 uppercase">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                        <p className="text-xs md:text-sm font-black text-slate-900 uppercase">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}</p>
                                     </div>
                                 </div>
 
@@ -251,9 +257,12 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                             <div className="space-y-1">
                                                 <span className="text-base md:text-lg font-black text-slate-950 uppercase tracking-tighter">TOTAL AMOUNT</span>
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
-                                                        }`}>
-                                                        {bookingData.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                                                    <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                                                        bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600'
+                                                        : bookingData.paymentStatus === 'proof_submitted' ? 'bg-amber-100 text-amber-600'
+                                                        : 'bg-red-100 text-red-600'
+                                                    }`}>
+                                                        {bookingData.paymentStatus === 'paid' ? 'Paid' : bookingData.paymentStatus === 'proof_submitted' ? 'Payment Under Review' : 'Unpaid'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -283,9 +292,9 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                                     {/* Confirmation/Submission Stamp */}
                                     <div className="absolute top-3 md:top-6 right-3 md:right-6 -rotate-12 pointer-events-none opacity-20">
-                                        <div className={`border-2 md:border-4 ${isConfirmed ? 'border-emerald-600 text-emerald-600' : 'border-blue-600 text-blue-600'} px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl`}>
+                                        <div className={`border-2 md:border-4 ${isCompleted ? 'border-emerald-600 text-emerald-600' : isConfirmed ? 'border-blue-600 text-blue-600' : 'border-blue-600 text-blue-600'} px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl`}>
                                             <p className="text-[8px] md:text-[10px] font-black uppercase tracking-wider md:tracking-widest text-center leading-none">
-                                                {isConfirmed ? 'Confirmed' : 'Submitted'}
+                                                {isCompleted ? 'Completed' : isConfirmed ? 'Confirmed' : 'Submitted'}
                                             </p>
                                             <p className="text-[7px] md:text-[8px] font-bold mt-0.5 md:mt-1 uppercase text-center">
                                                 {bookingData.confirmedAt
@@ -316,8 +325,13 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                         </div>
                                     )}
 
-                                    <div className={`text-center max-w-sm p-3 md:p-5 rounded-2xl md:rounded-3xl ${isConfirmed ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-slate-100/80 text-slate-400'}`}>
-                                        {isConfirmed ? (
+                                    <div className={`text-center max-w-sm p-3 md:p-5 rounded-2xl md:rounded-3xl ${isCompleted ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-200' : isConfirmed ? 'bg-blue-600 text-white shadow-xl shadow-blue-200' : 'bg-slate-100/80 text-slate-400'}`}>
+                                        {isCompleted ? (
+                                            <>
+                                                <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Booking Complete ✓</p>
+                                                <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Payment verified. Present this QR code at the court.</p>
+                                            </>
+                                        ) : isConfirmed ? (
                                             <>
                                                 <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Pass Activated</p>
                                                 <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Present this QR code to the court manager upon arrival.</p>
@@ -332,11 +346,13 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                                     {/* Confirmation Timestamp Footnote */}
                                     <div className="mt-4 md:mt-8 pt-4 md:pt-8 border-t border-slate-200/50 w-full text-center">
-                                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1">Confirmation Details</p>
+                                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider md:tracking-widest mb-1">{isCompleted ? 'Completion Details' : 'Confirmation Details'}</p>
                                         <p className="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                                            {isConfirmed
-                                                ? `Verified at ${new Date(bookingData.confirmedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString()}`
-                                                : 'Awaiting Verification'
+                                            {isCompleted
+                                                ? `Verified • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`
+                                                : isConfirmed
+                                                    ? `Verified at ${new Date(bookingData.confirmedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })} • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString('en-US', { timeZone: 'Asia/Manila' })}`
+                                                    : 'Awaiting Verification'
                                             }
                                         </p>
                                     </div>

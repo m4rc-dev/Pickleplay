@@ -4,8 +4,7 @@
  * Fetches time-based pricing rules for courts from the court_pricing_rules table.
  * Falls back to the court's base_price when no specific pricing rule exists.
  * 
- * Priority: specific_date rules > day_of_week rules for today > 
- *           any rule matching time range > min rule price > base_price
+ * Priority: specific_date rules > day_of_week rules for today > base_price
  * 
  * All date calculations use Philippine Time (Asia/Manila).
  */
@@ -14,7 +13,7 @@ import { supabase } from './supabase';
 const PH_TIMEZONE = 'Asia/Manila';
 
 /** Get current date string in PH timezone as YYYY-MM-DD */
-function toPhDateStr(date: Date): string {
+export function toPhDateStr(date: Date): string {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: PH_TIMEZONE,
     year: 'numeric',
@@ -86,9 +85,7 @@ export async function fetchCourtPricingRules(courtId: string): Promise<PricingRu
  * Lookup order:
  *  1. specific_date rule for this exact date + time range
  *  2. day_of_week rule for this day + time range
- *  3. ANY rule (any day/date) whose time range covers this slot
- *  4. Minimum rule price (court has pricing but slot falls outside all time ranges)
- *  5. base_price fallback (only when zero rules exist)
+ *  3. base_price fallback (when no matching rule exists)
  */
 export async function getSlotPrice(
   courtId: string,
@@ -122,23 +119,8 @@ export async function getSlotPrice(
     }
   }
 
-  // 3. ANY rule whose time range covers this slot (cross-day / cross-date fallback).
-  //    Check day-of-week rules from other days first, then date-specific rules.
-  const otherDowRules = rules.filter(r => r.day_of_week !== null && r.day_of_week !== dayOfWeek && r.specific_date === null);
-  for (const rule of otherDowRules) {
-    if (isTimeInRange(time24, rule.start_time, rule.end_time)) {
-      return rule.price_per_hour;
-    }
-  }
-  const otherDateRules = rules.filter(r => r.specific_date !== null && r.specific_date !== dateStr);
-  for (const rule of otherDateRules) {
-    if (isTimeInRange(time24, rule.start_time, rule.end_time)) {
-      return rule.price_per_hour;
-    }
-  }
-
-  // 4. Slot falls outside all time ranges — use minimum rule price as effective rate
-  return Math.min(...rules.map(r => r.price_per_hour));
+  // 3. No matching rule for this date/day — fall back to base price
+  return basePricePerHour;
 }
 
 /**

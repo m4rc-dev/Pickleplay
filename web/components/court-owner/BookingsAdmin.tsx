@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode, Play, ChevronLeft, ChevronRight, Trash2, RefreshCw, AlertTriangle, DollarSign, Ban, Eye, ChevronDown, Banknote, LogIn, LogOut, UserX, Timer, Mail, Users, UserPlus, Building2, Loader2 } from 'lucide-react';
+import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode, Play, ChevronLeft, ChevronRight, Trash2, RefreshCw, AlertTriangle, PhilippinePeso, Ban, Eye, ChevronDown, Banknote, LogIn, LogOut, UserX, Timer, Mail, Users, UserPlus, Building2, Loader2 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { isTimeSlotBlocked } from '../../services/courtEvents';
 import { autoCancelLateBookings } from '../../services/bookings';
@@ -925,7 +925,7 @@ const BookingsAdmin: React.FC = () => {
                                                 // Waiting (before start time, confirmed/pending)
                                                 if (booking.status === 'confirmed' || booking.status === 'pending') {
                                                     if (!isToday) {
-                                                        // Future booking — cannot check in, but can advance pay
+                                                        // Future booking — cannot check in
                                                         return (
                                                             <div className="flex flex-col items-center gap-1.5">
                                                                 <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-50 border border-indigo-200 text-indigo-600">
@@ -934,22 +934,6 @@ const BookingsAdmin: React.FC = () => {
                                                                 <span className="text-[9px] font-bold text-slate-400">
                                                                     {new Date(booking.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                                                 </span>
-                                                                {booking.payment_status !== 'paid' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const b = booking;
-                                                                            setViewingBooking(null);
-                                                                            setPayingBooking(b);
-                                                                            setPayCashReceived('');
-                                                                            setPayChange(0);
-                                                                            setPayError('');
-                                                                        }}
-                                                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700 transition-all active:scale-95 shadow-sm"
-                                                                    >
-                                                                        <Banknote size={10} /> Advance Pay
-                                                                    </button>
-                                                                )}
                                                             </div>
                                                         );
                                                     }
@@ -1003,14 +987,7 @@ const BookingsAdmin: React.FC = () => {
                                                                         <RefreshCw size={16} /> Refund Payment
                                                                     </button>
                                                                 )}
-                                                                {booking.status === 'pending' && (
-                                                                    <button
-                                                                        onClick={() => { setOpenMenuId(null); setConfirmModal({ type: 'confirm', booking }); }}
-                                                                        className="w-full text-left px-5 py-3.5 hover:bg-emerald-50 transition-colors text-sm font-bold text-emerald-600 flex items-center gap-3"
-                                                                    >
-                                                                        <CheckCircle size={16} /> Confirm Booking
-                                                                    </button>
-                                                                )}
+
                                                                 {booking.status !== 'cancelled' && (
                                                                     <button
                                                                         onClick={() => {
@@ -1396,7 +1373,7 @@ const BookingsAdmin: React.FC = () => {
                                     <div className="p-6 bg-slate-900 rounded-[32px] flex justify-between items-center text-white">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-                                                <DollarSign className="text-lime-400" size={20} />
+                                                <PhilippinePeso className="text-lime-400" size={20} />
                                             </div>
                                             <span className="text-xs font-black uppercase tracking-widest">Change</span>
                                         </div>
@@ -1500,7 +1477,7 @@ const BookingsAdmin: React.FC = () => {
                                 {/* Price display */}
                                 {mbCourtId && (
                                     <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl">
-                                        <DollarSign size={16} className="text-blue-600" />
+                                        <PhilippinePeso size={16} className="text-blue-600" />
                                         <div className="flex-1">
                                             <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Court Rate</p>
                                             <p className="text-lg font-black text-blue-900">{mbPrice > 0 ? `₱${mbPrice}/hr` : 'FREE'}</p>
@@ -1901,8 +1878,8 @@ const BookingsAdmin: React.FC = () => {
                                 const vIsPastEnd = vNow > vEnd;
                                 return (
                             <div className="flex gap-3 flex-wrap">
-                                {/* PAY & CHECK-IN / ADVANCE PAY — for CONFIRMED + unpaid + not checked in + not past end */}
-                                {!viewingBooking.is_checked_in && viewingBooking.status === 'confirmed' && viewingBooking.payment_status !== 'paid' && !vIsPastEnd && !viewingBooking.is_no_show && (
+                                {/* PAY & CHECK-IN — for CONFIRMED + unpaid + TODAY + not checked in + not past end */}
+                                {vIsToday && !viewingBooking.is_checked_in && viewingBooking.status === 'confirmed' && viewingBooking.payment_status !== 'paid' && !vIsPastEnd && !viewingBooking.is_no_show && (
                                     <button
                                         onClick={() => {
                                             const b = viewingBooking;
@@ -1912,9 +1889,9 @@ const BookingsAdmin: React.FC = () => {
                                             setPayChange(0);
                                             setPayError('');
                                         }}
-                                        className={`flex-1 h-14 ${!vIsToday ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95`}
+                                        className="flex-1 h-14 bg-blue-600 hover:bg-blue-700 shadow-blue-200 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
                                     >
-                                        <Banknote size={18} /> {!vIsToday ? 'Advance Pay' : vIsLate ? 'Late Pay & Check-In' : 'Pay & Check-In'}
+                                        <Banknote size={18} /> {vIsLate ? 'Late Pay & Check-In' : 'Pay & Check-In'}
                                     </button>
                                 )}
                                 {/* Check-in only for already-paid confirmed + not checked-in + TODAY only */}
@@ -2107,7 +2084,7 @@ const BookingsAdmin: React.FC = () => {
                                 <div className="p-6 bg-slate-900 rounded-[32px] flex justify-between items-center text-white">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-                                            <DollarSign className="text-lime-400" size={20} />
+                                            <PhilippinePeso className="text-lime-400" size={20} />
                                         </div>
                                         <span className="text-xs font-black uppercase tracking-widest">Change</span>
                                     </div>

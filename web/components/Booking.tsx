@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck, Banknote, QrCode, Upload } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, PhilippinePeso, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck, Banknote, QrCode, Upload } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -12,6 +12,7 @@ import { sendInvitation, searchPlayerForInvite } from '../services/invitations';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
 import Toast, { ToastType } from './ui/Toast';
+import WeeklyPricingSchedule from './ui/WeeklyPricingSchedule';
 import { getSlotPrices, PricingRule, fetchCourtPricingRules, getSlotPrice } from '../services/courtPricingService';
 
 // Always use hourly slots for simplicity
@@ -546,20 +547,8 @@ const Booking: React.FC = () => {
         });
         setLocationCourts(mappedCourts);
 
-        // Fetch pricing rules for all courts to build price ranges
-        const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
-        for (const court of mappedCourts) {
-          try {
-            const rules = await fetchCourtPricingRules(court.id);
-            if (rules.length > 0) {
-              const rulePrices = rules.map(r => r.price_per_hour);
-              rangesMap.set(court.id, { min: Math.min(...rulePrices), max: Math.max(...rulePrices), hasRules: true });
-            } else {
-              rangesMap.set(court.id, { min: 0, max: 0, hasRules: false });
-            }
-          } catch { rangesMap.set(court.id, { min: 0, max: 0, hasRules: false }); }
-        }
-        setCourtPriceRanges(rangesMap);
+        // Price ranges will be computed by the date-aware useEffect below
+        setCourtPriceRanges(new Map());
       } catch (err) {
         console.error('Error fetching location detail:', err);
       } finally {
@@ -804,6 +793,34 @@ const Booking: React.FC = () => {
       setIsCheckingAvailability(false);
     }
   };
+
+  // Recompute courtPriceRanges for all location courts based on selected date
+  useEffect(() => {
+    if (locationCourts.length === 0) return;
+    const loadDateRanges = async () => {
+      const dateStr = toPhDateStr(selectedDate);
+      const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
+        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+        : TIME_SLOTS;
+      const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
+      for (const court of locationCourts) {
+        try {
+          const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
+          const vals = Array.from(prices.values());
+          if (vals.length > 0) {
+            const hasRules = vals.some(v => v !== court.pricePerHour);
+            rangesMap.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules: hasRules || vals.length > 0 });
+          } else {
+            rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+          }
+        } catch {
+          rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+        }
+      }
+      setCourtPriceRanges(rangesMap);
+    };
+    loadDateRanges();
+  }, [locationCourts, selectedDate, selectedLocation]);
 
   // Check availability when a court or date is selected
   useEffect(() => {
@@ -1463,8 +1480,8 @@ const Booking: React.FC = () => {
           totalPrice: totalPrice,
           playerName: profileData?.full_name || profileData?.username || 'Guest',
           status: 'pending',
-          paymentMethod: paymentMethod === 'gcash' ? 'GCash' : paymentMethod === 'maya' ? 'Maya' : 'Cash',
-          paymentStatus: isQRPayment ? 'proof_submitted' : 'unpaid',
+          paymentMethod: paymentMethod === 'gcash' ? 'GCash' : 'Maya',
+          paymentStatus: 'proof_submitted',
         });
 
         // Hide payment modal, show success modal
@@ -2288,6 +2305,16 @@ const Booking: React.FC = () => {
                         <p className="text-[10px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mt-1">When will you be playing?</p>
                       </div>
 
+                      {/* This Week's Pricing Schedule */}
+                      {selectedCourt && (
+                        <WeeklyPricingSchedule
+                          courtId={selectedCourt.id}
+                          basePricePerHour={selectedCourt.pricePerHour || 0}
+                          courtName={selectedCourt.name}
+                          compact
+                        />
+                      )}
+
                       {/* Future booking notice */}
                       {(() => {
                         const nowPH = getNowPH();
@@ -2945,6 +2972,16 @@ const Booking: React.FC = () => {
                           <p className="text-[11px] font-black text-[#1E40AF] uppercase tracking-[0.2em] mt-1">When will you be playing?</p>
                         </div>
 
+                        {/* This Week's Pricing Schedule */}
+                        {selectedCourt && (
+                          <WeeklyPricingSchedule
+                            courtId={selectedCourt.id}
+                            basePricePerHour={selectedCourt.pricePerHour || 0}
+                            courtName={selectedCourt.name}
+                            compact
+                          />
+                        )}
+
                         {/* Future booking notice */}
                         {(() => {
                           const nowPH = getNowPH();
@@ -3222,28 +3259,6 @@ const Booking: React.FC = () => {
                         )}
                       </button>
                     ))}
-
-                    <button
-                      onClick={() => { setPaymentMethod('cash'); setSelectedQRMethod(null); }}
-                      className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
-                        paymentMethod === 'cash' ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-200 hover:border-blue-300'
-                      }`}
-                    >
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        paymentMethod === 'cash' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        <Banknote size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-slate-900">Cash Payment</p>
-                        <p className="text-[11px] font-medium text-slate-400">Walk-in payment</p>
-                      </div>
-                      {paymentMethod === 'cash' && (
-                        <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
-                          <CheckCircle2 size={14} />
-                        </div>
-                      )}
-                    </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -3255,16 +3270,12 @@ const Booking: React.FC = () => {
                     </button>
                     <button
                       onClick={() => {
-                        if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
-                          setShowQRPaymentStep(true);
-                        } else {
-                          confirmBookingWithPayment();
-                        }
+                        setShowQRPaymentStep(true);
                       }}
                       disabled={!paymentMethod || isProcessing}
                       className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                     >
-                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : paymentMethod === 'gcash' || paymentMethod === 'maya' ? 'Next' : 'Confirm Booking'}
+                      {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Next'}
                     </button>
                   </div>
                 </>
@@ -3642,7 +3653,7 @@ const Booking: React.FC = () => {
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${filterFreeOnly ? 'bg-emerald-500' : 'bg-slate-200'}`}>
-                        <DollarSign size={16} className={filterFreeOnly ? 'text-white' : 'text-slate-400'} />
+                        <PhilippinePeso size={16} className={filterFreeOnly ? 'text-white' : 'text-slate-400'} />
                       </div>
                       <div className="text-left">
                         <p className={`text-sm font-bold ${filterFreeOnly ? 'text-emerald-700' : 'text-slate-700'}`}>Free Courts Only</p>
