@@ -5,6 +5,7 @@ import {
   ChevronDown, Loader2, Plus, Pencil,
   Banknote, Search, X, Check, Ban, RefreshCw, User, MapPin
 } from 'lucide-react';
+import { sendPaymentReceiptEmail } from '../../services/paymentReceiptEmail';
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -214,7 +215,7 @@ const Transactions: React.FC = () => {
           court:courts(id, name, location_id,
             location:locations(id, name)
           ),
-          player:profiles!bookings_player_id_fkey(id, full_name, username, avatar_url)
+          player:profiles!bookings_player_id_fkey(id, email, full_name, username, avatar_url)
         )
       `)
       .in('booking_id', bookingIds)
@@ -327,6 +328,31 @@ const Transactions: React.FC = () => {
       const payment = payments.find(p => p.id === paymentId);
       if (payment) {
         await supabase.from('bookings').update({ status: 'confirmed', payment_status: 'paid', payment_proof_status: 'payment_verified' }).eq('id', payment.booking_id);
+
+        // Send payment receipt email
+        const bk = payment.booking;
+        console.log('DEBUG: verifyPayment triggered. Booking data:', bk);
+        
+        if (bk && bk.player?.email) {
+          console.log('DEBUG: Sending receipt email to:', bk.player.email);
+          sendPaymentReceiptEmail({
+            email: bk.player.email,
+            playerName: bk.player.full_name || bk.player.username || 'Player',
+            courtName: bk.court?.name || 'Pickleball Court',
+            locationName: bk.court?.location?.name || '',
+            date: bk.date,
+            startTime: bk.start_time.slice(0, 5),
+            endTime: bk.end_time.slice(0, 5),
+            totalPrice: payment.amount,
+            referenceId: payment.booking_id,
+            paymentMethod: payment.payment_type
+          }).then(res => {
+            if (res.success) console.log('DEBUG: Receipt email service reported success');
+            else console.error('DEBUG: Receipt email service reported failure:', res.error);
+          }).catch(err => console.error('DEBUG: Unexpected catch in email service call:', err));
+        } else {
+          console.warn('DEBUG: Cannot send email - player email missing or booking data incomplete', bk);
+        }
       }
 
       await fetchPayments(user.id);

@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         }
 
         const { data, error } = await resend.emails.send({
-            from: 'noreply@pickleplays.com',
+            from: 'onboarding@resend.dev',
             to: email,
             subject: subject || 'Your PicklePlay 2FA Code',
             html: `

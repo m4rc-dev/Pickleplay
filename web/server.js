@@ -251,7 +251,7 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
 
     // Send email via Resend
     const result = await resend.emails.send({
-      from: 'noreply@pickleplays.com', // Replace with your verified domain
+      from: 'onboarding@resend.dev', // Default Resend address for unverified domains
       to: email,
       subject: subject || 'Your PicklePlay 2FA Code',
       html: `
@@ -306,6 +306,148 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
   } catch (error) {
     console.error('❌ Email sending error:', error);
     res.status(500).json({ error: error.message || 'Failed to send email' });
+  }
+});
+
+// Send payment receipt email endpoint
+app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
+  try {
+    const { 
+      email, 
+      playerName, 
+      courtName, 
+      locationName, 
+      date, 
+      startTime, 
+      endTime, 
+      totalPrice, 
+      referenceId,
+      paymentMethod 
+    } = req.body;
+
+    console.log('📨 Received receipt email request for:', email);
+
+    if (!email || !playerName || !courtName || !date || !referenceId) {
+      return res.status(400).json({ error: 'Missing required booking parameters' });
+    }
+
+    if (!resend) {
+      console.error('❌ Receipt email failed: Resend not initialized');
+      return res.status(503).json({ error: 'Email service is currently unavailable' });
+    }
+
+    const appUrl = 'https://www.pickleplay.ph';
+    const logoUrl = 'https://www.pickleplay.ph/images/PicklePlayLogo.jpg';
+
+    // Branded HTML (Same as Vercel function)
+    const htmlContent = `
+<div style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 0; background-color: #f0fdf4;">
+  <div style="max-width: 600px; margin: 0 auto;">
+    <div style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #1d4ed8 100%); padding: 32px; text-align: center; border-radius: 0 0 24px 24px;">
+      <img src="${logoUrl}" alt="PicklePlay" style="width: 72px; height: 72px; border-radius: 16px; margin-bottom: 12px; border: 3px solid rgba(255,255,255,0.3);" />
+      <h1 style="margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 2px; color: #ffffff; text-transform: uppercase;">
+        PICKLE<span style="color: #a3e635;">PLAY</span>
+      </h1>
+      <p style="margin: 6px 0 0; font-size: 11px; color: rgba(255,255,255,0.6); letter-spacing: 3px; text-transform: uppercase; font-weight: 600;">Philippines</p>
+    </div>
+
+    <div style="background-color: #ffffff; padding: 36px 28px; margin: 0 12px;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%; background-color: #dcfce7; color: #16a34a; margin-bottom: 16px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+        <h2 style="margin: 0 0 6px; font-size: 22px; font-weight: 800; color: #0f172a;">
+          Payment Verified! 🎉
+        </h2>
+        <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+          Hi ${playerName}, your payment has been successfully verified. Your booking is now <strong style="color: #16a34a;">CONFIRMED</strong>.
+        </p>
+      </div>
+
+      <div style="background-color: #f8fafc; border: 2px solid #e2e8f0; border-radius: 16px; padding: 24px; margin-bottom: 28px;">
+        <div style="text-align: center; margin-bottom: 18px;">
+          <span style="display: inline-block; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; font-size: 10px; font-weight: 800; padding: 6px 18px; border-radius: 20px; letter-spacing: 2px; text-transform: uppercase;">Official Receipt</span>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Reference ID</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #1e40af; font-size: 13px; font-weight: 800; text-align: right; font-family: monospace; letter-spacing: 1px;">${referenceId.slice(0, 8).toUpperCase()}</td>
+          </tr>
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Court</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 800; text-align: right;">${courtName}</td>
+          </tr>
+          ${locationName ? `
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Location</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 800; text-align: right;">${locationName}</td>
+          </tr>
+          ` : ''}
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Date</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 800; text-align: right;">${new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</td>
+          </tr>
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Time</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 800; text-align: right;">${startTime} - ${endTime}</td>
+          </tr>
+          <tr>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; font-weight: 600;">Payment Via</td>
+            <td style="padding: 11px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 13px; font-weight: 800; text-align: right; text-transform: capitalize;">${paymentMethod || 'Online'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 14px 0 0; color: #0f172a; font-size: 15px; font-weight: 900;">TOTAL PAID</td>
+            <td style="padding: 14px 0 0; color: #16a34a; font-size: 22px; font-weight: 900; text-align: right;">₱${Number(totalPrice).toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 28px; text-align: center;">
+        <h3 style="margin: 0 0 8px; color: #0f172a; font-size: 16px; font-weight: 800;">Get Your Digital Pass</h3>
+        <p style="margin: 0 0 16px; color: #64748b; font-size: 13px; line-height: 1.5;">
+          You can download or print your official digital pass from your account. Present this pass at the venue.
+        </p>
+        <a href="${appUrl}/#/my-bookings" target="_blank" style="display: inline-block; text-decoration: none; color: #ffffff; background: #1e40af; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 700; border: 1px solid #1e3a8a;">
+          View My Bookings
+        </a>
+      </div>
+
+      <p style="color: #94a3b8; font-size: 12px; line-height: 1.6; text-align: center; margin: 0 0 6px;">
+        Need help? Contact us at
+        <a href="mailto:phpickleplay@gmail.com" style="color: #2563eb; text-decoration: none; font-weight: 700;">phpickleplay@gmail.com</a>
+      </p>
+      <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin: 0;">
+        Best regards, <strong style="color: #94a3b8;">The PicklePlay Philippines Team</strong>
+      </p>
+    </div>
+
+    <div style="background: linear-gradient(135deg, #1e40af, #1d4ed8); padding: 18px 32px; text-align: center; border-radius: 24px 24px 0 0; margin: 0 12px;">
+      <p style="margin: 0; font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 1px;">
+        © 2026 PicklePlay Philippines · <a href="${appUrl}" style="color: rgba(255,255,255,0.5); text-decoration: none;">pickleplay.ph</a>
+      </p>
+    </div>
+  </div>
+</div>
+    `.trim();
+
+    const result = await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: email,
+      subject: `Payment Verified – Booking Confirmed | PicklePlay`,
+      html: htmlContent,
+    });
+
+    if (result.error) {
+      console.error('❌ Resend API Error:', result.error);
+      throw new Error(result.error.message || 'Failed to send receipt email');
+    }
+
+    console.log('✅ Receipt email sent successfully to:', email, 'ID:', result.data?.id);
+    res.json({ success: true, id: result.data?.id });
+  } catch (error) {
+    console.error('❌ Receipt email error:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to send receipt email' });
   }
 });
 

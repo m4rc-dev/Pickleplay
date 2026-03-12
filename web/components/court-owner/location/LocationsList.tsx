@@ -1764,7 +1764,7 @@ const LocationsList: React.FC = () => {
                     </button>
                     <button onClick={() => navigate('/court-policies')}
                         className="px-8 py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
-                        <Shield size={16} /> Policies
+                        <Shield size={16} /> Court Policies
                     </button>
                 </div>
             </div>

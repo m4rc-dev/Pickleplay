@@ -6,6 +6,7 @@ import { supabase } from '../../services/supabase';
 import { isTimeSlotBlocked } from '../../services/courtEvents';
 import { autoCancelLateBookings } from '../../services/bookings';
 import { sendGuestBookingEmail } from '../../services/guestBookingEmail';
+import { sendPaymentReceiptEmail } from '../../services/paymentReceiptEmail';
 import BookingScanner from './BookingScanner';
 
 interface BookingRecord {
@@ -32,18 +33,23 @@ interface BookingRecord {
         full_name: string;
         email: string;
         avatar_url?: string;
+        username?: string; // Added for player search
     };
     courts?: {
         name: string;
         location_id?: string;
+        locations?: { // Added for location name in payment receipt
+            name: string;
+        };
     };
+    is_guest?: boolean; // Added for payment receipt logic
 }
 
 // Helper: resolve display name/email/avatar for a booking (guest vs player)
 const getBookingUser = (b: BookingRecord) => {
     const isGuest = !!b.guest_name && !!b.booked_by;
     return {
-        name: isGuest ? b.guest_name! : (b.profiles?.full_name || 'Guest Player'),
+        name: isGuest ? b.guest_name! : (b.profiles?.full_name || b.profiles?.username || 'Guest Player'),
         email: isGuest ? (b.guest_email || 'Guest') : (b.profiles?.email || 'No email'),
         avatarUrl: isGuest ? null : (b.profiles?.avatar_url || null),
         isGuest,
@@ -168,8 +174,8 @@ const BookingsAdmin: React.FC = () => {
                     .from('bookings')
                     .select(`
                         *,
-                        profiles (full_name, email, avatar_url),
-                        courts!inner (name, owner_id, location_id)
+                        profiles (full_name, email, avatar_url, username),
+                        courts!inner (name, owner_id, location_id, locations(name))
                     `)
                     .eq('courts.owner_id', user.id)
                     .order('created_at', { ascending: false })
@@ -382,7 +388,7 @@ const BookingsAdmin: React.FC = () => {
             let player_id: string | null = null;
             let guestName = '';
             let guestEmail = '';
-            let guestAccountCreated = false;
+            let isGuestBooking = false;
 
             if (mbUserType === 'player') {
                 if (!mbSelectedPlayer) {
@@ -400,6 +406,7 @@ const BookingsAdmin: React.FC = () => {
                     setIsSubmitting(false);
                     return;
                 }
+                isGuestBooking = true;
                 const { data: existingProfile } = await supabase
                     .from('profiles')
                     .select('id')
@@ -413,7 +420,7 @@ const BookingsAdmin: React.FC = () => {
             // 2. Build booking record
             const bookingRecord: any = {
                 court_id: mbCourtId,
-                player_id: player_id || currentUser.id,
+                player_id: player_id || currentUser.id, // Fallback to owner if guest has no profile
                 date: mbDate,
                 start_time: slotStart,
                 end_time: slotEnd,
@@ -421,10 +428,11 @@ const BookingsAdmin: React.FC = () => {
                 status: 'confirmed',
                 payment_status: 'unpaid',
                 booked_by: currentUser.id,
+                is_guest: isGuestBooking,
             };
 
             // Add guest info if guest booking
-            if (mbUserType === 'guest' && !player_id) {
+            if (isGuestBooking && !player_id) { // Only if it's a guest booking AND no existing profile was found
                 bookingRecord.guest_name = guestName;
                 bookingRecord.guest_email = guestEmail;
             }
@@ -433,13 +441,17 @@ const BookingsAdmin: React.FC = () => {
             const { data: bookingData, error } = await supabase
                 .from('bookings')
                 .insert(bookingRecord)
-                .select()
+                .select(`
+                    *,
+                    profiles (full_name, email, avatar_url, username),
+                    courts (name, locations(name))
+                `)
                 .single();
 
             if (error) throw error;
 
             // 4. For guest bookings: Send booking receipt email with "Setup Your Account" link
-            if (mbUserType === 'guest' && guestEmail) {
+            if (isGuestBooking && guestEmail) {
                 setMbSendingEmail(true);
                 const selectedCourt = myCourts.find((c: any) => c.id === mbCourtId);
                 const selectedLoc = myLocations.find((l: any) => l.id === mbLocationId);
@@ -464,18 +476,25 @@ const BookingsAdmin: React.FC = () => {
             }
 
             // Transition to payment step instead of closing
-            const selectedCourt2 = myCourts.find((c: any) => c.id === mbCourtId);
+            // For manual booking we want to pass player email, name, etc. to next step
+            let playerEmail = '';
+            if (!bookingData.is_guest && bookingData.profiles && bookingData.profiles.email) {
+                playerEmail = bookingData.profiles.email;
+            }
+
             setMbCreatedBooking({
-                id: bookingData?.id || '',
-                courtName: selectedCourt2?.name || 'Court',
-                date: mbDate,
-                startTime: slotStart,
-                endTime: slotEnd,
-                totalPrice: mbPrice,
-                guestName: mbUserType === 'guest' ? `${mbGuestFirstName.trim()} ${mbGuestLastName.trim()}` : (mbSelectedPlayer?.full_name || mbSelectedPlayer?.username || 'Player'),
-                guestEmail: mbUserType === 'guest' ? mbGuestEmail.trim() : (mbSelectedPlayer?.email || ''),
-                avatarUrl: mbUserType === 'player' ? mbSelectedPlayer?.avatar_url : null,
-                isGuest: mbUserType === 'guest',
+                id: bookingData.id,
+                isGuest: bookingData.is_guest,
+                guestName: bookingData.is_guest ? bookingData.guest_name : (bookingData.profiles?.full_name || bookingData.profiles?.username || 'Player'),
+                guestEmail: bookingData.is_guest ? bookingData.guest_email : playerEmail,
+                playerEmail: playerEmail, // Store player email separately for receipt
+                courtName: bookingData.courts?.name,
+                locationName: bookingData.courts?.locations?.name || '',
+                date: bookingData.date,
+                startTime: bookingData.start_time.slice(0, 5),
+                endTime: bookingData.end_time.slice(0, 5),
+                totalPrice: bookingData.total_price,
+                avatarUrl: bookingData.profiles?.avatar_url,
             });
             setMbPaymentStep(true);
             setMbCashReceived('');
@@ -1419,6 +1438,31 @@ const BookingsAdmin: React.FC = () => {
                                                     // Show confetti
                                                     setMbShowConfetti(true);
                                                     fetchBookings();
+
+                                                    // Send payment receipt email
+                                                    if (mbCreatedBooking.guestEmail || mbCreatedBooking.playerEmail) {
+                                                        const pEmail = mbCreatedBooking.isGuest ? mbCreatedBooking.guestEmail : mbCreatedBooking.playerEmail;
+                                                        console.log('DEBUG: Manual booking payment verified. Email:', pEmail);
+                                                        if (pEmail) {
+                                                            sendPaymentReceiptEmail({
+                                                                email: pEmail,
+                                                                playerName: mbCreatedBooking.guestName || 'Player',
+                                                                courtName: mbCreatedBooking.courtName || 'Court',
+                                                                locationName: mbCreatedBooking.locationName || '',
+                                                                date: mbCreatedBooking.date,
+                                                                startTime: mbCreatedBooking.startTime,
+                                                                endTime: mbCreatedBooking.endTime,
+                                                                totalPrice: mbCreatedBooking.totalPrice,
+                                                                referenceId: mbCreatedBooking.id,
+                                                                paymentMethod: 'cash'
+                                                            }).then(res => {
+                                                                if (res.success) console.log('DEBUG: Manual receipt email success');
+                                                                else console.error('DEBUG: Manual receipt email failure:', res.error);
+                                                            }).catch(err => console.error('DEBUG: Manual receipt email error:', err));
+                                                        }
+                                                    } else {
+                                                        console.warn('DEBUG: No email found for manual booking receipt');
+                                                    }
                                                 } catch (err: any) {
                                                     setMbPayError(err.message || 'Failed to process payment');
                                                 } finally {
@@ -1612,9 +1656,9 @@ const BookingsAdmin: React.FC = () => {
                                                                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors text-left border-b border-slate-50 last:border-0"
                                                             >
                                                                 {p.avatar_url ? (
-                                                                    <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
+                                                                    <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border-2 border-slate-200" />
                                                                 ) : (
-                                                                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name || p.username || 'U')}&background=random&size=32&font-size=0.4&bold=true`} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
+                                                                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name || p.username || 'U')}&background=random&size=32&font-size=0.4&bold=true`} alt="" className="w-8 h-8 rounded-full object-cover border-2 border-slate-200" />
                                                                 )}
                                                                 <div className="flex-1 min-w-0">
                                                                     <p className="text-sm font-bold text-slate-900 truncate">{p.full_name || p.username || 'Unknown'}</p>
@@ -2103,6 +2147,9 @@ const BookingsAdmin: React.FC = () => {
                                             }
                                             setPayProcessing(true);
                                             try {
+                                                const { data: { session } } = await supabase.auth.getSession();
+                                                const user = session?.user;
+
                                                 const now = new Date().toISOString();
                                                 const isAdvancePay = payingBooking.date !== todayDateStr;
                                                 const fullUpdates: any = {
@@ -2121,6 +2168,38 @@ const BookingsAdmin: React.FC = () => {
                                                     const { error: fallbackErr } = await supabase.from('bookings').update({ status: 'confirmed', payment_status: 'paid' }).eq('id', payingBooking.id);
                                                     if (fallbackErr) throw fallbackErr;
                                                 }
+
+                                                // Log event
+                                                await supabase.from('system_logs').insert({
+                                                    user_id: user?.id,
+                                                    action: 'PAYMENT_RECEIVED',
+                                                    details: { booking_id: payingBooking.id, amount: received, type: 'CASH', change: payChange, by: 'ADMIN' }
+                                                });
+                                                
+                                                // Send payment receipt email
+                                                const pEmail = payingBooking.is_guest ? payingBooking.guest_email : payingBooking.profiles?.email;
+                                                console.log('DEBUG: Check-in payment verified. Email:', pEmail);
+                                                if (pEmail) {
+                                                    const pName = payingBooking.is_guest ? payingBooking.guest_name : (payingBooking.profiles?.full_name || payingBooking.profiles?.username || 'Player');
+                                                    sendPaymentReceiptEmail({
+                                                        email: pEmail,
+                                                        playerName: pName,
+                                                        courtName: payingBooking.courts?.name || 'Court',
+                                                        locationName: payingBooking.courts?.locations?.name || '',
+                                                        date: payingBooking.date,
+                                                        startTime: payingBooking.start_time.slice(0, 5),
+                                                        endTime: payingBooking.end_time.slice(0, 5),
+                                                        totalPrice: payingBooking.total_price,
+                                                        referenceId: payingBooking.id,
+                                                        paymentMethod: 'cash'
+                                                    }).then(res => {
+                                                        if (res.success) console.log('DEBUG: Check-in receipt email success');
+                                                        else console.error('DEBUG: Check-in receipt email failure:', res.error);
+                                                    }).catch(err => console.error('DEBUG: Check-in receipt email error:', err));
+                                                } else {
+                                                    console.warn('DEBUG: No email found for check-in receipt');
+                                                }
+
                                                 setPayingBooking(null);
                                                 fetchBookings();
                                             } catch (err: any) {
