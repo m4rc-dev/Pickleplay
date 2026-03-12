@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, DollarSign, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel, Star, ChevronLeft, Building2, CheckCircle, Activity, CreditCard, Info, SlidersHorizontal } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, PhilippinePeso, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, Lock, X, LogIn, UserPlus, Ban, List, CircleCheck, Funnel, Star, ChevronLeft, Building2, CheckCircle, Activity, CreditCard, Info, SlidersHorizontal } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
-import { fetchCourtPricingRules, getSlotPrices, PricingRule } from '../services/courtPricingService';
+import { fetchCourtPricingRules, getSlotPrices, PricingRule, toPhDateStr } from '../services/courtPricingService';
+import WeeklyPricingSchedule from './ui/WeeklyPricingSchedule';
 
 const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
     const mapRef = useRef<HTMLDivElement>(null);
@@ -116,23 +117,22 @@ const GuestBooking: React.FC = () => {
         return R * c;
     };
 
-    // Fetch dynamic pricing ranges for all courts in the selected location
+    // Fetch dynamic pricing ranges for all courts based on selected date
     useEffect(() => {
         if (locationCourts.length === 0) return;
         const loadPriceRanges = async () => {
-            const today = new Date();
-            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const dateStr = toPhDateStr(selectedDate);
             const newRanges = new Map<string, { min: number; max: number; hasRules: boolean }>();
             for (const court of locationCourts) {
                 try {
-                    const rules = await fetchCourtPricingRules(court.id);
-                    if (rules.length > 0) {
-                        const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
-                            ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                            : TIME_SLOTS;
-                        const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
-                        const vals = Array.from(prices.values()) as number[];
-                        newRanges.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules: true });
+                    const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
+                        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                        : TIME_SLOTS;
+                    const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
+                    const vals = Array.from(prices.values()) as number[];
+                    if (vals.length > 0) {
+                        const hasRules = vals.some(v => v !== court.pricePerHour);
+                        newRanges.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules: hasRules || vals.length > 0 });
                     } else {
                         newRanges.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
                     }
@@ -143,7 +143,7 @@ const GuestBooking: React.FC = () => {
             setCourtPriceRanges(newRanges);
         };
         loadPriceRanges();
-    }, [locationCourts, selectedLocation]);
+    }, [locationCourts, selectedLocation, selectedDate]);
 
     const getUserLocation = () => {
         if (gpsEnabled === true && userLocation) return;
@@ -1814,6 +1814,13 @@ const GuestBooking: React.FC = () => {
                                                     )}
                                                 </div>
                                             )}
+                                            {/* This Week's Pricing Schedule */}
+                                            <WeeklyPricingSchedule
+                                                courtId={heroActiveCourt.id}
+                                                basePricePerHour={heroActiveCourt.pricePerHour || 0}
+                                                courtName={heroActiveCourt.name}
+                                                compact
+                                            />
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => { setHeroCourtId(null); }}
@@ -1920,7 +1927,7 @@ const GuestBooking: React.FC = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center text-center">
                                         <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-3">
-                                            <DollarSign className="text-blue-600" size={24} />
+                                            <PhilippinePeso className="text-blue-600" size={24} />
                                         </div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Rate</p>
                                         {(() => {
@@ -2008,6 +2015,15 @@ const GuestBooking: React.FC = () => {
                                         </div>
                                     </section>
                                 )}
+
+                                {/* This Week's Pricing Schedule */}
+                                <section>
+                                    <WeeklyPricingSchedule
+                                        courtId={heroActiveCourt.id}
+                                        basePricePerHour={heroActiveCourt.pricePerHour || 0}
+                                        courtName={heroActiveCourt.name}
+                                    />
+                                </section>
                             </div>
                         </div>
 
@@ -2134,7 +2150,7 @@ const GuestBooking: React.FC = () => {
                                         }`}
                                 >
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${filterFreeOnly ? 'bg-emerald-500' : 'bg-slate-200'}`}>
-                                        <DollarSign size={16} className={filterFreeOnly ? 'text-white' : 'text-slate-400'} />
+                                        <PhilippinePeso size={16} className={filterFreeOnly ? 'text-white' : 'text-slate-400'} />
                                     </div>
                                     <div className="text-left">
                                         <p className={`text-sm font-bold ${filterFreeOnly ? 'text-emerald-700' : 'text-slate-700'}`}>Free Courts Only</p>

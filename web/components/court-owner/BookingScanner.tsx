@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { X, QrCode, CheckCircle2, AlertCircle, Camera, Banknote, DollarSign, AlertTriangle, Calendar } from 'lucide-react';
+import { X, QrCode, CheckCircle2, AlertCircle, Camera, Banknote, PhilippinePeso, AlertTriangle, Calendar } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
 interface BookingScannerProps {
@@ -526,7 +526,7 @@ const BookingScanner: React.FC<BookingScannerProps> = ({ onClose }) => {
                                         <div className="p-6 bg-slate-900 rounded-[32px] flex justify-between items-center text-white">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-                                                    <DollarSign className="text-lime-400" size={20} />
+                                                    <PhilippinePeso className="text-lime-400" size={20} />
                                                 </div>
                                                 <span className="text-xs font-black uppercase tracking-widest">Change</span>
                                             </div>

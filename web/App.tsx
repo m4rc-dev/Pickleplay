@@ -28,7 +28,7 @@ import {
   Mail,
   Lock,
   CreditCard,
-  DollarSign,
+  PhilippinePeso,
   Eye,
   EyeOff,
   GraduationCap,
@@ -47,7 +47,8 @@ import {
   Medal,
   UserPlus,
   UserMinus,
-  MessageSquare
+  MessageSquare,
+  ClipboardCheck
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 
@@ -105,6 +106,7 @@ import LocationsList from './components/court-owner/location/LocationsList';
 import LocationDetailPage from './components/court-owner/location/LocationDetailPage';
 import LocationPolicies from './components/court-owner/LocationPolicies';
 import CourtPricing from './components/court-owner/CourtPricing';
+import ApplicationStatus from './components/court-owner/ApplicationStatus';
 import Achievements from './components/Achievements';
 import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
@@ -397,6 +399,17 @@ const NavigationHandler: React.FC<{
   const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
   const hasUnreadNotifications = unreadNotificationsCount > 0;
 
+  // Pending court owner verification count for sidebar badge
+  const [pendingVerificationCount, setPendingVerificationCount] = useState(0);
+  useEffect(() => {
+    if (role !== 'ADMIN') return;
+    supabase
+      .from('court_owner_verifications')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['PENDING', 'UNDER_REVIEW', 'RESUBMISSION_REQUESTED'])
+      .then(({ count }) => { if (count !== null) setPendingVerificationCount(count); });
+  }, [role]);
+
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -567,6 +580,7 @@ const NavigationHandler: React.FC<{
               <div className="relative space-y-1.5">
                 <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 {pendingCount > 0 && <span className={`absolute ${isSidebarCollapsed ? 'top-1 right-2' : 'top-3 right-4'} w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-pulse`}>{pendingCount}</span>}
+                <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={pendingVerificationCount || undefined} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="Manage Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
@@ -665,7 +679,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/court-pricing" icon={<DollarSign size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -912,6 +926,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               )}
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+              {role === 'ADMIN' && <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} badge={pendingVerificationCount || undefined} />}
               {role === 'ADMIN' && <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'ADMIN' && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
@@ -942,7 +957,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/court-pricing" icon={<DollarSign size={22} />} label="Court Pricing" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
@@ -1053,8 +1068,10 @@ const NavigationHandler: React.FC<{
               <Route path="/transactions" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Transactions /> : <Navigate to="/" />} />
               <Route path="/court-pricing" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtPricing /> : <Navigate to="/" />} />
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
+              <Route path="/application-status" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <ApplicationStatus /> : <Navigate to="/login" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
+              <Route path="/admin/verifications" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} initialTab="verifications" /> : <Navigate to="/login" />} />
               <Route path="/p/:username/:bookingId" element={<PosterPage />} />
               <Route path="/achievements-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AchievementsManager /> : <Navigate to="/login" />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />

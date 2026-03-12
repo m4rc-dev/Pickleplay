@@ -23,7 +23,7 @@ import {
   PlusCircle,
   Activity,
   Trophy,
-  DollarSign,
+  PhilippinePeso,
   GraduationCap,
   History,
   Award,
@@ -54,6 +54,7 @@ import { calculateGraceDaysRemaining, isInGracePeriod, isHardLocked } from '../s
 import { getPendingRatings, getMatchDetails, updateMatchStatus } from '../services/matches';
 import MatchVerification from './MatchVerification';
 import PlayerRatingModal from './PlayerRatingModal';
+import CourtOwnerVerificationForm from './court-owner/CourtOwnerVerificationForm';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -144,6 +145,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
   // Court Owner Referral auto-upgrade state
   const [isCourtOwnerReferral, setIsCourtOwnerReferral] = useState(false);
+
+  // Court Owner Verification Form state
+  const [showVerificationForm, setShowVerificationForm] = useState(false);
+  const [lastApplicationId, setLastApplicationId] = useState<string | undefined>();
 
   // Auto-open Pro Upgrade modal if user arrived via court-owner referral
   useEffect(() => {
@@ -884,7 +889,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'COURT_OWNER':
         return (
           <>
-            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<DollarSign className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
+            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<PhilippinePeso className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
             <StatCard label="Court Utilization" value={`${courtOwnerStats.courtUtilization}%`} change="+5%" icon={<Activity className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
             <StatCard label="Player Retention" value={`${courtOwnerStats.playerRetention}%`} change="+2%" icon={<UserCheck className="text-blue-600" />} color="blue" delay="animate-stagger-3" />
           </>
@@ -892,7 +897,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'COACH':
         return (
           <>
-            <StatCard label="Session Revenue" value={`₱${coachStats.totalRevenue.toLocaleString()}`} change="+12%" icon={<DollarSign className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
+            <StatCard label="Session Revenue" value={`₱${coachStats.totalRevenue.toLocaleString()}`} change="+12%" icon={<PhilippinePeso className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
             <StatCard label="Students" value={coachStats.studentsCount.toString()} change={`+${coachStats.studentsCount}`} icon={<GraduationCap className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
             <StatCard label="Clinic Completion" value={`${coachStats.clinicCompletion}%`} change="+10%" icon={<Award className="text-blue-600" />} color="blue" delay="animate-stagger-3" />
           </>
@@ -1230,6 +1235,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       SUBMIT DOCS
                       <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
                     </button>
+
+                    {/* View Application Status button for pending Court Owner apps */}
+                    {applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COURT_OWNER' && a.status === 'PENDING') && (
+                      <button
+                        onClick={() => navigate('/application-status')}
+                        className="w-full mt-3 bg-white/20 text-white font-black py-3 px-6 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-white/30 transition-all flex items-center justify-center gap-2 backdrop-blur-sm border border-white/20"
+                      >
+                        <Shield size={14} />
+                        View Application Status
+                      </button>
+                    )}
 
                     <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
                       <Sparkles size={12} className="text-white/80" />
@@ -1656,7 +1672,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   }
                 }
 
-                // Standard application path
+                // ─── COURT OWNER: Open verification form instead ───
+                if (applicationType === 'court_owner') {
+                  // Don't create app record yet — wait until verification form is actually submitted
+                  setShowSubmitConfirm(false);
+                  setShowVerificationForm(true);
+                  return;
+                }
+
+                // Standard application path (Coach)
                 if (!accessCodeValue.trim() && selectedFiles.length === 0) {
                   setUploadError('Supporting documents are required.');
                   return;
@@ -1759,7 +1783,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   </div>
                 </div>
 
-                {/* Access Code — show as read-only for referral, editable for normal */}
+                {/* Access Code — show as read-only for referral, editable for normal (hidden for court_owner) */}
                 {isCourtOwnerReferral ? (
                   <div className="space-y-2">
                     <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
@@ -1775,7 +1799,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       <CheckCircle2 className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
                     </div>
                   </div>
-                ) : (
+                ) : applicationType !== 'court_owner' ? (
                 <div className="space-y-2">
                   <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
                     Access Code (Promotional)
@@ -1795,10 +1819,68 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                     <Key className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   </div>
                 </div>
+                ) : null}
+
+                {/* Court Owner Verification Info — shown when court_owner is selected */}
+                {applicationType === 'court_owner' && !isCourtOwnerReferral && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-100/60 rounded-2xl p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                          <Shield size={20} className="text-indigo-600" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Guided Verification</p>
+                          <p className="text-[10px] font-bold text-slate-500">Choose your verification method and complete the steps</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <p className="text-[9px] font-black text-indigo-600 uppercase tracking-wider px-1">Choose 1 of 2 Verification Methods:</p>
+                        {[
+                          { num: 'A', label: 'Government ID', desc: 'Philippine ID (front, back, selfie)' },
+                          { num: 'B', label: 'Court Ownership Docs', desc: 'Title, lease, permit, or tax declaration' },
+                        ].map((step) => (
+                          <div key={step.num} className="flex items-center gap-3 bg-white/70 rounded-xl px-4 py-2.5">
+                            <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
+                              <span className="text-[9px] font-black text-white">{step.num}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">{step.label}</p>
+                              <p className="text-[9px] font-bold text-slate-400">{step.desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-1 pt-1">Then complete:</p>
+                        {[
+                          { num: '2', label: 'Business Documents', desc: 'DTI, SEC, or Barangay permit (optional)' },
+                          { num: '3', label: 'Court Photos', desc: 'Min 3 court photos + entrance photo' },
+                          { num: '4', label: 'Google Maps Location', desc: 'Pin your facility on the map' },
+                        ].map((step) => (
+                          <div key={step.num} className="flex items-center gap-3 bg-white/70 rounded-xl px-4 py-2.5">
+                            <div className="w-6 h-6 bg-slate-500 rounded-lg flex items-center justify-center shrink-0">
+                              <span className="text-[9px] font-black text-white">{step.num}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">{step.label}</p>
+                              <p className="text-[9px] font-bold text-slate-400">{step.desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 px-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      <p className="text-[9px] font-bold text-slate-400">
+                        Clicking "Start Verification" below will open the guided verification form.
+                      </p>
+                    </div>
+                  </div>
                 )}
 
-                {/* File Upload Zone — hidden for court owner referrals */}
-                {!isCourtOwnerReferral && (
+                {/* File Upload Zone — hidden for court owner referrals AND court_owner type */}
+                {!isCourtOwnerReferral && applicationType !== 'court_owner' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1 relative">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
@@ -1828,21 +1910,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                                 </li>
                                 <li className="flex items-center gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Professional Experience
-                                </li>
-                              </ul>
-                            </div>
-
-                            <div>
-                              <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Court Owner Requirements:</p>
-                              <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Business Permit
-                                </li>
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Facility Utility Bill
-                                </li>
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Government ID
                                 </li>
                               </ul>
                             </div>
@@ -1917,10 +1984,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmittingReview}
-                    className={`flex-1 py-4 ${isCourtOwnerReferral ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl disabled:opacity-50`}
+                    disabled={isSubmittingReview || (!applicationType)}
+                    className={`flex-1 py-4 ${isCourtOwnerReferral || applicationType === 'court_owner' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl disabled:opacity-50`}
                   >
-                    {isSubmittingReview ? 'Submitting...' : isCourtOwnerReferral ? 'Confirm & Upgrade' : 'Apply Now'}
+                    {isSubmittingReview ? 'Submitting...' : isCourtOwnerReferral ? 'Confirm & Upgrade' : applicationType === 'court_owner' ? 'Start Verification →' : 'Apply Now'}
                   </button>
                 </div>
               </div>
@@ -1929,6 +1996,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>,
         document.body
       )}
+
+      {/* Court Owner Verification Form */}
+      <CourtOwnerVerificationForm
+        open={showVerificationForm}
+        onClose={() => setShowVerificationForm(false)}
+        onSubmitApplication={onSubmitApplication}
+        onSuccess={() => {
+          setShowVerificationForm(false);
+          setShowStatusModal({
+            show: true,
+            type: 'success',
+            title: '🎉 Application Submitted!',
+            message: 'Your court owner verification documents have been submitted successfully! Our team will review everything within 3–5 business days. You can track your application status anytime.'
+          });
+        }}
+      />
 
       {/* Log DUPR Modal */}
       {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield, DollarSign } from 'lucide-react';
+import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield, PhilippinePeso } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
 import { uploadCourtImage, uploadCourtPhoto } from '../../../services/locations';
 import { Location, LocationClosure, LocationClosureReason, CourtStatus } from '../../../types';
@@ -1934,7 +1934,7 @@ const LocationsList: React.FC = () => {
                                                 <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
                                                     <button onClick={() => navigate(`/court-pricing?court=${court.id}`)}
                                                         className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Set Pricing">
-                                                        <DollarSign size={16} />
+                                                        <PhilippinePeso size={16} />
                                                     </button>
                                                     <button onClick={() => openEditCourtModal(court)}
                                                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit Court">
