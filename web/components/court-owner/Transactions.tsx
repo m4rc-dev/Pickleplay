@@ -14,13 +14,37 @@ interface PaymentMethod {
   id: string;
   owner_id: string;
   location_id: string | null;
-  payment_type: 'gcash' | 'maya';
+  payment_type: string;
   account_name: string;
   qr_code_url: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
+
+const PREDEFINED_PAYMENT_TYPES = [
+  { id: 'gcash', name: 'GCash', tag: 'Globe FinTech', color: 'bg-blue-600', borderColor: 'border-blue-500', activeBg: 'bg-blue-50', icon: 'G', logo: '/images/bank_logos/gcash.jpg' },
+  { id: 'maya', name: 'Maya', tag: 'PayMaya', color: 'bg-green-600', borderColor: 'border-green-500', activeBg: 'bg-green-50', icon: 'M', logo: '/images/bank_logos/maya.jpg' },
+  { id: 'bdo', name: 'BDO', tag: 'Banco De Oro', color: 'bg-blue-800', borderColor: 'border-blue-800', activeBg: 'bg-blue-50', icon: 'B', logo: '/images/bank_logos/bdo.jpg' },
+  { id: 'bpi', name: 'BPI', tag: 'Bank of the PI', color: 'bg-red-700', borderColor: 'border-red-700', activeBg: 'bg-red-50', icon: 'B', logo: '/images/bank_logos/bpi.jpg' },
+  { id: 'unionbank', name: 'UnionBank', tag: 'Union Bank', color: 'bg-orange-600', borderColor: 'border-orange-500', activeBg: 'bg-orange-50', icon: 'U', logo: '/images/bank_logos/union.jpg' },
+  { id: 'other', name: 'Other Bank', tag: 'Custom Bank', color: 'bg-slate-700', borderColor: 'border-slate-700', activeBg: 'bg-slate-50', icon: '🏦', logo: null }
+];
+
+export const getPaymentTypeDetails = (typeId: string) => {
+  const predefined = PREDEFINED_PAYMENT_TYPES.find(t => t.id === typeId);
+  if (predefined) return predefined;
+  return { 
+    id: typeId, 
+    name: typeId, 
+    tag: 'Custom Bank', 
+    color: 'bg-slate-700', 
+    borderColor: 'border-slate-700', 
+    activeBg: 'bg-slate-50', 
+    icon: typeId.charAt(0).toUpperCase(),
+    logo: null
+  };
+};
 
 interface BookingPayment {
   id: string;
@@ -135,7 +159,8 @@ const Transactions: React.FC = () => {
   const [showAddMethod, setShowAddMethod] = useState(false);
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
   const [methodForm, setMethodForm] = useState({
-    payment_type: 'gcash' as 'gcash' | 'maya',
+    payment_type: 'gcash',
+    custom_bank_name: '',
     account_name: '',
     location_id: '' as string,
     qr_file: null as File | null,
@@ -246,6 +271,13 @@ const Transactions: React.FC = () => {
   // ──────── Save Payment Method ────────
   const savePaymentMethod = async () => {
     if (!user) return;
+    
+    let finalPaymentType = methodForm.payment_type;
+    if (finalPaymentType === 'other') {
+      if (!methodForm.custom_bank_name.trim()) { alert('Please enter the custom bank name.'); return; }
+      finalPaymentType = methodForm.custom_bank_name.trim();
+    }
+    
     if (!methodForm.account_name.trim()) { alert('Please enter the account name.'); return; }
     if (!methodForm.qr_file && !editingMethod?.qr_code_url) { alert('Please upload a QR code image.'); return; }
 
@@ -254,7 +286,7 @@ const Transactions: React.FC = () => {
       let qrUrl = editingMethod?.qr_code_url || '';
 
       if (methodForm.qr_file) {
-        const filePath = `${user.id}/${Date.now()}_${methodForm.payment_type}.png`;
+        const filePath = `${user.id}/${Date.now()}_${finalPaymentType}.png`;
         const { error: uploadError } = await supabase.storage
           .from('payment-qr')
           .upload(filePath, methodForm.qr_file, { upsert: true });
@@ -268,7 +300,7 @@ const Transactions: React.FC = () => {
         const { error } = await supabase
           .from('court_owner_payment_methods')
           .update({
-            payment_type: methodForm.payment_type,
+            payment_type: finalPaymentType,
             account_name: methodForm.account_name.trim(),
             location_id: methodForm.location_id || null,
             qr_code_url: qrUrl,
@@ -281,7 +313,7 @@ const Transactions: React.FC = () => {
           .from('court_owner_payment_methods')
           .insert({
             owner_id: user.id,
-            payment_type: methodForm.payment_type,
+            payment_type: finalPaymentType,
             account_name: methodForm.account_name.trim(),
             location_id: methodForm.location_id || null,
             qr_code_url: qrUrl,
@@ -395,13 +427,16 @@ const Transactions: React.FC = () => {
   const resetMethodForm = () => {
     setShowAddMethod(false);
     setEditingMethod(null);
-    setMethodForm({ payment_type: 'gcash', account_name: '', location_id: '', qr_file: null, qr_preview: '', is_cropping: false });
+    setMethodForm({ payment_type: 'gcash', custom_bank_name: '', account_name: '', location_id: '', qr_file: null, qr_preview: '', is_cropping: false });
   };
 
   const openEditMethod = (method: PaymentMethod) => {
     setEditingMethod(method);
+    const isPredefined = PREDEFINED_PAYMENT_TYPES.some(t => t.id === method.payment_type && t.id !== 'other');
     setMethodForm({
-      payment_type: method.payment_type, account_name: method.account_name,
+      payment_type: isPredefined ? method.payment_type : 'other',
+      custom_bank_name: isPredefined ? '' : method.payment_type,
+      account_name: method.account_name,
       location_id: method.location_id || '', qr_file: null, qr_preview: method.qr_code_url, is_cropping: false,
     });
     setShowAddMethod(true);
@@ -475,31 +510,48 @@ const Transactions: React.FC = () => {
               {/* Payment Type */}
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Payment Type</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['gcash', 'maya'] as const).map(type => (
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {PREDEFINED_PAYMENT_TYPES.map(type => (
                     <button
-                      key={type}
-                      onClick={() => setMethodForm(prev => ({ ...prev, payment_type: type }))}
+                      key={type.id}
+                      onClick={() => setMethodForm(prev => ({ ...prev, payment_type: type.id }))}
                       className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ${
-                        methodForm.payment_type === type
-                          ? type === 'gcash' ? 'bg-blue-50 border-blue-500' : 'bg-green-50 border-green-500'
+                        methodForm.payment_type === type.id
+                          ? `${type.activeBg} ${type.borderColor}`
                           : 'bg-white border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm ${type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'}`}>
-                        {type === 'gcash' ? 'G' : 'M'}
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ${type.color}`}>
+                        {type.logo ? (
+                          <img src={type.logo} alt={type.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-white font-black text-sm">{type.icon}</span>
+                        )}
                       </div>
-                      <div className="text-left">
-                        <p className="text-sm font-bold text-slate-900">{type === 'gcash' ? 'GCash' : 'Maya'}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{type === 'gcash' ? 'Globe FinTech' : 'PayMaya'}</p>
+                      <div className="text-left min-w-0 pr-1 flex-1">
+                        <p className="text-sm font-bold text-slate-900 truncate">{type.name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">{type.tag}</p>
                       </div>
-                      {methodForm.payment_type === type && (
-                        <CheckCircle2 size={18} className={type === 'gcash' ? 'text-blue-600 ml-auto' : 'text-green-600 ml-auto'} />
+                      {methodForm.payment_type === type.id && (
+                        <CheckCircle2 size={18} className={`shrink-0 ${type.color.replace('bg-', 'text-')} ml-auto`} />
                       )}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {methodForm.payment_type === 'other' && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Custom Bank Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Metrobank, RCBC, Security Bank"
+                    value={methodForm.custom_bank_name}
+                    onChange={e => setMethodForm(prev => ({ ...prev, custom_bank_name: e.target.value }))}
+                    className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                  />
+                </div>
+              )}
 
               {/* Location */}
               <div>
@@ -556,13 +608,24 @@ const Transactions: React.FC = () => {
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Preview Display</p>
                       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 max-w-[260px]">
                         <div className="flex items-center gap-2 mb-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-xs ${methodForm.payment_type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'}`}>
-                            {methodForm.payment_type === 'gcash' ? 'G' : 'M'}
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-slate-900">{methodForm.payment_type === 'gcash' ? 'GCash' : 'Maya'}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{methodForm.account_name || 'Account Name'}</p>
-                          </div>
+                          {(() => {
+                            const details = getPaymentTypeDetails(methodForm.payment_type === 'other' && methodForm.custom_bank_name ? methodForm.custom_bank_name.trim() : methodForm.payment_type);
+                            return (
+                              <>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden shrink-0 ${details.color}`}>
+                                  {details.logo ? (
+                                    <img src={details.logo} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-white font-black text-xs">{details.icon}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1 pr-1">
+                                  <p className="text-xs font-black text-slate-900 truncate">{details.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-medium truncate">{methodForm.account_name || 'Account Name'}</p>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                         <div className="bg-white rounded-xl border border-slate-100 p-2">
                           <img src={methodForm.qr_preview} alt="QR" className="w-full aspect-square object-contain" />
@@ -600,6 +663,7 @@ const Transactions: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {paymentMethods.map(method => {
               const locName = locations.find(l => l.id === method.location_id)?.name;
+              const details = getPaymentTypeDetails(method.payment_type);
               return (
                 <div key={method.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${method.is_active ? 'border-slate-100' : 'border-slate-100 opacity-60'}`}>
                   <div className="bg-slate-50 p-4 flex items-center justify-center">
@@ -609,14 +673,18 @@ const Transactions: React.FC = () => {
                   </div>
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-xs ${method.payment_type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'}`}>
-                        {method.payment_type === 'gcash' ? 'G' : 'M'}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden shrink-0 ${details.color}`}>
+                        {details.logo ? (
+                          <img src={details.logo} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-white font-black text-xs">{details.icon}</span>
+                        )}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-1">
                         <p className="text-sm font-bold text-slate-900 truncate">{method.account_name}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{method.payment_type === 'gcash' ? 'GCash' : 'Maya'}</p>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">{details.name}</p>
                       </div>
-                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${method.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <div className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${method.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
                         {method.is_active ? 'Active' : 'Inactive'}
                       </div>
                     </div>
