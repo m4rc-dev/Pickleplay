@@ -8,7 +8,8 @@ import {
     EyeOff,
     AlertCircle,
     Loader2,
-    ArrowLeft
+    ArrowLeft,
+    CheckCircle2
 } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -159,9 +160,9 @@ const Login: React.FC = () => {
         setSendingReset(true);
         setError(null);
         try {
-            const appUrl = 'https://www.pickleplay.ph';
+            const appUrl = window.location.origin;
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${appUrl}/login`,
+                redirectTo: `${appUrl}/auth/callback`,
             });
             if (resetError) throw resetError;
             setResetSent(true);
@@ -279,9 +280,27 @@ const Login: React.FC = () => {
                         </div>
 
                         {/* Title */}
-                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-7 animate-fade-in-up">Login</h1>
+                        <h1 className="text-2xl font-black text-slate-950 tracking-tight text-center lg:text-center mb-7 animate-fade-in-up">
+                            {resetSent ? 'Check Your Email' : 'Login'}
+                        </h1>
 
-                        <form onSubmit={handleLogin} className="space-y-5">
+                        {resetSent ? (
+                            <div className="text-center animate-fade-in space-y-4">
+                                <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                                </div>
+                                <p className="text-slate-600 text-sm font-medium">
+                                    We've sent a password reset link to <strong className="text-slate-900">{email}</strong>. Please check your inbox and spam folder.
+                                </p>
+                                <button
+                                    onClick={() => setResetSent(false)}
+                                    className="mt-4 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors text-sm"
+                                >
+                                    Return to Login
+                                </button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleLogin} className="space-y-5">
                             {error && (
                                 <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-3 text-rose-600 text-sm animate-fade-in">
                                     <AlertCircle size={16} className="shrink-0" />
@@ -349,6 +368,8 @@ const Login: React.FC = () => {
                                 {loading ? <Loader2 size={20} className="animate-spin" /> : 'Sign In'}
                             </button>
                         </form>
+                        )}
+
 
                         {/* Divider */}
                         <div className="relative my-6 animate-fade-in delay-500">
@@ -359,21 +380,25 @@ const Login: React.FC = () => {
                         </div>
 
                         {/* Google */}
-                        <button
-                            type="button"
-                            onClick={() => handleSocialLogin('google')}
-                            className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl py-3 transition-all active:scale-[0.97] group animate-fade-in delay-700"
-                        >
-                            <GoogleIcon />
-                        </button>
+                        {!resetSent && (
+                            <button
+                                type="button"
+                                onClick={() => handleSocialLogin('google')}
+                                className="w-full flex items-center justify-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl py-3 transition-all active:scale-[0.97] group animate-fade-in delay-700"
+                            >
+                                <GoogleIcon />
+                            </button>
+                        )}
 
                         {/* Bottom link */}
-                        <p className="mt-6 text-center text-slate-600 text-sm font-medium">
-                            Don't have an account?{' '}
-                            <Link to="/signup" className="text-[#1E40AF] font-bold hover:text-blue-700 transition-all">
-                                Sign up
-                            </Link>
-                        </p>
+                        {!resetSent && (
+                            <p className="mt-6 text-center text-slate-600 text-sm font-medium">
+                                Don't have an account?{' '}
+                                <Link to="/signup" className="text-[#1E40AF] font-bold hover:text-blue-700 transition-all">
+                                    Sign up
+                                </Link>
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

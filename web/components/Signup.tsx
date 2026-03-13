@@ -303,9 +303,9 @@ const Signup: React.FC = () => {
     const handleSendResetEmail = async () => {
         setSendingReset(true);
         try {
-            const appUrl = 'https://www.pickleplay.ph';
+            const appUrl = window.location.origin;
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${appUrl}/login`,
+                redirectTo: `${appUrl}/auth/callback`,
             });
             if (resetError) throw resetError;
             setResetEmailSent(true);

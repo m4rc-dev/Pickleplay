@@ -72,6 +72,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import TwoFactorVerify from './components/TwoFactorVerify';
 import AuthCallback from './components/AuthCallback';
+import UpdatePassword from './components/UpdatePassword';
 import NotFound from './components/NotFound';
 import CourtDetail from './components/CourtDetail';
 import FAQ from './components/FAQ';
@@ -370,8 +371,29 @@ const NavigationHandler: React.FC<{
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/update-password';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
+
+  // ── PASSWORD_RECOVERY: Handle Supabase PKCE password reset flow ──
+  // The early interceptor in supabase.ts stores 'password_recovery_pending' in
+  // sessionStorage when PASSWORD_RECOVERY fires during Supabase initialization
+  // (before React renders). We read it here on mount and redirect accordingly.
+  useEffect(() => {
+    const isPendingRecovery = sessionStorage.getItem('password_recovery_pending') === 'true';
+    if (isPendingRecovery) {
+      sessionStorage.removeItem('password_recovery_pending');
+      navigate('/update-password', { replace: true });
+      return;
+    }
+
+    // Also subscribe in case the event fires after React mounts (edge cases)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        navigate('/update-password', { replace: true });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   // Load + poll unread message count
   useEffect(() => {
@@ -1007,21 +1029,37 @@ const NavigationHandler: React.FC<{
           <div key={location.pathname} className={isAuthPage ? "" : "animate-route-transition"}>
             <Routes location={location}>
               <Route path="/" element={
-                isTwoFactorPending
-                  ? <Navigate to="/verify-2fa" replace />
-                  : role === 'guest'
-                    ? <Home />
-                    : role === 'PLAYER'
-                      ? (isSoftLaunchMode ? <SoftLaunchWelcome userName={userName || undefined} /> : <Navigate to="/booking" replace />)
-                      : role === 'ADMIN'
-                        ? <Navigate to="/admin" replace />
-                        : <Navigate to="/dashboard" replace />
+                // Safety net: check if a password recovery is pending in sessionStorage.
+                // This prevents a dashboard flash when the recovery flag is set but AuthCallback
+                // hasn't had a chance to redirect yet. (Cleanup happens in UpdatePassword.tsx)
+                sessionStorage.getItem('password_recovery_pending') === 'true'
+                  ? <Navigate to="/update-password" replace />
+                  // Check for password recovery flag in URL (hash or search)
+                  : (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery'))
+                    ? <Navigate to="/update-password" replace />
+                    : isTwoFactorPending
+                      ? <Navigate to="/verify-2fa" replace />
+                      : role === 'guest'
+                        ? <Home />
+                        : role === 'PLAYER'
+                          ? (isSoftLaunchMode ? <SoftLaunchWelcome userName={userName || undefined} /> : <Navigate to="/booking" replace />)
+                          : role === 'ADMIN'
+                            ? <Navigate to="/admin" replace />
+                            : <Navigate to="/dashboard" replace />
               } />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/welcome" element={<SoftLaunchWelcome userName={userName || undefined} />} />
               <Route path="/verify-2fa" element={<TwoFactorVerify />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/auth/callback" element={
+                // Render-time check (runs once, NOT doubled by StrictMode unlike useEffects).
+                // If the HTML script in index.html captured 'type=recovery' from the URL hash
+                // before Supabase cleared it, redirect immediately to update-password.
+                sessionStorage.getItem('password_recovery_pending') === 'true'
+                  ? <Navigate to="/update-password" replace />
+                  : <AuthCallback />
+              } />
+              <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
               <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
               <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? <FeatureUnavailable featureName="academy" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
@@ -1415,7 +1453,7 @@ const App: React.FC = () => {
               .single();
 
             if (!createError && newProfile) {
-              console.log('✅ Fallback profile created successfully');
+              // console.log('✅ Fallback profile created successfully');
               setUserName(newProfile.full_name);
               setUserAvatar(newProfile.avatar_url);
               consolidatedRoles = ['PLAYER'];
@@ -1467,7 +1505,7 @@ const App: React.FC = () => {
         const allPossibleRoles = Array.from(new Set([...consolidatedRoles, currentActive || 'PLAYER', 'PLAYER'])) as UserRole[];
 
         if (allPossibleRoles.length > dbRoles.length) {
-          console.log('Self-healing triggered: Updating roles array in database...');
+          // console.log('Self-healing triggered: Updating roles array in database...');
           try {
             await supabase
               .from('profiles')

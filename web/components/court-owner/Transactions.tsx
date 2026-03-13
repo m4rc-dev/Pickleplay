@@ -363,10 +363,10 @@ const Transactions: React.FC = () => {
 
         // Send payment receipt email
         const bk = payment.booking;
-        console.log('DEBUG: verifyPayment triggered. Booking data:', bk);
+        // console.log('DEBUG: verifyPayment triggered. Booking data:', bk);
         
         if (bk && bk.player?.email) {
-          console.log('DEBUG: Sending receipt email to:', bk.player.email);
+          // console.log('DEBUG: Sending receipt email to:', bk.player.email);
           sendPaymentReceiptEmail({
             email: bk.player.email,
             playerName: bk.player.full_name || bk.player.username || 'Player',
@@ -379,8 +379,9 @@ const Transactions: React.FC = () => {
             referenceId: payment.booking_id,
             paymentMethod: payment.payment_type
           }).then(res => {
-            if (res.success) console.log('DEBUG: Receipt email service reported success');
-            else console.error('DEBUG: Receipt email service reported failure:', res.error);
+            if (!res.success) {
+              console.error('DEBUG: Receipt email service reported failure:', res.error);
+            }
           }).catch(err => console.error('DEBUG: Unexpected catch in email service call:', err));
         } else {
           console.warn('DEBUG: Cannot send email - player email missing or booking data incomplete', bk);

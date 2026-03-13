@@ -9,49 +9,60 @@ const AuthCallback: React.FC = () => {
     useEffect(() => {
         const handleAuthCallback = async () => {
             try {
-                console.log('🔍 AuthCallback: Starting...');
-                console.log('🔍 AuthCallback: Full URL:', window.location.href);
-                console.log('🔍 AuthCallback: Hash:', window.location.hash);
-                console.log('🔍 AuthCallback: Search params:', window.location.search);
 
                 // Extract referral code from URL query parameters if present
                 const urlParams = new URLSearchParams(window.location.search);
                 const referralCode = urlParams.get('ref');
                 const referralType = urlParams.get('type');
-                console.log('🔍 AuthCallback: Referral code from URL:', referralCode);
 
                 if (referralCode) {
-                    console.log('✅ AuthCallback: Referral code found, storing in localStorage:', referralCode);
                     localStorage.setItem('referral_code', referralCode);
-                    console.log('✅ AuthCallback: Stored referral_code in localStorage');
                 } else {
-                    console.log('ℹ️ AuthCallback: No referral code in URL');
                 }
 
                 // Store court-owner referral type if present
                 if (referralType === 'court-owner') {
                     localStorage.setItem('referral_type', 'court-owner');
-                    console.log('✅ AuthCallback: Stored referral_type=court-owner in localStorage');
                 }
 
                 // Verify localStorage
-                const storedCode = localStorage.getItem('referral_code');
-                console.log('🔍 AuthCallback: Current localStorage referral_code:', storedCode);
 
-                // Extract OAuth parameters from the URL
-                // With BrowserRouter, they should be in the search params or hash depending on Supabase config
-                // but usually they come in the hash after a redirect: #access_token=...
+                // ── EARLY RECOVERY CHECK ──────────────────────────────────────────
+                // The module-level listener in supabase.ts stores this flag when it
+                // intercepts PASSWORD_RECOVERY before React renders. Check it here
+                // FIRST to avoid any dashboard flash caused by route redirect logic.
+                const pendingRecovery = sessionStorage.getItem('password_recovery_pending') === 'true';
+                if (pendingRecovery) {
+                    sessionStorage.removeItem('password_recovery_pending');
+                    navigate('/update-password', { replace: true });
+                    return;
+                }
+
+                const isRecovery = window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery');
+
+
+                // Parse parameters from both hash and search
                 const oauthHash = window.location.hash.substring(1);
+                const hashParams = new URLSearchParams(oauthHash);
+                const searchParams = new URLSearchParams(window.location.search);
 
-                console.log('🔍 AuthCallback: OAuth hash:', oauthHash);
+                // Check for errors in the URL (e.g., otp_expired)
+                const errorCode = hashParams.get('error') || searchParams.get('error');
+                const errorMessage = hashParams.get('error_description') || searchParams.get('error_description');
 
-                // Parse the OAuth parameters
-                const params = new URLSearchParams(oauthHash || window.location.search);
-                const accessToken = params.get('access_token');
-                const refreshToken = params.get('refresh_token');
+                if (errorCode) {
+                    // Explicitly handle recovery failure
+                    if (isRecovery) {
+                        navigate(`/login?error=${encodeURIComponent(errorMessage || 'Your password reset link is invalid or has expired.')}`);
+                        return;
+                    }
+                    navigate(`/login?error=${encodeURIComponent(errorMessage || errorCode)}`);
+                    return;
+                }
 
-                console.log('🔍 AuthCallback: Access token exists:', !!accessToken);
-                console.log('🔍 AuthCallback: Refresh token exists:', !!refreshToken);
+                const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
+
 
                 let session = null;
                 let error = null;
@@ -64,23 +75,28 @@ const AuthCallback: React.FC = () => {
                     });
                     session = result.data.session;
                     error = result.error;
-                    console.log('✅ AuthCallback: Session set manually:', session);
                 } else {
                     // Fallback to getSession if no tokens in URL
+                    // BUT: if we were expecting a recovery/token and it's missing, we should be wary
                     const result = await supabase.auth.getSession();
                     session = result.data.session;
                     error = result.error;
-                    console.log('🔍 AuthCallback: Session from getSession:', session);
+
+                    // If it was a recovery attempt and we didn't get a session from the URL,
+                    // and the current session is just an old one, this might be a failed state.
                 }
 
                 if (error) throw error;
 
                 if (session?.user) {
-                    console.log('✅ AuthCallback: User found:', session.user.id);
+
+                    if (isRecovery) {
+                        navigate('/update-password');
+                        return;
+                    }
 
                     // 1.5 Block accounts without email (e.g. Facebook OAuth without email permission)
                     if (!session.user.email) {
-                        console.warn('⚠️ AuthCallback: User has no email — signing out and redirecting');
                         await supabase.auth.signOut();
                         navigate('/login?error=email_required');
                         return;
@@ -98,7 +114,6 @@ const AuthCallback: React.FC = () => {
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     localStorage.removeItem('auth_redirect');
 
-                    console.log('🔍 AuthCallback: Redirecting to:', storedRedirect || '/');
 
                     if (storedRedirect) {
                         navigate(storedRedirect);

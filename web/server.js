@@ -157,6 +157,8 @@ app.get('/health', (req, res) => {
 // ─── OAuth Callback Redirect ────────────────────────────────────
 // Google OAuth redirects to /auth/callback, but we need it at /#/auth/callback
 // This handler converts the query params to hash params for HashRouter compatibility
+// NOTE: Commented out because we are using BrowserRouter and this interferes with client-side routing.
+/*
 app.get('/auth/callback', (req, res) => {
   // Extract all query parameters
   const queryString = new URLSearchParams(req.query).toString();
@@ -164,6 +166,7 @@ app.get('/auth/callback', (req, res) => {
   const redirectUrl = queryString ? `/#/auth/callback#${queryString}` : '/#/auth/callback';
   res.redirect(redirectUrl);
 });
+*/
 
 // ─── News API Proxy ─────────────────────────────────────────────
 // Proxies requests to HomesPh News API, injecting the secure API key
@@ -237,7 +240,7 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
   try {
     const { email, subject, code } = req.body;
 
-    console.log('📨 Received email request:', { email, code: '******' });
+    // console.log('📨 Received email request:', { email, code: '******' });
 
     // Validate inputs
     if (!email || !code) {
@@ -296,7 +299,7 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
       `,
     });
 
-    console.log('✅ Email sent successfully:', result);
+    // console.log('✅ Email sent successfully:', result);
 
     if (result.error) {
       throw new Error(result.error.message || 'Failed to send email');
@@ -325,7 +328,7 @@ app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
       paymentMethod 
     } = req.body;
 
-    console.log('📨 Received receipt email request for:', email);
+    // console.log('📨 Received receipt email request for:', email);
 
     if (!email || !playerName || !courtName || !date || !referenceId) {
       return res.status(400).json({ error: 'Missing required booking parameters' });
@@ -443,7 +446,7 @@ app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
       throw new Error(result.error.message || 'Failed to send receipt email');
     }
 
-    console.log('✅ Receipt email sent successfully to:', email, 'ID:', result.data?.id);
+    // console.log('✅ Receipt email sent successfully to:', email, 'ID:', result.data?.id);
     res.json({ success: true, id: result.data?.id });
   } catch (error) {
     console.error('❌ Receipt email error:', error.message);
@@ -521,7 +524,7 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
         .then(() => {})
         .catch(() => console.warn('must_reset_password column may not exist yet — run migration 009'));
 
-      console.log(`🔄 Updated existing user ${guestEmail} (${userId}) with new temp password`);
+      // console.log(`🔄 Updated existing user ${guestEmail} (${userId}) with new temp password`);
 
     } else {
       // User doesn't exist — create new Supabase auth user
@@ -564,7 +567,7 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
                 full_name: guestName,
               }, { onConflict: 'id' });
             }
-            console.log(`🔄 Found existing auth user, updated: ${guestEmail} (${userId})`);
+            // console.log(`🔄 Found existing auth user, updated: ${guestEmail} (${userId})`);
           } else {
             throw createError;
           }
@@ -605,7 +608,7 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
           await supabaseAdmin.from('profiles').update({ must_reset_password: true }).eq('id', userId).then(() => {}).catch(() => {});
         }
 
-        console.log(`✅ Created new user: ${guestEmail} (${userId})`);
+        // console.log(`✅ Created new user: ${guestEmail} (${userId})`);
       }
     }
 
@@ -822,7 +825,7 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
       throw new Error(emailResult.error.message || 'Failed to send email');
     }
 
-    console.log(`✅ Guest account created for ${guestEmail} (userId: ${userId}), email sent.`);
+    // console.log(`✅ Guest account created for ${guestEmail} (userId: ${userId}), email sent.`);
 
     res.json({ success: true, userId, tempPassword });
   } catch (error) {
@@ -909,7 +912,7 @@ app.post('/api/auth/set-guest-password', authLimiter, async (req, res) => {
           .catch(() => {});
       });
 
-    console.log(`✅ Guest password set successfully for ${email} (${profile.id})`);
+    // console.log(`✅ Guest password set successfully for ${email} (${profile.id})`);
     res.json({ success: true, userId: profile.id });
 
   } catch (error) {
