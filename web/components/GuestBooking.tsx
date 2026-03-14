@@ -265,7 +265,8 @@ const GuestBooking: React.FC = () => {
                             rating
                         )
                     `)
-                    .eq('location_id', urlLocationId);
+                    .eq('location_id', urlLocationId)
+                    .eq('setup_complete', true);
 
                 if (courtsError) throw courtsError;
 
@@ -443,7 +444,8 @@ const GuestBooking: React.FC = () => {
                             latitude,
                             longitude
                         )
-                    `);
+                    `)
+                    .eq('setup_complete', true);
 
                 if (error) throw error;
 

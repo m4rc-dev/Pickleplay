@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -14,6 +14,7 @@ import { getLocationPolicies, LocationPolicy } from '../services/policies';
 import Toast, { ToastType } from './ui/Toast';
 import WeeklyPricingSchedule from './ui/WeeklyPricingSchedule';
 import { getSlotPrices, PricingRule, fetchCourtPricingRules, getSlotPrice } from '../services/courtPricingService';
+import { getEffectiveHours, type EffectiveHours } from '../services/courtOperationHours';
 
 // Always use hourly slots for simplicity
 const ALL_HOUR_SLOTS = [
@@ -279,6 +280,9 @@ const Booking: React.FC = () => {
   const [pricingRulesCache, setPricingRulesCache] = useState<PricingRule[]>([]);
   const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
 
+  // Court-level operation hours (resolved per court+date, overrides location hours)
+  const [courtEffectiveHours, setCourtEffectiveHours] = useState<EffectiveHours | null>(null);
+
 
   const getUserLocation = () => {
     if (userLocation) return;
@@ -505,7 +509,7 @@ const Booking: React.FC = () => {
           setLocationConfirmed(false);
         }
 
-        // Fetch courts belonging to this location
+        // Fetch courts belonging to this location (only setup-complete courts)
         const { data: courtsData, error: courtsError } = await supabase
           .from('courts')
           .select(`
@@ -521,7 +525,8 @@ const Booking: React.FC = () => {
               rating
             )
           `)
-          .eq('location_id', urlLocationId);
+          .eq('location_id', urlLocationId)
+          .eq('setup_complete', true);
 
         if (courtsError) throw courtsError;
 
@@ -614,7 +619,8 @@ const Booking: React.FC = () => {
               latitude,
               longitude
             )
-          `);
+          `)
+          .eq('setup_complete', true);
 
         if (error) throw error;
 
@@ -687,6 +693,36 @@ const Booking: React.FC = () => {
     fetchLocations();
   }, []);
 
+  // Resolve court-level operation hours whenever selected court or date changes
+  useEffect(() => {
+    if (!selectedCourt) {
+      setCourtEffectiveHours(null);
+      return;
+    }
+    const resolveHours = async () => {
+      const dateStr = toPhDateStr(selectedDate);
+      const hours = await getEffectiveHours(
+        selectedCourt.id,
+        dateStr,
+        selectedLocation?.opening_time,
+        selectedLocation?.closing_time
+      );
+      setCourtEffectiveHours(hours);
+    };
+    resolveHours();
+  }, [selectedCourt, selectedDate, selectedLocation]);
+
+  /** Get the time slots to display, using court-level hours if available, else location hours, else default */
+  const getCourtTimeSlots = useCallback((): string[] => {
+    if (courtEffectiveHours && !courtEffectiveHours.is_closed) {
+      return generateTimeSlots(courtEffectiveHours.open_time, courtEffectiveHours.close_time);
+    }
+    if (selectedLocation?.opening_time && selectedLocation?.closing_time) {
+      return generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time);
+    }
+    return TIME_SLOTS;
+  }, [courtEffectiveHours, selectedLocation]);
+
   // Function to check court availability - extracted for reuse
   const checkCourtAvailability = async (court: Court | null, date: Date) => {
     if (!court) {
@@ -729,9 +765,7 @@ const Booking: React.FC = () => {
       const cleaningTimeMinutes = court.cleaningTimeMinutes || 0;
 
       // Check each time slot
-      const slotsToCheck = selectedLocation?.opening_time && selectedLocation?.closing_time
-        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-        : TIME_SLOTS;
+      const slotsToCheck = getCourtTimeSlots();
       for (const slot of slotsToCheck) {
         const { start, end } = getSlotDateTime(slot, date);
 
@@ -799,9 +833,7 @@ const Booking: React.FC = () => {
     if (locationCourts.length === 0) return;
     const loadDateRanges = async () => {
       const dateStr = toPhDateStr(selectedDate);
-      const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
-        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-        : TIME_SLOTS;
+      const slots = getCourtTimeSlots();
       const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
       for (const court of locationCourts) {
         try {
@@ -838,9 +870,7 @@ const Booking: React.FC = () => {
       const rules = await fetchCourtPricingRules(selectedCourt.id);
       setPricingRulesCache(rules);
       const dateStr = toPhDateStr(selectedDate);
-      const slotsToPrice = selectedLocation?.opening_time && selectedLocation?.closing_time
-        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-        : TIME_SLOTS;
+      const slotsToPrice = getCourtTimeSlots();
       const prices = await getSlotPrices(selectedCourt.id, dateStr, slotsToPrice, selectedCourt.pricePerHour);
       setSlotPrices(prices);
     };
@@ -1328,18 +1358,20 @@ const Booking: React.FC = () => {
         const endTimeFormatted = formatTime(endDateTime);
         const targetDateStr = toPhDateStr(selectedDate);
 
-        // 3. DUPLICATE SLOT CHECK - Prevent double-booking
-        const { data: existingBooking, error: checkError } = await supabase
+        // 3. OVERLAP CHECK - Prevent double-booking only when times overlap
+        const { data: overlappingBookings, error: checkError } = await supabase
           .from('bookings')
           .select('id')
           .eq('court_id', selectedCourt.id)
           .eq('date', targetDateStr)
           .neq('status', 'cancelled')
-          .maybeSingle();
+          .lt('start_time', endTimeFormatted)
+          .gt('end_time', startTimeFormatted)
+          .limit(1);
 
         if (checkError) throw checkError;
 
-        if (existingBooking) {
+        if (overlappingBookings && overlappingBookings.length > 0) {
           showToast('This time slot is already booked. Please choose another time.', 'error');
           setIsProcessing(false);
           return;
@@ -2394,9 +2426,7 @@ const Booking: React.FC = () => {
                         ) : (
                           <div className="grid grid-cols-2 gap-2">
                             {(() => {
-                              const allSlots = selectedLocation?.opening_time && selectedLocation?.closing_time
-                                ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                                : TIME_SLOTS;
+                              const allSlots = getCourtTimeSlots();
                               return allSlots.map(slot => {
                                 const isBlocked = blockedSlots.has(slot);
                                 const isBookedSlot = bookedSlots.has(slot);
@@ -2491,12 +2521,15 @@ const Booking: React.FC = () => {
                             <img src="/images/Ball.png" alt="courts" className="w-3 h-3 object-contain" />
                             {locationCourts.length} {locationCourts.length === 1 ? 'Court' : 'Courts'}
                           </span>
-                          {selectedLocation.opening_time && selectedLocation.closing_time && (
+                          {(courtEffectiveHours || (selectedLocation.opening_time && selectedLocation.closing_time)) && (
                             <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
                               <Clock size={10} />
                               {(() => {
                                 const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
-                                return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
+                                const openT = courtEffectiveHours?.open_time || selectedLocation.opening_time;
+                                const closeT = courtEffectiveHours?.close_time || selectedLocation.closing_time;
+                                if (courtEffectiveHours?.is_closed) return 'Closed Today';
+                                return `${fmt(openT)} - ${fmt(closeT)}`;
                               })()}
                             </span>
                           )}
@@ -2818,7 +2851,7 @@ const Booking: React.FC = () => {
                             </div>
                           </div>
                           {/* Hours */}
-                          {selectedLocation.opening_time && selectedLocation.closing_time && (
+                          {(courtEffectiveHours || (selectedLocation.opening_time && selectedLocation.closing_time)) && (
                             <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
                               <Clock size={16} className="text-[#a3e635] shrink-0" />
                               <div>
@@ -2826,7 +2859,10 @@ const Booking: React.FC = () => {
                                 <p className="text-sm font-black text-white">
                                   {(() => {
                                     const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
-                                    return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
+                                    const openT = courtEffectiveHours?.open_time || selectedLocation.opening_time;
+                                    const closeT = courtEffectiveHours?.close_time || selectedLocation.closing_time;
+                                    if (courtEffectiveHours?.is_closed) return 'Closed Today';
+                                    return `${fmt(openT)} - ${fmt(closeT)}`;
                                   })()}
                                 </p>
                               </div>
@@ -2914,12 +2950,17 @@ const Booking: React.FC = () => {
                               })()}
                             </div>
                           </div>
-                        {selectedLocation.opening_time && selectedLocation.closing_time && (
+                        {(courtEffectiveHours || (selectedLocation.opening_time && selectedLocation.closing_time)) && (
                           <div className="flex-1 flex items-center gap-2 px-3 py-3 bg-slate-50 rounded-xl border border-slate-100">
                             <Clock size={14} className="text-slate-400 shrink-0" />
                             <div>
                               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Hours</p>
-                              <p className="text-xs font-bold text-slate-900 leading-tight mt-0.5">{selectedLocation.opening_time} - {selectedLocation.closing_time}</p>
+                              <p className="text-xs font-bold text-slate-900 leading-tight mt-0.5">
+                                {courtEffectiveHours?.is_closed
+                                  ? 'Closed Today'
+                                  : `${courtEffectiveHours?.open_time || selectedLocation.opening_time} - ${courtEffectiveHours?.close_time || selectedLocation.closing_time}`
+                                }
+                              </p>
                             </div>
                           </div>
                         )}
@@ -3063,9 +3104,7 @@ const Booking: React.FC = () => {
                           ) : (
                             <div className="grid grid-cols-2 gap-2.5">
                               {(() => {
-                                const allSlots = selectedLocation?.opening_time && selectedLocation?.closing_time
-                                  ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                                  : TIME_SLOTS;
+                                const allSlots = getCourtTimeSlots();
                                 return allSlots.map(slot => {
                                   const isBlocked = blockedSlots.has(slot);
                                   const isBookedSlot = bookedSlots.has(slot);
