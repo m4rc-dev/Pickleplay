@@ -57,6 +57,10 @@ const getBookingUser = (b: BookingRecord) => {
 };
 
 const ITEMS_PER_PAGE = 15;
+const DEFAULT_OPEN_TIME = '08:00';
+const DEFAULT_CLOSE_TIME = '18:00';
+const PH_TIMEZONE = 'Asia/Manila';
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const BookingsAdmin: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -64,6 +68,7 @@ const BookingsAdmin: React.FC = () => {
     const [bookings, setBookings] = useState<BookingRecord[]>([]);
     const [myCourts, setMyCourts] = useState<any[]>([]);
     const [myLocations, setMyLocations] = useState<any[]>([]);
+    const [courtOperationHoursByCourt, setCourtOperationHoursByCourt] = useState<Record<string, any[]>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,12 +90,21 @@ const BookingsAdmin: React.FC = () => {
     const [dateTo, setDateTo] = useState('');
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [locationFilter, setLocationFilter] = useState('');
+    const [courtFilter, setCourtFilter] = useState('');
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+    const [displayMode, setDisplayMode] = useState<'calendar' | 'list'>('calendar');
+    const [calendarMonth, setCalendarMonth] = useState(new Date());
+    const [legendFilter, setLegendFilter] = useState<'none' | 'partial' | 'half' | 'almost' | 'full' | 'available' | 'booked' | 'expired' | ''>('');
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [calendarAnimKey, setCalendarAnimKey] = useState(0);
+    const [filterAnimKey, setFilterAnimKey] = useState(0);
     const locationDropdownRef = useRef<HTMLDivElement>(null);
     const datePickerRef = useRef<HTMLDivElement>(null);
+    const monthPickerRef = useRef<HTMLDivElement>(null);
 
     // Detail modal
     const [viewingBooking, setViewingBooking] = useState<BookingRecord | null>(null);
+    const [scheduleDayModal, setScheduleDayModal] = useState<{ courtId: string; dateKey: string } | null>(null);
 
     // Pay / Check-in flow (from booking details modal)
     const [payingBooking, setPayingBooking] = useState<BookingRecord | null>(null);
@@ -113,6 +127,9 @@ const BookingsAdmin: React.FC = () => {
             }
             if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
                 setShowDatePicker(false);
+            }
+            if (monthPickerRef.current && !monthPickerRef.current.contains(e.target as Node)) {
+                setShowMonthPicker(false);
             }
         };
         document.addEventListener('mousedown', handleClick);
@@ -161,14 +178,14 @@ const BookingsAdmin: React.FC = () => {
             await autoCancelLateBookings();
 
             // 2. Parallelize fetching courts, locations, and bookings
-            const [courtsResponse, locationsResponse, bookingsResponse] = await Promise.all([
+            const [courtsResponse, locationsResponse, bookingsResponse, courtOperationHoursResponse] = await Promise.all([
                 supabase
                     .from('courts')
                     .select('*')
                     .eq('owner_id', user.id),
                 supabase
                     .from('locations')
-                    .select('id, name, city, address')
+                    .select('id, name, city, address, opening_time, closing_time')
                     .eq('owner_id', user.id),
                 supabase
                     .from('bookings')
@@ -178,16 +195,29 @@ const BookingsAdmin: React.FC = () => {
                         courts!inner (name, owner_id, location_id, locations(name))
                     `)
                     .eq('courts.owner_id', user.id)
-                    .order('created_at', { ascending: false })
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('court_operation_hours')
+                    .select('court_id, day_of_week, specific_date, open_time, close_time, is_closed, is_active')
+                    .eq('owner_id', user.id)
+                    .eq('is_active', true)
             ]);
 
             if (courtsResponse.error) throw courtsResponse.error;
             if (locationsResponse.error) throw locationsResponse.error;
             if (bookingsResponse.error) throw bookingsResponse.error;
+            if (courtOperationHoursResponse.error) throw courtOperationHoursResponse.error;
 
             setMyCourts(courtsResponse.data || []);
             setMyLocations(locationsResponse.data || []);
             setBookings(bookingsResponse.data || []);
+
+            const groupedHours = (courtOperationHoursResponse.data || []).reduce((acc: Record<string, any[]>, row: any) => {
+                if (!acc[row.court_id]) acc[row.court_id] = [];
+                acc[row.court_id].push(row);
+                return acc;
+            }, {});
+            setCourtOperationHoursByCourt(groupedHours);
         } catch (err) {
             console.error('Error fetching dashboard data:', err);
         } finally {
@@ -554,9 +584,10 @@ const BookingsAdmin: React.FC = () => {
             b.courts?.name?.toLowerCase().includes(q) ||
             b.id.toLowerCase().includes(q);
         const matchesCourt = !locationFilter || (b.courts as any)?.location_id === locationFilter;
+        const matchesSpecificCourt = !courtFilter || b.court_id === courtFilter;
         const matchesDateFrom = !dateFrom || b.date >= dateFrom;
         const matchesDateTo = !dateTo || b.date <= dateTo;
-        return matchesSearch && matchesCourt && matchesDateFrom && matchesDateTo;
+        return matchesSearch && matchesCourt && matchesSpecificCourt && matchesDateFrom && matchesDateTo;
     });
 
     // Pagination
@@ -564,158 +595,704 @@ const BookingsAdmin: React.FC = () => {
     const paginatedBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     // Reset to page 1 when filters change
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, locationFilter, dateFrom, dateTo]);
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, locationFilter, courtFilter, dateFrom, dateTo]);
 
-    const activeFilterCount = (locationFilter ? 1 : 0) + (dateFrom || dateTo ? 1 : 0);
+    // Reset selected court when location changes or becomes invalid
+    useEffect(() => {
+        if (!courtFilter) return;
+        const stillValid = myCourts.some((court: any) => court.id === courtFilter && (!locationFilter || court.location_id === locationFilter));
+        if (!stillValid) setCourtFilter('');
+    }, [courtFilter, locationFilter, myCourts]);
+
+    useEffect(() => {
+        if (courtFilter) {
+            if (legendFilter && legendFilter !== 'available' && legendFilter !== 'booked' && legendFilter !== 'expired') {
+                setLegendFilter('');
+            }
+        } else {
+            if (legendFilter === 'available' || legendFilter === 'booked') {
+                setLegendFilter('');
+            }
+        }
+    }, [courtFilter, legendFilter]);
+
+    useEffect(() => {
+        setFilterAnimKey(prev => prev + 1);
+    }, [locationFilter, courtFilter, legendFilter, displayMode]);
+
+    useEffect(() => {
+        if (!courtFilter) setScheduleDayModal(null);
+    }, [courtFilter]);
+
+    const changeCalendarMonth = (nextDate: Date) => {
+        setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+        setCalendarAnimKey(prev => prev + 1);
+    };
+
+    const normalizeTime = (time?: string) => {
+        if (!time) return '';
+        return time.slice(0, 5);
+    };
+
+    const toMinutes = (time: string) => {
+        const [h, m] = time.split(':').map(Number);
+        return (h * 60) + m;
+    };
+
+    const minutesToHHMM = (mins: number) => {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    const formatTime12 = (time: string) => {
+        const [h, m] = time.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const hh = h % 12 || 12;
+        return `${hh}:${String(m).padStart(2, '0')}${ampm}`;
+    };
+
+    const formatTime12Compact = (time: string) => {
+        return formatTime12(time).replace(':00', '');
+    };
+
+    const getDateKey = (date: Date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const getNowPH = () => {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: PH_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        }).formatToParts(new Date());
+
+        const lookup = (type: string) => parts.find((p) => p.type === type)?.value || '00';
+        const year = lookup('year');
+        const month = lookup('month');
+        const day = lookup('day');
+        const hour = Number(lookup('hour'));
+        const minute = Number(lookup('minute'));
+
+        return {
+            dateKey: `${year}-${month}-${day}`,
+            minutes: (hour * 60) + minute,
+        };
+    };
+
+    const getLocationHours = (locationId: string) => {
+        const location = myLocations.find((loc: any) => loc.id === locationId);
+        const open = normalizeTime(location?.opening_time) || DEFAULT_OPEN_TIME;
+        const close = normalizeTime(location?.closing_time) || DEFAULT_CLOSE_TIME;
+        return { open, close };
+    };
+
+    const getCourtEffectiveHoursForDate = (courtId: string, dateKey: string) => {
+        const entries = courtOperationHoursByCourt[courtId] || [];
+
+        const dateSpecific = entries.find((row: any) => row.specific_date === dateKey);
+        if (dateSpecific) {
+            return {
+                open: normalizeTime(dateSpecific.open_time) || DEFAULT_OPEN_TIME,
+                close: normalizeTime(dateSpecific.close_time) || DEFAULT_CLOSE_TIME,
+                isClosed: !!dateSpecific.is_closed,
+            };
+        }
+
+        const [y, m, d] = dateKey.split('-').map(Number);
+        const dayOfWeek = new Date(y, m - 1, d).getDay();
+        const weekly = entries.find((row: any) => row.day_of_week === dayOfWeek && !row.specific_date);
+        if (weekly) {
+            return {
+                open: normalizeTime(weekly.open_time) || DEFAULT_OPEN_TIME,
+                close: normalizeTime(weekly.close_time) || DEFAULT_CLOSE_TIME,
+                isClosed: !!weekly.is_closed,
+            };
+        }
+
+        const court = myCourts.find((c: any) => c.id === courtId);
+        const locationHours = getLocationHours(court?.location_id || '');
+        return {
+            open: locationHours.open,
+            close: locationHours.close,
+            isClosed: false,
+        };
+    };
+
+    const bookingIsActive = (booking: BookingRecord) => booking.status !== 'cancelled';
+
+    const countBookedAndExpiredHourSlots = (dayBookings: BookingRecord[], openTime: string, closeTime: string, dateKey: string) => {
+        const open = toMinutes(openTime);
+        const close = toMinutes(closeTime);
+        if (close <= open) return { booked: 0, expired: 0, occupied: 0 };
+        const { dateKey: nowKey, minutes: nowMinutes } = getNowPH();
+        const isPastDate = dateKey < nowKey;
+        const isToday = dateKey === nowKey;
+        let booked = 0;
+        let expired = 0;
+        for (let slotStart = open; slotStart < close; slotStart += 60) {
+            const slotEnd = Math.min(slotStart + 60, close);
+            const hasBooking = dayBookings.some((b) => {
+                const bStart = toMinutes(b.start_time.slice(0, 5));
+                const bEnd = toMinutes(b.end_time.slice(0, 5));
+                return bStart < slotEnd && bEnd > slotStart;
+            });
+            const isExpired = isPastDate || (isToday && slotStart < nowMinutes);
+            if (hasBooking) {
+                booked += 1;
+            } else if (isExpired) {
+                expired += 1;
+            }
+        }
+        return {
+            booked,
+            expired,
+            occupied: booked + expired,
+        };
+    };
+
+    const getCapacityState = (bookedSlots: number, totalSlots: number): 'none' | 'partial' | 'half' | 'almost' | 'full' => {
+        if (bookedSlots <= 0) return 'none';
+        if (totalSlots <= 0) return 'none';
+        if (bookedSlots >= totalSlots) return 'full';
+
+        const ratio = bookedSlots / totalSlots;
+        if (ratio < 0.5) return 'partial';
+        if (ratio < 0.75) return 'half';
+        return 'almost';
+    };
+
+    const getTagClass = (state: 'none' | 'partial' | 'half' | 'almost' | 'full') => {
+        if (state === 'none') return 'bg-lime-400/32 text-lime-900 border border-lime-500/45 backdrop-blur-sm';
+        if (state === 'partial') return 'bg-blue-600/22 text-blue-900 border border-blue-500/50 backdrop-blur-sm';
+        if (state === 'half') return 'bg-orange-500/20 text-orange-800 border border-orange-300/55 backdrop-blur-sm';
+        if (state === 'almost') return 'bg-rose-400/22 text-rose-800 border border-rose-300/55 backdrop-blur-sm';
+        return 'bg-red-700/18 text-red-800 border border-red-400/55 backdrop-blur-sm';
+    };
+
+    const selectedLocationCourts = locationFilter
+        ? myCourts.filter((court: any) => court.location_id === locationFilter)
+        : [];
+
+    const calendarSourceBookings = filteredBookings.filter(bookingIsActive);
+
+    const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const firstWeekday = monthStart.getDay();
+    const daysInMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+    const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+    const { dateKey: todayKey, minutes: nowMinutesToday } = getNowPH();
+
+    const calendarDays = Array.from({ length: totalCells }, (_, idx) => {
+        const dayNumber = idx - firstWeekday + 1;
+        if (dayNumber < 1 || dayNumber > daysInMonth) {
+            return {
+                key: `empty-${calendarMonth.getFullYear()}-${calendarMonth.getMonth()}-${idx}`,
+                isPlaceholder: true,
+            };
+        }
+
+        const d = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), dayNumber);
+        const key = getDateKey(d);
+        return {
+            date: d,
+            key,
+            inCurrentMonth: true,
+            isToday: key === todayKey,
+            isPast: key < todayKey,
+            isPlaceholder: false,
+        };
+    });
+
+    const buildCourtDaySegments = (courtId: string, dateKey: string) => {
+        const effectiveHours = getCourtEffectiveHoursForDate(courtId, dateKey);
+        const { open, close, isClosed } = effectiveHours;
+        const openMin = toMinutes(open);
+        const closeMin = toMinutes(close);
+        const isPastDate = dateKey < todayKey;
+        const isToday = dateKey === todayKey;
+
+        if (isClosed || closeMin <= openMin) {
+            return {
+                open,
+                close,
+                isClosed: true,
+                segments: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }>,
+            };
+        }
+
+        const dayBookings = calendarSourceBookings
+            .filter((b) => b.court_id === courtId && b.date === dateKey)
+            .map((b) => ({
+                start: Math.max(openMin, toMinutes(b.start_time.slice(0, 5))),
+                end: Math.min(closeMin, toMinutes(b.end_time.slice(0, 5))),
+            }))
+            .filter((r) => r.end > r.start)
+            .sort((a, b) => a.start - b.start);
+
+        const merged: Array<{ start: number; end: number }> = [];
+        for (const interval of dayBookings) {
+            const last = merged[merged.length - 1];
+            if (!last || interval.start > last.end) {
+                merged.push({ ...interval });
+            } else {
+                last.end = Math.max(last.end, interval.end);
+            }
+        }
+
+        const segments: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }> = [];
+
+        const pushFreeOrExpired = (startMin: number, endMin: number) => {
+            if (endMin <= startMin) return;
+            if (isPastDate) {
+                segments.push({ type: 'expired', start: minutesToHHMM(startMin), end: minutesToHHMM(endMin) });
+                return;
+            }
+            if (isToday) {
+                if (endMin <= nowMinutesToday) {
+                    segments.push({ type: 'expired', start: minutesToHHMM(startMin), end: minutesToHHMM(endMin) });
+                    return;
+                }
+                if (startMin >= nowMinutesToday) {
+                    segments.push({ type: 'free', start: minutesToHHMM(startMin), end: minutesToHHMM(endMin) });
+                    return;
+                }
+                segments.push({ type: 'expired', start: minutesToHHMM(startMin), end: minutesToHHMM(nowMinutesToday) });
+                segments.push({ type: 'free', start: minutesToHHMM(nowMinutesToday), end: minutesToHHMM(endMin) });
+                return;
+            }
+            segments.push({ type: 'free', start: minutesToHHMM(startMin), end: minutesToHHMM(endMin) });
+        };
+
+        let cursor = openMin;
+        for (const block of merged) {
+            if (block.start > cursor) {
+                pushFreeOrExpired(cursor, block.start);
+            }
+            segments.push({ type: 'booked', start: minutesToHHMM(block.start), end: minutesToHHMM(block.end) });
+            cursor = Math.max(cursor, block.end);
+        }
+        if (cursor < closeMin) {
+            pushFreeOrExpired(cursor, closeMin);
+        }
+
+        return { open, close, isClosed: false, segments };
+    };
+
+    const buildCourtDayModalDetails = (courtId: string, dateKey: string) => {
+        const effectiveHours = getCourtEffectiveHoursForDate(courtId, dateKey);
+        const { open, close, isClosed } = effectiveHours;
+        const openMin = toMinutes(open);
+        const closeMin = toMinutes(close);
+        const isPastDate = dateKey < todayKey;
+        const isToday = dateKey === todayKey;
+
+        if (isClosed || closeMin <= openMin) {
+            return {
+                open,
+                close,
+                isClosed: true,
+                slotTags: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }>,
+                bookedDetails: [] as Array<{ id: string; userName: string; avatarUrl?: string | null; start: string; end: string }>,
+            };
+        }
+
+        const dayBookings = calendarSourceBookings
+            .filter((b) => b.court_id === courtId && b.date === dateKey)
+            .map((b) => ({
+                booking: b,
+                start: Math.max(openMin, toMinutes(b.start_time.slice(0, 5))),
+                end: Math.min(closeMin, toMinutes(b.end_time.slice(0, 5))),
+            }))
+            .filter((r) => r.end > r.start)
+            .sort((a, b) => a.start - b.start);
+
+        const hourlySlots: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }> = [];
+        for (let slotStart = openMin; slotStart < closeMin; slotStart += 60) {
+            const slotEnd = Math.min(slotStart + 60, closeMin);
+            const isBookedHour = dayBookings.some((b) => b.start < slotEnd && b.end > slotStart);
+            const isExpiredHour = isPastDate || (isToday && slotStart < nowMinutesToday);
+            hourlySlots.push({
+                type: isBookedHour ? 'booked' : (isExpiredHour ? 'expired' : 'free'),
+                start: minutesToHHMM(slotStart),
+                end: minutesToHHMM(slotEnd),
+            });
+        }
+
+        const bookedDetails = dayBookings.map(({ booking, start, end }) => {
+            const user = getBookingUser(booking);
+            return {
+                id: booking.id,
+                userName: user.name,
+                avatarUrl: user.avatarUrl,
+                start: minutesToHHMM(start),
+                end: minutesToHHMM(end),
+            };
+        });
+
+        const bookedTags = dayBookings.map(({ booking, start, end }) => {
+            const user = getBookingUser(booking);
+            return {
+                type: 'booked' as const,
+                start: minutesToHHMM(start),
+                end: minutesToHHMM(end),
+                userName: user.name,
+                avatarUrl: user.avatarUrl,
+            };
+        });
+
+        const slotTags: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }> = [
+            ...bookedTags,
+            ...hourlySlots
+                .filter((slot) => slot.type !== 'booked')
+                .map((slot) => ({
+                    type: slot.type,
+                    start: slot.start,
+                    end: slot.end,
+                })),
+        ].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+
+        return { open, close, isClosed: false, slotTags, bookedDetails };
+    };
+
+    const getDateFromKey = (dateKey: string) => {
+        const [y, m, d] = dateKey.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    };
+
+    const selectedLocationName = locationFilter
+        ? (myLocations.find((l: any) => l.id === locationFilter)?.name || 'Location')
+        : 'Location';
+    const selectedCourtName = courtFilter
+        ? (myCourts.find((c: any) => c.id === courtFilter)?.name || 'Court')
+        : 'Court';
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Court Bookings</h1>
-                    <p className="text-slate-500 font-medium tracking-tight">Administrative control for court reservations.</p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowScanner(true)}
-                        className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
-                    >
-                        <QrCode size={18} /> Scan QR Code
-                    </button>
-                    <button
-                        onClick={handleExportCSV}
-                        className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
-                    >
-                        <Download size={18} /> Export Data
-                    </button>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="px-8 py-4 bg-lime-400 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-lime-500 transition-all shadow-xl shadow-lime-900/20 active:scale-95"
-                    >
-                        New Booking
-                    </button>
-                </div>
-            </div>
-
-            {/* Filters Bar */}
-            <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input
-                        type="text"
-                        placeholder="Search by name, ID or court..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-transparent rounded-[20px] focus:bg-white focus:border-blue-200 outline-none transition-all font-medium"
-                    />
-                </div>
-                <div className="flex gap-3">
-                    {/* Date Range Filter */}
-                    <div className="relative" ref={datePickerRef}>
-                        <button
-                            onClick={() => setShowDatePicker(!showDatePicker)}
-                            className={`flex items-center gap-2 px-6 py-4 border rounded-[20px] font-black text-[10px] uppercase tracking-widest transition-all ${
-                                dateFrom || dateTo
-                                    ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                    : 'bg-slate-50 border-transparent text-slate-600 hover:bg-white hover:border-slate-200'
-                            }`}
-                        >
-                            <Calendar size={16} />
-                            {dateFrom || dateTo ? (
-                                <span className="max-w-[140px] truncate">
-                                    {dateFrom ? new Date(dateFrom + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Start'}
-                                    {' → '}
-                                    {dateTo ? new Date(dateTo + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'End'}
-                                </span>
-                            ) : 'Date Range'}
-                            <ChevronDown size={14} className={`transition-transform ${showDatePicker ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showDatePicker && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 p-5 min-w-[280px] animate-in fade-in zoom-in-95 duration-200">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Filter by date</p>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">From</label>
-                                        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium outline-none focus:border-blue-300 transition-all" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">To</label>
-                                        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium outline-none focus:border-blue-300 transition-all" />
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 mt-4">
-                                    <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 rounded-xl transition-all border border-slate-200">Clear</button>
-                                    <button onClick={() => setShowDatePicker(false)} className="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-blue-600 rounded-xl transition-all">Apply</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Location Filter */}
-                    <div className="relative" ref={locationDropdownRef}>
-                        <button
-                            onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                            className={`flex items-center gap-2 px-6 py-4 border rounded-[20px] font-black text-[10px] uppercase tracking-widest transition-all ${
-                                locationFilter
-                                    ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                    : 'bg-slate-50 border-transparent text-slate-600 hover:bg-white hover:border-slate-200'
-                            }`}
-                        >
-                            <Filter size={16} />
-                            <span className="max-w-[140px] truncate">{locationFilter ? (myLocations.find(l => l.id === locationFilter)?.name || 'Location') : 'All Locations'}</span>
-                            <ChevronDown size={14} className={`transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showLocationDropdown && (
-                            <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 min-w-[240px] max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+            {displayMode === 'calendar' ? (
+                <div key={`calendar-shell-${filterAnimKey}`} className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-6 md:p-8 animate-in fade-in duration-300">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
+                        <div>
+                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Court Bookings</h1>
+                            <p className="text-slate-500 font-medium tracking-tight">Administrative control for court reservations.</p>
+                            <div key={`crumbs-${filterAnimKey}`} className="mt-3 flex flex-wrap items-center gap-2 text-sm font-black uppercase tracking-widest animate-in fade-in duration-300">
                                 <button
-                                    onClick={() => { setLocationFilter(''); setShowLocationDropdown(false); }}
-                                    className={`w-full text-left px-5 py-3.5 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
-                                        !locationFilter ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
-                                    }`}
+                                    type="button"
+                                    onClick={() => { setLocationFilter(''); setCourtFilter(''); }}
+                                    className={`px-3 py-1.5 rounded-xl border transition-all ${!locationFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
                                 >
-                                    <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${!locationFilter ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                        {!locationFilter && <CheckCircle size={10} className="text-blue-600" />}
-                                    </span>
-                                    All Locations
+                                    All Location
                                 </button>
-                                {myLocations.map(loc => (
-                                    <button
-                                        key={loc.id}
-                                        onClick={() => { setLocationFilter(loc.id); setShowLocationDropdown(false); }}
-                                        className={`w-full text-left px-5 py-3.5 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
-                                            locationFilter === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
-                                        }`}
-                                    >
-                                        <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${locationFilter === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
-                                            {locationFilter === loc.id && <CheckCircle size={10} className="text-blue-600" />}
-                                        </span>
-                                        <div>
-                                            <p>{loc.name}</p>
-                                            {loc.city && <p className="text-[10px] text-slate-400 font-medium">{loc.city}</p>}
-                                        </div>
-                                    </button>
-                                ))}
+                                <span className="text-slate-300">&gt;</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setCourtFilter('')}
+                                    className={`px-3 py-1.5 rounded-xl border transition-all ${locationFilter && !courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
+                                >
+                                    {locationFilter ? selectedLocationName : 'Court'}
+                                </button>
+                                <span className="text-slate-300">&gt;</span>
+                                <span className={`px-3 py-1.5 rounded-xl border ${courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                    {courtFilter ? selectedCourtName : 'Schedules'}
+                                </span>
                             </div>
-                        )}
+                        </div>
+
+                        <div className="md:text-right">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Calendar View</p>
+                            <div className="relative mt-1" ref={monthPickerRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMonthPicker(v => !v)}
+                                    className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight hover:text-blue-700 transition-colors"
+                                >
+                                    {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                                </button>
+                                {showMonthPicker && (
+                                    <div className="absolute right-0 mt-2 w-[280px] bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 z-40 animate-in fade-in zoom-in-95 duration-150">
+                                        <div className="mb-2">
+                                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Year</label>
+                                            <input
+                                                type="number"
+                                                value={calendarMonth.getFullYear()}
+                                                onChange={(e) => {
+                                                    const y = Number(e.target.value);
+                                                    if (!Number.isNaN(y) && y >= 2000 && y <= 2100) {
+                                                        changeCalendarMonth(new Date(y, calendarMonth.getMonth(), 1));
+                                                    }
+                                                }}
+                                                className="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-blue-300"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            {MONTH_NAMES.map((monthName, idx) => (
+                                                <button
+                                                    key={monthName}
+                                                    type="button"
+                                                    onClick={() => { changeCalendarMonth(new Date(calendarMonth.getFullYear(), idx, 1)); setShowMonthPicker(false); }}
+                                                    className={`px-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${calendarMonth.getMonth() === idx ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                                                >
+                                                    {monthName.slice(0, 3)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div key={`legend-${filterAnimKey}`} className="mt-3 flex flex-wrap md:justify-end items-center gap-1.5 text-[9px] font-black uppercase tracking-widest animate-in fade-in duration-300">
+                                <span className="text-slate-400">Legend:</span>
+                                {courtFilter ? (
+                                    <>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'available' ? '' : 'available')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'available' ? 'ring-2 ring-emerald-300 bg-emerald-500/28' : 'bg-emerald-500/20'} text-emerald-800 border-emerald-300/50`}>🟢 Available</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'booked' ? '' : 'booked')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'booked' ? 'ring-2 ring-red-300 bg-red-700/26' : 'bg-red-700/18'} text-red-800 border-red-400/55`}>🔴 Booked</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'none' ? '' : 'none')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'none' ? 'ring-2 ring-lime-400 bg-lime-400/38' : 'bg-lime-400/26'} text-lime-900 border-lime-500/45`}>🟢 No Bookings</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'partial' ? '' : 'partial')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'partial' ? 'ring-2 ring-blue-400 bg-blue-600/32' : 'bg-blue-600/22'} text-blue-900 border-blue-500/50`}>🔵 Partially Booked</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'half' ? '' : 'half')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'half' ? 'ring-2 ring-orange-300 bg-orange-500/28' : 'bg-orange-500/20'} text-orange-800 border-orange-300/55`}>🟠 Half Day Booked</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'almost' ? '' : 'almost')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'almost' ? 'ring-2 ring-rose-300 bg-rose-400/30' : 'bg-rose-400/22'} text-rose-800 border-rose-300/55`}>🔴 Almost Full</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'full' ? '' : 'full')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'full' ? 'ring-2 ring-red-300 bg-red-700/26' : 'bg-red-700/18'} text-red-800 border-red-400/55`}>🔴 Fully Booked</button>
+                                    </>
+                                )}
+                                {legendFilter && (
+                                    <button type="button" onClick={() => setLegendFilter('')} className="px-2 py-1 rounded-full border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-colors">Clear All</button>
+                                )}
+                            </div>
+                            <div className="mt-3 flex md:justify-end items-center gap-2">
+                                <button
+                                    onClick={() => changeCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                                    className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-all"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                                <button
+                                    onClick={() => changeCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                                    className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-all"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Clear all filters */}
-                    {activeFilterCount > 0 && (
-                        <button
-                            onClick={() => { setLocationFilter(''); setDateFrom(''); setDateTo(''); setSearchQuery(''); }}
-                            className="flex items-center gap-2 px-5 py-4 bg-rose-50 border border-rose-100 rounded-[20px] text-rose-600 font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all"
-                        >
-                            <X size={14} /> Clear ({activeFilterCount})
-                        </button>
-                    )}
-                </div>
-            </div>
+                    <div className="grid grid-cols-7 gap-2 mb-2">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                            <div key={day} className="px-2 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">{day}</div>
+                        ))}
+                    </div>
 
-            {/* Bookings Table */}
+                    <div key={`${calendarAnimKey}-${filterAnimKey}`} className="grid grid-cols-1 md:grid-cols-7 gap-2 animate-in fade-in duration-300">
+                        {calendarDays.map((day) => {
+                            if ((day as any).isPlaceholder) {
+                                return <div key={day.key} className="min-h-[180px] rounded-2xl border border-transparent bg-transparent" />;
+                            }
+
+                            const dayBookings = calendarSourceBookings.filter((b) => b.date === day.key);
+                            const isPastDay = !!(day as any).isPast;
+                            const isCourtScheduleView = !!(locationFilter && courtFilter);
+                            const courtScheduleDetail = isCourtScheduleView ? buildCourtDaySegments(courtFilter, day.key) : null;
+
+                            return (
+                                <div
+                                    key={day.key}
+                                    onClick={() => {
+                                        if (isCourtScheduleView && courtFilter) {
+                                            setScheduleDayModal({ courtId: courtFilter, dateKey: day.key });
+                                        }
+                                    }}
+                                    className={`group min-h-[180px] rounded-2xl border p-2.5 md:p-3 relative overflow-visible transition-all duration-300 ${isCourtScheduleView ? 'min-h-[210px]' : ''} ${
+                                        isPastDay
+                                            ? 'bg-slate-100 border-slate-200 opacity-65'
+                                            : 'bg-white border-slate-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-blue-100/70 hover:border-blue-300'
+                                    } ${isCourtScheduleView ? 'cursor-pointer' : ''}`}
+                                >
+                                    {!isPastDay && (
+                                        <div className="pointer-events-none absolute left-3 right-3 top-0.5 h-[2px] rounded-full bg-blue-500/70 scale-x-0 group-hover:scale-x-100 origin-center transition-transform duration-300" />
+                                    )}
+                                    {day.isToday && (
+                                        <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 z-50 text-[8px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-black uppercase tracking-widest shadow-sm">Today</span>
+                                    )}
+                                    {isCourtScheduleView ? (
+                                        <>
+                                            <div className="flex items-center mb-2 gap-1.5">
+                                                <span className={`text-base font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigate(`/court-pricing?court=${courtFilter}`);
+                                                    }}
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-300/70 bg-amber-400/15 text-[10px] font-black text-amber-800 tracking-wide hover:bg-amber-400/25 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
+                                                    title="Edit operation hours in Court Pricing"
+                                                >
+                                                    <Clock size={12} className="text-amber-700" />
+                                                    <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
+                                                </button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex items-center mb-2">
+                                            <span className={`text-sm font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
+                                        </div>
+                                    )}
+
+                                    {!locationFilter && (
+                                        <div className="space-y-1.5 max-h-[130px] overflow-y-auto pr-1">
+                                            {myLocations.length === 0 ? (
+                                                <p className="text-[10px] text-slate-400 font-bold">No locations</p>
+                                            ) : (
+                                                myLocations.map((loc: any) => {
+                                                    const courtsInLoc = myCourts.filter((c: any) => c.location_id === loc.id);
+                                                    const totalSlots = courtsInLoc.reduce((sum: number, court: any) => {
+                                                        const hours = getCourtEffectiveHoursForDate(court.id, day.key);
+                                                        if (hours.isClosed) return sum;
+                                                        const cap = Math.max(0, Math.ceil((toMinutes(hours.close) - toMinutes(hours.open)) / 60));
+                                                        return sum + cap;
+                                                    }, 0);
+
+                                                    const bookedSlots = courtsInLoc.reduce((sum: number, court: any) => {
+                                                        const hours = getCourtEffectiveHoursForDate(court.id, day.key);
+                                                        if (hours.isClosed) return sum;
+                                                        const courtBookings = dayBookings.filter((b) => b.court_id === court.id);
+                                                        return sum + countBookedAndExpiredHourSlots(courtBookings, hours.open, hours.close, day.key).occupied;
+                                                    }, 0);
+
+                                                    const hasAnyBooking = courtsInLoc.some((court: any) => {
+                                                        const courtBookings = dayBookings.filter((b) => b.court_id === court.id);
+                                                        return courtBookings.length > 0;
+                                                    });
+
+                                                    const hasAnyExpired = courtsInLoc.some((court: any) => {
+                                                        const hours = getCourtEffectiveHoursForDate(court.id, day.key);
+                                                        if (hours.isClosed) return false;
+                                                        const courtBookings = dayBookings.filter((b) => b.court_id === court.id);
+                                                        return countBookedAndExpiredHourSlots(courtBookings, hours.open, hours.close, day.key).expired > 0;
+                                                    });
+
+                                                    const state = hasAnyBooking
+                                                        ? getCapacityState(bookedSlots, Math.max(totalSlots, 1))
+                                                        : 'none';
+
+                                                    if (legendFilter) {
+                                                        if (legendFilter === 'expired') {
+                                                            if (!hasAnyExpired) return null;
+                                                        } else if (legendFilter !== state) {
+                                                            return null;
+                                                        }
+                                                    }
+
+                                                    return (
+                                                        <button
+                                                            key={`${day.key}-${loc.id}`}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setLocationFilter(loc.id);
+                                                                setCourtFilter('');
+                                                            }}
+                                                            className={`w-full text-left text-[10px] sm:text-[11px] font-medium rounded-md px-2 py-1 truncate transition-all hover:scale-[1.01] hover:shadow-sm cursor-pointer animate-in fade-in zoom-in-95 duration-200 ${!hasAnyBooking && isPastDay ? 'bg-slate-500/18 text-slate-700 border border-slate-300/60 backdrop-blur-sm' : getTagClass(state)}`}
+                                                            title={`${loc.name} — ${state} (Click to open location courts calendar)`}
+                                                        >
+                                                            {loc.name}
+                                                        </button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {locationFilter && !courtFilter && (
+                                        <div className="space-y-1.5 max-h-[130px] overflow-y-auto pr-1">
+                                            {selectedLocationCourts.length === 0 ? (
+                                                <p className="text-[10px] text-slate-400 font-bold">No courts in location</p>
+                                            ) : (
+                                                selectedLocationCourts.map((court: any) => {
+                                                    const hours = getCourtEffectiveHoursForDate(court.id, day.key);
+                                                    const totalSlots = hours.isClosed
+                                                        ? 0
+                                                        : Math.max(1, Math.ceil((toMinutes(hours.close) - toMinutes(hours.open)) / 60));
+                                                    const courtBookings = dayBookings.filter((b) => b.court_id === court.id);
+                                                    const slotStats = hours.isClosed
+                                                        ? { booked: 0, expired: 0, occupied: 0 }
+                                                        : countBookedAndExpiredHourSlots(courtBookings, hours.open, hours.close, day.key);
+                                                    const hasBooking = courtBookings.length > 0;
+                                                    const state = hasBooking
+                                                        ? getCapacityState(slotStats.occupied, Math.max(totalSlots, 1))
+                                                        : 'none';
+
+                                                    if (legendFilter) {
+                                                        if (legendFilter === 'expired') {
+                                                            if (slotStats.expired <= 0) return null;
+                                                        } else if (legendFilter !== state) {
+                                                            return null;
+                                                        }
+                                                    }
+
+                                                    return (
+                                                        <button
+                                                            key={`${day.key}-${court.id}`}
+                                                            type="button"
+                                                            onClick={() => setCourtFilter(court.id)}
+                                                            className={`w-full text-left text-[10px] sm:text-[11px] font-medium rounded-md px-2 py-1 truncate transition-all hover:scale-[1.01] hover:shadow-sm cursor-pointer animate-in fade-in zoom-in-95 duration-200 ${!hasBooking && isPastDay ? 'bg-slate-500/18 text-slate-700 border border-slate-300/60 backdrop-blur-sm' : getTagClass(state)}`}
+                                                            title={`${court.name} — ${state} (Click to open court schedule calendar)`}
+                                                        >
+                                                            {court.name}
+                                                        </button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {locationFilter && courtFilter && (
+                                        <div className="space-y-2 max-h-[130px] overflow-y-auto pr-1">
+                                            {(() => {
+                                                const detail = courtScheduleDetail!;
+                                                return (
+                                                    <>
+                                                        {detail.isClosed && (
+                                                            <div className="text-[10px] font-black rounded-md px-2 py-1 bg-slate-400 text-white">
+                                                                Closed
+                                                            </div>
+                                                        )}
+                                                        <div className="flex flex-wrap items-start content-start gap-1.5">
+                                                            {detail.segments
+                                                                .filter((segment) => {
+                                                                    if (!legendFilter) return true;
+                                                                    if (legendFilter === 'booked') return segment.type === 'booked';
+                                                                    if (legendFilter === 'available') return segment.type === 'free';
+                                                                    if (legendFilter === 'expired') return segment.type === 'expired';
+                                                                    return true;
+                                                                })
+                                                                .map((segment, idx) => (
+                                                                    <div
+                                                                        key={`${day.key}-${segment.start}-${segment.end}-${idx}`}
+                                                                        className={`inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 ${segment.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : segment.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                                    >
+                                                                        {formatTime12Compact(segment.start)}-{formatTime12Compact(segment.end)}
+                                                                    </div>
+                                                                ))}
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                </div>
+            ) : (
             <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left">
@@ -1105,6 +1682,109 @@ const BookingsAdmin: React.FC = () => {
                         </div>
                     </div>
                 )}
+            </div>
+            )}
+                {/* Court Schedule Day Modal */}
+                {scheduleDayModal && ReactDOM.createPortal(
+                    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[210] flex items-center justify-center p-6 animate-in fade-in duration-300" onClick={() => setScheduleDayModal(null)}>
+                        {(() => {
+                            const detail = buildCourtDayModalDetails(scheduleDayModal.courtId, scheduleDayModal.dateKey);
+                            const selectedDate = getDateFromKey(scheduleDayModal.dateKey);
+                            return (
+                                <div className="bg-white w-full max-w-3xl rounded-[32px] p-6 md:p-8 shadow-2xl animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-5">
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Court Schedule</p>
+                                            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                                                {selectedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                                            </h2>
+                                        </div>
+                                        <div className="flex items-start gap-3 md:ml-auto">
+                                            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 min-w-[220px]">
+                                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Operational Hours</p>
+                                                    <p className="text-sm md:text-base font-bold text-amber-900">
+                                                        {detail.isClosed ? 'Closed' : `${formatTime12(detail.open)} - ${formatTime12(detail.close)}`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setScheduleDayModal(null)}
+                                                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors text-slate-500"
+                                            >
+                                                <X size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {!detail.isClosed && (
+                                        <>
+                                            <div className="mb-5">
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Slot Tags</p>
+                                                <div className="flex flex-wrap gap-2 max-h-[240px] overflow-y-auto pr-1">
+                                                    {detail.slotTags.map((slot, idx) => (
+                                                        <span
+                                                            key={`${slot.start}-${slot.end}-${idx}`}
+                                                            className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border whitespace-nowrap ${slot.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : slot.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                        >
+                                                            {slot.type === 'booked' && slot.userName && (
+                                                                <img
+                                                                    src={slot.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(slot.userName)}&background=random&size=28&font-size=0.4&bold=true`}
+                                                                    alt={slot.userName}
+                                                                    className="w-4 h-4 rounded-full object-cover border border-white/80"
+                                                                />
+                                                            )}
+                                                            {formatTime12Compact(slot.start)}-{formatTime12Compact(slot.end)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div className="flex items-center justify-between gap-3 mb-2">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Booked Details</p>
+                                                    <div className="flex flex-wrap items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest">
+                                                        <span className="px-2 py-1 rounded-full border bg-emerald-500/20 text-emerald-800 border-emerald-300/50">🟢 Available</span>
+                                                        <span className="px-2 py-1 rounded-full border bg-red-700/18 text-red-800 border-red-400/55">🔴 Booked</span>
+                                                        <span className="px-2 py-1 rounded-full border bg-slate-500/18 text-slate-700 border-slate-300/60">⚫ Expired</span>
+                                                    </div>
+                                                </div>
+                                                {detail.bookedDetails.length > 0 ? (
+                                                    <div className="max-h-[220px] overflow-y-auto pr-1 border border-slate-200 rounded-2xl bg-slate-50/50">
+                                                        <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0 z-10">
+                                                            <span>Player</span>
+                                                            <span>Schedule</span>
+                                                        </div>
+                                                        <div className="divide-y divide-slate-200">
+                                                            {detail.bookedDetails.map((b) => (
+                                                                <div key={b.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 items-center text-sm text-slate-700">
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <img
+                                                                            src={b.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(b.userName)}&background=random&size=40&font-size=0.42&bold=true`}
+                                                                            alt={b.userName}
+                                                                            className="w-7 h-7 rounded-full object-cover border border-white shadow-sm"
+                                                                        />
+                                                                        <span className="font-semibold truncate">{b.userName}</span>
+                                                                    </div>
+                                                                    <span className="font-semibold text-slate-600 whitespace-nowrap">{formatTime12Compact(b.start)}-{formatTime12Compact(b.end)}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-slate-500">No booked slots for this date.</p>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>,
+                    document.body
+                )}
+
                 {/* Action Confirmation Modal */}
                 {confirmModal && ReactDOM.createPortal(
                     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -2234,7 +2914,6 @@ const BookingsAdmin: React.FC = () => {
                     />,
                     document.body
                 )}
-            </div>
         </div>
     );
 };

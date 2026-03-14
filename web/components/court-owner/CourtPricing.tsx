@@ -9,6 +9,14 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import WeeklyPricingSchedule from '../ui/WeeklyPricingSchedule';
+import {
+  fetchCourtOperationHours,
+  saveAllDayHours,
+  saveDateOverrideHours,
+  deleteCourtHoursEntry,
+  type CourtOperationHours as OpHoursEntry,
+  DAY_NAMES as OP_DAY_NAMES,
+} from '../../services/courtOperationHours';
 
 // ────────────────────────────────────────────────────────────────
 // Types
@@ -34,6 +42,7 @@ interface CourtOption {
   base_price: number;
   location_id: string | null;
   location_name?: string;
+  setup_complete: boolean;
 }
 
 interface CourtPricingProps {
@@ -65,9 +74,11 @@ for (let h = 0; h < 24; h++) {
   const hh = h.toString().padStart(2, '0');
   HOUR_OPTIONS.push(`${hh}:00`);
 }
+const HOUR_CLOSE_OPTIONS: string[] = [...HOUR_OPTIONS, '24:00'];
 
 function formatTime12(time24: string): string {
   const [h, m] = time24.split(':').map(Number);
+  if (h === 24) return `12:${(m || 0).toString().padStart(2, '0')} AM`;
   const period = h >= 12 ? 'PM' : 'AM';
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return `${h12}:${m.toString().padStart(2, '0')} ${period}`;
@@ -141,6 +152,24 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   const [editingBasePrice, setEditingBasePrice] = useState(false);
   const [basePriceInput, setBasePriceInput] = useState('');
 
+  // ─── Operation Hours state ───
+  const [showOperationHours, setShowOperationHours] = useState(false);
+  const [operationHours, setOperationHours] = useState<OpHoursEntry[]>([]);
+  const [opHoursSchedule, setOpHoursSchedule] = useState<Array<{ dayOfWeek: number; openTime: string; closeTime: string; isClosed: boolean }>>(
+    Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, openTime: '08:00', closeTime: '18:00', isClosed: false }))
+  );
+  const [isSavingHours, setIsSavingHours] = useState(false);
+  const [opHoursLoaded, setOpHoursLoaded] = useState(false);
+
+  // ─── Date-specific operation hours override state ───
+  const [showDateOverrideForm, setShowDateOverrideForm] = useState(false);
+  const [dateOverrideDate, setDateOverrideDate] = useState('');
+  const [dateOverrideOpen, setDateOverrideOpen] = useState('08:00');
+  const [dateOverrideClose, setDateOverrideClose] = useState('18:00');
+  const [dateOverrideClosed, setDateOverrideClosed] = useState(false);
+  const [isSavingDateOverride, setIsSavingDateOverride] = useState(false);
+  const [opHoursMonth, setOpHoursMonth] = useState(getNowPH()); // month calendar for date overrides
+
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({ message: '', type: 'info', visible: false });
 
@@ -165,13 +194,139 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   useEffect(() => {
     if (selectedCourtId && user) {
       fetchRules(selectedCourtId);
+      loadOperationHours(selectedCourtId);
     }
   }, [selectedCourtId, user]);
+
+  const loadOperationHours = async (courtId: string) => {
+    setOpHoursLoaded(false);
+    const hours = await fetchCourtOperationHours(courtId);
+    setOperationHours(hours);
+
+    // Populate the schedule form from existing data
+    const schedule = Array.from({ length: 7 }, (_, i) => {
+      const existing = hours.find(h => h.day_of_week === i && h.specific_date === null);
+      if (existing) {
+        return {
+          dayOfWeek: i,
+          openTime: existing.open_time.slice(0, 5),
+          closeTime: existing.close_time.slice(0, 5),
+          isClosed: existing.is_closed,
+        };
+      }
+      return { dayOfWeek: i, openTime: '08:00', closeTime: '18:00', isClosed: false };
+    });
+    setOpHoursSchedule(schedule);
+    setOpHoursLoaded(true);
+  };
+
+  const handleSaveOperationHours = async () => {
+    if (!user || !selectedCourtId) return;
+    const invalidDay = opHoursSchedule.find((d) => !d.isClosed && d.openTime >= d.closeTime);
+    if (invalidDay) {
+      showToast(`Invalid hours for ${DAY_SHORT[invalidDay.dayOfWeek]}: close time must be after open time.`, 'error');
+      return;
+    }
+    setIsSavingHours(true);
+    const result = await saveAllDayHours(selectedCourtId, user.id, opHoursSchedule);
+    if (result.success) {
+      showToast('Operation hours saved successfully!', 'success');
+      await loadOperationHours(selectedCourtId);
+
+      // Auto-mark setup_complete if both hours saved and base_price > 0
+      if (selectedCourt && selectedCourt.base_price > 0 && !selectedCourt.setup_complete) {
+        await markCourtSetupComplete(selectedCourtId);
+      }
+    } else {
+      showToast(`Failed to save: ${result.error}`, 'error');
+    }
+    setIsSavingHours(false);
+  };
+
+  const updateDaySchedule = (dayOfWeek: number, field: 'openTime' | 'closeTime' | 'isClosed', value: string | boolean) => {
+    setOpHoursSchedule(prev => prev.map(d =>
+      d.dayOfWeek === dayOfWeek ? { ...d, [field]: value } : d
+    ));
+  };
+
+  const applyToAllDays = (sourceDow: number) => {
+    const source = opHoursSchedule.find(d => d.dayOfWeek === sourceDow);
+    if (!source) return;
+    setOpHoursSchedule(prev => prev.map(d => ({
+      ...d,
+      openTime: source.openTime,
+      closeTime: source.closeTime,
+      isClosed: source.isClosed,
+    })));
+  };
+
+  const applyToWeekdays = (sourceDow: number) => {
+    const source = opHoursSchedule.find(d => d.dayOfWeek === sourceDow);
+    if (!source) return;
+    setOpHoursSchedule(prev => prev.map(d =>
+      (d.dayOfWeek >= 1 && d.dayOfWeek <= 5)
+        ? { ...d, openTime: source.openTime, closeTime: source.closeTime, isClosed: source.isClosed }
+        : d
+    ));
+  };
+
+  const applyToWeekends = (sourceDow: number) => {
+    const source = opHoursSchedule.find(d => d.dayOfWeek === sourceDow);
+    if (!source) return;
+    setOpHoursSchedule(prev => prev.map(d =>
+      (d.dayOfWeek === 0 || d.dayOfWeek === 6)
+        ? { ...d, openTime: source.openTime, closeTime: source.closeTime, isClosed: source.isClosed }
+        : d
+    ));
+  };
+
+  // ─── Date-specific override handlers ───
+  const dateOverrides = operationHours.filter(h => h.specific_date !== null && h.day_of_week === null);
+
+  const handleSaveDateOverride = async () => {
+    if (!user || !selectedCourtId || !dateOverrideDate) return;
+    if (!dateOverrideClosed && dateOverrideOpen >= dateOverrideClose) {
+      showToast('End time must be after start time for date override.', 'error');
+      return;
+    }
+    setIsSavingDateOverride(true);
+    const result = await saveDateOverrideHours(
+      selectedCourtId,
+      user.id,
+      dateOverrideDate,
+      dateOverrideOpen,
+      dateOverrideClose,
+      dateOverrideClosed
+    );
+    if (result.success) {
+      showToast(`Date override for ${dateOverrideDate} saved!`, 'success');
+      await loadOperationHours(selectedCourtId);
+      setShowDateOverrideForm(false);
+      setDateOverrideDate('');
+      setDateOverrideClosed(false);
+    } else {
+      showToast(`Failed: ${result.error}`, 'error');
+    }
+    setIsSavingDateOverride(false);
+  };
+
+  const handleDeleteDateOverride = async (entryId: string) => {
+    const result = await deleteCourtHoursEntry(entryId);
+    if (result.success) {
+      showToast('Date override removed', 'success');
+      await loadOperationHours(selectedCourtId);
+    } else {
+      showToast(`Failed: ${result.error}`, 'error');
+    }
+  };
+
+  // How many days have custom court hours set
+  const daysWithCustomHours = operationHours.filter(h => h.day_of_week !== null && h.specific_date === null).length;
 
   const fetchCourts = async (ownerId: string) => {
     const { data, error } = await supabase
       .from('courts')
-      .select('id, name, base_price, location_id, locations(name)')
+      .select('id, name, base_price, location_id, setup_complete, locations(name)')
       .eq('owner_id', ownerId)
       .order('name');
     if (!error && data) {
@@ -181,6 +336,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
         base_price: c.base_price || DEFAULT_BASE_PRICE,
         location_id: c.location_id,
         location_name: c.locations?.name || '',
+        setup_complete: c.setup_complete ?? true,
       }));
       setCourts(mapped);
       if (!selectedCourtId && mapped.length > 0) {
@@ -214,9 +370,37 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
       setCourts(prev => prev.map(c => c.id === courtId ? { ...c, base_price: price } : c));
       setEditingBasePrice(false);
       showToast(`Base price updated to ₱${price}/hr`, 'success');
+
+      // Auto-mark setup_complete if both price > 0 and operation hours are set
+      const court = courts.find(c => c.id === courtId);
+      if (price > 0 && daysWithCustomHours > 0 && court && !court.setup_complete) {
+        await markCourtSetupComplete(courtId);
+      }
     } else {
       showToast('Failed to update base price', 'error');
     }
+  };
+
+  /** Mark a court as setup_complete in the database and update local state */
+  const markCourtSetupComplete = async (courtId: string) => {
+    const { error } = await supabase
+      .from('courts')
+      .update({ setup_complete: true })
+      .eq('id', courtId);
+    if (!error) {
+      setCourts(prev => prev.map(c => c.id === courtId ? { ...c, setup_complete: true } : c));
+      showToast('🎉 Court setup complete! This court is now visible to players on the booking page.', 'success');
+    }
+  };
+
+  /** Manual override: let owner mark court as ready even with base_price = 0 (free court) */
+  const handleManualSetupComplete = async () => {
+    if (!selectedCourtId || !selectedCourt) return;
+    if (daysWithCustomHours === 0) {
+      showToast('Please set operation hours first before marking as ready.', 'error');
+      return;
+    }
+    await markCourtSetupComplete(selectedCourtId);
   };
 
   // ──────── Calendar Helpers ────────
@@ -305,6 +489,45 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
 
   const displayRules = getDisplayRules();
 
+  // ──── Get operation-hours-aware hour options for the pricing form ────
+  // Returns only hours within the court's operation schedule for the given day/date
+  const getFormHourOptions = useCallback((): { options: string[]; openTime: string; closeTime: string } => {
+    let dayOfWeek: number | null = null;
+
+    if (formSpecificDate) {
+      // Specific date → find its day-of-week
+      dayOfWeek = new Date(formSpecificDate + 'T00:00:00').getDay();
+    } else if (formDayOfWeek !== null) {
+      dayOfWeek = formDayOfWeek;
+    }
+
+    if (dayOfWeek !== null) {
+      const dayHours = opHoursSchedule.find(d => d.dayOfWeek === dayOfWeek);
+      if (dayHours && !dayHours.isClosed) {
+        const openH = parseInt(dayHours.openTime.split(':')[0], 10);
+        const closeH = parseInt(dayHours.closeTime.split(':')[0], 10);
+        if (closeH > openH) {
+          const filtered = HOUR_CLOSE_OPTIONS.filter((_, idx) => idx >= openH && idx <= closeH);
+          return { options: filtered, openTime: dayHours.openTime, closeTime: dayHours.closeTime };
+        }
+      }
+      // If day is closed, return empty (shouldn't normally add pricing for closed days)
+      if (dayHours?.isClosed) {
+        return { options: [], openTime: '00:00', closeTime: '00:00' };
+      }
+    }
+
+    // Fallback: use default 08:00–18:00 if no custom hours set
+    return {
+      options: HOUR_CLOSE_OPTIONS.filter((_, idx) => idx >= 8 && idx <= 18),
+      openTime: '08:00',
+      closeTime: '18:00',
+    };
+  }, [formSpecificDate, formDayOfWeek, opHoursSchedule]);
+
+  const formHourInfo = getFormHourOptions();
+  const formHourOptions = formHourInfo.options;
+
   // Group weekly rules by day
   const weeklyRulesByDay = DAY_NAMES.map((name, idx) => ({
     dayName: name,
@@ -316,21 +539,38 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   // ──────── Open form ────────
   const openAddForm = (dayOfWeek?: number) => {
     setEditingRule(null);
-    setFormStartTime('08:00');
-    setFormEndTime('12:00');
     setFormPrice('');
     setFormLabel('');
 
+    // Determine the day so we can look up operation hours
+    let targetDow: number | null = null;
     if (viewMode === 'date' && selectedDate) {
       setFormSpecificDate(toPhDateStr(selectedDate));
       setFormDayOfWeek(null);
+      targetDow = selectedDate.getDay();
     } else if (dayOfWeek !== undefined) {
       setFormDayOfWeek(dayOfWeek);
       setFormSpecificDate(null);
+      targetDow = dayOfWeek;
     } else {
       setFormDayOfWeek(null);
       setFormSpecificDate(null);
     }
+
+    // Default start/end to the court's operation hours for that day
+    const dayHours = targetDow !== null ? opHoursSchedule.find(d => d.dayOfWeek === targetDow) : null;
+    if (dayHours && !dayHours.isClosed) {
+      setFormStartTime(dayHours.openTime);
+      // Default end time to midpoint or +4h, whichever is smaller
+      const openH = parseInt(dayHours.openTime.split(':')[0], 10);
+      const closeH = parseInt(dayHours.closeTime.split(':')[0], 10);
+      const midH = Math.min(openH + 4, closeH);
+      setFormEndTime(midH.toString().padStart(2, '0') + ':00');
+    } else {
+      setFormStartTime('08:00');
+      setFormEndTime('12:00');
+    }
+
     setShowForm(true);
   };
 
@@ -533,7 +773,12 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               <div className="text-left flex-1 min-w-0">
                 {selectedCourt ? (
                   <>
-                    <p className="text-xs font-black text-slate-900 truncate">{selectedCourt.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-black text-slate-900 truncate">{selectedCourt.name}</p>
+                      {!selectedCourt.setup_complete && (
+                        <span className="text-[8px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200 uppercase tracking-wider shrink-0 animate-pulse">NEW</span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-slate-400 font-bold truncate">
                       {selectedCourt.location_name || 'No Location'} • ₱{selectedCourt.base_price}/hr • {
                         (() => {
@@ -571,13 +816,19 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                           <PhilippinePeso size={14} className={isActive ? 'text-white' : 'text-slate-400'} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-black truncate ${isActive ? 'text-blue-900' : 'text-slate-700'}`}>{court.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className={`text-xs font-black truncate ${isActive ? 'text-blue-900' : 'text-slate-700'}`}>{court.name}</p>
+                            {!court.setup_complete && (
+                              <span className="text-[7px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200 uppercase tracking-wider shrink-0">NEW</span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-slate-400 font-bold truncate">{court.location_name || 'No Location'} • ₱{court.base_price}/hr</p>
                         </div>
                         <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-wider border shrink-0 ${
-                          court.base_price <= 0 ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-amber-500 bg-amber-50 border-amber-100'
+                          !court.setup_complete ? 'text-orange-600 bg-orange-50 border-orange-200' :
+                          court.base_price <= 0 ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100'
                         }`}>
-                          {court.base_price <= 0 ? 'Not Set' : 'Base Only'}
+                          {!court.setup_complete ? 'Setup Needed' : court.base_price <= 0 ? 'Not Set' : 'Ready'}
                         </span>
                         {isActive && <Check size={14} className="text-blue-600 shrink-0" />}
                       </button>
@@ -605,6 +856,103 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
           </div>
         </div>
       </div>
+
+      {/* ═══ SETUP YOUR NEW ADDED COURT BANNER ═══ */}
+      {selectedCourt && !selectedCourt.setup_complete && (
+        <div className="bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 border-2 border-orange-200 rounded-[28px] p-6 shadow-lg shadow-orange-100/50 animate-in fade-in slide-in-from-top-3 duration-500">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center shrink-0 border border-orange-200">
+              <AlertTriangle size={28} className="text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-black text-orange-900 tracking-tight flex items-center gap-2">
+                🆕 Setup Your New Added Court
+                <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-2.5 py-1 rounded-full uppercase tracking-widest border border-orange-200 animate-pulse">Action Required</span>
+              </h2>
+              <p className="text-sm text-orange-700/80 font-medium mt-1 leading-relaxed">
+                Complete the setup below so this court will be visible to players on the booking page. Set both the <strong>Default Base Price</strong> and <strong>Operation Hours</strong> to activate.
+              </p>
+
+              {/* Setup checklist */}
+              <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                {/* Step 1: Base Price */}
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border-2 flex-1 transition-all ${
+                  selectedCourt.base_price > 0
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-white border-orange-200'
+                }`}>
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedCourt.base_price > 0 ? 'bg-emerald-500' : 'bg-orange-100'
+                  }`}>
+                    {selectedCourt.base_price > 0
+                      ? <CheckCircle2 size={16} className="text-white" />
+                      : <span className="text-xs font-black text-orange-500">1</span>
+                    }
+                  </div>
+                  <div>
+                    <p className={`text-xs font-black uppercase tracking-wider ${selectedCourt.base_price > 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
+                      Default Base Price
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {selectedCourt.base_price > 0 ? `✅ Set to ₱${selectedCourt.base_price}/hr` : '⬜ Click "Edit Price" below to set'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2: Operation Hours */}
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border-2 flex-1 transition-all ${
+                  daysWithCustomHours > 0
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-white border-orange-200'
+                }`}>
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    daysWithCustomHours > 0 ? 'bg-emerald-500' : 'bg-orange-100'
+                  }`}>
+                    {daysWithCustomHours > 0
+                      ? <CheckCircle2 size={16} className="text-white" />
+                      : <span className="text-xs font-black text-orange-500">2</span>
+                    }
+                  </div>
+                  <div>
+                    <p className={`text-xs font-black uppercase tracking-wider ${daysWithCustomHours > 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
+                      Operation Hours
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {daysWithCustomHours > 0 ? `✅ ${daysWithCustomHours}/7 days configured` : '⬜ Expand "Operation Hours" below to set'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Manual "Mark as Ready" button for free courts or when both steps done */}
+              {selectedCourt.base_price > 0 && daysWithCustomHours > 0 && (
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={handleManualSetupComplete}
+                    className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200/50 flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={16} /> Activate Court — Make Visible to Players
+                  </button>
+                </div>
+              )}
+              {selectedCourt.base_price <= 0 && daysWithCustomHours > 0 && (
+                <div className="mt-4 flex items-center gap-3">
+                  <p className="text-xs text-orange-600 font-bold">
+                    <Info size={12} className="inline mr-1 -mt-0.5" />
+                    If this is a <strong>free court</strong>, you can still activate it:
+                  </p>
+                  <button
+                    onClick={handleManualSetupComplete}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-sm flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 size={12} /> Activate as Free Court
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Base Price Info + Editable */}
       {selectedCourt && (
@@ -662,6 +1010,441 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
             >
               <Pencil size={12} /> Edit Price
             </button>
+          )}
+        </div>
+      )}
+
+      {/* ═══ OPERATION HOURS SECTION — 2 COLUMN LAYOUT ═══ */}
+      {selectedCourt && (
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+          {/* Header — always visible, click to expand */}
+          <button
+            onClick={() => setShowOperationHours(!showOperationHours)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50/50 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                <Clock size={18} className="text-indigo-600" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Operation Hours</h3>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  {daysWithCustomHours > 0
+                    ? `Custom hours set for ${daysWithCustomHours}/7 days${dateOverrides.length > 0 ? ` • ${dateOverrides.length} date override${dateOverrides.length > 1 ? 's' : ''}` : ''}`
+                    : 'Using default hours (08:00 – 18:00) — click to customize'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {daysWithCustomHours > 0 && (
+                <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider border border-emerald-100">
+                  {daysWithCustomHours}/7 Days
+                </span>
+              )}
+              {dateOverrides.length > 0 && (
+                <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full uppercase tracking-wider border border-amber-100">
+                  {dateOverrides.length} Override{dateOverrides.length > 1 ? 's' : ''}
+                </span>
+              )}
+              <ChevronRight size={16} className={`text-slate-300 transition-transform duration-300 ${showOperationHours ? 'rotate-90' : ''}`} />
+            </div>
+          </button>
+
+          {/* Expanded — 2-Column Layout */}
+          {showOperationHours && (
+            <div className="px-6 pb-6 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* ══════ LEFT COLUMN: Weekly Schedule ══════ */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-indigo-600" />
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Weekly Schedule</h4>
+                    </div>
+                    <button
+                      onClick={() => applyToAllDays(opHoursSchedule[1]?.dayOfWeek ?? 1)}
+                      className="px-2.5 py-1 text-[8px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-all"
+                      title="Apply Monday's hours to all days"
+                    >
+                      Mon → All
+                    </button>
+                  </div>
+
+                  {/* Day-by-day schedule */}
+                  <div className="space-y-1.5">
+                    {opHoursSchedule.map((day) => {
+                      const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6;
+                      const existingEntry = operationHours.find(h => h.day_of_week === day.dayOfWeek && h.specific_date === null);
+                      return (
+                        <div
+                          key={day.dayOfWeek}
+                          className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all ${
+                            day.isClosed
+                              ? 'bg-rose-50/50 border-rose-100'
+                              : existingEntry
+                                ? 'bg-emerald-50/30 border-emerald-100'
+                                : 'bg-slate-50/50 border-slate-100'
+                          }`}
+                        >
+                          {/* Day label */}
+                          <div className="w-16 shrink-0">
+                            <span className={`text-[10px] font-black uppercase tracking-wider ${
+                              day.isClosed ? 'text-rose-400' : isWeekend ? 'text-amber-700' : 'text-slate-700'
+                            }`}>
+                              {DAY_SHORT[day.dayOfWeek]}
+                            </span>
+                          </div>
+
+                          {/* Closed toggle */}
+                          <button
+                            onClick={() => updateDaySchedule(day.dayOfWeek, 'isClosed', !day.isClosed)}
+                            className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all shrink-0 ${
+                              day.isClosed
+                                ? 'bg-rose-100 text-rose-600 border-rose-200 hover:bg-rose-200'
+                                : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                            }`}
+                          >
+                            {day.isClosed ? 'Closed' : 'Open'}
+                          </button>
+
+                          {!day.isClosed && (
+                            <button
+                              onClick={() => {
+                                updateDaySchedule(day.dayOfWeek, 'isClosed', false);
+                                updateDaySchedule(day.dayOfWeek, 'openTime', '00:00');
+                                updateDaySchedule(day.dayOfWeek, 'closeTime', '24:00');
+                              }}
+                              className="px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all shrink-0 bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
+                              title="Set to open 24 hours"
+                            >
+                              24 Hrs
+                            </button>
+                          )}
+
+                          {/* Time selects */}
+                          {!day.isClosed ? (
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <select
+                                value={day.openTime}
+                                onChange={(e) => {
+                                  const nextOpen = e.target.value;
+                                  updateDaySchedule(day.dayOfWeek, 'openTime', nextOpen);
+                                  if (day.closeTime <= nextOpen) {
+                                    const nextClose = HOUR_CLOSE_OPTIONS.find((h) => h > nextOpen) || '24:00';
+                                    updateDaySchedule(day.dayOfWeek, 'closeTime', nextClose);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-blue-200 outline-none"
+                              >
+                                {HOUR_OPTIONS.map(h => (
+                                  <option key={h} value={h}>{formatTime12(h)}</option>
+                                ))}
+                              </select>
+                              <span className="text-slate-300 font-bold text-[10px]">–</span>
+                              <select
+                                value={day.closeTime}
+                                onChange={(e) => updateDaySchedule(day.dayOfWeek, 'closeTime', e.target.value)}
+                                className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-blue-200 outline-none"
+                              >
+                                {HOUR_CLOSE_OPTIONS.filter((h) => h > day.openTime).map(h => (
+                                  <option key={h} value={h}>{formatTime12(h)}</option>
+                                ))}
+                              </select>
+
+                              {/* Quick copy */}
+                              <button
+                                onClick={() => isWeekend ? applyToWeekends(day.dayOfWeek) : applyToWeekdays(day.dayOfWeek)}
+                                className="ml-auto px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all shrink-0"
+                                title={isWeekend ? 'Apply to weekends' : 'Apply to weekdays'}
+                              >
+                                → {isWeekend ? 'Wknd' : 'Wkday'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-1">
+                              <span className="text-[10px] font-medium text-rose-400 italic">Closed</span>
+                            </div>
+                          )}
+
+                          {existingEntry && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Saved" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Save weekly hours button */}
+                  <button
+                    onClick={handleSaveOperationHours}
+                    disabled={isSavingHours}
+                    className="w-full mt-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200/50 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSavingHours ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    Save Weekly Hours
+                  </button>
+                </div>
+
+                {/* ══════ RIGHT COLUMN: Monthly Calendar + Date Overrides ══════ */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays size={14} className="text-amber-600" />
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Date-Specific Hours</h4>
+                    </div>
+                    <span className="text-[9px] font-bold text-slate-400">Holidays, Events, etc.</span>
+                  </div>
+
+                  {/* ─── Mini Month Calendar ─── */}
+                  {(() => {
+                    const ohYear = opHoursMonth.getFullYear();
+                    const ohMonth = opHoursMonth.getMonth();
+                    const ohDaysInMonth = new Date(ohYear, ohMonth + 1, 0).getDate();
+                    const ohFirstDow = new Date(ohYear, ohMonth, 1).getDay();
+                    const ohMonthLabel = opHoursMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    const ohNow = getNowPH();
+
+                    // Map of date string → override entry
+                    const overrideMap = new Map<string, OpHoursEntry>();
+                    dateOverrides.forEach(ov => { if (ov.specific_date) overrideMap.set(ov.specific_date, ov); });
+
+                    return (
+                      <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3">
+                        {/* Month nav */}
+                        <div className="flex items-center justify-between mb-2">
+                          <button onClick={() => setOpHoursMonth(new Date(ohYear, ohMonth - 1, 1))} className="p-1 hover:bg-slate-200 rounded-lg transition-all">
+                            <ChevronLeft size={14} className="text-slate-400" />
+                          </button>
+                          <span className="text-xs font-black text-slate-700 uppercase tracking-wider">{ohMonthLabel}</span>
+                          <button onClick={() => setOpHoursMonth(new Date(ohYear, ohMonth + 1, 1))} className="p-1 hover:bg-slate-200 rounded-lg transition-all">
+                            <ChevronRight size={14} className="text-slate-400" />
+                          </button>
+                        </div>
+
+                        {/* Day headers */}
+                        <div className="grid grid-cols-7 gap-0.5 mb-1">
+                          {DAY_SHORT.map(d => (
+                            <div key={d} className="text-center text-[8px] font-black text-slate-400 uppercase">{d}</div>
+                          ))}
+                        </div>
+
+                        {/* Calendar grid */}
+                        <div className="grid grid-cols-7 gap-0.5">
+                          {Array.from({ length: ohFirstDow }).map((_, i) => (
+                            <div key={`empty-${i}`} className="h-8" />
+                          ))}
+                          {Array.from({ length: ohDaysInMonth }, (_, i) => i + 1).map(day => {
+                            const ds = `${ohYear}-${(ohMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                            const ov = overrideMap.get(ds);
+                            const dayDate = new Date(ohYear, ohMonth, day);
+                            const isPast = dayDate < new Date(ohNow.getFullYear(), ohNow.getMonth(), ohNow.getDate());
+                            const isTodays = day === ohNow.getDate() && ohMonth === ohNow.getMonth() && ohYear === ohNow.getFullYear();
+                            const isSelected = dateOverrideDate === ds;
+
+                            return (
+                              <button
+                                key={day}
+                                disabled={isPast}
+                                onClick={() => {
+                                  setDateOverrideDate(ds);
+                                  if (ov) {
+                                    setDateOverrideOpen(ov.open_time.slice(0, 5));
+                                    setDateOverrideClose(ov.close_time.slice(0, 5));
+                                    setDateOverrideClosed(ov.is_closed);
+                                  } else {
+                                    // Default from weekly schedule for that day
+                                    const dow = dayDate.getDay();
+                                    const weeklyDay = opHoursSchedule.find(d => d.dayOfWeek === dow);
+                                    setDateOverrideOpen(weeklyDay?.openTime || '08:00');
+                                    setDateOverrideClose(weeklyDay?.closeTime || '18:00');
+                                    setDateOverrideClosed(weeklyDay?.isClosed || false);
+                                  }
+                                  setShowDateOverrideForm(true);
+                                }}
+                                className={`h-8 rounded-lg text-[10px] font-bold transition-all relative ${
+                                  isPast
+                                    ? 'text-slate-300 cursor-not-allowed'
+                                    : isSelected
+                                      ? 'bg-amber-500 text-white shadow-md'
+                                      : ov
+                                        ? ov.is_closed
+                                          ? 'bg-rose-100 text-rose-600 border border-rose-200 hover:bg-rose-200'
+                                          : 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200'
+                                        : isTodays
+                                          ? 'bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200'
+                                          : 'text-slate-600 hover:bg-slate-100'
+                                }`}
+                              >
+                                {day}
+                                {ov && (
+                                  <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${ov.is_closed ? 'bg-rose-500' : 'bg-amber-500'}`} />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center gap-3 mt-2 justify-center">
+                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[7px] font-bold text-slate-400 uppercase">Custom Hours</span></div>
+                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /><span className="text-[7px] font-bold text-slate-400 uppercase">Closed</span></div>
+                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400" /><span className="text-[7px] font-bold text-slate-400 uppercase">Today</span></div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ─── Date Override Form (shown when a date is clicked) ─── */}
+                  {showDateOverrideForm && dateOverrideDate && (
+                    <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-black text-amber-800">
+                          {formatDatePH(new Date(dateOverrideDate + 'T00:00:00'), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                        </p>
+                        <button onClick={() => setShowDateOverrideForm(false)} className="p-1 hover:bg-amber-100 rounded-lg transition-all">
+                          <X size={14} className="text-amber-400" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setDateOverrideClosed(!dateOverrideClosed)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all shrink-0 ${
+                            dateOverrideClosed
+                              ? 'bg-rose-100 text-rose-600 border-rose-200 hover:bg-rose-200'
+                              : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {dateOverrideClosed ? 'Closed' : 'Open'}
+                        </button>
+
+                        {!dateOverrideClosed && (
+                          <button
+                            onClick={() => {
+                              setDateOverrideClosed(false);
+                              setDateOverrideOpen('00:00');
+                              setDateOverrideClose('24:00');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all shrink-0 bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
+                            title="Set this date to open 24 hours"
+                          >
+                            24 Hrs
+                          </button>
+                        )}
+
+                        {!dateOverrideClosed && (
+                          <>
+                            <select
+                              value={dateOverrideOpen}
+                              onChange={(e) => setDateOverrideOpen(e.target.value)}
+                              className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-amber-200 outline-none"
+                            >
+                              {HOUR_OPTIONS.map(h => (
+                                <option key={h} value={h}>{formatTime12(h)}</option>
+                              ))}
+                            </select>
+                            <span className="text-slate-300 font-bold text-[10px]">–</span>
+                            <select
+                              value={dateOverrideClose}
+                              onChange={(e) => setDateOverrideClose(e.target.value)}
+                              className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-amber-200 outline-none"
+                            >
+                              {HOUR_CLOSE_OPTIONS.filter(h => h > dateOverrideOpen).map(h => (
+                                <option key={h} value={h}>{formatTime12(h)}</option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleSaveDateOverride}
+                          disabled={isSavingDateOverride}
+                          className="flex-1 px-3 py-2 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSavingDateOverride ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                          Save Override
+                        </button>
+                        {/* Delete existing override if it exists */}
+                        {dateOverrides.find(ov => ov.specific_date === dateOverrideDate) && (
+                          <button
+                            onClick={() => {
+                              const existing = dateOverrides.find(ov => ov.specific_date === dateOverrideDate);
+                              if (existing) handleDeleteDateOverride(existing.id);
+                              setShowDateOverrideForm(false);
+                            }}
+                            className="px-3 py-2 bg-rose-100 text-rose-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-200 transition-all flex items-center gap-1.5"
+                          >
+                            <Trash2 size={12} /> Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[9px] text-amber-600/60 font-medium">
+                        <Info size={9} className="inline mr-0.5 -mt-0.5" />
+                        Overrides take highest priority over the weekly schedule
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ─── Upcoming date overrides list ─── */}
+                  {dateOverrides.length > 0 && (
+                    <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active Overrides</p>
+                      {dateOverrides
+                        .sort((a, b) => (a.specific_date || '').localeCompare(b.specific_date || ''))
+                        .map((ov) => {
+                          const dateObj = new Date(ov.specific_date + 'T00:00:00');
+                          const isPast = dateObj < getNowPH();
+                          return (
+                            <div
+                              key={ov.id}
+                              className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${
+                                ov.is_closed
+                                  ? 'bg-rose-50/50 border-rose-100'
+                                  : isPast
+                                    ? 'bg-slate-50/30 border-slate-100 opacity-50'
+                                    : 'bg-amber-50/30 border-amber-100 hover:bg-amber-50'
+                              }`}
+                              onClick={() => {
+                                setDateOverrideDate(ov.specific_date || '');
+                                setDateOverrideOpen(ov.open_time.slice(0, 5));
+                                setDateOverrideClose(ov.close_time.slice(0, 5));
+                                setDateOverrideClosed(ov.is_closed);
+                                setShowDateOverrideForm(true);
+                              }}
+                            >
+                              <CalendarDays size={12} className={ov.is_closed ? 'text-rose-400' : 'text-amber-500'} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-black text-slate-700 truncate">
+                                  {formatDatePH(dateObj, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </p>
+                              </div>
+                              <span className={`text-[8px] font-bold ${ov.is_closed ? 'text-rose-500' : 'text-amber-600'}`}>
+                                {ov.is_closed ? 'Closed' : `${formatTime12(ov.open_time.slice(0, 5))} – ${formatTime12(ov.close_time.slice(0, 5))}`}
+                              </span>
+                              {isPast && (
+                                <span className="text-[7px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full uppercase">Past</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {dateOverrides.length === 0 && !showDateOverrideForm && (
+                    <div className="py-6 text-center">
+                      <CalendarDays size={24} className="text-slate-200 mx-auto mb-2" />
+                      <p className="text-[10px] text-slate-300 font-medium">Click a date on the calendar to add special hours</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -1099,19 +1882,35 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Day of Week</label>
                 <div className="flex flex-wrap gap-2">
-                  {DAY_SHORT.map((d, idx) => (
-                    <button
-                      key={d}
-                      onClick={() => setFormDayOfWeek(idx)}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                        formDayOfWeek === idx
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/50'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
+                  {DAY_SHORT.map((d, idx) => {
+                    const dayH = opHoursSchedule.find(dh => dh.dayOfWeek === idx);
+                    const isClosed = dayH?.isClosed ?? false;
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => {
+                          setFormDayOfWeek(idx);
+                          // Reset times to this day's operation hours
+                          if (dayH && !dayH.isClosed) {
+                            setFormStartTime(dayH.openTime);
+                            const openH = parseInt(dayH.openTime.split(':')[0], 10);
+                            const closeH = parseInt(dayH.closeTime.split(':')[0], 10);
+                            const midH = Math.min(openH + 4, closeH);
+                            setFormEndTime(midH.toString().padStart(2, '0') + ':00');
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                          formDayOfWeek === idx
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-200/50'
+                            : isClosed
+                              ? 'bg-rose-50 text-rose-300 hover:bg-rose-100 line-through'
+                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1125,6 +1924,24 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               </div>
             )}
 
+            {/* Operation hours hint */}
+            {formHourOptions.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
+                <Clock size={12} className="text-indigo-500 shrink-0" />
+                <p className="text-[10px] font-bold text-indigo-600">
+                  Court hours: {formatTime12(formHourInfo.openTime)} – {formatTime12(formHourInfo.closeTime)}
+                </p>
+              </div>
+            )}
+            {formHourOptions.length === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-rose-50 border border-rose-100 rounded-xl">
+                <AlertCircle size={12} className="text-rose-500 shrink-0" />
+                <p className="text-[10px] font-bold text-rose-600">
+                  Court is closed on this day. You can still add a rate override if needed.
+                </p>
+              </div>
+            )}
+
             {/* Time Range */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1134,7 +1951,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                   onChange={e => setFormStartTime(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                 >
-                  {HOUR_OPTIONS.map(h => (
+                  {(formHourOptions.length > 0 ? formHourOptions : HOUR_OPTIONS).slice(0, -1).map(h => (
                     <option key={h} value={h}>{formatTime12(h)}</option>
                   ))}
                 </select>
@@ -1146,31 +1963,41 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                   onChange={e => setFormEndTime(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                 >
-                  {HOUR_OPTIONS.filter(h => h > formStartTime).map(h => (
+                  {(formHourOptions.length > 0 ? formHourOptions : HOUR_OPTIONS).filter(h => h > formStartTime).map(h => (
                     <option key={h} value={h}>{formatTime12(h)}</option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Visual Time Bar */}
+            {/* Visual Time Bar — scoped to operation hours */}
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="relative h-8 bg-slate-200 rounded-lg overflow-hidden">
                 {(() => {
+                  const opOpen = parseInt(formHourInfo.openTime.split(':')[0]);
+                  const opClose = parseInt(formHourInfo.closeTime.split(':')[0]);
+                  const opRange = opClose - opOpen || 24;
                   const startH = parseInt(formStartTime.split(':')[0]);
                   const endH = parseInt(formEndTime.split(':')[0]);
-                  const left = (startH / 24) * 100;
-                  const width = ((endH - startH) / 24) * 100;
+                  const left = ((startH - opOpen) / opRange) * 100;
+                  const width = ((endH - startH) / opRange) * 100;
                   return (
                     <div
                       className="absolute top-0 bottom-0 bg-blue-500 rounded"
-                      style={{ left: `${left}%`, width: `${Math.max(width, 2)}%` }}
+                      style={{ left: `${Math.max(left, 0)}%`, width: `${Math.max(width, 2)}%` }}
                     />
                   );
                 })()}
               </div>
               <div className="flex justify-between mt-1 text-[8px] font-bold text-slate-300 uppercase">
-                <span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span><span>12AM</span>
+                <span>{formatTime12(formHourInfo.openTime)}</span>
+                {(() => {
+                  const opOpen = parseInt(formHourInfo.openTime.split(':')[0]);
+                  const opClose = parseInt(formHourInfo.closeTime.split(':')[0]);
+                  const midH = Math.round((opOpen + opClose) / 2);
+                  return <span>{formatTime12(midH.toString().padStart(2, '0') + ':00')}</span>;
+                })()}
+                <span>{formatTime12(formHourInfo.closeTime)}</span>
               </div>
             </div>
 

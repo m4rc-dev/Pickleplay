@@ -103,7 +103,6 @@ const globalLimiter = rateLimit({
   standardHeaders: true,    // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false,
   message: { error: 'Too many requests — please slow down.', retryAfter: 60 },
-  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
 });
 app.use(globalLimiter);
 
@@ -120,21 +119,18 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
   max: 15,                     // 15 auth attempts per 15 min
   message: { error: 'Too many authentication attempts. Please try again in 15 minutes.' },
-  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
 });
 
 const emailLimiter = rateLimit({
   windowMs: 60 * 1000,       // 1 minute
   max: 5,                     // 5 emails per minute per IP
   message: { error: 'Too many email requests. Please wait a moment.' },
-  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
 });
 
 const accountCreationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,  // 1 hour
   max: 10,                     // 10 account creations per IP per hour
   message: { error: 'Too many account creation attempts. Please try again later.' },
-  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
 });
 
 // 9. Block suspicious user-agents and empty requests
