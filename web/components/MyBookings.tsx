@@ -42,6 +42,43 @@ const isTimeslotConsumed = (date: string, endTime: string): boolean => {
     return now > bookingEnd;
 };
 
+const isQrPaymentMethod = (method?: string | null): boolean => {
+    const normalized = (method || '').toLowerCase();
+    return normalized === 'gcash' || normalized === 'maya';
+};
+
+const isPaymentVerifiedForPlayer = (booking: any): boolean => {
+    if (!booking) return false;
+
+    const isPaid = booking.payment_status === 'paid';
+    if (!isPaid) return false;
+
+    // QR payments must be owner-verified before showing as paid to players.
+    if (isQrPaymentMethod(booking.payment_method)) {
+        return booking.payment_proof_status === 'payment_verified' || booking.payment_verified === true;
+    }
+
+    // Non-QR payments can rely on payment_status.
+    return true;
+};
+
+const isPaymentReviewForPlayer = (booking: any): boolean => {
+    if (!booking || booking.status === 'cancelled') return false;
+
+    if (booking.payment_proof_status === 'proof_submitted') return true;
+    if (isQrPaymentMethod(booking.payment_method) && !isPaymentVerifiedForPlayer(booking)) return true;
+    return false;
+};
+
+const getPlayerDisplayStatus = (booking: any): 'paid' | 'payment_review' | 'confirmed' | 'pending' | 'cancelled' => {
+    if (!booking) return 'pending';
+    if (booking.status === 'cancelled') return 'cancelled';
+    if (isPaymentVerifiedForPlayer(booking)) return 'paid';
+    if (isPaymentReviewForPlayer(booking)) return 'payment_review';
+    if (booking.status === 'confirmed') return 'confirmed';
+    return 'pending';
+};
+
 const MyBookings: React.FC = () => {
     const [myBookings, setMyBookings] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -335,7 +372,7 @@ const MyBookings: React.FC = () => {
         let results = myBookings;
         if (activeFilter !== 'All') {
             results = results.filter(b => {
-                if (activeFilter === 'Paid') return b.payment_status === 'paid';
+                if (activeFilter === 'Paid') return getPlayerDisplayStatus(b) === 'paid';
                 return b.status === activeFilter.toLowerCase();
             });
         }
@@ -370,7 +407,7 @@ const MyBookings: React.FC = () => {
         myBookings.forEach(b => {
             if (!map[b.date]) map[b.date] = { count: 0, statuses: [] };
             map[b.date].count++;
-            map[b.date].statuses.push(b.payment_status === 'paid' ? 'paid' : b.status);
+            map[b.date].statuses.push(getPlayerDisplayStatus(b));
         });
         return map;
     }, [myBookings]);
@@ -447,7 +484,7 @@ const MyBookings: React.FC = () => {
             status: booking.status,
             confirmedAt: booking.status === 'confirmed' ? booking.updated_at : undefined,
             paymentMethod: booking.payment_method,
-            paymentStatus: booking.payment_status,
+            paymentStatus: isPaymentVerifiedForPlayer(booking) ? 'paid' : 'proof_submitted',
             amountTendered: booking.amount_tendered,
             changeAmount: booking.change_amount
         });
@@ -611,14 +648,19 @@ const MyBookings: React.FC = () => {
     };
 
     const getStatusBadge = (b: any) => {
-        const isPaid = b.payment_status === 'paid';
-        const label = isPaid ? 'Paid' : b.status;
-        const colors = isPaid ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
-            b.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                b.status === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                    b.status === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
-                        'bg-slate-100 border-slate-200 text-slate-500';
-        return <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colors}`}>{label}</span>;
+        const displayStatus = getPlayerDisplayStatus(b);
+        const label = displayStatus === 'paid'
+            ? 'Paid'
+            : displayStatus === 'payment_review'
+                ? 'Payment Review'
+                : displayStatus;
+        const colors = displayStatus === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
+            displayStatus === 'payment_review' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                displayStatus === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                    displayStatus === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                        displayStatus === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
+                            'bg-slate-100 border-slate-200 text-slate-500';
+        return <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide whitespace-nowrap border ${colors}`}>{label}</span>;
     };
 
     // Review available only if confirmed AND timeslot consumed AND not already reviewed
@@ -708,8 +750,9 @@ const MyBookings: React.FC = () => {
                                                 {day}
                                                 {hasBooking && !isSelected && (
                                                     <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${info.statuses.includes('paid') ? 'bg-emerald-500' :
-                                                        info.statuses.includes('confirmed') ? 'bg-blue-500' :
-                                                            info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
+                                                        info.statuses.includes('payment_review') ? 'bg-amber-500' :
+                                                            info.statuses.includes('confirmed') ? 'bg-blue-500' :
+                                                                info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
                                                         }`} />
                                                 )}
                                             </button>
@@ -825,8 +868,8 @@ const MyBookings: React.FC = () => {
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</div>
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Time</div>
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Amount</div>
-                                            <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</div>
-                                            <div className="col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
+                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</div>
+                                            <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
                                         </div>
 
                                         {paginatedBookings.map((b, idx) => (
@@ -854,8 +897,8 @@ const MyBookings: React.FC = () => {
                                                 <div className="col-span-1">
                                                     {b.total_price > 0 ? <p className="text-sm font-black text-slate-900">₱{b.total_price}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
                                                 </div>
-                                                <div className="col-span-1">{getStatusBadge(b)}</div>
-                                                <div className="col-span-3 flex items-center justify-end">
+                                                <div className="col-span-2">{getStatusBadge(b)}</div>
+                                                <div className="col-span-2 flex items-center justify-end">
                                                     <div className="relative">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setOpenActionsMenuId(openActionsMenuId === b.id ? null : b.id); }}
@@ -1335,13 +1378,19 @@ const MyBookings: React.FC = () => {
                                     <div className="space-y-5">
                                         <div>
                                             {(() => {
-                                                const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
-                                                const label = isPaid ? 'Paid' : b.status;
-                                                const colors = isPaid ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300' :
-                                                    b.status === 'confirmed' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
-                                                        b.status === 'pending' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
-                                                            b.status === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
-                                                                'bg-white/10 border-white/20 text-white/60';
+                                                const b = selectedBookingForDetail;
+                                                const displayStatus = getPlayerDisplayStatus(b);
+                                                const label = displayStatus === 'paid'
+                                                    ? 'Paid'
+                                                    : displayStatus === 'payment_review'
+                                                        ? 'Payment Review'
+                                                        : displayStatus;
+                                                const colors = displayStatus === 'paid' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300' :
+                                                    displayStatus === 'payment_review' ? 'bg-amber-500/20 border-amber-300/30 text-amber-200' :
+                                                        displayStatus === 'confirmed' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
+                                                            displayStatus === 'pending' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
+                                                                displayStatus === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
+                                                                    'bg-white/10 border-white/20 text-white/60';
                                                 return <span className={`inline-block px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border mb-4 ${colors}`}>{label}</span>;
                                             })()}
                                             <h2 className="text-3xl xl:text-4xl font-black text-white leading-[1.1] tracking-tight uppercase">
@@ -1410,9 +1459,24 @@ const MyBookings: React.FC = () => {
                                             <div className="flex items-center gap-2.5 bg-slate-50/50 border border-slate-200 rounded-xl py-3 px-4">
                                                 <Sparkles size={15} className="text-blue-600 shrink-0" />
                                                 {(() => {
-                                                    const b = selectedBookingForDetail; const isPaid = b.payment_status === 'paid';
-                                                    const label = isPaid ? 'Paid' : b.status;
-                                                    const color = isPaid ? 'text-emerald-600' : b.status === 'confirmed' ? 'text-blue-600' : b.status === 'pending' ? 'text-blue-600' : b.status === 'cancelled' ? 'text-red-500' : 'text-slate-500';
+                                                    const b = selectedBookingForDetail;
+                                                    const displayStatus = getPlayerDisplayStatus(b);
+                                                    const label = displayStatus === 'paid'
+                                                        ? 'Paid'
+                                                        : displayStatus === 'payment_review'
+                                                            ? 'Payment Review'
+                                                            : displayStatus;
+                                                    const color = displayStatus === 'paid'
+                                                        ? 'text-emerald-600'
+                                                        : displayStatus === 'payment_review'
+                                                            ? 'text-amber-700'
+                                                            : displayStatus === 'confirmed'
+                                                                ? 'text-blue-600'
+                                                                : displayStatus === 'pending'
+                                                                    ? 'text-blue-600'
+                                                                    : displayStatus === 'cancelled'
+                                                                        ? 'text-red-500'
+                                                                        : 'text-slate-500';
                                                     return <span className={`text-sm font-black capitalize ${color}`}>{label}</span>;
                                                 })()}
                                             </div>

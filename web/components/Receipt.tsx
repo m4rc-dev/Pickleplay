@@ -124,9 +124,13 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
         return `${displayHour}:${minutes} ${period}`;
     };
 
+    const normalizedPaymentStatus = bookingData.paymentStatus === 'paid'
+        ? 'paid'
+        : 'proof_submitted'; // Treat unpaid/undefined as under review
     const isConfirmed = bookingData.status === 'confirmed';
-    const isPaid = bookingData.paymentStatus === 'paid';
+    const isPaid = normalizedPaymentStatus === 'paid';
     const isCompleted = isConfirmed && isPaid;
+    const isPaymentReview = !isPaid;
 
     const modalContent = (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[9999] p-4 overflow-y-auto">
@@ -145,10 +149,10 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                         </div>
                         <div>
                             <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                                {isCompleted ? 'Booking Completed' : isConfirmed ? 'Booking Confirmed' : 'Booking Pending'}
+                                {isCompleted ? 'Booking Completed' : isConfirmed ? 'Booking Confirmed' : 'Payment Review'}
                             </h2>
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                                {isCompleted ? 'Payment verified • Enjoy your game!' : isConfirmed ? 'Your digital pass is ready' : 'Waiting for owner confirmation'}
+                                {isCompleted ? 'Payment verified • Enjoy your game!' : isConfirmed ? 'Your digital pass is ready' : 'Awaiting payment verification'}
                             </p>
                         </div>
                     </div>
@@ -182,7 +186,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                         ? 'bg-blue-50 border-blue-100 text-blue-600'
                                         : 'bg-amber-50 border-amber-100 text-amber-600'
                                     }`}>
-                                    STATUS: {isCompleted ? 'COMPLETED' : isConfirmed ? 'CONFIRMED' : 'PENDING'}
+                                    STATUS: {isCompleted ? 'COMPLETED' : isConfirmed ? 'CONFIRMED' : 'PAYMENT REVIEW'}
                                 </div>
 
                                 {/* Receipt Info Grid */}
@@ -258,18 +262,17 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                                 <span className="text-base md:text-lg font-black text-slate-950 uppercase tracking-tighter">TOTAL AMOUNT</span>
                                                 <div className="flex items-center gap-1.5">
                                                     <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
-                                                        bookingData.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600'
-                                                        : bookingData.paymentStatus === 'proof_submitted' ? 'bg-amber-100 text-amber-600'
-                                                        : 'bg-red-100 text-red-600'
+                                                        normalizedPaymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600'
+                                                        : 'bg-amber-100 text-amber-600'
                                                     }`}>
-                                                        {bookingData.paymentStatus === 'paid' ? 'Paid' : bookingData.paymentStatus === 'proof_submitted' ? 'Payment Under Review' : 'Unpaid'}
+                                                        {normalizedPaymentStatus === 'paid' ? 'Paid' : 'Payment Review'}
                                                     </span>
                                                 </div>
                                             </div>
                                             <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">{bookingData.totalPrice > 0 ? `₱${bookingData.totalPrice.toFixed(2)}` : 'FREE'}</span>
                                         </div>
 
-                                        {bookingData.paymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (
+                                        {normalizedPaymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (
                                             <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
                                                 <div className="flex justify-between items-center opacity-60">
                                                     <span className="text-[10px] font-black text-slate-500 uppercase">Cash Received</span>
@@ -338,8 +341,8 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                             </>
                                         ) : (
                                             <>
-                                                <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Pass Pending</p>
-                                                <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Your QR code will generate once the owner confirms your booking.</p>
+                                                <p className="text-[10px] md:text-xs font-black uppercase tracking-widest mb-1">Payment Review</p>
+                                                <p className="text-[9px] md:text-[10px] font-bold opacity-80 leading-relaxed uppercase">Your QR code will generate once payment is verified by the court owner.</p>
                                             </>
                                         )}
                                     </div>
@@ -352,7 +355,9 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                                 ? `Verified • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}`
                                                 : isConfirmed
                                                     ? `Verified at ${new Date(bookingData.confirmedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })} • ${new Date(bookingData.confirmedAt || Date.now()).toLocaleDateString('en-US', { timeZone: 'Asia/Manila' })}`
-                                                    : 'Awaiting Verification'
+                                                    : isPaymentReview
+                                                        ? 'Awaiting Payment Verification'
+                                                        : 'Awaiting Verification'
                                             }
                                         </p>
                                     </div>

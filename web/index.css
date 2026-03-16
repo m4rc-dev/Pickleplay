@@ -127,4 +127,109 @@
   .rotate-y-180 {
     transform: rotateY(180deg);
   }
+
+  .slot-lime-entrance {
+    animation: slot-lime-entrance 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform, opacity, box-shadow;
+  }
+
+  .court-sweep-entrance {
+    position: relative;
+    isolation: isolate;
+    animation: court-card-entrance 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform, opacity;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none !important;
+    box-shadow: none;
+  }
+
+  .court-availability-grid,
+  .court-availability-grid * {
+    outline-color: transparent;
+  }
+
+  .court-sweep-entrance:focus,
+  .court-sweep-entrance:focus-visible,
+  .court-sweep-entrance:active,
+  .court-sweep-entrance:-moz-focusring {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: rgb(226 232 240) !important;
+  }
+
+  .court-sweep-entrance::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg,
+      transparent 0%,
+      rgba(163, 230, 53, 0) 38%,
+      rgba(163, 230, 53, 0.18) 50%,
+      rgba(163, 230, 53, 0) 62%,
+      transparent 100%);
+    transform: translateX(-140%);
+    animation: court-card-sweep 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes court-card-entrance {
+    from {
+      opacity: 0;
+      transform: translateY(10px) translateX(8px) scale(0.985);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) translateX(0) scale(1);
+    }
+  }
+
+  @keyframes court-card-sweep {
+    from {
+      transform: translateX(-140%);
+      opacity: 0;
+    }
+
+    20% {
+      opacity: 1;
+    }
+
+    to {
+      transform: translateX(140%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes slot-lime-entrance {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      box-shadow: 0 0 0 0 rgba(163, 230, 53, 0.7);
+    }
+
+    55% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      box-shadow: 0 0 0 6px rgba(163, 230, 53, 0.12);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      box-shadow: 0 0 0 0 rgba(163, 230, 53, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slot-lime-entrance {
+      animation: none;
+    }
+
+    .court-sweep-entrance,
+    .court-sweep-entrance::after {
+      animation: none;
+    }
+  }
 }

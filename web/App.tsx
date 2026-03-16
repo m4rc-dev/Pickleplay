@@ -834,7 +834,7 @@ const NavigationHandler: React.FC<{
             )}
 
             <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
-              <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? 'justify-center' : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
+              <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 p-2 transition-all duration-300 group ${isSidebarCollapsed ? 'justify-center' : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
                 <div className={`relative shrink-0 rounded-full p-0.5`}>
                   <img
                     src={userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || role}`}

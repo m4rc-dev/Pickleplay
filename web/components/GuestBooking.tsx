@@ -6,6 +6,7 @@ import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
 import { fetchCourtPricingRules, getSlotPrices, PricingRule, toPhDateStr } from '../services/courtPricingService';
+import { getEffectiveHours, type EffectiveHours } from '../services/courtOperationHours';
 import WeeklyPricingSchedule from './ui/WeeklyPricingSchedule';
 
 const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
@@ -48,8 +49,24 @@ const ALL_HOUR_SLOTS = [
 
 /** Generate time slots based on opening and closing hours */
 const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
-    const openH = parseInt(openTime.split(':')[0], 10);
-    const closeH = parseInt(closeTime.split(':')[0], 10);
+    if (!openTime || !closeTime) return TIME_SLOTS;
+
+    const parseTime = (t: string) => {
+        const [hStr, mStr = '0'] = t.split(':');
+        return { h: parseInt(hStr, 10), m: parseInt(mStr, 10) };
+    };
+
+    const open = parseTime(openTime);
+    const close = parseTime(closeTime);
+    const openH = open.h;
+    let closeH = close.h;
+
+    if ((closeH === 0 && close.m === 0) || closeH < openH || (closeH === openH && close.m <= open.m)) {
+        closeH = 24;
+    } else if (close.m > 0) {
+        closeH = Math.min(24, closeH + 1);
+    }
+
     return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
 };
 
@@ -57,6 +74,124 @@ const TIME_SLOTS = [
     '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
     '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
 ];
+
+/** Convert a slot like '08:00 AM' to a 24-hour number (0–23) */
+const slotTo24 = (slot: string): number => {
+    const [time, period] = slot.split(' ');
+    let [h] = time.split(':').map(Number);
+    if (period === 'PM' && h !== 12) h += 12;
+    else if (period === 'AM' && h === 12) h = 0;
+    return h;
+};
+
+const formatHour12 = (hours24: number): string => {
+    const period = hours24 >= 12 ? 'PM' : 'AM';
+    const h12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    return `${h12} ${period}`;
+};
+
+/** Convert a slot start time like '08:00 AM' to a range like '8 AM - 9 AM' */
+const slotToRange = (slot: string): string => {
+    const [time, period] = slot.split(' ');
+    let [h] = time.split(':').map(Number);
+    if (period === 'PM' && h !== 12) h += 12;
+    else if (period === 'AM' && h === 12) h = 0;
+    const endH = (h + 1) % 24;
+    return `${formatHour12(h)} - ${formatHour12(endH)}`;
+};
+
+/** Build the display range for multiple consecutive slots, e.g. '8 AM - 11 AM (3 hrs)' */
+const slotsToRange = (slots: string[]): string => {
+    if (slots.length === 0) return '';
+    if (slots.length === 1) return slotToRange(slots[0]);
+    const sorted = [...slots].sort((a, b) => slotTo24(a) - slotTo24(b));
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const endH = (slotTo24(last) + 1) % 24;
+    return `${formatHour12(slotTo24(first))} - ${formatHour12(endH)} (${sorted.length} hr${sorted.length > 1 ? 's' : ''})`;
+};
+
+const MiniMapCard: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
+    const mapRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!mapRef.current || !window.google) return;
+
+        const map = new window.google.maps.Map(mapRef.current, {
+            center: { lat, lng },
+            zoom: 15,
+            mapTypeId: 'terrain',
+            disableDefaultUI: true,
+            gestureHandling: 'none',
+            styles: [
+                { featureType: 'landscape.natural', elementType: 'geometry.fill', stylers: [{ color: '#dde8cd' }] },
+                { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#e4e0d8' }] },
+                { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a3c8e9' }] },
+                { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#b5d48c' }] },
+                { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+                { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f5edd5' }] },
+                { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5544' }] },
+                { elementType: 'labels.text.stroke', stylers: [{ color: '#f0ebe0' }, { weight: 2 }] }
+            ]
+        });
+
+        new window.google.maps.Marker({
+            position: { lat, lng },
+            map,
+            icon: {
+                url: '/images/PinMarker.png',
+                scaledSize: new window.google.maps.Size(46, 60),
+                anchor: new window.google.maps.Point(23, 60)
+            }
+        });
+
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.innerHTML = '';
+            }
+        };
+    }, [lat, lng]);
+
+    return (
+        <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-50">
+            <div ref={mapRef} className="w-full h-32" />
+        </div>
+    );
+};
+
+const PH_TIMEZONE = 'Asia/Manila';
+
+const getNowPH = (): Date => {
+  const nowUtc = new Date();
+  const phStr = nowUtc.toLocaleString('en-US', { timeZone: PH_TIMEZONE });
+  return new Date(phStr);
+};
+
+const isSlotInPast = (slot: string, selectedDate: Date): boolean => {
+  const nowPH = getNowPH();
+  const todayPH = toPhDateStr(new Date());
+  const selectedPH = toPhDateStr(selectedDate);
+  if (selectedPH > todayPH) return false;
+  if (selectedPH < todayPH) return true;
+  const [time, period] = slot.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (period === 'PM' && hours !== 12) hours += 12;
+  else if (period === 'AM' && hours === 12) hours = 0;
+  const currentPHHour = nowPH.getHours();
+  const currentPHMinute = nowPH.getMinutes();
+  return hours < currentPHHour || (hours === currentPHHour && minutes <= currentPHMinute);
+};
+
+const getSlotDateTime = (slot: string, baseDate: Date = new Date()): { start: Date; end: Date } => {
+  const [time, period] = slot.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (period === 'PM' && hours !== 12) hours += 12;
+  else if (period === 'AM' && hours === 12) hours = 0;
+  const startDateTime = new Date(baseDate);
+  startDateTime.setHours(hours, minutes, 0, 0);
+  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+  return { start: startDateTime, end: endDateTime };
+};
 
 declare global {
     interface Window {
@@ -85,9 +220,51 @@ const GuestBooking: React.FC = () => {
     const [filterAmenities, setFilterAmenities] = useState<string[]>([]);
     const isMobile = window.innerWidth < 768;
 
+    // For Location View
+    const [locationSelectedSlots, setLocationSelectedSlots] = useState<string[]>([]);
+    const [showLocationDetailHero, setShowLocationDetailHero] = useState(true);
+    const [locationReviewSummary, setLocationReviewSummary] = useState<{ avg: number; count: number } | null>(null);
+    const [locationAvailability, setLocationAvailability] = useState<Map<string, { blocked: Set<string>, booked: Set<string> }>>(new Map());
+    const [locationEffectiveHours, setLocationEffectiveHours] = useState<Map<string, EffectiveHours>>(new Map());
+    const [locationTimeSlots, setLocationTimeSlots] = useState<string[]>([]);
+    const [isCheckingLocationAvailability, setIsCheckingLocationAvailability] = useState(false);
+    const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date(getNowPH()));
+    const [showLeftCalendar, setShowLeftCalendar] = useState(false);
+    const [showLocationEntryModal, setShowLocationEntryModal] = useState(false);
+    const [locationConfirmed, setLocationConfirmed] = useState(false);
+
     const handleCloseFilters = () => {
         setIsFilterClosing(true);
         setTimeout(() => { setShowFilters(false); setIsFilterClosing(false); }, 400);
+    };
+
+    const goToMapView = () => {
+        setSelectedLocation(null);
+        setActiveLocationId(null);
+        setSelectedCourt(null);
+        setShowLocationDetailHero(true);
+        setShowLeftCalendar(false);
+        setViewMode('map');
+    };
+
+    // Location entry confirmation modal handlers
+    const openLocationConfirmModal = () => {
+        if (!selectedLocation) return;
+        setLocationConfirmed(false);
+        setShowLocationEntryModal(true);
+    };
+
+    const confirmLocationEntry = () => {
+        setShowLocationEntryModal(false);
+        setLocationConfirmed(true);
+        setShowLocationDetailHero(false);
+        setShowLeftCalendar(true);
+    };
+
+    const cancelLocationEntry = () => {
+        setShowLocationEntryModal(false);
+        setShowLeftCalendar(false);
+        setShowLocationDetailHero(true);
     };
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [showDesktopSuggestions, setShowDesktopSuggestions] = useState(false);
@@ -103,6 +280,21 @@ const GuestBooking: React.FC = () => {
 
     // Dynamic pricing state
     const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
+    const [locationSlotPriceRanges, setLocationSlotPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
+
+    const [searchParams] = useSearchParams();
+    const urlLocationId = searchParams.get('locationId');
+    const urlLat = searchParams.get('lat');
+    const urlLng = searchParams.get('lng');
+    const urlZoom = searchParams.get('zoom');
+    const urlCourt = searchParams.get('court');
+    const [activeLocationId, setActiveLocationId] = useState<string | null>(urlLocationId);
+
+    useEffect(() => {
+        if (urlLocationId) {
+            setActiveLocationId(urlLocationId);
+        }
+    }, [urlLocationId]);
 
     // Distance calculation helper (Haversine formula)
     const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -125,9 +317,12 @@ const GuestBooking: React.FC = () => {
             const newRanges = new Map<string, { min: number; max: number; hasRules: boolean }>();
             for (const court of locationCourts) {
                 try {
-                    const slots = selectedLocation?.opening_time && selectedLocation?.closing_time
-                        ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                        : TIME_SLOTS;
+                    const hours = locationEffectiveHours.get(court.id);
+                    const slots = hours && !hours.is_closed
+                        ? generateTimeSlots(hours.open_time, hours.close_time)
+                        : (selectedLocation?.opening_time && selectedLocation?.closing_time
+                            ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                            : TIME_SLOTS);
                     const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
                     const vals = Array.from(prices.values()) as number[];
                     if (vals.length > 0) {
@@ -143,7 +338,118 @@ const GuestBooking: React.FC = () => {
             setCourtPriceRanges(newRanges);
         };
         loadPriceRanges();
-    }, [locationCourts, selectedLocation, selectedDate]);
+    }, [locationCourts, selectedLocation, selectedDate, locationEffectiveHours]);
+
+    // Price ranges for location cards based on selected time slots
+    useEffect(() => {
+        if (locationCourts.length === 0 || locationSelectedSlots.length === 0) {
+            setLocationSlotPriceRanges(new Map());
+            return;
+        }
+        const loadRanges = async () => {
+            const dateStr = toPhDateStr(selectedDate);
+            const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
+            for (const court of locationCourts) {
+                try {
+                    const prices = await getSlotPrices(court.id, dateStr, locationSelectedSlots, court.pricePerHour);
+                    const vals = Array.from(prices.values()) as number[];
+                    if (vals.length > 0) {
+                        const hasRules = vals.some(v => v !== court.pricePerHour);
+                        rangesMap.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules });
+                    } else {
+                        rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+                    }
+                } catch {
+                    rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+                }
+            }
+            setLocationSlotPriceRanges(rangesMap);
+        };
+        loadRanges();
+    }, [locationCourts, locationSelectedSlots, selectedDate]);
+
+    // Resolve effective hours for all courts at a location and build the location-wide slot list
+    useEffect(() => {
+        if (!activeLocationId || locationCourts.length === 0) {
+            setLocationEffectiveHours(new Map());
+            setLocationTimeSlots([]);
+            return;
+        }
+
+        let cancelled = false;
+        const resolveLocationHours = async () => {
+            const dateStr = toPhDateStr(selectedDate);
+            const hoursList = await Promise.all(
+                locationCourts.map(c =>
+                    getEffectiveHours(
+                        c.id,
+                        dateStr,
+                        selectedLocation?.opening_time,
+                        selectedLocation?.closing_time
+                    )
+                )
+            );
+
+            if (cancelled) return;
+
+            const hoursMap = new Map<string, EffectiveHours>();
+            const slotSet = new Set<string>();
+
+            hoursList.forEach((hours, idx) => {
+                const courtId = locationCourts[idx]?.id;
+                if (!courtId) return;
+                hoursMap.set(courtId, hours);
+                if (!hours.is_closed) {
+                    generateTimeSlots(hours.open_time, hours.close_time).forEach(s => slotSet.add(s));
+                }
+            });
+
+            const slots = ALL_HOUR_SLOTS.filter(s => slotSet.has(s));
+            setLocationEffectiveHours(hoursMap);
+            setLocationTimeSlots(slots.length > 0 ? slots : TIME_SLOTS);
+        };
+
+        resolveLocationHours();
+        return () => {
+            cancelled = true;
+        };
+    }, [locationCourts, selectedLocation, selectedDate, activeLocationId]);
+
+    useEffect(() => {
+        if (locationSelectedSlots.length === 0 || locationTimeSlots.length === 0) return;
+        const filtered = locationSelectedSlots.filter(slot => locationTimeSlots.includes(slot));
+        if (filtered.length !== locationSelectedSlots.length) {
+            setLocationSelectedSlots(filtered);
+        }
+    }, [locationSelectedSlots, locationTimeSlots]);
+
+    const toggleLocationSlotSelection = (slot: string, allSlots: string[]) => {
+        setLocationSelectedSlots(prev => {
+            const slotH = slotTo24(slot);
+
+            if (prev.includes(slot)) {
+                const remaining = prev.filter(s => s !== slot);
+                if (remaining.length === 0) return [];
+                const sorted = remaining.sort((a, b) => slotTo24(a) - slotTo24(b));
+                const before = sorted.filter(s => slotTo24(s) < slotH);
+                const after = sorted.filter(s => slotTo24(s) > slotH);
+                return before.length >= after.length ? before : after;
+            }
+
+            if (prev.length === 0) return [slot];
+
+            const prevHours = prev.map(slotTo24).sort((a, b) => a - b);
+            const minH = prevHours[0];
+            const maxH = prevHours[prevHours.length - 1];
+
+            // Only allow adjacent selection to keep times consecutive
+            if (slotH !== minH - 1 && slotH !== maxH + 1) {
+                return prev;
+            }
+
+            return [...prev, slot];
+        });
+    };
 
     const getUserLocation = () => {
         if (gpsEnabled === true && userLocation) return;
@@ -209,7 +515,6 @@ const GuestBooking: React.FC = () => {
     }, []);
 
     const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
-    const [searchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
     const [user, setUser] = useState<any>(null);
 
@@ -222,19 +527,18 @@ const GuestBooking: React.FC = () => {
     const navigate = useNavigate();
 
     // Get map position from URL params
-    const urlLat = searchParams.get('lat');
-    const urlLng = searchParams.get('lng');
-    const urlZoom = searchParams.get('zoom');
-    const urlCourt = searchParams.get('court');
-    const urlLocationId = searchParams.get('locationId');
 
     // Fetch location detail + its courts when locationId is in URL
     useEffect(() => {
-        if (!urlLocationId) {
+        if (!activeLocationId) {
             setSelectedLocation(null);
             setLocationCourts([]);
+            setShowLocationDetailHero(false);
             return;
         }
+
+        setShowLocationDetailHero(true);
+        setLocationReviewSummary(null);
 
         const fetchLocationDetail = async () => {
             setIsLoadingLocationDetail(true);
@@ -243,7 +547,7 @@ const GuestBooking: React.FC = () => {
                 const { data: locData, error: locError } = await supabase
                     .from('locations')
                     .select('*')
-                    .eq('id', urlLocationId)
+                    .eq('id', activeLocationId)
                     .single();
 
                 if (locError) throw locError;
@@ -265,7 +569,7 @@ const GuestBooking: React.FC = () => {
                             rating
                         )
                     `)
-                    .eq('location_id', urlLocationId)
+                    .eq('location_id', activeLocationId)
                     .eq('setup_complete', true);
 
                 if (courtsError) throw courtsError;
@@ -290,6 +594,16 @@ const GuestBooking: React.FC = () => {
                     };
                 });
                 setLocationCourts(mappedCourts);
+
+                const ratings = (courtsData || [])
+                    .flatMap((c: any) => (c.court_reviews || []).map((r: any) => r.rating))
+                    .filter((r: any) => typeof r === 'number');
+                if (ratings.length > 0) {
+                    const avg = ratings.reduce((sum: number, r: number) => sum + r, 0) / ratings.length;
+                    setLocationReviewSummary({ avg, count: ratings.length });
+                } else {
+                    setLocationReviewSummary(null);
+                }
             } catch (err) {
                 console.error('Error fetching location detail:', err);
             } finally {
@@ -298,7 +612,7 @@ const GuestBooking: React.FC = () => {
         };
 
         fetchLocationDetail();
-    }, [urlLocationId]);
+    }, [activeLocationId]);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const googleMapRef = useRef<any>(null);
@@ -509,7 +823,7 @@ const GuestBooking: React.FC = () => {
 
     // Zoom to location and trigger pulse when arriving from homepage with locationId
     useEffect(() => {
-        if (urlLocationId && urlLat && urlLng && googleMapRef.current && !isLoading) {
+        if (activeLocationId && urlLat && urlLng && googleMapRef.current && !isLoading) {
             const lat = parseFloat(urlLat);
             const lng = parseFloat(urlLng);
             const zoom = urlZoom ? parseInt(urlZoom) : 15;
@@ -523,7 +837,7 @@ const GuestBooking: React.FC = () => {
                 triggerPulse(lat, lng);
             }, 500);
         }
-    }, [urlLocationId, urlLat, urlLng, urlZoom, isLoading]);
+    }, [activeLocationId, urlLat, urlLng, urlZoom, isLoading]);
 
     // Re-center map and trigger resize when returning to map view or hero is cleared
     useEffect(() => {
@@ -617,7 +931,11 @@ const GuestBooking: React.FC = () => {
                 });
 
                 marker.addListener('click', () => {
-                    navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                    setActiveLocationId(location.id);
+                    setSelectedCourt(null);
+                    setLocationSelectedSlots([]);
+                    setShowLeftCalendar(false);
+                    setShowLocationDetailHero(true);
                     setHeroCourtId(null);
                     if (window.innerWidth < 768) {
                         setViewMode('list');
@@ -964,12 +1282,112 @@ const GuestBooking: React.FC = () => {
             };
         });
 
+    const locationAmenityList = React.useMemo(() => {
+        const set = new Set<string>();
+        if (Array.isArray(selectedLocation?.amenities)) {
+            selectedLocation.amenities.forEach((a: string) => set.add(a));
+        }
+        locationCourts.forEach(c => {
+            if (Array.isArray(c.amenities)) c.amenities.forEach(a => set.add(a));
+        });
+        return Array.from(set);
+    }, [selectedLocation, locationCourts]);
+
+    const locationGalleryImages = React.useMemo(() => {
+        const images = new Set<string>();
+        if (selectedLocation?.hero_image) images.add(selectedLocation.hero_image);
+        if (selectedLocation?.image_url) images.add(selectedLocation.image_url);
+        locationCourts.forEach(c => {
+            if (c.imageUrl) images.add(c.imageUrl);
+        });
+        return Array.from(images);
+    }, [selectedLocation, locationCourts]);
+
+    // Fetch location availability whenever date or location changes
+    useEffect(() => {
+        if (!activeLocationId || locationCourts.length === 0 || locationTimeSlots.length === 0) return;
+        const checkAllAvailability = async () => {
+            setIsCheckingLocationAvailability(true);
+            const result = new Map<string, { blocked: Set<string>, booked: Set<string> }>();
+            const targetDateStr = toPhDateStr(selectedDate);
+
+            const { data: bookingsData } = await supabase
+                .from('bookings')
+                .select('court_id, start_time, end_time, status')
+                .in('court_id', locationCourts.map(c => c.id))
+                .eq('date', targetDateStr)
+                .not('status', 'eq', 'cancelled');
+            const bookings = bookingsData || [];
+
+            const { data: events } = await supabase
+                .from('court_events')
+                .select('court_id, start_datetime, end_datetime')
+                .in('court_id', locationCourts.map(c => c.id))
+                .eq('blocks_bookings', true);
+
+            const slotsToCheck = locationTimeSlots.length > 0
+                ? locationTimeSlots
+                : (selectedLocation?.opening_time && selectedLocation?.closing_time
+                    ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                    : TIME_SLOTS);
+
+            for (const court of locationCourts) {
+                const newBlockedSlots = new Set<string>();
+                const newBookedSlots = new Set<string>();
+                const courtBookings = bookings.filter(b => b.court_id === court.id);
+                const courtEvents = events?.filter(e => e.court_id === court.id) || [];
+                const hours = locationEffectiveHours.get(court.id);
+                const courtSlots = hours && !hours.is_closed
+                    ? generateTimeSlots(hours.open_time, hours.close_time)
+                    : [];
+
+                for (const slot of slotsToCheck) {
+                    if (courtSlots.length > 0 && !courtSlots.includes(slot)) {
+                        newBlockedSlots.add(slot);
+                        continue;
+                    }
+                    const { start, end } = getSlotDateTime(slot, selectedDate);
+                    let isBlocked = false;
+                    let isBooked = false;
+
+                    for (const event of courtEvents) {
+                        const eventStart = new Date(event.start_datetime);
+                        const eventEnd = new Date(event.end_datetime);
+                        if (start < eventEnd && end > eventStart) {
+                            isBlocked = true; break;
+                        }
+                    }
+
+                    if (!isBlocked) {
+                        for (const b of courtBookings) {
+                            const [bH, bM] = b.start_time.split(':').map(Number);
+                            const bs = new Date(selectedDate); bs.setHours(bH, bM, 0, 0);
+                            const [eH, eM] = b.end_time.split(':').map(Number);
+                            const be = new Date(selectedDate); be.setHours(eH, eM, 0, 0);
+                            const beWithCleaning = new Date(be.getTime() + (court.cleaningTimeMinutes || 0) * 60000);
+                            if (start < beWithCleaning && end > bs) {
+                                isBooked = true; break;
+                            }
+                        }
+                    }
+
+                    if (isBlocked) newBlockedSlots.add(slot);
+                    if (isBooked) newBookedSlots.add(slot);
+                }
+                result.set(court.id, { blocked: newBlockedSlots, booked: newBookedSlots });
+            }
+            setLocationAvailability(result);
+            setIsCheckingLocationAvailability(false);
+        };
+        checkAllAvailability();
+    }, [locationCourts, selectedDate, activeLocationId, selectedLocation, locationEffectiveHours, locationTimeSlots]);
+
     return (
-        <div className="min-h-screen bg-white md:bg-gradient-to-b md:from-slate-50 md:to-white">
+        <div className="min-h-screen md:h-screen md:overflow-hidden bg-white md:bg-gradient-to-b md:from-slate-50 md:to-white">
             {/* ──────────── MOBILE HEADER BAR ──────────── */}
             <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-white border-b border-slate-200/60 shadow-sm">
-                {/* Search row — hidden when viewing location detail */}
-                <div className={`px-4 pt-3 pb-2 transition-all duration-300 ${urlLocationId && selectedLocation ? 'hidden' : ''}`}>
+                {/* Search row */}
+                <div className="px-4 pt-3 pb-2 transition-all duration-300">
                     {isSearchExpanded ? (
                         <div className="relative">
                             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
@@ -1068,7 +1486,11 @@ const GuestBooking: React.FC = () => {
                                                             smoothZoom(19);
                                                             triggerPulse(location.latitude, location.longitude);
                                                         }
-                                                        navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                                        setActiveLocationId(location.id);
+                                                        setSelectedCourt(null);
+                                                        setLocationSelectedSlots([]);
+                                                        setShowLeftCalendar(false);
+                                                        setShowLocationDetailHero(true);
                                                     }}
                                                     className="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors border-b border-slate-50 last:border-none"
                                                 >
@@ -1115,10 +1537,10 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* Back to Locations / Courts — mobile, shown when in a location detail */}
-                {urlLocationId && selectedLocation && (
+                {false && (
                     <div className="px-4 pt-2 pb-2 flex items-center gap-3">
                         <button
-                            onClick={() => navigate('/booking')}
+                            onClick={() => setActiveLocationId(null)}
                             className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors group"
                         >
                             <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
@@ -1132,21 +1554,18 @@ const GuestBooking: React.FC = () => {
             </div>
 
             {/* ──────────── MAIN CONTAINER ──────────── */}
-            <div className={`md:pt-28 pb-0 md:pb-10 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto ${urlLocationId && selectedLocation ? 'pt-[100px] sm:pt-[104px]' : 'pt-[136px] sm:pt-[140px]'}`}>
+            <div className={`md:pt-28 pb-0 md:pb-6 px-0 md:px-6 lg:px-10 xl:px-16 max-w-[1600px] mx-auto md:h-[calc(100vh-140px)] md:overflow-hidden ${activeLocationId && selectedLocation ? 'pt-[100px] sm:pt-[104px]' : 'pt-[136px] sm:pt-[140px]'}`}>
 
                 {/* ──────────── DESKTOP HEADER ──────────── */}
                 <div className="hidden md:block mb-6 lg:mb-8">
                     <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-5">
                         <div>
                             <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">
-                                {urlLocationId && selectedLocation ? 'Location / Detail' : 'Courts / Live'}
+                                {'Courts / Live'}
                             </p>
-                            <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
-                                {urlLocationId && selectedLocation
-                                    ? <>Book a <span className="text-blue-600">Court at {selectedLocation.name}.</span></>
-                                    : <>Book a <span className="text-blue-600">Court in {(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}.</span></>
-                                }
-                            </h1>
+                                <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-950 tracking-tighter">
+                                    <>Book a Court in <span className="text-blue-600">{(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}</span></>
+                                </h1>
                         </div>
                     </div>
 
@@ -1154,18 +1573,18 @@ const GuestBooking: React.FC = () => {
                 </div>
 
                 {/* ──────────── MAIN CONTENT GRID ──────────── */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-5 gap-0 lg:gap-6 xl:gap-8 items-start md:h-full md:overflow-hidden">
 
                     {/* ═══ LEFT COLUMN ═══ */}
-                    <div className={`lg:col-span-2 xl:col-span-2 ${(urlLocationId || viewMode === 'list') ? 'block' : 'hidden md:block'}`}>
-                        {/* Desktop Search Bar — hidden when viewing location detail */}
+                    <div className={`lg:col-span-2 xl:col-span-2 ${(activeLocationId || viewMode === 'list') ? 'block' : 'hidden md:block'} md:sticky md:top-28 self-start`}>
+                        {/* Desktop Search Bar */}
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 handleSearch(searchQuery);
                                 setShowDesktopSuggestions(false);
                             }}
-                            className={`hidden md:flex gap-3 mb-5 relative transition-all duration-300 ${urlLocationId && selectedLocation ? 'opacity-0 max-h-0 overflow-hidden mb-0 pointer-events-none' : 'opacity-100 max-h-[100px]'}`}
+                            className="hidden md:flex gap-3 mb-5 relative transition-all duration-300 opacity-100 max-h-[100px]"
                         >
                             <div className="relative flex-1 group">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
@@ -1263,7 +1682,11 @@ const GuestBooking: React.FC = () => {
                                                                     smoothZoom(19);
                                                                     triggerPulse(location.latitude, location.longitude);
                                                                 }
-                                                                navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                                                setActiveLocationId(location.id);
+                                                                setSelectedCourt(null);
+                                                                setLocationSelectedSlots([]);
+                                                                setShowLeftCalendar(false);
+                                                                setShowLocationDetailHero(true);
                                                             }}
                                                             className="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 flex items-center gap-3 transition-colors"
                                                         >
@@ -1313,16 +1736,16 @@ const GuestBooking: React.FC = () => {
                         </form>
 
                         {/* ─── Navigation buttons (desktop, location detail view) ─── */}
-                        {urlLocationId && selectedLocation && !heroActiveCourt && (
+                        {false && (
                             <button
-                                onClick={() => navigate('/booking')}
+                                onClick={() => setActiveLocationId(null)}
                                 className="hidden md:flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest mb-4 transition-colors group"
                             >
                                 <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
                                 Back to Locations
                             </button>
                         )}
-                        {heroActiveCourt && !selectedCourt && (
+                        {false && (
                             <button
                                 onClick={() => setHeroCourtId(null)}
                                 className="hidden md:flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest mb-4 transition-colors group"
@@ -1333,10 +1756,10 @@ const GuestBooking: React.FC = () => {
                         )}
 
                         {/* ─── List Container ─── */}
-                        <div className={`bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col md:h-auto md:max-h-[calc(100vh-280px)] lg:max-h-[calc(100vh-300px)] ${urlLocationId ? 'h-[calc(100vh-100px)]' : 'h-[calc(100vh-150px)]'}`}>
+                        <div className={`bg-white md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden flex flex-col md:h-full ${activeLocationId ? 'h-[calc(100vh-100px)]' : 'h-[calc(100vh-150px)]'}`}>
 
                             {/* Location Detail Header — mobile only (desktop shows hero in right column) */}
-                            {urlLocationId && selectedLocation && (
+                            {false && (
                                 <div className="border-b border-slate-100 shrink-0 md:hidden">
                                     {selectedLocation.image_url && (
                                         <div className="relative h-28 sm:h-36 w-full">
@@ -1378,7 +1801,7 @@ const GuestBooking: React.FC = () => {
                                 </div>
                             )}
 
-                            {isLoadingLocationDetail && urlLocationId && (
+                            {isLoadingLocationDetail && activeLocationId && (
                                 <div className="flex items-center justify-center py-12">
                                     <Loader2 className="animate-spin text-blue-600" size={28} />
                                 </div>
@@ -1387,154 +1810,82 @@ const GuestBooking: React.FC = () => {
                             {/* Section title */}
                             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
                                 <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    {urlLocationId && selectedLocation
-                                        ? `Courts at ${selectedLocation.name} (${locationCourts.length})`
-                                        : `${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`
-                                    }
+                                    {`${filteredLocations.length} Location${filteredLocations.length !== 1 ? 's' : ''} in ${(searchParams.get('loc') || userCity || 'the Philippines').split(',')[0]}`}
                                 </h2>
                             </div>
-
                             {/* Scrollable list */}
                             <div className="flex-1 overflow-y-auto px-0 md:px-1.5 py-1 md:py-1.5 space-y-1 md:space-y-1.5">
-                                {isLoading || isLoadingLocationDetail ? (
+                                {isLoading ? (
                                     Array(5).fill(0).map((_, i) => <CourtSkeleton key={i} />)
-                                ) : urlLocationId ? (
-                                    locationCourts.length === 0 ? (
-                                        <div className="px-4 py-12 text-center">
-                                            <p className="text-sm text-slate-400">No courts found at this location</p>
+                                ) : showLeftCalendar ? (
+                                        <div className="flex flex-col h-full bg-white p-4 md:p-6 rounded-[24px] shadow-sm border border-slate-100 m-2">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <button
+                                                    onClick={() => setShowLeftCalendar(false)}
+                                                    className="text-[11px] font-black text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5 hover:text-blue-600"
+                                                >
+                                                    <ChevronLeft size={14} />
+                                                    Back to Locations
+                                                </button>
+                                                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.18em]">Calendar</span>
+                                            </div>
+                                            <div className="flex items-center justify-between mb-6">
+                                                <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1))} className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                                                    <ChevronLeft size={20} />
+                                                </button>
+                                                <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                                                    {currentMonthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                                                </h3>
+                                                <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1))} className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rotate-180">
+                                                    <ChevronLeft size={20} />
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-7 gap-2 text-center mb-4">
+                                                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                                                    <div key={day} className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{day}</div>
+                                                ))}
+                                            </div>
+                                            <div className="grid grid-cols-7 gap-2">
+                                                {(() => {
+                                                    const year = currentMonthDate.getFullYear();
+                                                    const month = currentMonthDate.getMonth();
+                                                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                                    const firstDay = new Date(year, month, 1).getDay();
+                                                    const cells = [];
+                                                    const todayStr = toPhDateStr(getNowPH());
+                                                    const selectedStr = toPhDateStr(selectedDate);
+                                                    for (let i = 0; i < 42; i++) {
+                                                        const dayNum = i - firstDay + 1;
+                                                        if (dayNum > 0 && dayNum <= daysInMonth) {
+                                                            const dateObj = new Date(year, month, dayNum);
+                                                            const dateStr = toPhDateStr(dateObj);
+                                                            const isPast = dateStr < todayStr;
+                                                            const isSelected = dateStr === selectedStr;
+                                                            cells.push(
+                                                                <button
+                                                                    key={i}
+                                                                    disabled={isPast}
+                                                                    onClick={() => { setSelectedDate(dateObj); setLocationSelectedSlots([]); }}
+                                                                    className={`aspect-square w-full rounded-2xl flex flex-col items-center justify-center transition-all ${isPast ? 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' : isSelected ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/20 scale-105' : 'bg-white text-slate-700 border border-slate-200 hover:border-[#1E40AF] hover:text-[#1E40AF]'}`}
+                                                                >
+                                                                    <span className={`text-sm md:text-base font-black ${isSelected ? 'text-white' : ''}`}>{dayNum}</span>
+                                                                </button>
+                                                            );
+                                                        } else {
+                                                            cells.push(<div key={i} className="aspect-square"></div>);
+                                                        }
+                                                    }
+                                                    return cells;
+                                                })()}
+                                            </div>
                                         </div>
-                                    ) : (() => {
-                                        const locStatus = selectedLocation?.status || (selectedLocation?.is_active ? 'Active' : 'Closed');
-                                        const isLocationAvailable = locStatus === 'Active';
-                                        return locationCourts.map(court => {
-                                            const courtSt = court.status || 'Available';
-                                            const isCourtAvailable = isLocationAvailable && (courtSt === 'Available' || courtSt === 'Fully Booked');
-                                            const isFullyBooked = courtSt === 'Fully Booked';
-                                            const courtStatusLabel = !isLocationAvailable ? locStatus : courtSt !== 'Available' ? courtSt : '';
-                                            const courtStatusStyle = courtSt === 'Fully Booked' ? 'bg-blue-50 text-blue-500'
-                                                : courtSt === 'Coming Soon' ? 'bg-blue-50 text-blue-500'
-                                                    : courtSt === 'Maintenance' ? 'bg-blue-50 text-blue-500'
-                                                        : locStatus === 'Closed' ? 'bg-rose-50 text-rose-500'
-                                                            : locStatus === 'Maintenance' ? 'bg-blue-50 text-blue-500'
-                                                                : 'bg-blue-50 text-blue-500';
-                                            return (
-                                                <div key={court.id}>
-                                                    <button
-                                                        onClick={() => {
-                                                            if (isCourtAvailable) {
-                                                                setHeroCourtId(court.id);
-                                                                if (window.innerWidth < 768) {
-                                                                    setShowCourtDetails(true);
-                                                                }
-                                                            }
-                                                        }}
-                                                        disabled={!isCourtAvailable}
-                                                        className={`w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 ${isCourtAvailable ? 'hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer active:bg-slate-50' : 'opacity-60 cursor-not-allowed'}`}
-                                                    >
-                                                        {/* Left — Image */}
-                                                        <div className="w-32 sm:w-36 h-[140px] shrink-0 bg-slate-100 relative overflow-hidden">
-                                                            <img
-                                                                src={court.imageUrl || '/images/home-images/pb2.jpg'}
-                                                                alt={court.name}
-                                                                className={`w-full h-full object-cover transition-transform duration-700 ${isCourtAvailable ? 'group-hover:scale-110' : 'grayscale'}`}
-                                                            />
-                                                            {!isCourtAvailable && courtStatusLabel ? (
-                                                                <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${courtStatusStyle}`}>{courtStatusLabel}</div>
-                                                            ) : isCourtAvailable && (
-                                                                <div className="absolute top-2 left-2">
-                                                                    <span className="bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest shadow-md shadow-lime-500/30">Available</span>
-                                                                </div>
-                                                            )}
-                                                            {!isCourtAvailable && (
-                                                                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
-                                                            )}
-                                                            {/* Price badge */}
-                                                            <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1">
-                                                                {(() => {
-                                                                    const range = courtPriceRanges.get(court.id);
-                                                                    if (range && range.hasRules && range.max > 0) {
-                                                                        return (
-                                                                            <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                                                                {range.min === range.max ? (
-                                                                                    <><span className="text-[11px] font-black text-slate-900">₱{range.min}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span></>
-                                                                                ) : (
-                                                                                    <><span className="text-[11px] font-black text-slate-900">₱{range.min}–₱{range.max}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span></>
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    } else if (court.pricePerHour != null && court.pricePerHour > 0) {
-                                                                        return (
-                                                                            <div className="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                                                                <span className="text-[11px] font-black text-slate-900">₱{court.pricePerHour}</span><span className="text-[8px] font-semibold text-slate-400">/hr</span>
-                                                                            </div>
-                                                                        );
-                                                                    } else {
-                                                                        return (
-                                                                            <div className="bg-slate-100/95 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-md">
-                                                                                <span className="text-[10px] font-bold text-slate-500 italic">Price Not Set</span>
-                                                                            </div>
-                                                                        );
-                                                                    }
-                                                                    return null;
-                                                                })()}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Right — Details */}
-                                                        <div className="flex-1 p-3 text-left flex flex-col min-w-0">
-                                                            <p className={`font-black text-base tracking-tight mb-0.5 truncate ${isCourtAvailable ? 'text-slate-900 group-hover:text-blue-600 transition-colors' : 'text-slate-400'}`}>{court.name}</p>
-                                                            <div className="flex items-center gap-1 mb-2">
-                                                                <MapPin size={12} className="text-slate-300 shrink-0" />
-                                                                <p className="text-xs text-slate-400 truncate">{selectedLocation?.address || selectedLocation?.city || ''}</p>
-                                                            </div>
-
-                                                            {/* 2×2 Info Grid */}
-                                                            <div className="grid grid-cols-2 gap-1.5 mt-auto">
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                                                    <img src="/images/Ball.png" alt="" className="w-4 h-4 object-contain" />
-                                                                    <span className="text-[11px] font-bold text-slate-600">{court.numCourts || 1} {(court.numCourts || 1) === 1 ? 'Court' : 'Courts'}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                                                                    <span className="text-[11px] font-bold text-slate-600">{(court.numCourts || 1) * 4} Players</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                                                    <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="1" /><line x1="12" y1="6" x2="12" y2="18" /><line x1="2" y1="12" x2="22" y2="12" /></svg>
-                                                                    <span className="text-[11px] font-bold text-slate-600 truncate">{court.type || 'Indoor'}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2">
-                                                                    <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                                                                    <span className="text-[11px] font-bold text-slate-600 truncate">
-                                                                        {Array.isArray(court.amenities) && court.amenities.length > 0
-                                                                            ? court.amenities.join(', ')
-                                                                            : 'No Amenities'
-                                                                        }
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </button>
-                                                    {isFullyBooked && isLocationAvailable && (
-                                                        <div className="px-2 pb-1 -mt-1">
-                                                            <button
-                                                                onClick={() => { setHeroCourtId(court.id); setShowCourtDetails(true); }}
-                                                                className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-blue-200/50 flex items-center justify-center gap-2"
-                                                            >
-                                                                📅 Book Future Dates
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        });
-                                    })()
                                 ) : (
                                     filteredLocations.length === 0 ? (
                                         <div className="px-4 py-12 text-center">
                                             <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
                                             <p className="text-sm text-slate-400">No locations found</p>
                                         </div>
-                                    ) : filteredLocations.map(location => {
+                                    ) : filteredLocations.map((location: any) => {
                                         const locStatus = location.status || (location.is_active ? 'Active' : 'Closed');
                                         const isAvailable = locStatus === 'Active';
                                         return (
@@ -1546,7 +1897,11 @@ const GuestBooking: React.FC = () => {
                                                             smoothZoom(19);
                                                             triggerPulse(location.latitude, location.longitude);
                                                         }
-                                                        navigate(`/booking?locationId=${location.id}&lat=${location.latitude}&lng=${location.longitude}&zoom=19&loc=${encodeURIComponent(location.city)}`);
+                                                        setActiveLocationId(location.id);
+                                                        setSelectedCourt(null);
+                                                        setLocationSelectedSlots([]);
+                                                        setShowLeftCalendar(false);
+                                                        setShowLocationDetailHero(true);
                                                     }}
                                                     className="w-full group flex flex-row rounded-none md:rounded-2xl overflow-hidden bg-white border-b md:border border-slate-100 md:shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 active:bg-slate-50"
                                                 >
@@ -1625,13 +1980,13 @@ const GuestBooking: React.FC = () => {
                     </div>
 
                     {/* ═══ RIGHT COLUMN — MAP / COURT DETAIL ═══ */}
-                    <div className={`lg:col-span-3 xl:col-span-3 ${(urlLocationId || viewMode === 'list') ? 'hidden md:block' : 'block'}`}>
+                    <div className={`lg:col-span-3 xl:col-span-3 ${(activeLocationId || viewMode === 'list') ? 'hidden md:block' : 'block'}`}>
                         <div className="md:rounded-2xl md:border md:border-slate-200/60 md:shadow-sm overflow-hidden relative md:sticky md:top-28 h-[calc(100vh-200px)] sm:h-[calc(100vh-200px)] md:h-[calc(100vh-220px)] lg:h-[calc(100vh-240px)]">
 
                             {/* ── Map — shown when no location is selected ── */}
                             <div
                                 className="absolute inset-0 transition-all duration-500 ease-out"
-                                style={{ opacity: (!urlLocationId) ? 1 : 0, transform: (!urlLocationId) ? 'scale(1)' : 'scale(1.02)', pointerEvents: (!urlLocationId) ? 'auto' : 'none' }}
+                                style={{ opacity: (!activeLocationId) ? 1 : 0, transform: (!activeLocationId) ? 'scale(1)' : 'scale(1.02)', pointerEvents: (!activeLocationId) ? 'auto' : 'none' }}
                             >
                                 {isLoading ? (
                                     <div className="h-full bg-slate-100 flex items-center justify-center">
@@ -1644,99 +1999,239 @@ const GuestBooking: React.FC = () => {
 
                             {/* ── Location Hero Panel — shown when location is selected but no court yet ── */}
                             <div
-                                className="absolute inset-0 flex flex-col overflow-hidden transition-all duration-500 ease-out"
+                                className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-500 ease-out"
                                 style={{
-                                    opacity: (urlLocationId && selectedLocation && !heroActiveCourt) ? 1 : 0,
-                                    transform: (urlLocationId && selectedLocation && !heroActiveCourt) ? 'translateY(0)' : 'translateY(24px)',
-                                    pointerEvents: (urlLocationId && selectedLocation && !heroActiveCourt) ? 'auto' : 'none',
+                                    opacity: (activeLocationId && selectedLocation && !heroActiveCourt) ? 1 : 0,
+                                    transform: (activeLocationId && selectedLocation && !heroActiveCourt) ? 'translateY(0)' : 'translateY(24px)',
+                                    pointerEvents: (activeLocationId && selectedLocation && !heroActiveCourt) ? 'auto' : 'none',
                                 }}
                             >
                                 {selectedLocation && (
-                                    <>
-                                        {/* Full Hero Image with gradient + venue info overlay */}
-                                        <div className="relative flex-1 min-h-0 overflow-hidden">
-                                            <img
-                                                src={selectedLocation.image_url || '/images/home-images/pb2.jpg'}
-                                                alt={selectedLocation.name}
-                                                className="absolute inset-0 w-full h-full object-cover"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
-
-                                            {/* Venue Details Overlay */}
-                                            <div className="absolute bottom-0 left-0 right-0 p-5 lg:p-6 xl:p-8 z-10">
-                                                {/* Venue Name */}
-                                                <h2 className="text-2xl lg:text-3xl xl:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-lg mb-2">{selectedLocation.name}</h2>
-
-                                                {/* Address */}
-                                                <div className="flex items-center gap-2 mb-4">
-                                                    <MapPin size={14} className="text-[#a3e635] shrink-0" />
-                                                    <p className="text-sm text-white/80 font-medium truncate">{selectedLocation.address}, {selectedLocation.city}</p>
+                                    showLocationDetailHero ? (
+                                        <div className="relative h-full overflow-hidden">
+                                            <div className="absolute inset-0">
+                                                <img
+                                                    src={selectedLocation.hero_image || selectedLocation.image_url || '/images/home-images/pb2.jpg'}
+                                                    alt={selectedLocation.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <div className="absolute inset-0 bg-black/25" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-[#a3e635]/75 via-[#a3e635]/20 to-transparent" />
+                                            </div>
+                                            <div className="relative z-10 flex flex-col h-full p-6 sm:p-8 lg:p-10">
+                                                <div className="flex items-center gap-3 justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-2xl bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/60">
+                                                            <MapPin size={22} className="text-[#1E40AF]" />
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <p className="text-[10px] font-black text-white/80 uppercase tracking-[0.2em]">Venue Selected</p>
+                                                            <p className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight">{selectedLocation.name}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={goToMapView}
+                                                        className="px-4 py-2 rounded-xl bg-white/85 hover:bg-white text-slate-900 text-xs font-black uppercase tracking-[0.12em] shadow-md border border-white/70 transition-all"
+                                                    >
+                                                        Map View
+                                                    </button>
                                                 </div>
 
-                                                {/* Info Grid */}
-                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-                                                    {/* Courts */}
-                                                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
-                                                        <img src="/images/Ball.png" alt="courts" className="w-5 h-5 object-contain" />
+                                                <div className="mt-4 flex flex-col md:flex-row md:items-start md:gap-4">
+                                                    <div className="flex-1 space-y-4">
                                                         <div>
-                                                            <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Courts</p>
-                                                            <p className="text-sm font-black text-white">{locationCourts.length}</p>
-                                                        </div>
-                                                    </div>
-                                                    {/* Court Types */}
-                                                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
-                                                        <Building2 size={16} className="text-[#a3e635] shrink-0" />
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Type</p>
-                                                            <p className="text-sm font-black text-white">
-                                                                {(() => {
-                                                                    const types = [...new Set(locationCourts.map(c => c.type))];
-                                                                    return types.join(' / ') || 'N/A';
-                                                                })()}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {/* Hours */}
-                                                    {selectedLocation.opening_time && selectedLocation.closing_time && (
-                                                        <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
-                                                            <Clock size={16} className="text-[#a3e635] shrink-0" />
-                                                            <div>
-                                                                <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Hours</p>
-                                                                <p className="text-sm font-black text-white">
-                                                                    {(() => {
-                                                                        const fmt = (t: string) => { const h = parseInt(t.split(':')[0], 10); return h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`; };
-                                                                        return `${fmt(selectedLocation.opening_time)} - ${fmt(selectedLocation.closing_time)}`;
-                                                                    })()}
-                                                                </p>
+                                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Amenities</p>
+                                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                                {locationAmenityList.length > 0 ? (
+                                                                    locationAmenityList.slice(0, 8).map((a, i) => (
+                                                                        <span key={`${a}-${i}`} className="text-[11px] font-semibold px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/60 shadow-sm">
+                                                                            {a}
+                                                                        </span>
+                                                                    ))
+                                                                ) : (
+                                                                    <span className="text-[11px] font-semibold text-slate-400">No amenities listed</span>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                    )}
-                                                    {/* Status */}
-                                                    <div className="flex items-center gap-2.5 px-3 py-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20">
-                                                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${(selectedLocation.status || 'Active') === 'Active' ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50' : 'bg-rose-400'}`} />
+
                                                         <div>
-                                                            <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Status</p>
-                                                            <p className="text-sm font-black text-white">{selectedLocation.status || (selectedLocation.is_active ? 'Active' : 'Closed')}</p>
+                                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">Court Galleries</p>
+                                                            <div className="mt-3 flex gap-3 overflow-x-auto">
+                                                                {locationGalleryImages.slice(0, 6).map((img, idx) => (
+                                                                    <img
+                                                                        key={`${img}-${idx}`}
+                                                                        src={img}
+                                                                        alt={`${selectedLocation.name} gallery ${idx + 1}`}
+                                                                        className="h-16 w-24 rounded-2xl object-cover border border-white/80 shadow-md"
+                                                                    />
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     </div>
+
+                                                    {selectedLocation.latitude && selectedLocation.longitude && (
+                                                        <div className="w-full md:max-w-[260px] mt-3 md:mt-0">
+                                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">Map View</p>
+                                                            <MiniMapCard lat={selectedLocation.latitude} lng={selectedLocation.longitude} />
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                {/* Amenities */}
-                                                {selectedLocation.amenities && selectedLocation.amenities.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1.5 mb-3">
-                                                        {selectedLocation.amenities.map((amenity: string, i: number) => (
-                                                            <span key={i} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white/15 backdrop-blur-sm text-white/90 border border-white/20">{amenity}</span>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {/* Description */}
-                                                {selectedLocation.description && (
-                                                    <p className="text-xs text-white/60 font-medium leading-relaxed line-clamp-2 mb-1">{selectedLocation.description}</p>
-                                                )}
+                                                <button
+                                                    onClick={openLocationConfirmModal}
+                                                    className="mt-6 w-full py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all"
+                                                >
+                                                    Book Now
+                                                </button>
                                             </div>
                                         </div>
-                                    </>
+                                    ) : (
+                                    <div className="flex flex-col h-full bg-slate-50/50">
+                                        {/* Top Row: Time Slots Grid */}
+                                        <div className="flex flex-col bg-white p-4 border-b border-slate-200 shadow-sm z-10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Clock className="text-[#1E40AF]" size={18} />
+                                                    <h3 className="text-lg font-black text-slate-800 tracking-tight">Total time slots of all courts</h3>
+                                                </div>
+                                                <button
+                                                    onClick={goToMapView}
+                                                    className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
+                                                >
+                                                    Map View
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-col gap-1 mb-4 shrink-0">
+                                                <p className="text-sm text-slate-600 font-semibold">Select a time slot to check court availability below.</p>
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="h-2.5 w-2.5 rounded-full bg-[#a3e635]" />
+                                                        Available
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                                                        Fully booked
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-3 overflow-y-auto pb-2 content-start pr-2 custom-scrollbar animate-in fade-in duration-300 ease-out">
+                                                {(() => {
+                                                    const slots = locationTimeSlots.length > 0
+                                                        ? locationTimeSlots
+                                                        : (selectedLocation?.opening_time && selectedLocation?.closing_time
+                                                            ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                                                            : TIME_SLOTS);
+                                                    return slots.map(slot => {
+                                                        const isSelected = locationSelectedSlots.includes(slot);
+                                                        const isPast = isSlotInPast(slot, selectedDate);
+
+                                                        let availableCount = 0;
+                                                        if (!isCheckingLocationAvailability) {
+                                                            locationCourts.forEach(c => {
+                                                                const av = locationAvailability.get(c.id);
+                                                                if (!av?.blocked.has(slot) && !av?.booked.has(slot) && (c.status === 'Available' || c.status === 'Fully Booked')) {
+                                                                    availableCount++;
+                                                                }
+                                                            });
+                                                        }
+
+                                                        const hasAvailability = availableCount > 0;
+                                                        const isDisabled = isPast || isCheckingLocationAvailability || !hasAvailability;
+
+                                                        return (
+                                                            <button
+                                                                key={slot}
+                                                                disabled={isDisabled}
+                                                                onClick={() => !isDisabled && toggleLocationSlotSelection(slot, slots)}
+                                                                className={`flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : !hasAvailability ? 'bg-rose-50 border-rose-200 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:shadow-md'}`}
+                                                            >
+                                                                <span className="text-xs font-bold uppercase whitespace-nowrap">{slotToRange(slot)}</span>
+                                                            </button>
+                                                        );
+                                                    });
+                                                })()}
+                                            </div>
+                                        </div>
+
+                                        {/* Bottom Row: Available Courts */}
+                                        <div className="h-[280px] shrink-0 overflow-y-auto p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
+                                            <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                                                <Building2 className="text-[#a3e635]" size={18} />
+                                                {locationSelectedSlots.length > 0
+                                                    ? `Courts available at ${slotsToRange(locationSelectedSlots)}`
+                                                    : 'Select time slots to see courts'}
+                                            </h3>
+
+                                            {locationSelectedSlots.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
+                                                    <CalendarIcon size={32} className="text-slate-300 mb-3" />
+                                                    <p className="text-slate-500 font-bold text-sm">Please pick a time slot above</p>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
+                                                    {(() => {
+                                                        const availableCourts = locationCourts.filter(court => {
+                                                            const av = locationAvailability.get(court.id);
+                                                            if (!av) return false;
+                                                            for (const slot of locationSelectedSlots) {
+                                                                if (av.blocked.has(slot) || av.booked.has(slot)) return false;
+                                                            }
+                                                            if (court.status !== 'Available' && court.status !== 'Fully Booked') return false;
+                                                            return true;
+                                                        });
+
+                                                        if (availableCourts.length === 0 && !isCheckingLocationAvailability) {
+                                                            return (
+                                                                <div className="col-span-full flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
+                                                                    <Ban size={32} className="text-slate-300 mb-3" />
+                                                                    <p className="text-slate-500 font-bold text-sm">No courts available at {slotsToRange(locationSelectedSlots)}</p>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        return availableCourts.map(court => (
+                                                            <button
+                                                                key={court.id}
+                                                                onClick={() => {
+                                                                    if (window.innerWidth < 768) {
+                                                                        setShowCourtDetails(true);
+                                                                    }
+                                                                    setHeroCourtId(court.id);
+                                                                    handleBooking(); 
+                                                                }}
+                                                                className="group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 transition-all duration-300 ease-out text-left h-[100px]"
+                                                            >
+                                                                <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
+                                                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                                                                    <span className="absolute bottom-1 right-1 bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md">Available</span>
+                                                                </div>
+                                                                <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
+                                                                    <p className="font-black text-sm text-slate-900 truncate group-hover:text-[#1E40AF] transition-colors">{court.name}</p>
+                                                                    <p className="text-[10px] font-bold text-slate-500 mb-1 truncate">{court.type}</p>
+                                                                    <div className="mt-auto flex items-center justify-between">
+                                                                        <p className="text-xs font-black text-[#1E40AF]">
+                                                                            {(() => {
+                                                                                const range = locationSlotPriceRanges.get(court.id);
+                                                                                if (range?.hasRules && range.min !== range.max) {
+                                                                                    return `₱${range.min}–₱${range.max}/hr`;
+                                                                                }
+                                                                                return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
+                                                                            })()}
+                                                                        </p>
+                                                                        <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                                            <CheckCircle2 size={12} />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    )
                                 )}
                             </div>
 
@@ -1853,7 +2348,7 @@ const GuestBooking: React.FC = () => {
             </div>
 
             {/* ──────────── MOBILE BOTTOM BAR — hidden in location/court detail ──────────── */}
-            {isMobile && !urlLocationId && (
+            {isMobile && !activeLocationId && (
                 <nav className="fixed bottom-14 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
                     <div className="flex justify-center items-center gap-2 px-4 py-2.5">
                         <button
@@ -2046,6 +2541,39 @@ const GuestBooking: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL ──────────── */}
+            {showLocationEntryModal && selectedLocation && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="p-6 sm:p-8 text-center space-y-5">
+                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto">
+                                <MapPin size={32} className="text-[#1E40AF]" />
+                            </div>
+                            <div className="space-y-2">
+                                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">You are about to book in</h2>
+                                <p className="text-lg font-black text-[#1E40AF] uppercase tracking-wide">{selectedLocation.name}</p>
+                                <p className="text-sm text-slate-500 font-medium">{selectedLocation.address}, {selectedLocation.city}</p>
+                            </div>
+                            <div className="space-y-3 pt-2">
+                                <button
+                                    onClick={confirmLocationEntry}
+                                    className="w-full py-3.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
+                                >
+                                    Confirm & Continue
+                                </button>
+                                <button
+                                    onClick={cancelLocationEntry}
+                                    className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                                >
+                                    Go Back
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
             {/* ──────────── FILTER SIDEBAR ──────────── */}
             {showFilters && ReactDOM.createPortal(
