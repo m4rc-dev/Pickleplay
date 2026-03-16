@@ -162,10 +162,6 @@ const LocationsList: React.FC = () => {
     const barangayDropdownRef = useRef<HTMLDivElement>(null);
     const isEditLoadingRef = useRef(false);
 
-    // Operation hours state
-    const [formOpeningTime, setFormOpeningTime] = useState('08:00');
-    const [formClosingTime, setFormClosingTime] = useState('18:00');
-
     // Location closures calendar state (Edit only)
     const [closures, setClosures] = useState<LocationClosure[]>([]);
     const [closureCalendarMonth, setClosureCalendarMonth] = useState(new Date());
@@ -430,8 +426,6 @@ const LocationsList: React.FC = () => {
         setFormImagePreview(null);
         setFormCourtType('Indoor');
         setFormStatus('Active');
-        setFormOpeningTime('08:00');
-        setFormClosingTime('18:00');
         setClosures([]);
         setSelectedClosureDate(null);
         setClosureReason('Holiday');
@@ -484,9 +478,7 @@ const LocationsList: React.FC = () => {
                     longitude: previewCoords?.lng || 120.9842,
                     is_active: true,
                     image_url: imageUrl,
-                    court_type: formCourtType,
-                    opening_time: formOpeningTime,
-                    closing_time: formClosingTime
+                    court_type: formCourtType
                 });
 
             if (error) throw error;
@@ -535,9 +527,7 @@ const LocationsList: React.FC = () => {
                     image_url: imageUrl,
                     court_type: formCourtType,
                     status: formStatus,
-                    is_active: formStatus === 'Active',
-                    opening_time: formOpeningTime,
-                    closing_time: formClosingTime
+                    is_active: formStatus === 'Active'
                 })
                 .eq('id', editingLocation.id);
 
@@ -631,8 +621,6 @@ const LocationsList: React.FC = () => {
         setAmenitySearch('');
         setIsAmenityDropdownOpen(false);
         setFormCleaningTime(loc.base_cleaning_time || 0);
-        setFormOpeningTime(loc.opening_time || '08:00');
-        setFormClosingTime(loc.closing_time || '18:00');
         fetchClosures(loc.id);
         setSelectedClosureDate(null);
         setClosureCalendarMonth(new Date());
@@ -1449,7 +1437,7 @@ const LocationsList: React.FC = () => {
                         TIP: Drag the marker or click map to refine location
                     </p>
 
-                    {/* ── Court Type, Status & Hours ── */}
+                    {/* ── Court Type & Status ── */}
                     <div className="space-y-4 pt-2">
                         {/* Court Type Selector */}
                         <div className="space-y-2">
@@ -1479,32 +1467,6 @@ const LocationsList: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                        </div>
-
-                        {/* Operation Hours */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Operation Hours</label>
-                            <div className="flex items-center gap-3">
-                                <div className="flex-1 relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-emerald-500 uppercase tracking-widest">Open</div>
-                                    <select value={formOpeningTime} onChange={e => setFormOpeningTime(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer">
-                                        {Array.from({ length: 24 }, (_, i) => { const h = i.toString().padStart(2, '0'); const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`; return <option key={h} value={`${h}:00`}>{label}</option>; })}
-                                    </select>
-                                </div>
-                                <span className="text-slate-300 font-black text-xs">to</span>
-                                <div className="flex-1 relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-rose-400 uppercase tracking-widest">Close</div>
-                                    <select value={formClosingTime} onChange={e => setFormClosingTime(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-16 pr-4 outline-none focus:ring-4 focus:ring-blue-500/10 font-bold text-sm text-slate-900 appearance-none cursor-pointer">
-                                        {Array.from({ length: 24 }, (_, i) => { const h = i.toString().padStart(2, '0'); const label = i === 0 ? '12:00 AM' : i < 12 ? `${i.toString().padStart(2, '0')}:00 AM` : i === 12 ? '12:00 PM' : `${(i - 12).toString().padStart(2, '0')}:00 PM`; return <option key={h} value={`${h}:00`}>{label}</option>; })}
-                                    </select>
-                                </div>
-                            </div>
-                            <p className="text-[9px] text-slate-400 ml-4">
-                                <Clock size={10} className="inline mr-1 -mt-0.5" />
-                                Only time slots within these hours will be available for booking.
-                            </p>
                         </div>
                     </div>
                 </div>

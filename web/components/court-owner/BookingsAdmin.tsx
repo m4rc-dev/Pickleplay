@@ -20,6 +20,7 @@ interface BookingRecord {
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
     payment_status?: 'paid' | 'unpaid' | 'refunded';
     payment_method?: string;
+    payment_proof_status?: 'awaiting_payment' | 'proof_submitted' | 'payment_verified' | 'payment_rejected' | null;
     is_checked_in?: boolean;
     checked_in_at?: string;
     checked_out_at?: string;
@@ -43,6 +44,15 @@ interface BookingRecord {
         };
     };
     is_guest?: boolean; // Added for payment receipt logic
+    booking_payments?: {
+        id: string;
+        status?: string | null;
+        payment_type?: string | null;
+        proof_image_url?: string | null;
+        reference_number?: string | null;
+        account_name?: string | null;
+        created_at?: string | null;
+    }[];
 }
 
 // Helper: resolve display name/email/avatar for a booking (guest vs player)
@@ -78,7 +88,7 @@ const BookingsAdmin: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
 
     // Action modals
-    const [confirmModal, setConfirmModal] = useState<{ type: 'confirm' | 'cancel' | 'delete' | 'refund'; booking: BookingRecord } | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ type: 'verify' | 'cancel' | 'delete' | 'refund'; booking: BookingRecord } | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
     // Three-dot menu
@@ -94,7 +104,7 @@ const BookingsAdmin: React.FC = () => {
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
     const [displayMode, setDisplayMode] = useState<'calendar' | 'list'>('calendar');
     const [calendarMonth, setCalendarMonth] = useState(new Date());
-    const [legendFilter, setLegendFilter] = useState<'none' | 'partial' | 'half' | 'almost' | 'full' | 'available' | 'booked' | 'expired' | ''>('');
+    const [legendFilter, setLegendFilter] = useState<'none' | 'partial' | 'half' | 'almost' | 'full' | 'available' | 'booked' | 'expired' | 'pending' | ''>('');
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [calendarAnimKey, setCalendarAnimKey] = useState(0);
     const [filterAnimKey, setFilterAnimKey] = useState(0);
@@ -192,7 +202,8 @@ const BookingsAdmin: React.FC = () => {
                     .select(`
                         *,
                         profiles (full_name, email, avatar_url, username),
-                        courts!inner (name, owner_id, location_id, locations(name))
+                        courts!inner (name, owner_id, location_id, locations(name)),
+                        booking_payments (id, status, payment_type, proof_image_url, reference_number, account_name, created_at)
                     `)
                     .eq('courts.owner_id', user.id)
                     .order('created_at', { ascending: false }),
@@ -251,13 +262,48 @@ const BookingsAdmin: React.FC = () => {
         }
     };
 
+    const verifyBookingPayment = async (booking: BookingRecord) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) throw new Error('Please log in again to verify payment.');
+
+        const paymentCandidates = [...(booking.booking_payments || [])].sort((a, b) =>
+            new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+        );
+        const paymentToVerify = paymentCandidates.find((p) => p.status === 'pending' || p.status === 'submitted' || !p.status) || paymentCandidates[0];
+
+        if (!paymentToVerify?.id) {
+            throw new Error('No payment record found for this booking.');
+        }
+
+        const { error: paymentError } = await supabase
+            .from('booking_payments')
+            .update({
+                status: 'verified',
+                verified_by: user.id,
+                verified_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', paymentToVerify.id);
+
+        if (paymentError) throw paymentError;
+
+        const { error: bookingError } = await supabase
+            .from('bookings')
+            .update({ status: 'confirmed', payment_status: 'paid', payment_proof_status: 'payment_verified' })
+            .eq('id', booking.id);
+
+        if (bookingError) throw bookingError;
+    };
+
     const handleConfirmAction = async () => {
         if (!confirmModal) return;
         setActionLoading(true);
         try {
             const { type, booking } = confirmModal;
-            if (type === 'confirm') {
-                await updateBookingStatus(booking.id, 'confirmed');
+            if (type === 'verify') {
+                await verifyBookingPayment(booking);
+                await fetchBookings();
             } else if (type === 'cancel') {
                 await updateBookingStatus(booking.id, 'cancelled');
             } else if (type === 'delete') {
@@ -823,30 +869,21 @@ const BookingsAdmin: React.FC = () => {
                 open,
                 close,
                 isClosed: true,
-                segments: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }>,
+                segments: [] as Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string }>,
             };
         }
 
         const dayBookings = calendarSourceBookings
             .filter((b) => b.court_id === courtId && b.date === dateKey)
             .map((b) => ({
+                booking: b,
                 start: Math.max(openMin, toMinutes(b.start_time.slice(0, 5))),
                 end: Math.min(closeMin, toMinutes(b.end_time.slice(0, 5))),
             }))
             .filter((r) => r.end > r.start)
             .sort((a, b) => a.start - b.start);
 
-        const merged: Array<{ start: number; end: number }> = [];
-        for (const interval of dayBookings) {
-            const last = merged[merged.length - 1];
-            if (!last || interval.start > last.end) {
-                merged.push({ ...interval });
-            } else {
-                last.end = Math.max(last.end, interval.end);
-            }
-        }
-
-        const segments: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }> = [];
+        const segments: Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string }> = [];
 
         const pushFreeOrExpired = (startMin: number, endMin: number) => {
             if (endMin <= startMin) return;
@@ -871,11 +908,12 @@ const BookingsAdmin: React.FC = () => {
         };
 
         let cursor = openMin;
-        for (const block of merged) {
+        for (const block of dayBookings) {
             if (block.start > cursor) {
                 pushFreeOrExpired(cursor, block.start);
             }
-            segments.push({ type: 'booked', start: minutesToHHMM(block.start), end: minutesToHHMM(block.end) });
+            const pending = block.booking.payment_proof_status === 'proof_submitted' || block.booking.payment_status === 'unpaid';
+            segments.push({ type: pending ? 'pending' : 'booked', start: minutesToHHMM(block.start), end: minutesToHHMM(block.end) });
             cursor = Math.max(cursor, block.end);
         }
         if (cursor < closeMin) {
@@ -898,8 +936,8 @@ const BookingsAdmin: React.FC = () => {
                 open,
                 close,
                 isClosed: true,
-                slotTags: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }>,
-                bookedDetails: [] as Array<{ id: string; userName: string; avatarUrl?: string | null; start: string; end: string }>,
+                slotTags: [] as Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }>,
+                bookedDetails: [] as Array<{ id: string; userName: string; avatarUrl?: string | null; start: string; end: string; status: 'booked' | 'pending'; paymentStatus?: string; paymentProofStatus?: string | null }>,
             };
         }
 
@@ -927,19 +965,24 @@ const BookingsAdmin: React.FC = () => {
 
         const bookedDetails = dayBookings.map(({ booking, start, end }) => {
             const user = getBookingUser(booking);
+            const isPending = booking.payment_proof_status === 'proof_submitted' || booking.payment_status === 'unpaid';
             return {
                 id: booking.id,
                 userName: user.name,
                 avatarUrl: user.avatarUrl,
                 start: minutesToHHMM(start),
                 end: minutesToHHMM(end),
+                status: isPending ? 'pending' : 'booked' as const,
+                paymentStatus: booking.payment_status,
+                paymentProofStatus: booking.payment_proof_status,
             };
         });
 
         const bookedTags = dayBookings.map(({ booking, start, end }) => {
             const user = getBookingUser(booking);
+            const isPending = booking.payment_proof_status === 'proof_submitted' || booking.payment_status === 'unpaid';
             return {
-                type: 'booked' as const,
+                type: isPending ? 'pending' as const : 'booked' as const,
                 start: minutesToHHMM(start),
                 end: minutesToHHMM(end),
                 userName: user.name,
@@ -947,7 +990,7 @@ const BookingsAdmin: React.FC = () => {
             };
         });
 
-        const slotTags: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }> = [
+        const slotTags: Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }> = [
             ...bookedTags,
             ...hourlySlots
                 .filter((slot) => slot.type !== 'booked')
@@ -1051,6 +1094,7 @@ const BookingsAdmin: React.FC = () => {
                                     <>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'available' ? '' : 'available')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'available' ? 'ring-2 ring-emerald-300 bg-emerald-500/28' : 'bg-emerald-500/20'} text-emerald-800 border-emerald-300/50`}>🟢 Available</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'booked' ? '' : 'booked')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'booked' ? 'ring-2 ring-red-300 bg-red-700/26' : 'bg-red-700/18'} text-red-800 border-red-400/55`}>🔴 Booked</button>
+                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'pending' ? '' : 'pending')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'pending' ? 'ring-2 ring-amber-300 bg-amber-400/28' : 'bg-amber-400/20'} text-amber-800 border-amber-300/60`}>🟠 Pending</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
                                     </>
                                 ) : (
@@ -1268,6 +1312,7 @@ const BookingsAdmin: React.FC = () => {
                                                                 .filter((segment) => {
                                                                     if (!legendFilter) return true;
                                                                     if (legendFilter === 'booked') return segment.type === 'booked';
+                                                                    if (legendFilter === 'pending') return segment.type === 'pending';
                                                                     if (legendFilter === 'available') return segment.type === 'free';
                                                                     if (legendFilter === 'expired') return segment.type === 'expired';
                                                                     return true;
@@ -1275,7 +1320,13 @@ const BookingsAdmin: React.FC = () => {
                                                                 .map((segment, idx) => (
                                                                     <div
                                                                         key={`${day.key}-${segment.start}-${segment.end}-${idx}`}
-                                                                        className={`inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 ${segment.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : segment.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                                        className={`inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 ${segment.type === 'booked'
+                                                                                ? 'bg-red-700/18 text-red-800 border-red-400/55'
+                                                                                : segment.type === 'pending'
+                                                                                    ? 'bg-amber-400/20 text-amber-800 border-amber-300/60'
+                                                                                    : segment.type === 'expired'
+                                                                                        ? 'bg-slate-500/18 text-slate-700 border-slate-300/60'
+                                                                                        : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
                                                                     >
                                                                         {formatTime12Compact(segment.start)}-{formatTime12Compact(segment.end)}
                                                                     </div>
@@ -1726,9 +1777,15 @@ const BookingsAdmin: React.FC = () => {
                                                     {detail.slotTags.map((slot, idx) => (
                                                         <span
                                                             key={`${slot.start}-${slot.end}-${idx}`}
-                                                            className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border whitespace-nowrap ${slot.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : slot.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                            className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border whitespace-nowrap ${slot.type === 'booked'
+                                                                    ? 'bg-red-700/18 text-red-800 border-red-400/55'
+                                                                    : slot.type === 'pending'
+                                                                        ? 'bg-amber-400/20 text-amber-800 border-amber-300/60'
+                                                                        : slot.type === 'expired'
+                                                                            ? 'bg-slate-500/18 text-slate-700 border-slate-300/60'
+                                                                            : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
                                                         >
-                                                            {slot.type === 'booked' && slot.userName && (
+                                                            {slot.type !== 'free' && slot.userName && (
                                                                 <img
                                                                     src={slot.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(slot.userName)}&background=random&size=28&font-size=0.4&bold=true`}
                                                                     alt={slot.userName}
@@ -1746,19 +1803,21 @@ const BookingsAdmin: React.FC = () => {
                                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Booked Details</p>
                                                     <div className="flex flex-wrap items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest">
                                                         <span className="px-2 py-1 rounded-full border bg-emerald-500/20 text-emerald-800 border-emerald-300/50">🟢 Available</span>
+                                                        <span className="px-2 py-1 rounded-full border bg-amber-400/20 text-amber-800 border-amber-300/60">🟠 Pending</span>
                                                         <span className="px-2 py-1 rounded-full border bg-red-700/18 text-red-800 border-red-400/55">🔴 Booked</span>
                                                         <span className="px-2 py-1 rounded-full border bg-slate-500/18 text-slate-700 border-slate-300/60">⚫ Expired</span>
                                                     </div>
                                                 </div>
                                                 {detail.bookedDetails.length > 0 ? (
                                                     <div className="max-h-[220px] overflow-y-auto pr-1 border border-slate-200 rounded-2xl bg-slate-50/50">
-                                                        <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0 z-10">
+                                                        <div className="grid grid-cols-[1.2fr_auto_auto] gap-3 px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0 z-10">
                                                             <span>Player</span>
                                                             <span>Schedule</span>
+                                                            <span className="text-right">Status</span>
                                                         </div>
                                                         <div className="divide-y divide-slate-200">
                                                             {detail.bookedDetails.map((b) => (
-                                                                <div key={b.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 items-center text-sm text-slate-700">
+                                                                <div key={b.id} className="grid grid-cols-[1.2fr_auto_auto] gap-3 px-4 py-3 items-center text-sm text-slate-700">
                                                                     <div className="flex items-center gap-2.5 min-w-0">
                                                                         <img
                                                                             src={b.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(b.userName)}&background=random&size=40&font-size=0.42&bold=true`}
@@ -1768,6 +1827,27 @@ const BookingsAdmin: React.FC = () => {
                                                                         <span className="font-semibold truncate">{b.userName}</span>
                                                                     </div>
                                                                     <span className="font-semibold text-slate-600 whitespace-nowrap">{formatTime12Compact(b.start)}-{formatTime12Compact(b.end)}</span>
+                                                                    <div className="flex items-center justify-end gap-2">
+                                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${
+                                                                            b.status === 'pending'
+                                                                                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                                                                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                                                        }`}>
+                                                                            {b.status === 'pending' ? 'Pending' : 'Booked'}
+                                                                        </span>
+                                                                        {b.status === 'pending' && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 shadow-sm"
+                                                                                onClick={() => {
+                                                                                    const full = bookings.find((bk) => bk.id === b.id);
+                                                                                    if (full) setViewingBooking(full);
+                                                                                }}
+                                                                            >
+                                                                                Verify
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -1791,25 +1871,25 @@ const BookingsAdmin: React.FC = () => {
                         <div className="bg-white w-full max-w-md rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
                             <div className="text-center mb-8">
                                 <div className={`w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center ${
-                                    confirmModal.type === 'confirm' ? 'bg-emerald-50' :
+                                    confirmModal.type === 'verify' ? 'bg-emerald-50' :
                                     confirmModal.type === 'refund' ? 'bg-amber-50' :
                                     confirmModal.type === 'delete' ? 'bg-rose-50' :
                                     'bg-rose-50'
                                 }`}>
-                                    {confirmModal.type === 'confirm' && <CheckCircle size={32} className="text-emerald-600" />}
+                                    {confirmModal.type === 'verify' && <CheckCircle size={32} className="text-emerald-600" />}
                                     {confirmModal.type === 'cancel' && <XCircle size={32} className="text-rose-500" />}
                                     {confirmModal.type === 'delete' && <Trash2 size={32} className="text-rose-600" />}
                                     {confirmModal.type === 'refund' && <RefreshCw size={32} className="text-amber-600" />}
                                 </div>
                                 <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-2">
-                                    {confirmModal.type === 'confirm' && 'Confirm Booking'}
+                                    {confirmModal.type === 'verify' && 'Verify Payment'}
                                     {confirmModal.type === 'cancel' && 'Cancel Booking'}
                                     {confirmModal.type === 'delete' && 'Delete Booking'}
                                     {confirmModal.type === 'refund' && 'Cancel & Refund'}
                                 </h2>
                                 <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                                    {confirmModal.type === 'confirm' && (
-                                        <>Are you sure you want to confirm the booking for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong> at <strong className="text-slate-900">{confirmModal.booking.courts?.name}</strong>?</>
+                                    {confirmModal.type === 'verify' && (
+                                        <>Verify payment for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong>? This will mark the transaction as verified and update booking status to paid/confirmed.</>
                                     )}
                                     {confirmModal.type === 'cancel' && (
                                         <>Are you sure you want to cancel the booking for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong>? This action cannot be undone.</>
@@ -1859,7 +1939,7 @@ const BookingsAdmin: React.FC = () => {
                                     onClick={handleConfirmAction}
                                     disabled={actionLoading}
                                     className={`flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                        confirmModal.type === 'confirm' ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200' :
+                                        confirmModal.type === 'verify' ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200' :
                                         confirmModal.type === 'refund' ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-200' :
                                         'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200'
                                     }`}
@@ -1868,7 +1948,7 @@ const BookingsAdmin: React.FC = () => {
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (
                                         <>
-                                            {confirmModal.type === 'confirm' && 'Yes, Confirm'}
+                                            {confirmModal.type === 'verify' && 'Yes, Verify'}
                                             {confirmModal.type === 'cancel' && 'Yes, Cancel'}
                                             {confirmModal.type === 'delete' && 'Delete Forever'}
                                             {confirmModal.type === 'refund' && 'Cancel & Refund'}
@@ -2507,6 +2587,63 @@ const BookingsAdmin: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Payment Proof */}
+                            <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Proof</p>
+                                        <p className="text-sm font-black text-slate-900">Uploaded screenshot & reference</p>
+                                    </div>
+                                    {viewingBooking.payment_proof_status && (
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                                            viewingBooking.payment_proof_status === 'payment_verified'
+                                                ? 'bg-lime-50 border-lime-200 text-lime-700'
+                                                : viewingBooking.payment_proof_status === 'payment_rejected'
+                                                    ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                                        }`}>
+                                            {viewingBooking.payment_proof_status.replace('_', ' ')}
+                                        </span>
+                                    )}
+                                </div>
+                                {(() => {
+                                    const proof = (viewingBooking.booking_payments || [])
+                                        .filter(p => p.proof_image_url)
+                                        .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())[0];
+                                    if (!proof) {
+                                        return <p className="text-sm font-medium text-slate-500">No proof submitted.</p>;
+                                    }
+                                    return (
+                                        <div className="flex flex-col md:flex-row gap-4 items-start">
+                                            <div className="w-full md:w-1/2">
+                                                <img src={proof.proof_image_url || ''} alt="Payment proof" className="w-full rounded-xl border border-slate-200 shadow-sm object-cover" />
+                                            </div>
+                                            <div className="flex-1 space-y-2 text-sm text-slate-700">
+                                                {proof.reference_number && (
+                                                    <p className="font-semibold">Reference: <span className="font-bold text-slate-900">{proof.reference_number}</span></p>
+                                                )}
+                                                {proof.payment_type && (
+                                                    <p className="font-semibold capitalize">Method: <span className="font-bold text-slate-900">{proof.payment_type}</span></p>
+                                                )}
+                                                {proof.account_name && (
+                                                    <p className="font-semibold">Account: <span className="font-bold text-slate-900">{proof.account_name}</span></p>
+                                                )}
+                                                <div className="flex flex-wrap gap-2">
+                                                    <a
+                                                        href={proof.proof_image_url || '#'}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-black uppercase tracking-widest hover:bg-blue-100"
+                                                    >
+                                                        Open Full Size
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
                             {/* Timestamp Section */}
                             <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-2xl p-5 border border-slate-100 mb-8">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Clock size={12} className="text-blue-600" /> Booking Timestamps</p>
@@ -2671,10 +2808,10 @@ const BookingsAdmin: React.FC = () => {
                                 )}
                                 {viewingBooking.status === 'pending' && (
                                     <button
-                                        onClick={() => { setViewingBooking(null); setConfirmModal({ type: 'confirm', booking: viewingBooking }); }}
+                                        onClick={() => { setViewingBooking(null); setConfirmModal({ type: 'verify', booking: viewingBooking }); }}
                                         className="h-14 px-6 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-95"
                                     >
-                                        <CheckCircle size={16} /> Confirm
+                                        <CheckCircle size={16} /> Verify
                                     </button>
                                 )}
                                 {viewingBooking.status !== 'cancelled' && viewingBooking.status !== 'completed' && (
