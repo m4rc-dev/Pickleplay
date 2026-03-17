@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, HelpCircle, Sparkles, BookOpen, MessageCircle, Mail, Search, TrendingUp, Clock, CheckCircle2, User, AlertCircle, X } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import useSEO from '../hooks/useSEO';
 
 const FAQ_ITEMS = [
   {
@@ -113,6 +114,28 @@ const FAQ: React.FC = () => {
   });
 
   const categories = ['All', ...FAQ_ITEMS.map(cat => cat.category)];
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ_ITEMS.flatMap((category) =>
+      category.questions.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      }))
+    ),
+  };
+
+  useSEO({
+    title: 'Pickleball FAQ Philippines - Courts, Booking, Coaches and Tournaments',
+    description:
+      'Get answers about pickleball court booking, tournaments, coaches, equipment, payments, and support in the Philippines with PicklePlay.',
+    canonical: 'https://www.pickleplay.ph/faq',
+    structuredData: faqSchema,
+  });
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,7 +211,7 @@ const FAQ: React.FC = () => {
         </div>
         <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(-1)}
             className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm"
           >
             <ArrowLeft size={16} /> Back

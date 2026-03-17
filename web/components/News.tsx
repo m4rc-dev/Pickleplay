@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, ArrowUpRight } from 'lucide-react';
+import useSEO from '../hooks/useSEO';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface ApiArticle {
@@ -84,6 +85,15 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
     sourceUrl: raw.url || raw.external_url || '',
   };
 }
+
+const buildNewsArticlePath = (article: NormalizedArticle) => {
+  const safeSlug = (article.slug || article.title || 'article')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `/news/${article.id}/${safeSlug || 'article'}`;
+};
 
 function formatDateLong(dateStr: string) {
   if (!dateStr) return '';
@@ -374,6 +384,7 @@ const NewsSkeleton: React.FC = () => (
 // ─── Main News Component ────────────────────────────────────────
 const News: React.FC = () => {
   const navigate = useNavigate();
+  const { articleId } = useParams<{ articleId?: string }>();
   const [articles, setArticles] = useState<NormalizedArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -413,8 +424,35 @@ const News: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (articleId) return;
     fetchArticles(page);
-  }, [page, fetchArticles]);
+  }, [articleId, page, fetchArticles]);
+
+  const fetchArticleDetail = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/news/articles/${id}`);
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      const result = await response.json();
+      const rawArticle: ApiArticle | null = result?.data || result?.article || result || null;
+      if (!rawArticle) throw new Error('Article not found');
+      setSelectedArticle(normalizeArticle(rawArticle, 0));
+    } catch (err: any) {
+      setSelectedArticle(null);
+      setError(err.message || 'Failed to load article');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!articleId) {
+      setSelectedArticle(null);
+      return;
+    }
+    fetchArticleDetail(articleId);
+  }, [articleId, fetchArticleDetail]);
 
   const handleImageError = (articleId: string) => {
     setImageErrors(prev => new Set(prev).add(articleId));
@@ -425,9 +463,56 @@ const News: React.FC = () => {
     return imageErrors.has(article.id) ? FALLBACK_IMAGE : article.image;
   };
 
+  useSEO(
+    articleId && selectedArticle
+      ? {
+          title: `${selectedArticle.title} | Pickleball News Philippines`,
+          description: selectedArticle.excerpt,
+          canonical: `https://www.pickleplay.ph${buildNewsArticlePath(selectedArticle)}`,
+          ogType: 'article',
+          image: selectedArticle.image,
+          structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'NewsArticle',
+            headline: selectedArticle.title,
+            description: selectedArticle.excerpt,
+            image: [selectedArticle.image],
+            author: {
+              '@type': 'Person',
+              name: selectedArticle.author,
+            },
+            datePublished: selectedArticle.rawDate || undefined,
+            dateModified: selectedArticle.rawDate || undefined,
+            mainEntityOfPage: `https://www.pickleplay.ph${buildNewsArticlePath(selectedArticle)}`,
+            publisher: {
+              '@type': 'Organization',
+              name: 'PicklePlay Philippines',
+              logo: {
+                '@type': 'ImageObject',
+                url: 'https://www.pickleplay.ph/images/PicklePlayLogo.jpg',
+              },
+            },
+          },
+        }
+      : {
+          title: 'Pickleball News Philippines | PicklePlay',
+          description:
+            'Stay updated with pickleball news in the Philippines, including tournaments, player highlights, community stories, and local updates.',
+          canonical: 'https://www.pickleplay.ph/news',
+          structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: 'Pickleball News Philippines',
+            url: 'https://www.pickleplay.ph/news',
+            description:
+              'Latest pickleball news, stories, and community updates from the Philippines.',
+          },
+        }
+  );
+
   // ── Article Detail ──
-  if (selectedArticle) {
-    return <ArticleDetail article={selectedArticle} onBack={() => setSelectedArticle(null)} />;
+  if (articleId && selectedArticle) {
+    return <ArticleDetail article={selectedArticle} onBack={() => navigate('/news')} />;
   }
 
   // Get unique categories
@@ -552,13 +637,13 @@ const News: React.FC = () => {
       {featuredArticle && (
         <div
           className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden cursor-pointer group"
-          onClick={() => setSelectedArticle(featuredArticle)}
+          onClick={() => navigate(buildNewsArticlePath(featuredArticle))}
         >
           <div className="flex flex-col lg:flex-row">
             <div className="lg:w-3/5 relative aspect-[16/10] lg:aspect-auto overflow-hidden">
               <img
                 src={getArticleImage(featuredArticle)}
-                alt=""
+                alt={featuredArticle.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 min-h-[280px] lg:min-h-[360px]"
                 onError={() => handleImageError(featuredArticle.id)}
               />
@@ -630,13 +715,13 @@ const News: React.FC = () => {
                 <div
                   key={article.id}
                   className="group cursor-pointer rounded-[20px] sm:rounded-[24px] border border-slate-100 hover:border-blue-200 bg-white hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col"
-                  onClick={() => setSelectedArticle(article)}
+                  onClick={() => navigate(buildNewsArticlePath(article))}
                 >
                   {/* Image */}
                   <div className="aspect-[16/10] overflow-hidden relative">
                     <img
                       src={getArticleImage(article)}
-                      alt=""
+                      alt={article.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={() => handleImageError(article.id)}
                     />
