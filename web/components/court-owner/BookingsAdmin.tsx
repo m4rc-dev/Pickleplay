@@ -276,17 +276,34 @@ const BookingsAdmin: React.FC = () => {
             throw new Error('No payment record found for this booking.');
         }
 
+        const verifiedAt = new Date().toISOString();
+
         const { error: paymentError } = await supabase
             .from('booking_payments')
             .update({
                 status: 'verified',
                 verified_by: user.id,
-                verified_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
+                verified_at: verifiedAt,
+                updated_at: verifiedAt,
             })
             .eq('id', paymentToVerify.id);
 
         if (paymentError) throw paymentError;
+
+        // Keep booking_payments and bookings in sync even when there are multiple
+        // payment submissions for the same booking.
+        const { error: syncPaymentsError } = await supabase
+            .from('booking_payments')
+            .update({
+                status: 'verified',
+                verified_by: user.id,
+                verified_at: verifiedAt,
+                updated_at: verifiedAt,
+            })
+            .eq('booking_id', booking.id)
+            .in('status', ['pending', 'submitted']);
+
+        if (syncPaymentsError) throw syncPaymentsError;
 
         const { error: bookingError } = await supabase
             .from('bookings')
@@ -1092,6 +1109,7 @@ const BookingsAdmin: React.FC = () => {
                                 <span className="text-slate-400">Legend:</span>
                                 {courtFilter ? (
                                     <>
+                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'available' ? '' : 'available')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'available' ? 'ring-2 ring-emerald-300 bg-emerald-500/28' : 'bg-emerald-500/20'} text-emerald-800 border-emerald-300/50`}>🟢 Available</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'booked' ? '' : 'booked')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'booked' ? 'ring-2 ring-red-300 bg-red-700/26' : 'bg-red-700/18'} text-red-800 border-red-400/55`}>🔴 Booked</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'pending' ? '' : 'pending')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'pending' ? 'ring-2 ring-amber-300 bg-amber-400/28' : 'bg-amber-400/20'} text-amber-800 border-amber-300/60`}>🟠 Pending</button>
@@ -1099,6 +1117,7 @@ const BookingsAdmin: React.FC = () => {
                                     </>
                                 ) : (
                                     <>
+                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'none' ? '' : 'none')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'none' ? 'ring-2 ring-lime-400 bg-lime-400/38' : 'bg-lime-400/26'} text-lime-900 border-lime-500/45`}>🟢 No Bookings</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'partial' ? '' : 'partial')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'partial' ? 'ring-2 ring-blue-400 bg-blue-600/32' : 'bg-blue-600/22'} text-blue-900 border-blue-500/50`}>🔵 Partially Booked</button>
@@ -1175,10 +1194,10 @@ const BookingsAdmin: React.FC = () => {
                                                         e.stopPropagation();
                                                         navigate(`/court-pricing?court=${courtFilter}`);
                                                     }}
-                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-300/70 bg-amber-400/15 text-[10px] font-black text-amber-800 tracking-wide hover:bg-amber-400/25 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/70 bg-blue-600/20 text-[10px] font-black text-blue-900 tracking-wide hover:bg-blue-600/30 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
                                                     title="Edit operation hours in Court Pricing"
                                                 >
-                                                    <Clock size={12} className="text-amber-700" />
+                                                    <Clock size={12} className="text-blue-700" />
                                                     <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
                                                 </button>
                                             </div>
@@ -1751,10 +1770,10 @@ const BookingsAdmin: React.FC = () => {
                                             </h2>
                                         </div>
                                         <div className="flex items-start gap-3 md:ml-auto">
-                                            <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 min-w-[220px]">
+                                            <div className="p-3 rounded-xl border border-blue-300 bg-blue-50/80 min-w-[220px]">
                                                 <div className="flex items-center gap-2 whitespace-nowrap">
-                                                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Operational Hours</p>
-                                                    <p className="text-sm md:text-base font-bold text-amber-900">
+                                                    <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Operational Hours</p>
+                                                    <p className="text-sm md:text-base font-bold text-blue-900">
                                                         {detail.isClosed ? 'Closed' : `${formatTime12(detail.open)} - ${formatTime12(detail.close)}`}
                                                     </p>
                                                 </div>
@@ -1802,6 +1821,7 @@ const BookingsAdmin: React.FC = () => {
                                                 <div className="flex items-center justify-between gap-3 mb-2">
                                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Booked Details</p>
                                                     <div className="flex flex-wrap items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest">
+                                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                                         <span className="px-2 py-1 rounded-full border bg-emerald-500/20 text-emerald-800 border-emerald-300/50">🟢 Available</span>
                                                         <span className="px-2 py-1 rounded-full border bg-amber-400/20 text-amber-800 border-amber-300/60">🟠 Pending</span>
                                                         <span className="px-2 py-1 rounded-full border bg-red-700/18 text-red-800 border-red-400/55">🔴 Booked</span>

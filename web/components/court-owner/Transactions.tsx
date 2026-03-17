@@ -236,7 +236,7 @@ const Transactions: React.FC = () => {
       .select(`
         *,
         booking:bookings(
-          id, date, start_time, end_time, total_price, status, payment_status,
+          id, date, start_time, end_time, total_price, status, payment_status, payment_proof_status,
           court:courts(id, name, location_id,
             location:locations(id, name)
           ),
@@ -246,7 +246,27 @@ const Transactions: React.FC = () => {
       .in('booking_id', bookingIds)
       .order('created_at', { ascending: false });
 
-    if (!error && data) setPayments(data as any);
+    if (!error && data) {
+      const normalized = (data as any[]).map((p) => {
+        const booking = p.booking;
+        const bookingPaymentStatus = booking?.payment_status;
+        const bookingProofStatus = booking?.payment_proof_status;
+
+        let normalizedStatus = p.status;
+        if (bookingPaymentStatus === 'paid' || bookingProofStatus === 'payment_verified') {
+          normalizedStatus = 'verified';
+        } else if (bookingProofStatus === 'payment_rejected') {
+          normalizedStatus = 'rejected';
+        }
+
+        return {
+          ...p,
+          status: normalizedStatus,
+        };
+      });
+
+      setPayments(normalized as any);
+    }
   };
 
   // ──────── Handle QR File Select with Auto-Crop ────────
@@ -351,14 +371,21 @@ const Transactions: React.FC = () => {
     if (!user) return;
     setIsVerifying(paymentId);
     try {
+      const payment = payments.find(p => p.id === paymentId);
+
       const { error: paymentError } = await supabase
         .from('booking_payments')
         .update({ status: 'verified', verified_by: user.id, verified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', paymentId);
       if (paymentError) throw paymentError;
 
-      const payment = payments.find(p => p.id === paymentId);
       if (payment) {
+        await supabase
+          .from('booking_payments')
+          .update({ status: 'verified', verified_by: user.id, verified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('booking_id', payment.booking_id)
+          .in('status', ['pending', 'submitted']);
+
         await supabase.from('bookings').update({ status: 'confirmed', payment_status: 'paid', payment_proof_status: 'payment_verified' }).eq('id', payment.booking_id);
 
         // Send payment receipt email
