@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase, createSession, getSecuritySettings } from '../services/supabase';
+import { getCourtManagerLoginState } from '../services/courtManagers';
 import { canAttemptLogin, canRequestPasswordReset } from '../services/rateLimiter';
 import {
     Eye,
@@ -142,7 +143,34 @@ const Login: React.FC = () => {
                 }
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to sign in. Please check your credentials.');
+            const message = err.message || 'Failed to sign in. Please check your credentials.';
+            if (message.toLowerCase().includes('banned')) {
+                try {
+                    const loginState = await getCourtManagerLoginState(email);
+                    if (loginState.state === 'pending_invite_registration') {
+                        setError('This court manager invite setup is not complete yet. Open your invitation link and finish registration first.');
+                    } else if (loginState.state === 'pending_owner_approval') {
+                        if (loginState.restoredLoginAccess) {
+                            const { error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+                            if (!retryError) {
+                                const redirectUrl = searchParams.get('redirect') || '/dashboard';
+                                const storedRedirect = localStorage.getItem('auth_redirect');
+                                localStorage.removeItem('auth_redirect');
+                                navigate(storedRedirect || redirectUrl);
+                                return;
+                            }
+                        }
+
+                        setError('Your Court Manager assignment is still waiting for owner approval. Once approved, Court Manager mode will appear alongside your normal PicklePlay access.');
+                    } else {
+                        setError('This court manager account is not active yet. If you have not finished the invitation, reopen your invite link. If you already completed registration, wait for owner approval.');
+                    }
+                } catch {
+                    setError('This court manager account is not active yet. If you have not finished the invitation, reopen your invite link. If you already completed registration, wait for owner approval.');
+                }
+            } else {
+                setError(message);
+            }
         } finally {
             setLoading(false);
         }

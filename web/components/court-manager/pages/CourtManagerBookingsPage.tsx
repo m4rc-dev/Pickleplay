@@ -1,13 +1,15 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Search, Filter, Download, MoreHorizontal, CheckCircle, XCircle, Clock, MapPin, User, Phone, X, QrCode, Play, ChevronLeft, ChevronRight, Trash2, RefreshCw, AlertTriangle, PhilippinePeso, Ban, Eye, ChevronDown, Banknote, LogIn, LogOut, UserX, Timer, Mail, Users, UserPlus, Building2, Loader2 } from 'lucide-react';
-import { supabase } from '../../services/supabase';
-import { isTimeSlotBlocked } from '../../services/courtEvents';
-import { autoCancelLateBookings } from '../../services/bookings';
-import { sendGuestBookingEmail } from '../../services/guestBookingEmail';
-import { sendPaymentReceiptEmail } from '../../services/paymentReceiptEmail';
-import BookingScanner from './BookingScanner';
+import { supabase } from '../../../services/supabase';
+import { isTimeSlotBlocked } from '../../../services/courtEvents';
+import { autoCancelLateBookings } from '../../../services/bookings';
+import { sendGuestBookingEmail } from '../../../services/guestBookingEmail';
+import { sendPaymentReceiptEmail } from '../../../services/paymentReceiptEmail';
+import BookingScanner from '../../court-owner/BookingScanner';
+import { getCurrentActiveRole, getCurrentCourtManagerContext, performCourtManagerBookingAction } from '../../../services/courtManagers';
+import { CourtManagerScheduleWorkspace } from './CourtManagerSchedulePage';
 
 interface BookingRecord {
     id: string;
@@ -20,7 +22,6 @@ interface BookingRecord {
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
     payment_status?: 'paid' | 'unpaid' | 'refunded';
     payment_method?: string;
-    payment_proof_status?: 'awaiting_payment' | 'proof_submitted' | 'payment_verified' | 'payment_rejected' | null;
     is_checked_in?: boolean;
     checked_in_at?: string;
     checked_out_at?: string;
@@ -44,15 +45,6 @@ interface BookingRecord {
         };
     };
     is_guest?: boolean; // Added for payment receipt logic
-    booking_payments?: {
-        id: string;
-        status?: string | null;
-        payment_type?: string | null;
-        proof_image_url?: string | null;
-        reference_number?: string | null;
-        account_name?: string | null;
-        created_at?: string | null;
-    }[];
 }
 
 // Helper: resolve display name/email/avatar for a booking (guest vs player)
@@ -72,7 +64,7 @@ const DEFAULT_CLOSE_TIME = '18:00';
 const PH_TIMEZONE = 'Asia/Manila';
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-const BookingsAdmin: React.FC = () => {
+const CourtManagerBookingsPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const navigate = useNavigate();
     const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -80,6 +72,7 @@ const BookingsAdmin: React.FC = () => {
     const [myLocations, setMyLocations] = useState<any[]>([]);
     const [courtOperationHoursByCourt, setCourtOperationHoursByCourt] = useState<Record<string, any[]>>({});
     const [isLoading, setIsLoading] = useState(true);
+    const [isManagerRole, setIsManagerRole] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
@@ -88,8 +81,9 @@ const BookingsAdmin: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
 
     // Action modals
-    const [confirmModal, setConfirmModal] = useState<{ type: 'verify' | 'cancel' | 'delete' | 'refund'; booking: BookingRecord } | null>(null);
+    const [confirmModal, setConfirmModal] = useState<{ type: 'confirm' | 'cancel' | 'delete' | 'refund'; booking: BookingRecord } | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
+    const [dayPanelActionKey, setDayPanelActionKey] = useState<string | null>(null);
 
     // Three-dot menu
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -101,10 +95,11 @@ const BookingsAdmin: React.FC = () => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [locationFilter, setLocationFilter] = useState('');
     const [courtFilter, setCourtFilter] = useState('');
+    const [activeDatePreset, setActiveDatePreset] = useState<'' | 'today' | 'week' | 'month'>('');
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-    const [displayMode, setDisplayMode] = useState<'calendar' | 'list'>('calendar');
+    const [displayMode, setDisplayMode] = useState<'calendar' | 'day' | 'list'>('calendar');
     const [calendarMonth, setCalendarMonth] = useState(new Date());
-    const [legendFilter, setLegendFilter] = useState<'none' | 'partial' | 'half' | 'almost' | 'full' | 'available' | 'booked' | 'expired' | 'pending' | ''>('');
+    const [legendFilter, setLegendFilter] = useState<'none' | 'partial' | 'half' | 'almost' | 'full' | 'available' | 'booked' | 'expired' | ''>('');
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [calendarAnimKey, setCalendarAnimKey] = useState(0);
     const [filterAnimKey, setFilterAnimKey] = useState(0);
@@ -183,35 +178,99 @@ const BookingsAdmin: React.FC = () => {
             const { data: { session } } = await supabase.auth.getSession();
             const user = session?.user;
             if (!user) return;
+            const activeRole = await getCurrentActiveRole();
+            const isManager = activeRole === 'COURT_MANAGER';
+            setIsManagerRole(isManager);
 
-            // 1.5 Auto-cancel late bookings to keep owner dashboard updated
-            await autoCancelLateBookings();
+            // Keep owner-facing booking dashboards clean without giving managers broad write access.
+            if (!isManager) {
+                await autoCancelLateBookings();
+            }
 
-            // 2. Parallelize fetching courts, locations, and bookings
-            const [courtsResponse, locationsResponse, bookingsResponse, courtOperationHoursResponse] = await Promise.all([
-                supabase
+            let targetCourtIds: string[] = [];
+            let ownerId = user.id;
+            let managerLocationId = '';
+            let managerCourtId = '';
+
+            if (isManager) {
+                const context = await getCurrentCourtManagerContext();
+                if (!context) {
+                    setMyCourts([]);
+                    setMyLocations([]);
+                    setBookings([]);
+                    setCourtOperationHoursByCourt({});
+                    setLocationFilter('');
+                    setCourtFilter('');
+                    return;
+                }
+                targetCourtIds = [context.court.id];
+                ownerId = context.court.owner_id;
+                managerLocationId = context.court.location_id || '';
+                managerCourtId = context.court.id;
+            }
+
+            const courtsPromise = isManager
+                ? supabase
                     .from('courts')
                     .select('*')
-                    .eq('owner_id', user.id),
-                supabase
+                    .in('id', targetCourtIds)
+                : supabase
+                    .from('courts')
+                    .select('*')
+                    .eq('owner_id', ownerId);
+
+            const locationsPromise = isManager
+                ? managerLocationId
+                    ? supabase
+                        .from('locations')
+                        .select('id, name, city, address')
+                        .eq('id', managerLocationId)
+                    : Promise.resolve({ data: [], error: null } as any)
+                : supabase
                     .from('locations')
                     .select('id, name, city, address, opening_time, closing_time')
-                    .eq('owner_id', user.id),
-                supabase
+                    .eq('owner_id', ownerId);
+
+            const bookingsPromise = isManager
+                ? supabase
                     .from('bookings')
                     .select(`
                         *,
                         profiles (full_name, email, avatar_url, username),
-                        courts!inner (name, owner_id, location_id, locations(name)),
-                        booking_payments (id, status, payment_type, proof_image_url, reference_number, account_name, created_at)
+                        courts!inner (name, owner_id, location_id, locations(name))
                     `)
-                    .eq('courts.owner_id', user.id)
-                    .order('created_at', { ascending: false }),
-                supabase
+                    .in('court_id', targetCourtIds)
+                    .order('created_at', { ascending: false })
+                : supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        profiles (full_name, email, avatar_url, username),
+                        courts!inner (name, owner_id, location_id, locations(name))
+                    `)
+                    .eq('courts.owner_id', ownerId)
+                    .order('created_at', { ascending: false });
+
+            const courtOperationHoursPromise = isManager
+                ? targetCourtIds.length > 0
+                    ? supabase
+                        .from('court_operation_hours')
+                        .select('court_id, day_of_week, specific_date, open_time, close_time, is_closed, is_active')
+                        .in('court_id', targetCourtIds)
+                        .eq('is_active', true)
+                    : Promise.resolve({ data: [], error: null } as any)
+                : supabase
                     .from('court_operation_hours')
                     .select('court_id, day_of_week, specific_date, open_time, close_time, is_closed, is_active')
-                    .eq('owner_id', user.id)
-                    .eq('is_active', true)
+                    .eq('owner_id', ownerId)
+                    .eq('is_active', true);
+
+            // 2. Parallelize fetching courts, locations, and bookings
+            const [courtsResponse, locationsResponse, bookingsResponse, courtOperationHoursResponse] = await Promise.all([
+                courtsPromise,
+                locationsPromise,
+                bookingsPromise,
+                courtOperationHoursPromise,
             ]);
 
             if (courtsResponse.error) throw courtsResponse.error;
@@ -219,8 +278,12 @@ const BookingsAdmin: React.FC = () => {
             if (bookingsResponse.error) throw bookingsResponse.error;
             if (courtOperationHoursResponse.error) throw courtOperationHoursResponse.error;
 
-            setMyCourts(courtsResponse.data || []);
-            setMyLocations(locationsResponse.data || []);
+            const scopedCourts = courtsResponse.data || [];
+            const locationIds = new Set(scopedCourts.map((court: any) => court.location_id).filter(Boolean));
+            const scopedLocations = (locationsResponse.data || []).filter((location: any) => locationIds.size === 0 || locationIds.has(location.id));
+
+            setMyCourts(scopedCourts);
+            setMyLocations(scopedLocations);
             setBookings(bookingsResponse.data || []);
 
             const groupedHours = (courtOperationHoursResponse.data || []).reduce((acc: Record<string, any[]>, row: any) => {
@@ -229,6 +292,11 @@ const BookingsAdmin: React.FC = () => {
                 return acc;
             }, {});
             setCourtOperationHoursByCourt(groupedHours);
+
+            if (isManager) {
+                setLocationFilter(managerLocationId);
+                setCourtFilter(managerCourtId);
+            }
         } catch (err) {
             console.error('Error fetching dashboard data:', err);
         } finally {
@@ -262,55 +330,84 @@ const BookingsAdmin: React.FC = () => {
         }
     };
 
-    const verifyBookingPayment = async (booking: BookingRecord) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
-        if (!user) throw new Error('Please log in again to verify payment.');
+    const handleManagerBookingAction = async (
+        bookingId: string,
+        action: 'confirm' | 'cancel' | 'check_in' | 'check_out' | 'no_show'
+    ) => {
+        try {
+            await performCourtManagerBookingAction(bookingId, action);
+            await fetchBookings();
+        } catch (err: any) {
+            alert(err?.message || 'Failed to update booking.');
+        }
+    };
 
-        const paymentCandidates = [...(booking.booking_payments || [])].sort((a, b) =>
-            new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
-        );
-        const paymentToVerify = paymentCandidates.find((p) => p.status === 'pending' || p.status === 'submitted' || !p.status) || paymentCandidates[0];
-
-        if (!paymentToVerify?.id) {
-            throw new Error('No payment record found for this booking.');
+    const handleCheckIn = async (booking: BookingRecord) => {
+        if (isManagerRole) {
+            await handleManagerBookingAction(booking.id, 'check_in');
+            return;
         }
 
-        const verifiedAt = new Date().toISOString();
-
-        const { error: paymentError } = await supabase
-            .from('booking_payments')
-            .update({
-                status: 'verified',
-                verified_by: user.id,
-                verified_at: verifiedAt,
-                updated_at: verifiedAt,
-            })
-            .eq('id', paymentToVerify.id);
-
-        if (paymentError) throw paymentError;
-
-        // Keep booking_payments and bookings in sync even when there are multiple
-        // payment submissions for the same booking.
-        const { error: syncPaymentsError } = await supabase
-            .from('booking_payments')
-            .update({
-                status: 'verified',
-                verified_by: user.id,
-                verified_at: verifiedAt,
-                updated_at: verifiedAt,
-            })
-            .eq('booking_id', booking.id)
-            .in('status', ['pending', 'submitted']);
-
-        if (syncPaymentsError) throw syncPaymentsError;
-
-        const { error: bookingError } = await supabase
+        const nowIso = new Date().toISOString();
+        const { error } = await supabase
             .from('bookings')
-            .update({ status: 'confirmed', payment_status: 'paid', payment_proof_status: 'payment_verified' })
+            .update({ is_checked_in: true, checked_in_at: nowIso, status: 'confirmed' })
             .eq('id', booking.id);
 
-        if (bookingError) throw bookingError;
+        if (error) {
+            const fallback = await supabase
+                .from('bookings')
+                .update({ status: 'confirmed' })
+                .eq('id', booking.id);
+            if (fallback.error) throw fallback.error;
+        }
+
+        await fetchBookings();
+    };
+
+    const handleCheckOut = async (booking: BookingRecord) => {
+        if (isManagerRole) {
+            await handleManagerBookingAction(booking.id, 'check_out');
+            return;
+        }
+
+        const outNow = new Date().toISOString();
+        const { error } = await supabase
+            .from('bookings')
+            .update({ status: 'completed', checked_out_at: outNow })
+            .eq('id', booking.id);
+
+        if (error) {
+            const fallback = await supabase
+                .from('bookings')
+                .update({ status: 'completed' })
+                .eq('id', booking.id);
+            if (fallback.error) throw fallback.error;
+        }
+
+        await fetchBookings();
+    };
+
+    const handleMarkNoShow = async (booking: BookingRecord) => {
+        if (isManagerRole) {
+            await handleManagerBookingAction(booking.id, 'no_show');
+            return;
+        }
+
+        const { error } = await supabase
+            .from('bookings')
+            .update({ is_no_show: true, status: 'cancelled' })
+            .eq('id', booking.id);
+
+        if (error) {
+            const fallback = await supabase
+                .from('bookings')
+                .update({ status: 'cancelled' })
+                .eq('id', booking.id);
+            if (fallback.error) throw fallback.error;
+        }
+
+        await fetchBookings();
     };
 
     const handleConfirmAction = async () => {
@@ -318,12 +415,22 @@ const BookingsAdmin: React.FC = () => {
         setActionLoading(true);
         try {
             const { type, booking } = confirmModal;
-            if (type === 'verify') {
-                await verifyBookingPayment(booking);
-                await fetchBookings();
+            if (type === 'confirm') {
+                if (isManagerRole) {
+                    await handleManagerBookingAction(booking.id, 'confirm');
+                } else {
+                    await updateBookingStatus(booking.id, 'confirmed');
+                }
             } else if (type === 'cancel') {
-                await updateBookingStatus(booking.id, 'cancelled');
+                if (isManagerRole) {
+                    await handleManagerBookingAction(booking.id, 'cancel');
+                } else {
+                    await updateBookingStatus(booking.id, 'cancelled');
+                }
             } else if (type === 'delete') {
+                if (isManagerRole) {
+                    throw new Error('Court managers cannot delete bookings.');
+                }
                 // Try direct delete first
                 const { error: deleteError } = await supabase.from('bookings').delete().eq('id', booking.id);
                 if (deleteError) {
@@ -338,6 +445,9 @@ const BookingsAdmin: React.FC = () => {
                 // Remove from local state immediately so it disappears
                 setBookings(prev => prev.filter(b => b.id !== booking.id));
             } else if (type === 'refund') {
+                if (isManagerRole) {
+                    throw new Error('Court managers cannot process refunds.');
+                }
                 const { error } = await supabase
                     .from('bookings')
                     .update({ payment_status: 'refunded', status: 'cancelled' })
@@ -448,6 +558,10 @@ const BookingsAdmin: React.FC = () => {
 
     const handleManualBooking = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isManagerRole) {
+            alert('Court managers can manage schedules and check-ins, but manual booking creation stays with the court owner.');
+            return;
+        }
         setIsSubmitting(true);
 
         try {
@@ -886,21 +1000,30 @@ const BookingsAdmin: React.FC = () => {
                 open,
                 close,
                 isClosed: true,
-                segments: [] as Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string }>,
+                segments: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }>,
             };
         }
 
         const dayBookings = calendarSourceBookings
             .filter((b) => b.court_id === courtId && b.date === dateKey)
             .map((b) => ({
-                booking: b,
                 start: Math.max(openMin, toMinutes(b.start_time.slice(0, 5))),
                 end: Math.min(closeMin, toMinutes(b.end_time.slice(0, 5))),
             }))
             .filter((r) => r.end > r.start)
             .sort((a, b) => a.start - b.start);
 
-        const segments: Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string }> = [];
+        const merged: Array<{ start: number; end: number }> = [];
+        for (const interval of dayBookings) {
+            const last = merged[merged.length - 1];
+            if (!last || interval.start > last.end) {
+                merged.push({ ...interval });
+            } else {
+                last.end = Math.max(last.end, interval.end);
+            }
+        }
+
+        const segments: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string }> = [];
 
         const pushFreeOrExpired = (startMin: number, endMin: number) => {
             if (endMin <= startMin) return;
@@ -925,12 +1048,11 @@ const BookingsAdmin: React.FC = () => {
         };
 
         let cursor = openMin;
-        for (const block of dayBookings) {
+        for (const block of merged) {
             if (block.start > cursor) {
                 pushFreeOrExpired(cursor, block.start);
             }
-            const pending = block.booking.payment_proof_status === 'proof_submitted' || block.booking.payment_status === 'unpaid';
-            segments.push({ type: pending ? 'pending' : 'booked', start: minutesToHHMM(block.start), end: minutesToHHMM(block.end) });
+            segments.push({ type: 'booked', start: minutesToHHMM(block.start), end: minutesToHHMM(block.end) });
             cursor = Math.max(cursor, block.end);
         }
         if (cursor < closeMin) {
@@ -953,8 +1075,8 @@ const BookingsAdmin: React.FC = () => {
                 open,
                 close,
                 isClosed: true,
-                slotTags: [] as Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }>,
-                bookedDetails: [] as Array<{ id: string; userName: string; avatarUrl?: string | null; start: string; end: string; status: 'booked' | 'pending'; paymentStatus?: string; paymentProofStatus?: string | null }>,
+                slotTags: [] as Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }>,
+                bookedDetails: [] as Array<{ id: string; userName: string; avatarUrl?: string | null; start: string; end: string; booking: BookingRecord; email: string; isGuest: boolean }>,
             };
         }
 
@@ -982,24 +1104,22 @@ const BookingsAdmin: React.FC = () => {
 
         const bookedDetails = dayBookings.map(({ booking, start, end }) => {
             const user = getBookingUser(booking);
-            const isPending = booking.payment_proof_status === 'proof_submitted' || booking.payment_status === 'unpaid';
             return {
                 id: booking.id,
                 userName: user.name,
                 avatarUrl: user.avatarUrl,
                 start: minutesToHHMM(start),
                 end: minutesToHHMM(end),
-                status: isPending ? 'pending' : 'booked' as const,
-                paymentStatus: booking.payment_status,
-                paymentProofStatus: booking.payment_proof_status,
+                email: user.email,
+                isGuest: user.isGuest,
+                booking,
             };
         });
 
         const bookedTags = dayBookings.map(({ booking, start, end }) => {
             const user = getBookingUser(booking);
-            const isPending = booking.payment_proof_status === 'proof_submitted' || booking.payment_status === 'unpaid';
             return {
-                type: isPending ? 'pending' as const : 'booked' as const,
+                type: 'booked' as const,
                 start: minutesToHHMM(start),
                 end: minutesToHHMM(end),
                 userName: user.name,
@@ -1007,7 +1127,7 @@ const BookingsAdmin: React.FC = () => {
             };
         });
 
-        const slotTags: Array<{ type: 'booked' | 'pending' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }> = [
+        const slotTags: Array<{ type: 'booked' | 'free' | 'expired'; start: string; end: string; userName?: string; avatarUrl?: string | null }> = [
             ...bookedTags,
             ...hourlySlots
                 .filter((slot) => slot.type !== 'booked')
@@ -1026,41 +1146,227 @@ const BookingsAdmin: React.FC = () => {
         return new Date(y, m - 1, d);
     };
 
+    const getManagerBookingStatusBadge = (booking: BookingRecord) => {
+        if (booking.is_no_show) {
+            return {
+                label: 'No-Show',
+                className: 'bg-rose-50 text-rose-700 border-rose-200',
+            };
+        }
+        if (booking.checked_out_at || booking.status === 'completed') {
+            return {
+                label: 'Checked Out',
+                className: 'bg-violet-50 text-violet-700 border-violet-200',
+            };
+        }
+        if (booking.is_checked_in) {
+            return {
+                label: 'Checked In',
+                className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            };
+        }
+        if (booking.status === 'pending') {
+            return {
+                label: 'Pending',
+                className: 'bg-amber-50 text-amber-700 border-amber-200',
+            };
+        }
+        if (booking.payment_status === 'paid') {
+            return {
+                label: 'Confirmed',
+                className: 'bg-blue-50 text-blue-700 border-blue-200',
+            };
+        }
+        return {
+            label: 'Reserved',
+            className: 'bg-slate-100 text-slate-600 border-slate-200',
+        };
+    };
+
+    const getManagerBookingOperationalState = (booking: BookingRecord) => {
+        const now = new Date();
+        const isToday = booking.date === todayDateStr;
+        const start = new Date(`${booking.date}T${booking.start_time}`);
+        const end = new Date(`${booking.date}T${booking.end_time}`);
+        const fiveMinutesBeforeEnd = new Date(end.getTime() - 5 * 60000);
+        const isLate = now > start && !booking.is_checked_in && booking.status !== 'cancelled';
+        const isPastEnd = now > end;
+
+        return {
+            canCheckIn:
+                isToday &&
+                !booking.is_checked_in &&
+                booking.status === 'confirmed' &&
+                booking.payment_status === 'paid' &&
+                !isPastEnd &&
+                !booking.is_no_show,
+            canCheckOut:
+                now >= fiveMinutesBeforeEnd &&
+                booking.is_checked_in &&
+                booking.status !== 'completed' &&
+                !booking.checked_out_at,
+            canMarkNoShow:
+                !booking.is_checked_in &&
+                !booking.is_no_show &&
+                booking.status !== 'cancelled' &&
+                booking.status !== 'completed' &&
+                (isLate || isPastEnd),
+            canConfirm: booking.status === 'pending',
+            canCancel:
+                booking.status !== 'cancelled' &&
+                booking.status !== 'completed' &&
+                booking.payment_status !== 'paid',
+        };
+    };
+
+    const handleDayPanelBookingAction = async (
+        booking: BookingRecord,
+        action: 'check_in' | 'check_out' | 'no_show' | 'confirm' | 'cancel' | 'view'
+    ) => {
+        if (action === 'view') {
+            setScheduleDayModal(null);
+            setViewingBooking(booking);
+            return;
+        }
+
+        if (action === 'confirm' || action === 'cancel') {
+            setConfirmModal({ type: action, booking });
+            return;
+        }
+
+        const nextActionKey = `${booking.id}:${action}`;
+        setDayPanelActionKey(nextActionKey);
+
+        try {
+            if (action === 'check_in') {
+                await handleCheckIn(booking);
+            } else if (action === 'check_out') {
+                await handleCheckOut(booking);
+            } else if (action === 'no_show') {
+                await handleMarkNoShow(booking);
+            }
+        } finally {
+            setDayPanelActionKey(null);
+        }
+    };
+
+    const applyDatePreset = (preset: 'today' | 'week' | 'month') => {
+        const today = getDateFromKey(todayKey);
+
+        if (preset === 'today') {
+            setDateFrom(todayKey);
+            setDateTo(todayKey);
+        } else if (preset === 'week') {
+            const weekStart = new Date(today);
+            const offset = (weekStart.getDay() + 6) % 7;
+            weekStart.setDate(weekStart.getDate() - offset);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+            setDateFrom(getDateKey(weekStart));
+            setDateTo(getDateKey(weekEnd));
+        } else {
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            setDateFrom(getDateKey(monthStart));
+            setDateTo(getDateKey(monthEnd));
+        }
+
+        setActiveDatePreset(preset);
+        setShowDatePicker(false);
+    };
+
     const selectedLocationName = locationFilter
         ? (myLocations.find((l: any) => l.id === locationFilter)?.name || 'Location')
         : 'Location';
     const selectedCourtName = courtFilter
         ? (myCourts.find((c: any) => c.id === courtFilter)?.name || 'Court')
         : 'Court';
+    const managerLocationName = locationFilter
+        ? selectedLocationName
+        : (myLocations[0]?.name || 'Assigned Location');
+    const managerCourtName = courtFilter
+        ? selectedCourtName
+        : (myCourts[0]?.name || 'Assigned Court');
+    const isCompactManagerCalendar = isManagerRole && displayMode === 'calendar';
+    const isManagerDayView = isManagerRole && displayMode === 'day';
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-            {displayMode === 'calendar' ? (
-                <div key={`calendar-shell-${filterAnimKey}`} className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-6 md:p-8 animate-in fade-in duration-300">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-6">
+        <div className={`animate-in fade-in duration-700 ${isCompactManagerCalendar || isManagerDayView ? 'space-y-6 pb-8' : 'space-y-8 pb-12'}`}>
+            {isManagerRole && (
+                <div className="flex justify-end">
+                    <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+                        {[
+                            { key: 'calendar' as const, label: 'Month' },
+                            { key: 'day' as const, label: 'Day' },
+                            { key: 'list' as const, label: 'List' },
+                        ].map((option) => (
+                            <button
+                                key={option.key}
+                                type="button"
+                                onClick={() => setDisplayMode(option.key)}
+                                className={`rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest transition-all ${
+                                    displayMode === option.key
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {isManagerDayView ? (
+                <CourtManagerScheduleWorkspace
+                    lockedViewMode="day"
+                    showViewToggle={false}
+                    contextLabel="Court Manager / Bookings"
+                />
+            ) : displayMode === 'calendar' ? (
+                <div key={`calendar-shell-${filterAnimKey}`} className={`bg-white border border-slate-100 shadow-sm animate-in fade-in duration-300 ${isCompactManagerCalendar ? 'rounded-[32px] p-5 md:p-6' : 'rounded-[40px] p-6 md:p-8'}`}>
+                    <div className={`flex flex-col justify-between ${isCompactManagerCalendar ? 'gap-5 mb-5 md:flex-row md:items-center' : 'gap-6 mb-6 md:flex-row md:items-start'}`}>
                         <div>
-                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Court Bookings</h1>
-                            <p className="text-slate-500 font-medium tracking-tight">Administrative control for court reservations.</p>
+                            <h1 className={`font-black text-slate-900 tracking-tighter uppercase mb-2 ${isCompactManagerCalendar ? 'text-3xl md:text-[2.8rem]' : 'text-4xl'}`}>Court Bookings</h1>
+                            <p className="text-slate-500 font-medium tracking-tight">
+                                {isManagerRole
+                                    ? 'Single-court operational view for schedules, check-ins, and court-side booking updates.'
+                                    : 'Administrative control for court reservations.'}
+                            </p>
                             <div key={`crumbs-${filterAnimKey}`} className="mt-3 flex flex-wrap items-center gap-2 text-sm font-black uppercase tracking-widest animate-in fade-in duration-300">
-                                <button
-                                    type="button"
-                                    onClick={() => { setLocationFilter(''); setCourtFilter(''); }}
-                                    className={`px-3 py-1.5 rounded-xl border transition-all ${!locationFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
-                                >
-                                    All Location
-                                </button>
-                                <span className="text-slate-300">&gt;</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setCourtFilter('')}
-                                    className={`px-3 py-1.5 rounded-xl border transition-all ${locationFilter && !courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
-                                >
-                                    {locationFilter ? selectedLocationName : 'Court'}
-                                </button>
-                                <span className="text-slate-300">&gt;</span>
-                                <span className={`px-3 py-1.5 rounded-xl border ${courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                                    {courtFilter ? selectedCourtName : 'Schedules'}
-                                </span>
+                                {isManagerRole ? (
+                                    <>
+                                        <span className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600">
+                                            {managerLocationName}
+                                        </span>
+                                        <span className="text-slate-300">&gt;</span>
+                                        <span className="px-3 py-1.5 rounded-xl border border-blue-600 bg-blue-600 text-white shadow-sm">
+                                            {managerCourtName}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setLocationFilter(''); setCourtFilter(''); }}
+                                            className={`px-3 py-1.5 rounded-xl border transition-all ${!locationFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
+                                        >
+                                            All Location
+                                        </button>
+                                        <span className="text-slate-300">&gt;</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCourtFilter('')}
+                                            className={`px-3 py-1.5 rounded-xl border transition-all ${locationFilter && !courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'}`}
+                                        >
+                                            {locationFilter ? selectedLocationName : 'Court'}
+                                        </button>
+                                        <span className="text-slate-300">&gt;</span>
+                                        <span className={`px-3 py-1.5 rounded-xl border ${courtFilter ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                            {courtFilter ? selectedCourtName : 'Schedules'}
+                                        </span>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -1070,7 +1376,7 @@ const BookingsAdmin: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={() => setShowMonthPicker(v => !v)}
-                                    className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight hover:text-blue-700 transition-colors"
+                                    className={`max-w-full font-black text-slate-900 tracking-tight leading-none hover:text-blue-700 transition-colors ${isCompactManagerCalendar ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl'}`}
                                 >
                                     {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                                 </button>
@@ -1109,15 +1415,12 @@ const BookingsAdmin: React.FC = () => {
                                 <span className="text-slate-400">Legend:</span>
                                 {courtFilter ? (
                                     <>
-                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'available' ? '' : 'available')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'available' ? 'ring-2 ring-emerald-300 bg-emerald-500/28' : 'bg-emerald-500/20'} text-emerald-800 border-emerald-300/50`}>🟢 Available</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'booked' ? '' : 'booked')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'booked' ? 'ring-2 ring-red-300 bg-red-700/26' : 'bg-red-700/18'} text-red-800 border-red-400/55`}>🔴 Booked</button>
-                                        <button type="button" onClick={() => setLegendFilter(legendFilter === 'pending' ? '' : 'pending')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'pending' ? 'ring-2 ring-amber-300 bg-amber-400/28' : 'bg-amber-400/20'} text-amber-800 border-amber-300/60`}>🟠 Pending</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'none' ? '' : 'none')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'none' ? 'ring-2 ring-lime-400 bg-lime-400/38' : 'bg-lime-400/26'} text-lime-900 border-lime-500/45`}>🟢 No Bookings</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'expired' ? '' : 'expired')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'expired' ? 'ring-2 ring-slate-300 bg-slate-500/28' : 'bg-slate-500/18'} text-slate-700 border-slate-300/60`}>⚫ Expired</button>
                                         <button type="button" onClick={() => setLegendFilter(legendFilter === 'partial' ? '' : 'partial')} className={`px-2 py-1 rounded-full border backdrop-blur-sm transition-all ${legendFilter === 'partial' ? 'ring-2 ring-blue-400 bg-blue-600/32' : 'bg-blue-600/22'} text-blue-900 border-blue-500/50`}>🔵 Partially Booked</button>
@@ -1146,17 +1449,182 @@ const BookingsAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
+            {!(displayMode === 'calendar' && isManagerRole) && (
+                <div className={`flex flex-col gap-6 ${displayMode === 'calendar' ? 'md:items-center md:justify-end' : 'md:flex-row md:items-end md:justify-between'}`}>
+                    {displayMode !== 'calendar' && (
+                        <div>
+                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Court Bookings</h1>
+                            <p className="text-slate-500 font-medium tracking-tight">
+                                {isManagerRole
+                                    ? 'Single-court operational view for schedules, check-ins, and court-side booking updates.'
+                                    : 'Administrative control for court reservations.'}
+                            </p>
+                        </div>
+                    )}
 
-                    <div className="grid grid-cols-7 gap-2 mb-2">
+                    {!isManagerRole && (
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowScanner(true)}
+                                className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                            >
+                                <QrCode size={18} /> Scan QR Code
+                            </button>
+                            <button
+                                onClick={handleExportCSV}
+                                className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+                            >
+                                <Download size={18} /> Export Data
+                            </button>
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="px-8 py-4 bg-lime-400 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-lime-500 transition-all shadow-xl shadow-lime-900/20 active:scale-95"
+                            >
+                                New Booking
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Filters Bar */}
+            <div className={`bg-white border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 ${isCompactManagerCalendar ? 'p-3 rounded-[28px]' : 'p-4 rounded-[32px]'}`}>
+                <div className="flex-1 relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                        type="text"
+                        placeholder={isManagerRole ? 'Search player name or booking ID' : 'Search by name, ID or court...'}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={`w-full pl-12 pr-6 bg-slate-50 border border-transparent outline-none transition-all font-medium focus:bg-white focus:border-blue-200 ${isCompactManagerCalendar ? 'py-3 rounded-2xl text-sm' : 'py-4 rounded-[20px]'}`}
+                    />
+                </div>
+                <div className="flex gap-3">
+                    {/* Date Range Filter */}
+                    <div className="relative" ref={datePickerRef}>
+                        <button
+                            onClick={() => setShowDatePicker(!showDatePicker)}
+                            className={`flex items-center gap-2 border font-black text-[10px] uppercase tracking-widest transition-all ${isCompactManagerCalendar ? 'px-4 py-3 rounded-2xl' : 'px-6 py-4 rounded-[20px]'} ${
+                                dateFrom || dateTo
+                                    ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                    : 'bg-slate-50 border-transparent text-slate-600 hover:bg-white hover:border-slate-200'
+                            }`}
+                        >
+                            <Calendar size={16} />
+                            {dateFrom || dateTo ? (
+                                <span className="max-w-[140px] truncate">
+                                    {dateFrom ? new Date(dateFrom + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Start'}
+                                    {' → '}
+                                    {dateTo ? new Date(dateTo + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'End'}
+                                </span>
+                            ) : 'Date Range'}
+                            <ChevronDown size={14} className={`transition-transform ${showDatePicker ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showDatePicker && (
+                            <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 p-5 min-w-[280px] animate-in fade-in zoom-in-95 duration-200">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Filter by date</p>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">From</label>
+                                        <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActiveDatePreset(''); }}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium outline-none focus:border-blue-300 transition-all" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-500 mb-1 block">To</label>
+                                        <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActiveDatePreset(''); }}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium outline-none focus:border-blue-300 transition-all" />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-4">
+                                    <button onClick={() => { setDateFrom(''); setDateTo(''); setActiveDatePreset(''); }} className="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 rounded-xl transition-all border border-slate-200">Clear</button>
+                                    <button onClick={() => setShowDatePicker(false)} className="flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-blue-600 rounded-xl transition-all">Apply</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { key: 'today' as const, label: 'Today' },
+                            { key: 'week' as const, label: 'This Week' },
+                            { key: 'month' as const, label: 'This Month' },
+                        ].map((preset) => (
+                            <button
+                                key={preset.key}
+                                type="button"
+                                onClick={() => applyDatePreset(preset.key)}
+                                className={`px-3.5 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    activeDatePreset === preset.key
+                                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700'
+                                }`}
+                            >
+                                {preset.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {!isManagerRole && (
+                        <div className="relative" ref={locationDropdownRef}>
+                            <button
+                                onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                                className={`flex items-center gap-2 px-6 py-4 border rounded-[20px] font-black text-[10px] uppercase tracking-widest transition-all ${
+                                    locationFilter
+                                        ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                        : 'bg-slate-50 border-transparent text-slate-600 hover:bg-white hover:border-slate-200'
+                                }`}
+                            >
+                                <Filter size={16} />
+                                <span className="max-w-[140px] truncate">{locationFilter ? (myLocations.find(l => l.id === locationFilter)?.name || 'Location') : 'All Locations'}</span>
+                                <ChevronDown size={14} className={`transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showLocationDropdown && (
+                                <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 min-w-[240px] max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                                    <button
+                                        onClick={() => { setLocationFilter(''); setShowLocationDropdown(false); }}
+                                        className={`w-full text-left px-5 py-3.5 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
+                                            !locationFilter ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
+                                        }`}
+                                    >
+                                        <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${!locationFilter ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                            {!locationFilter && <CheckCircle size={10} className="text-blue-600" />}
+                                        </span>
+                                        All Locations
+                                    </button>
+                                    {myLocations.map(loc => (
+                                        <button
+                                            key={loc.id}
+                                            onClick={() => { setLocationFilter(loc.id); setShowLocationDropdown(false); }}
+                                            className={`w-full text-left px-5 py-3.5 hover:bg-slate-50 transition-colors font-bold text-sm flex items-center gap-3 ${
+                                                locationFilter === loc.id ? 'text-blue-600 bg-blue-50/50' : 'text-slate-700'
+                                            }`}
+                                        >
+                                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${locationFilter === loc.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`}>
+                                                {locationFilter === loc.id && <CheckCircle size={10} className="text-blue-600" />}
+                                            </span>
+                                            <div>
+                                                <p>{loc.name}</p>
+                                                {loc.city && <p className="text-[10px] text-slate-400 font-medium">{loc.city}</p>}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+                    <div className={`grid grid-cols-7 mb-2 ${isCompactManagerCalendar ? 'gap-1.5' : 'gap-2'}`}>
                         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                             <div key={day} className="px-2 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">{day}</div>
                         ))}
                     </div>
 
-                    <div key={`${calendarAnimKey}-${filterAnimKey}`} className="grid grid-cols-1 md:grid-cols-7 gap-2 animate-in fade-in duration-300">
+                    <div key={`${calendarAnimKey}-${filterAnimKey}`} className={`grid grid-cols-1 md:grid-cols-7 animate-in fade-in duration-300 ${isCompactManagerCalendar ? 'gap-1.5' : 'gap-2'}`}>
                         {calendarDays.map((day) => {
                             if ((day as any).isPlaceholder) {
-                                return <div key={day.key} className="min-h-[180px] rounded-2xl border border-transparent bg-transparent" />;
+                                return <div key={day.key} className={`${isCompactManagerCalendar ? 'min-h-[140px]' : 'min-h-[180px]'} rounded-2xl border border-transparent bg-transparent`} />;
                             }
 
                             const dayBookings = calendarSourceBookings.filter((b) => b.date === day.key);
@@ -1172,7 +1640,7 @@ const BookingsAdmin: React.FC = () => {
                                             setScheduleDayModal({ courtId: courtFilter, dateKey: day.key });
                                         }
                                     }}
-                                    className={`group min-h-[180px] rounded-2xl border p-2.5 md:p-3 relative overflow-visible transition-all duration-300 ${isCourtScheduleView ? 'min-h-[210px]' : ''} ${
+                                    className={`group rounded-2xl border relative overflow-visible transition-all duration-300 ${isCompactManagerCalendar ? 'min-h-[140px] p-2' : 'min-h-[180px] p-2.5 md:p-3'} ${isCourtScheduleView ? (isCompactManagerCalendar ? 'min-h-[160px]' : 'min-h-[210px]') : ''} ${
                                         isPastDay
                                             ? 'bg-slate-100 border-slate-200 opacity-65'
                                             : 'bg-white border-slate-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-blue-100/70 hover:border-blue-300'
@@ -1186,20 +1654,29 @@ const BookingsAdmin: React.FC = () => {
                                     )}
                                     {isCourtScheduleView ? (
                                         <>
-                                            <div className="flex items-center mb-2 gap-1.5">
-                                                <span className={`text-base font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        navigate(`/court-pricing?court=${courtFilter}`);
-                                                    }}
-                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/70 bg-blue-600/20 text-[10px] font-black text-blue-900 tracking-wide hover:bg-blue-600/30 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
-                                                    title="Edit operation hours in Court Pricing"
-                                                >
-                                                    <Clock size={12} className="text-blue-700" />
-                                                    <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
-                                                </button>
+                                            <div className={`mb-2 ${isManagerRole ? 'space-y-1.5' : 'flex items-center gap-1.5'}`}>
+                                                <span className={`${isCompactManagerCalendar ? 'text-sm' : 'text-base'} font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
+                                                {isManagerRole ? (
+                                                    <span className="inline-flex w-full max-w-full items-center gap-1.5 rounded-2xl border border-amber-300/70 bg-amber-400/15 px-2 py-1 text-[9px] font-black tracking-wide text-amber-800">
+                                                        <Clock size={11} className="shrink-0 text-amber-700" />
+                                                        <span className="min-w-0 break-words leading-tight">
+                                                            {courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigate(`/court-pricing?court=${courtFilter}`);
+                                                        }}
+                                                        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300/70 bg-amber-400/15 px-2.5 py-1 text-[10px] font-black tracking-wide text-amber-800 transition-all hover:bg-amber-400/25"
+                                                        title="Edit operation hours in Court Pricing"
+                                                    >
+                                                        <Clock size={12} className="shrink-0 text-amber-700" />
+                                                        <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </>
                                     ) : (
@@ -1319,6 +1796,66 @@ const BookingsAdmin: React.FC = () => {
                                         <div className="space-y-2 max-h-[130px] overflow-y-auto pr-1">
                                             {(() => {
                                                 const detail = courtScheduleDetail!;
+
+                                                if (isManagerRole) {
+                                                    const visibleBookings = [...dayBookings]
+                                                        .sort((a, b) => toMinutes(a.start_time.slice(0, 5)) - toMinutes(b.start_time.slice(0, 5)))
+                                                        .slice(0, 2);
+                                                    const hiddenBookingCount = Math.max(0, dayBookings.length - visibleBookings.length);
+
+                                                    return (
+                                                        <>
+                                                            {detail.isClosed ? (
+                                                                <div className="rounded-xl border border-slate-300 bg-slate-200/60 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700">
+                                                                    Closed
+                                                                </div>
+                                                            ) : visibleBookings.length > 0 ? (
+                                                                <div className="space-y-1.5">
+                                                                    {visibleBookings.map((booking) => {
+                                                                        const bookingUser = getBookingUser(booking);
+                                                                        const statusBadge = getManagerBookingStatusBadge(booking);
+
+                                                                        return (
+                                                                            <div
+                                                                                key={booking.id}
+                                                                                className="rounded-xl border border-slate-200 bg-slate-50/90 px-2.5 py-2 shadow-sm"
+                                                                            >
+                                                                                <div className="flex items-start justify-between gap-2">
+                                                                                    <p className="min-w-0 truncate text-[10px] font-black uppercase tracking-wide text-slate-900">
+                                                                                        {bookingUser.name}
+                                                                                    </p>
+                                                                                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${statusBadge.className}`}>
+                                                                                        {statusBadge.label}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="mt-1 flex items-center justify-between gap-2 text-[9px] font-bold text-slate-500">
+                                                                                    <span className="truncate">
+                                                                                        {formatTime12Compact(booking.start_time.slice(0, 5))}-{formatTime12Compact(booking.end_time.slice(0, 5))}
+                                                                                    </span>
+                                                                                    {bookingUser.isGuest && (
+                                                                                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-700">
+                                                                                            Guest
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                    {hiddenBookingCount > 0 && (
+                                                                        <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
+                                                                            +{hiddenBookingCount} more booking{hiddenBookingCount > 1 ? 's' : ''}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                                                    No bookings
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                }
+
                                                 return (
                                                     <>
                                                         {detail.isClosed && (
@@ -1331,7 +1868,6 @@ const BookingsAdmin: React.FC = () => {
                                                                 .filter((segment) => {
                                                                     if (!legendFilter) return true;
                                                                     if (legendFilter === 'booked') return segment.type === 'booked';
-                                                                    if (legendFilter === 'pending') return segment.type === 'pending';
                                                                     if (legendFilter === 'available') return segment.type === 'free';
                                                                     if (legendFilter === 'expired') return segment.type === 'expired';
                                                                     return true;
@@ -1339,13 +1875,7 @@ const BookingsAdmin: React.FC = () => {
                                                                 .map((segment, idx) => (
                                                                     <div
                                                                         key={`${day.key}-${segment.start}-${segment.end}-${idx}`}
-                                                                        className={`inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 ${segment.type === 'booked'
-                                                                                ? 'bg-red-700/18 text-red-800 border-red-400/55'
-                                                                                : segment.type === 'pending'
-                                                                                    ? 'bg-amber-400/20 text-amber-800 border-amber-300/60'
-                                                                                    : segment.type === 'expired'
-                                                                                        ? 'bg-slate-500/18 text-slate-700 border-slate-300/60'
-                                                                                        : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                                        className={`inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 ${segment.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : segment.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
                                                                     >
                                                                         {formatTime12Compact(segment.start)}-{formatTime12Compact(segment.end)}
                                                                     </div>
@@ -1499,13 +2029,8 @@ const BookingsAdmin: React.FC = () => {
                                                             <button
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
-                                                                    const outNow = new Date().toISOString();
                                                                     try {
-                                                                        const { error } = await supabase.from('bookings').update({ status: 'completed', checked_out_at: outNow }).eq('id', booking.id);
-                                                                        if (error) {
-                                                                            await supabase.from('bookings').update({ status: 'completed' }).eq('id', booking.id);
-                                                                        }
-                                                                        fetchBookings();
+                                                                        await handleCheckOut(booking);
                                                                     } catch (err) { console.error(err); }
                                                                 }}
                                                                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-violet-600 text-white hover:bg-violet-700 transition-all active:scale-95 shadow-sm"
@@ -1524,37 +2049,34 @@ const BookingsAdmin: React.FC = () => {
                                                             <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-50 border border-amber-200 text-amber-700">
                                                                 <Timer size={12} /> Late
                                                             </span>
-                                                            <button
-                                                                onClick={async (e) => {
-                                                                    e.stopPropagation();
-                                                                    const b = booking;
-                                                                    setViewingBooking(null);
-                                                                    setPayingBooking(null);
-                                                                    if (b.payment_status !== 'paid') {
-                                                                        setPayingBooking(b);
-                                                                        setPayCashReceived('');
-                                                                        setPayChange(0);
-                                                                        setPayError('');
-                                                                    } else {
-                                                                        const now2 = new Date().toISOString();
-                                                                        try {
-                                                                            const { error } = await supabase.from('bookings').update({ is_checked_in: true, checked_in_at: now2, status: 'confirmed' }).eq('id', b.id);
-                                                                            if (error) await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', b.id);
-                                                                            fetchBookings();
-                                                                        } catch (err) { console.error(err); }
-                                                                    }
-                                                                }}
-                                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-600 text-white hover:bg-amber-700 transition-all active:scale-95 shadow-sm"
-                                                            >
-                                                                <LogIn size={10} /> Late Check-In
-                                                            </button>
+                                                            {(!isManagerRole || booking.payment_status === 'paid') && (
+                                                                <button
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        const b = booking;
+                                                                        setViewingBooking(null);
+                                                                        setPayingBooking(null);
+                                                                        if (b.payment_status !== 'paid' && !isManagerRole) {
+                                                                            setPayingBooking(b);
+                                                                            setPayCashReceived('');
+                                                                            setPayChange(0);
+                                                                            setPayError('');
+                                                                        } else {
+                                                                            try {
+                                                                                await handleCheckIn(b);
+                                                                            } catch (err) { console.error(err); }
+                                                                        }
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-600 text-white hover:bg-amber-700 transition-all active:scale-95 shadow-sm"
+                                                                >
+                                                                    <LogIn size={10} /> {booking.payment_status !== 'paid' ? 'Late Pay & Check-In' : 'Late Check-In'}
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
                                                                     try {
-                                                                        const { error } = await supabase.from('bookings').update({ is_no_show: true, status: 'cancelled' }).eq('id', booking.id);
-                                                                        if (error) await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id);
-                                                                        fetchBookings();
+                                                                        await handleMarkNoShow(booking);
                                                                     } catch (err) { console.error(err); }
                                                                 }}
                                                                 className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-rose-100 text-rose-600 hover:bg-rose-200 transition-all active:scale-95"
@@ -1576,8 +2098,7 @@ const BookingsAdmin: React.FC = () => {
                                                                 onClick={async (e) => {
                                                                     e.stopPropagation();
                                                                     try {
-                                                                        await supabase.from('bookings').update({ is_no_show: true, status: 'cancelled' }).eq('id', booking.id);
-                                                                        fetchBookings();
+                                                                        await handleMarkNoShow(booking);
                                                                     } catch (err) { console.error(err); }
                                                                 }}
                                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 transition-all"
@@ -1645,7 +2166,7 @@ const BookingsAdmin: React.FC = () => {
                                                                 >
                                                                     <Eye size={16} /> View Details
                                                                 </button>
-                                                                {isPaid && booking.status !== 'cancelled' && (
+                                                                {!isManagerRole && isPaid && booking.status !== 'cancelled' && (
                                                                     <button
                                                                         onClick={() => { setOpenMenuId(null); setConfirmModal({ type: 'refund', booking }); }}
                                                                         className="w-full text-left px-5 py-3.5 hover:bg-amber-50 transition-colors text-sm font-bold text-amber-600 flex items-center gap-3"
@@ -1654,7 +2175,7 @@ const BookingsAdmin: React.FC = () => {
                                                                     </button>
                                                                 )}
 
-                                                                {booking.status !== 'cancelled' && (
+                                                                {booking.status !== 'cancelled' && (!isManagerRole || !isPaid) && (
                                                                     <button
                                                                         onClick={() => {
                                                                             setOpenMenuId(null);
@@ -1669,13 +2190,17 @@ const BookingsAdmin: React.FC = () => {
                                                                         <Ban size={16} /> {isPaid ? 'Cancel & Refund' : 'Cancel Booking'}
                                                                     </button>
                                                                 )}
-                                                                <div className="border-t border-slate-100"></div>
-                                                                <button
-                                                                    onClick={() => { setOpenMenuId(null); setConfirmModal({ type: 'delete', booking }); }}
-                                                                    className="w-full text-left px-5 py-3.5 hover:bg-rose-50 transition-colors text-sm font-bold text-rose-600 flex items-center gap-3"
-                                                                >
-                                                                    <Trash2 size={16} /> Delete Booking
-                                                                </button>
+                                                                {!isManagerRole && (
+                                                                    <>
+                                                                        <div className="border-t border-slate-100"></div>
+                                                                        <button
+                                                                            onClick={() => { setOpenMenuId(null); setConfirmModal({ type: 'delete', booking }); }}
+                                                                            className="w-full text-left px-5 py-3.5 hover:bg-rose-50 transition-colors text-sm font-bold text-rose-600 flex items-center gap-3"
+                                                                        >
+                                                                            <Trash2 size={16} /> Delete Booking
+                                                                        </button>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </>,
                                                         document.body
@@ -1756,39 +2281,281 @@ const BookingsAdmin: React.FC = () => {
             )}
                 {/* Court Schedule Day Modal */}
                 {scheduleDayModal && ReactDOM.createPortal(
-                    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[210] flex items-center justify-center p-6 animate-in fade-in duration-300" onClick={() => setScheduleDayModal(null)}>
+                    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[210] flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300" onClick={() => setScheduleDayModal(null)}>
                         {(() => {
                             const detail = buildCourtDayModalDetails(scheduleDayModal.courtId, scheduleDayModal.dateKey);
                             const selectedDate = getDateFromKey(scheduleDayModal.dateKey);
+                            const visibleFlowTags = detail.slotTags.slice(0, 10);
+                            const hiddenFlowTagCount = Math.max(0, detail.slotTags.length - visibleFlowTags.length);
+                            const bookedCount = detail.bookedDetails.length;
+                            const freeCount = detail.slotTags.filter((slot) => slot.type === 'free').length;
+                            const expiredCount = detail.slotTags.filter((slot) => slot.type === 'expired').length;
                             return (
-                                <div className="bg-white w-full max-w-3xl rounded-[32px] p-6 md:p-8 shadow-2xl animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-5">
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Court Schedule</p>
-                                            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                                <div className="bg-white w-full max-w-5xl rounded-[30px] p-5 md:p-6 shadow-2xl animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col gap-4 border-b border-slate-100 pb-5">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.35em] mb-2">
+                                                    {isManagerRole ? 'Manager Operations' : 'Court Schedule'}
+                                                </p>
+                                                <h2 className="text-2xl md:text-[2rem] font-black text-slate-900 tracking-tight leading-none">
                                                 {selectedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                                            </h2>
-                                        </div>
-                                        <div className="flex items-start gap-3 md:ml-auto">
-                                            <div className="p-3 rounded-xl border border-blue-300 bg-blue-50/80 min-w-[220px]">
-                                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                                    <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Operational Hours</p>
-                                                    <p className="text-sm md:text-base font-bold text-blue-900">
-                                                        {detail.isClosed ? 'Closed' : `${formatTime12(detail.open)} - ${formatTime12(detail.close)}`}
-                                                    </p>
-                                                </div>
+                                                </h2>
+                                                <p className="mt-2 text-sm font-medium text-slate-500">
+                                                    {isManagerRole
+                                                        ? 'Focus on bookings, check-ins, and court-side updates for this assigned court.'
+                                                        : 'Daily schedule details for this court.'}
+                                                </p>
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => setScheduleDayModal(null)}
-                                                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors text-slate-500"
+                                                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors text-slate-500 shrink-0"
                                             >
                                                 <X size={20} />
                                             </button>
                                         </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                            <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                                                <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Operational Hours</p>
+                                                <div className="mt-1 flex items-center gap-2 text-sm font-bold text-amber-900">
+                                                    <Clock size={14} className="shrink-0" />
+                                                    <span>{detail.isClosed ? 'Closed' : `${formatTime12(detail.open)} - ${formatTime12(detail.close)}`}</span>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Bookings</p>
+                                                <p className="mt-1 text-2xl font-black text-slate-900">{bookedCount}</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+                                                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Open Blocks</p>
+                                                <p className="mt-1 text-2xl font-black text-emerald-700">{freeCount}</p>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-100/90 px-4 py-3">
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Expired Blocks</p>
+                                                <p className="mt-1 text-2xl font-black text-slate-700">{expiredCount}</p>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {!detail.isClosed && (
+                                    {isManagerRole && (
+                                        <div className="mt-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(260px,0.9fr)] gap-5">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center justify-between gap-3 mb-3">
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bookings Queue</p>
+                                                        <p className="text-sm font-medium text-slate-500">Booked players stay first. Flow tags move to the side.</p>
+                                                    </div>
+                                                    <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700">
+                                                        {bookedCount} active booking{bookedCount === 1 ? '' : 's'}
+                                                    </span>
+                                                </div>
+
+                                                {detail.isClosed ? (
+                                                    <div className="rounded-[28px] border border-slate-300 bg-slate-100 px-5 py-8 text-center">
+                                                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Court Closed</p>
+                                                        <p className="mt-2 text-sm font-medium text-slate-500">
+                                                            This day is closed in the assigned-court schedule, so no manager actions are needed here.
+                                                        </p>
+                                                    </div>
+                                                ) : detail.bookedDetails.length > 0 ? (
+                                                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                                                        {detail.bookedDetails.map((b) => {
+                                                            const bookingUser = getBookingUser(b.booking);
+                                                            const statusBadge = getManagerBookingStatusBadge(b.booking);
+                                                            const operationState = getManagerBookingOperationalState(b.booking);
+                                                            const bookingReference = b.booking.id.slice(0, 8).toUpperCase();
+
+                                                            return (
+                                                                <div key={b.id} className="rounded-[26px] border border-slate-200 bg-slate-50/90 p-4 shadow-sm">
+                                                                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                                        <div className="min-w-0">
+                                                                            <div className="flex items-start gap-3">
+                                                                                <img
+                                                                                    src={b.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(b.userName)}&background=random&size=64&font-size=0.42&bold=true`}
+                                                                                    alt={b.userName}
+                                                                                    className="w-11 h-11 rounded-2xl object-cover border border-white shadow-sm shrink-0"
+                                                                                />
+                                                                                <div className="min-w-0">
+                                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                                        <p className="text-base font-black text-slate-900 truncate">{b.userName}</p>
+                                                                                        <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${statusBadge.className}`}>
+                                                                                            {statusBadge.label}
+                                                                                        </span>
+                                                                                        {bookingUser.isGuest && (
+                                                                                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700">
+                                                                                                Guest
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500">
+                                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                                            <Clock size={12} className="text-blue-600" />
+                                                                                            {formatTime12Compact(b.start)} - {formatTime12Compact(b.end)}
+                                                                                        </span>
+                                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                                            <Mail size={12} className="text-blue-600" />
+                                                                                            <span className="truncate">{b.email}</span>
+                                                                                        </span>
+                                                                                        <span className="inline-flex items-center gap-1.5">
+                                                                                            <Timer size={12} className="text-blue-600" />
+                                                                                            Booking ID {bookingReference}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 min-w-[180px]">
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Booking Snapshot</p>
+                                                                            <div className="mt-2 space-y-1.5 text-[11px] font-bold text-slate-600">
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <span>Payment</span>
+                                                                                    <span className="capitalize text-slate-900">{b.booking.payment_status || 'unpaid'}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <span>Status</span>
+                                                                                    <span className="capitalize text-slate-900">{b.booking.status}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <span>Check-In</span>
+                                                                                    <span className="text-slate-900">{b.booking.is_checked_in ? 'Done' : 'Waiting'}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="mt-4 flex flex-wrap gap-2">
+                                                                        {operationState.canCheckIn && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => void handleDayPanelBookingAction(b.booking, 'check_in')}
+                                                                                disabled={dayPanelActionKey === `${b.booking.id}:check_in`}
+                                                                                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-emerald-700 disabled:opacity-60"
+                                                                            >
+                                                                                {dayPanelActionKey === `${b.booking.id}:check_in` ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
+                                                                                Check In
+                                                                            </button>
+                                                                        )}
+                                                                        {operationState.canCheckOut && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => void handleDayPanelBookingAction(b.booking, 'check_out')}
+                                                                                disabled={dayPanelActionKey === `${b.booking.id}:check_out`}
+                                                                                className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-60"
+                                                                            >
+                                                                                {dayPanelActionKey === `${b.booking.id}:check_out` ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                                                                                Check Out
+                                                                            </button>
+                                                                        )}
+                                                                        {operationState.canMarkNoShow && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => void handleDayPanelBookingAction(b.booking, 'no_show')}
+                                                                                disabled={dayPanelActionKey === `${b.booking.id}:no_show`}
+                                                                                className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-rose-700 transition-all hover:bg-rose-100 disabled:opacity-60"
+                                                                            >
+                                                                                {dayPanelActionKey === `${b.booking.id}:no_show` ? <Loader2 size={14} className="animate-spin" /> : <UserX size={14} />}
+                                                                                Mark No-Show
+                                                                            </button>
+                                                                        )}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void handleDayPanelBookingAction(b.booking, 'view')}
+                                                                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 transition-all hover:border-blue-200 hover:text-blue-700"
+                                                                        >
+                                                                            <Eye size={14} />
+                                                                            View Booking Details
+                                                                        </button>
+                                                                        {operationState.canConfirm && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => void handleDayPanelBookingAction(b.booking, 'confirm')}
+                                                                                className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-amber-700 transition-all hover:bg-amber-100"
+                                                                            >
+                                                                                <CheckCircle size={14} />
+                                                                                Confirm Booking
+                                                                            </button>
+                                                                        )}
+                                                                        {operationState.canCancel && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => void handleDayPanelBookingAction(b.booking, 'cancel')}
+                                                                                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-rose-200 hover:text-rose-600"
+                                                                            >
+                                                                                <XCircle size={14} />
+                                                                                Cancel Booking
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <div className="rounded-[28px] border border-dashed border-emerald-200 bg-emerald-50/70 px-5 py-10 text-center">
+                                                        <p className="text-[11px] font-black uppercase tracking-widest text-emerald-700">No bookings on this day</p>
+                                                        <p className="mt-2 text-sm font-medium text-emerald-800/70">
+                                                            Availability stays open for normal player booking flow.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="rounded-[26px] border border-slate-200 bg-slate-50/90 p-4">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Day Flow</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-500">
+                                                        Keep the schedule overview compact while bookings stay front and center.
+                                                    </p>
+                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                        {visibleFlowTags.map((slot, idx) => (
+                                                            <span
+                                                                key={`${slot.start}-${slot.end}-${idx}`}
+                                                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                                                                    slot.type === 'booked'
+                                                                        ? 'bg-red-50 text-red-700 border-red-200'
+                                                                        : slot.type === 'expired'
+                                                                            ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                                                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                }`}
+                                                            >
+                                                                {slot.type === 'booked' && <Users size={11} className="shrink-0" />}
+                                                                {slot.type === 'free' && <CheckCircle size={11} className="shrink-0" />}
+                                                                {slot.type === 'expired' && <Clock size={11} className="shrink-0" />}
+                                                                {formatTime12Compact(slot.start)}-{formatTime12Compact(slot.end)}
+                                                            </span>
+                                                        ))}
+                                                        {hiddenFlowTagCount > 0 && (
+                                                            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                                                                +{hiddenFlowTagCount} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="rounded-[26px] border border-blue-100 bg-blue-50/70 p-4">
+                                                    <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Manager Focus</p>
+                                                    <ul className="mt-3 space-y-2 text-sm font-medium text-blue-900/80">
+                                                        <li className="flex items-start gap-2">
+                                                            <CheckCircle size={14} className="mt-0.5 shrink-0 text-blue-600" />
+                                                            Prioritize player check-ins and no-show cleanup before editing anything else.
+                                                        </li>
+                                                        <li className="flex items-start gap-2">
+                                                            <Eye size={14} className="mt-0.5 shrink-0 text-blue-600" />
+                                                            Use booking details when you need the full record, payment state, or contact info.
+                                                        </li>
+                                                        <li className="flex items-start gap-2">
+                                                            <Building2 size={14} className="mt-0.5 shrink-0 text-blue-600" />
+                                                            This panel stays limited to your assigned court only.
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!isManagerRole && !detail.isClosed && (
                                         <>
                                             <div className="mb-5">
                                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Slot Tags</p>
@@ -1796,15 +2563,9 @@ const BookingsAdmin: React.FC = () => {
                                                     {detail.slotTags.map((slot, idx) => (
                                                         <span
                                                             key={`${slot.start}-${slot.end}-${idx}`}
-                                                            className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border whitespace-nowrap ${slot.type === 'booked'
-                                                                    ? 'bg-red-700/18 text-red-800 border-red-400/55'
-                                                                    : slot.type === 'pending'
-                                                                        ? 'bg-amber-400/20 text-amber-800 border-amber-300/60'
-                                                                        : slot.type === 'expired'
-                                                                            ? 'bg-slate-500/18 text-slate-700 border-slate-300/60'
-                                                                            : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
+                                                            className={`inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border whitespace-nowrap ${slot.type === 'booked' ? 'bg-red-700/18 text-red-800 border-red-400/55' : slot.type === 'expired' ? 'bg-slate-500/18 text-slate-700 border-slate-300/60' : 'bg-emerald-500/20 text-emerald-800 border-emerald-300/50'}`}
                                                         >
-                                                            {slot.type !== 'free' && slot.userName && (
+                                                            {slot.type === 'booked' && slot.userName && (
                                                                 <img
                                                                     src={slot.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(slot.userName)}&background=random&size=28&font-size=0.4&bold=true`}
                                                                     alt={slot.userName}
@@ -1821,23 +2582,20 @@ const BookingsAdmin: React.FC = () => {
                                                 <div className="flex items-center justify-between gap-3 mb-2">
                                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Booked Details</p>
                                                     <div className="flex flex-wrap items-center justify-end gap-1.5 text-[9px] font-black uppercase tracking-widest">
-                                                        <span className="px-2 py-1 rounded-full border bg-blue-600/24 text-blue-900 border-blue-500/60">🔵 Operational Hours</span>
                                                         <span className="px-2 py-1 rounded-full border bg-emerald-500/20 text-emerald-800 border-emerald-300/50">🟢 Available</span>
-                                                        <span className="px-2 py-1 rounded-full border bg-amber-400/20 text-amber-800 border-amber-300/60">🟠 Pending</span>
                                                         <span className="px-2 py-1 rounded-full border bg-red-700/18 text-red-800 border-red-400/55">🔴 Booked</span>
                                                         <span className="px-2 py-1 rounded-full border bg-slate-500/18 text-slate-700 border-slate-300/60">⚫ Expired</span>
                                                     </div>
                                                 </div>
                                                 {detail.bookedDetails.length > 0 ? (
                                                     <div className="max-h-[220px] overflow-y-auto pr-1 border border-slate-200 rounded-2xl bg-slate-50/50">
-                                                        <div className="grid grid-cols-[1.2fr_auto_auto] gap-3 px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0 z-10">
+                                                        <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 sticky top-0 z-10">
                                                             <span>Player</span>
                                                             <span>Schedule</span>
-                                                            <span className="text-right">Status</span>
                                                         </div>
                                                         <div className="divide-y divide-slate-200">
                                                             {detail.bookedDetails.map((b) => (
-                                                                <div key={b.id} className="grid grid-cols-[1.2fr_auto_auto] gap-3 px-4 py-3 items-center text-sm text-slate-700">
+                                                                <div key={b.id} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 items-center text-sm text-slate-700">
                                                                     <div className="flex items-center gap-2.5 min-w-0">
                                                                         <img
                                                                             src={b.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(b.userName)}&background=random&size=40&font-size=0.42&bold=true`}
@@ -1847,27 +2605,6 @@ const BookingsAdmin: React.FC = () => {
                                                                         <span className="font-semibold truncate">{b.userName}</span>
                                                                     </div>
                                                                     <span className="font-semibold text-slate-600 whitespace-nowrap">{formatTime12Compact(b.start)}-{formatTime12Compact(b.end)}</span>
-                                                                    <div className="flex items-center justify-end gap-2">
-                                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border whitespace-nowrap ${
-                                                                            b.status === 'pending'
-                                                                                ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                                                                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                                                        }`}>
-                                                                            {b.status === 'pending' ? 'Pending' : 'Booked'}
-                                                                        </span>
-                                                                        {b.status === 'pending' && (
-                                                                            <button
-                                                                                type="button"
-                                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200 bg-white hover:bg-blue-50 text-blue-700 shadow-sm"
-                                                                                onClick={() => {
-                                                                                    const full = bookings.find((bk) => bk.id === b.id);
-                                                                                    if (full) setViewingBooking(full);
-                                                                                }}
-                                                                            >
-                                                                                Verify
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -1891,25 +2628,25 @@ const BookingsAdmin: React.FC = () => {
                         <div className="bg-white w-full max-w-md rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
                             <div className="text-center mb-8">
                                 <div className={`w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center ${
-                                    confirmModal.type === 'verify' ? 'bg-emerald-50' :
+                                    confirmModal.type === 'confirm' ? 'bg-emerald-50' :
                                     confirmModal.type === 'refund' ? 'bg-amber-50' :
                                     confirmModal.type === 'delete' ? 'bg-rose-50' :
                                     'bg-rose-50'
                                 }`}>
-                                    {confirmModal.type === 'verify' && <CheckCircle size={32} className="text-emerald-600" />}
+                                    {confirmModal.type === 'confirm' && <CheckCircle size={32} className="text-emerald-600" />}
                                     {confirmModal.type === 'cancel' && <XCircle size={32} className="text-rose-500" />}
                                     {confirmModal.type === 'delete' && <Trash2 size={32} className="text-rose-600" />}
                                     {confirmModal.type === 'refund' && <RefreshCw size={32} className="text-amber-600" />}
                                 </div>
                                 <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase mb-2">
-                                    {confirmModal.type === 'verify' && 'Verify Payment'}
+                                    {confirmModal.type === 'confirm' && 'Confirm Booking'}
                                     {confirmModal.type === 'cancel' && 'Cancel Booking'}
                                     {confirmModal.type === 'delete' && 'Delete Booking'}
                                     {confirmModal.type === 'refund' && 'Cancel & Refund'}
                                 </h2>
                                 <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                                    {confirmModal.type === 'verify' && (
-                                        <>Verify payment for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong>? This will mark the transaction as verified and update booking status to paid/confirmed.</>
+                                    {confirmModal.type === 'confirm' && (
+                                        <>Are you sure you want to confirm the booking for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong> at <strong className="text-slate-900">{confirmModal.booking.courts?.name}</strong>?</>
                                     )}
                                     {confirmModal.type === 'cancel' && (
                                         <>Are you sure you want to cancel the booking for <strong className="text-slate-900">{getBookingUser(confirmModal.booking).name}</strong>? This action cannot be undone.</>
@@ -1959,7 +2696,7 @@ const BookingsAdmin: React.FC = () => {
                                     onClick={handleConfirmAction}
                                     disabled={actionLoading}
                                     className={`flex-1 h-14 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                        confirmModal.type === 'verify' ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200' :
+                                        confirmModal.type === 'confirm' ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200' :
                                         confirmModal.type === 'refund' ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-200' :
                                         'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200'
                                     }`}
@@ -1968,7 +2705,7 @@ const BookingsAdmin: React.FC = () => {
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (
                                         <>
-                                            {confirmModal.type === 'verify' && 'Yes, Verify'}
+                                            {confirmModal.type === 'confirm' && 'Yes, Confirm'}
                                             {confirmModal.type === 'cancel' && 'Yes, Cancel'}
                                             {confirmModal.type === 'delete' && 'Delete Forever'}
                                             {confirmModal.type === 'refund' && 'Cancel & Refund'}
@@ -1982,7 +2719,7 @@ const BookingsAdmin: React.FC = () => {
                 )}
 
                 {/* New Booking Modal */}
-                {isModalOpen && ReactDOM.createPortal(
+                {!isManagerRole && isModalOpen && ReactDOM.createPortal(
                     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
                         <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto relative overflow-x-hidden">
                             {/* Confetti Animation */}
@@ -2255,7 +2992,7 @@ const BookingsAdmin: React.FC = () => {
                                             {mbPayProcessing ? (
                                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                             ) : (
-                                                <>{mbCreatedBooking.date !== todayDateStr ? 'Complete Advance Payment' : `Complete ${mbCreatedBooking.isGuest ? 'Guest' : ''} Booking`}</>  
+                                                <>{mbCreatedBooking.date !== todayDateStr ? 'Complete Advance Payment' : `Complete ${mbCreatedBooking.isGuest ? 'Guest' : ''} Booking`}</>
                                             )}
                                         </button>
                                     </div>
@@ -2589,7 +3326,7 @@ const BookingsAdmin: React.FC = () => {
                                         }`}>
                                             {viewingBooking.payment_status === 'paid' ? '✓ Paid' : viewingBooking.payment_status === 'refunded' ? '↩ Refunded' : 'Unpaid'}
                                         </span>
-                                        {viewingBooking.payment_method && (
+                                        {!isManagerRole && viewingBooking.payment_method && (
                                             <span className="text-[10px] font-bold text-slate-400 capitalize">{viewingBooking.payment_method}</span>
                                         )}
                                     </div>
@@ -2605,63 +3342,6 @@ const BookingsAdmin: React.FC = () => {
                                         {viewingBooking.status}
                                     </span>
                                 </div>
-                            </div>
-
-                            {/* Payment Proof */}
-                            <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-6 shadow-sm">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Proof</p>
-                                        <p className="text-sm font-black text-slate-900">Uploaded screenshot & reference</p>
-                                    </div>
-                                    {viewingBooking.payment_proof_status && (
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                                            viewingBooking.payment_proof_status === 'payment_verified'
-                                                ? 'bg-lime-50 border-lime-200 text-lime-700'
-                                                : viewingBooking.payment_proof_status === 'payment_rejected'
-                                                    ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                                    : 'bg-amber-50 border-amber-200 text-amber-700'
-                                        }`}>
-                                            {viewingBooking.payment_proof_status.replace('_', ' ')}
-                                        </span>
-                                    )}
-                                </div>
-                                {(() => {
-                                    const proof = (viewingBooking.booking_payments || [])
-                                        .filter(p => p.proof_image_url)
-                                        .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())[0];
-                                    if (!proof) {
-                                        return <p className="text-sm font-medium text-slate-500">No proof submitted.</p>;
-                                    }
-                                    return (
-                                        <div className="flex flex-col md:flex-row gap-4 items-start">
-                                            <div className="w-full md:w-1/2">
-                                                <img src={proof.proof_image_url || ''} alt="Payment proof" className="w-full rounded-xl border border-slate-200 shadow-sm object-cover" />
-                                            </div>
-                                            <div className="flex-1 space-y-2 text-sm text-slate-700">
-                                                {proof.reference_number && (
-                                                    <p className="font-semibold">Reference: <span className="font-bold text-slate-900">{proof.reference_number}</span></p>
-                                                )}
-                                                {proof.payment_type && (
-                                                    <p className="font-semibold capitalize">Method: <span className="font-bold text-slate-900">{proof.payment_type}</span></p>
-                                                )}
-                                                {proof.account_name && (
-                                                    <p className="font-semibold">Account: <span className="font-bold text-slate-900">{proof.account_name}</span></p>
-                                                )}
-                                                <div className="flex flex-wrap gap-2">
-                                                    <a
-                                                        href={proof.proof_image_url || '#'}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-black uppercase tracking-widest hover:bg-blue-100"
-                                                    >
-                                                        Open Full Size
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
                             </div>
 
                             {/* Timestamp Section */}
@@ -2760,7 +3440,7 @@ const BookingsAdmin: React.FC = () => {
                                 return (
                             <div className="flex gap-3 flex-wrap">
                                 {/* PAY & CHECK-IN — for CONFIRMED + unpaid + TODAY + not checked in + not past end */}
-                                {vIsToday && !viewingBooking.is_checked_in && viewingBooking.status === 'confirmed' && viewingBooking.payment_status !== 'paid' && !vIsPastEnd && !viewingBooking.is_no_show && (
+                                {!isManagerRole && vIsToday && !viewingBooking.is_checked_in && viewingBooking.status === 'confirmed' && viewingBooking.payment_status !== 'paid' && !vIsPastEnd && !viewingBooking.is_no_show && (
                                     <button
                                         onClick={() => {
                                             const b = viewingBooking;
@@ -2781,11 +3461,8 @@ const BookingsAdmin: React.FC = () => {
                                         onClick={async () => {
                                             const b = viewingBooking;
                                             try {
-                                                const now = new Date().toISOString();
-                                                const { error } = await supabase.from('bookings').update({ is_checked_in: true, checked_in_at: now }).eq('id', b.id);
-                                                if (error) await supabase.from('bookings').update({ status: 'confirmed' }).eq('id', b.id);
+                                                await handleCheckIn(b);
                                                 setViewingBooking(null);
-                                                fetchBookings();
                                             } catch (err) { console.error(err); }
                                         }}
                                         className="flex-1 h-14 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 active:scale-95"
@@ -2798,12 +3475,9 @@ const BookingsAdmin: React.FC = () => {
                                     <button
                                         onClick={async () => {
                                             const b = viewingBooking;
-                                            const outNow = new Date().toISOString();
                                             try {
-                                                const { error } = await supabase.from('bookings').update({ status: 'completed', checked_out_at: outNow }).eq('id', b.id);
-                                                if (error) await supabase.from('bookings').update({ status: 'completed' }).eq('id', b.id);
+                                                await handleCheckOut(b);
                                                 setViewingBooking(null);
-                                                fetchBookings();
                                             } catch (err) { console.error(err); }
                                         }}
                                         className="flex-1 h-14 bg-violet-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-violet-700 transition-all shadow-lg shadow-violet-200 flex items-center justify-center gap-2 active:scale-95"
@@ -2816,9 +3490,8 @@ const BookingsAdmin: React.FC = () => {
                                     <button
                                         onClick={async () => {
                                             try {
-                                                await supabase.from('bookings').update({ is_no_show: true, status: 'cancelled' }).eq('id', viewingBooking.id);
+                                                await handleMarkNoShow(viewingBooking);
                                                 setViewingBooking(null);
-                                                fetchBookings();
                                             } catch (err) { console.error(err); }
                                         }}
                                         className="h-14 px-6 bg-rose-50 border border-rose-200 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-2 active:scale-95"
@@ -2828,13 +3501,13 @@ const BookingsAdmin: React.FC = () => {
                                 )}
                                 {viewingBooking.status === 'pending' && (
                                     <button
-                                        onClick={() => { setViewingBooking(null); setConfirmModal({ type: 'verify', booking: viewingBooking }); }}
+                                        onClick={() => { setViewingBooking(null); setConfirmModal({ type: 'confirm', booking: viewingBooking }); }}
                                         className="h-14 px-6 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-95"
                                     >
-                                        <CheckCircle size={16} /> Verify
+                                        <CheckCircle size={16} /> Confirm
                                     </button>
                                 )}
-                                {viewingBooking.status !== 'cancelled' && viewingBooking.status !== 'completed' && (
+                                {viewingBooking.status !== 'cancelled' && viewingBooking.status !== 'completed' && (!isManagerRole || viewingBooking.payment_status !== 'paid') && (
                                     <button
                                         onClick={() => {
                                             const b = viewingBooking;
@@ -2850,12 +3523,14 @@ const BookingsAdmin: React.FC = () => {
                                         <XCircle size={16} /> {viewingBooking.payment_status === 'paid' ? 'Cancel & Refund' : 'Cancel'}
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => { const b = viewingBooking; setViewingBooking(null); setConfirmModal({ type: 'delete', booking: b }); }}
-                                    className="h-14 px-6 border border-slate-200 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 hover:text-rose-600 hover:border-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
+                                {!isManagerRole && (
+                                    <button
+                                        onClick={() => { const b = viewingBooking; setViewingBooking(null); setConfirmModal({ type: 'delete', booking: b }); }}
+                                        className="h-14 px-6 border border-slate-200 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 hover:text-rose-600 hover:border-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
                             </div>
                                 );
                             })()}
@@ -2865,7 +3540,7 @@ const BookingsAdmin: React.FC = () => {
                 )}
 
                 {/* Pay & Check-In Modal (from booking details) */}
-                {payingBooking && ReactDOM.createPortal(
+                {!isManagerRole && payingBooking && ReactDOM.createPortal(
                     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
                         <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
                             {/* Header */}
@@ -3012,7 +3687,7 @@ const BookingsAdmin: React.FC = () => {
                                                     action: 'PAYMENT_RECEIVED',
                                                     details: { booking_id: payingBooking.id, amount: received, type: 'CASH', change: payChange, by: 'ADMIN' }
                                                 });
-                                                
+
                                                 // Send payment receipt email
                                                 const pEmail = payingBooking.is_guest ? payingBooking.guest_email : payingBooking.profiles?.email;
                                                 console.log('DEBUG: Check-in payment verified. Email:', pEmail);
@@ -3062,7 +3737,7 @@ const BookingsAdmin: React.FC = () => {
                 )}
 
                 {/* QR Scanner Modal */}
-                {showScanner && ReactDOM.createPortal(
+                {!isManagerRole && showScanner && ReactDOM.createPortal(
                     <BookingScanner
                         onClose={() => {
                             setShowScanner(false);
@@ -3075,4 +3750,4 @@ const BookingsAdmin: React.FC = () => {
     );
 };
 
-export default BookingsAdmin;
+export default CourtManagerBookingsPage;
