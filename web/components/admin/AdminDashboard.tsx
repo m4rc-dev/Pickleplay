@@ -94,7 +94,7 @@ const GROWTH_DATA = [
 interface PlatformUser {
   id: string;
   name: string;
-  email: string;
+  subtitle: string;
   role: UserRole;
   status: 'Active' | 'Suspended' | 'Pending';
   joinedDate: string;
@@ -103,9 +103,41 @@ interface PlatformUser {
 }
 
 const MOCK_USERS: PlatformUser[] = [
-  { id: 'u1', name: 'David Smith', email: 'david@pickleplay.com', role: 'PLAYER', status: 'Active', joinedDate: '2025-01-12', dupr: 5.12 },
-  { id: 'u2', name: 'Marcus Chen', email: 'marcus@procoach.me', role: 'COACH', status: 'Active', joinedDate: '2025-02-01', dupr: 4.85 },
+  { id: 'u1', name: 'David Smith', subtitle: 'david@pickleplay.com', role: 'PLAYER', status: 'Active', joinedDate: '2025-01-12', dupr: 5.12 },
+  { id: 'u2', name: 'Marcus Chen', subtitle: 'marcus@procoach.me', role: 'COACH', status: 'Active', joinedDate: '2025-02-01', dupr: 4.85 },
 ];
+
+const resolveUserDisplayName = (profile: {
+  full_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+  id: string;
+}) => {
+  const trimmedFullName = profile.full_name?.trim();
+  if (trimmedFullName) return trimmedFullName;
+
+  const trimmedUsername = profile.username?.trim();
+  if (trimmedUsername) return trimmedUsername;
+
+  const trimmedEmail = profile.email?.trim();
+  if (trimmedEmail) return trimmedEmail.split('@')[0];
+
+  return `User ${profile.id.slice(0, 8)}`;
+};
+
+const resolveUserSubtitle = (profile: {
+  username?: string | null;
+  email?: string | null;
+  id: string;
+}) => {
+  const trimmedEmail = profile.email?.trim();
+  if (trimmedEmail) return trimmedEmail;
+
+  const trimmedUsername = profile.username?.trim();
+  if (trimmedUsername) return `@${trimmedUsername}`;
+
+  return `ID: ${profile.id.slice(0, 8)}`;
+};
 
 interface AdminDashboardProps {
   applications?: ProfessionalApplication[];
@@ -238,15 +270,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
     // 2. Fetch Users List
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, full_name, email, active_role, created_at, account_status, avatar_url')
+      .select('id, full_name, username, email, active_role, created_at, account_status, avatar_url')
       .order('created_at', { ascending: false })
       .limit(50);
 
     if (profiles) {
       const mappedUsers: PlatformUser[] = profiles.map(p => ({
         id: p.id,
-        name: p.full_name || 'Anonymous',
-        email: p.email || 'No email',
+        name: resolveUserDisplayName(p),
+        subtitle: resolveUserSubtitle(p),
         role: p.active_role as UserRole,
         status: (p.account_status as any) || 'Active',
         joinedDate: p.created_at?.split('T')[0] || '',
@@ -641,7 +673,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
 
   const filteredUsers = userList.filter(u =>
     u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.email.toLowerCase().includes(userSearch.toLowerCase())
+    u.subtitle.toLowerCase().includes(userSearch.toLowerCase())
   );
 
   return (
@@ -1021,13 +1053,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full min-w-[920px] table-fixed text-left">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                     <th className="px-8 py-6">Identity</th>
-                    <th className="px-8 py-6">Role</th>
-                    <th className="px-8 py-6">Status</th>
-                    <th className="px-8 py-6 text-right">Administrative Actions</th>
+                    <th className="w-40 px-8 py-6">Role</th>
+                    <th className="w-40 px-8 py-6">Status</th>
+                    <th className="w-72 px-8 py-6 text-right">Administrative Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1046,36 +1078,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                               {user.name.charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <div>
-                            <p className="font-black text-slate-950 text-sm">{user.name}</p>
-                            <p className="text-[11px] text-slate-400">{user.email}</p>
+                          <div className="min-w-0">
+                            <p className="truncate font-black text-slate-950 text-sm">{user.name}</p>
+                            <p className="truncate text-[11px] text-slate-400">{user.subtitle}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-8 py-6">
-                        <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg bg-slate-100 text-slate-500">
+                        <span className="inline-flex text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg bg-slate-100 text-slate-500">
                           {user.role}
                         </span>
                       </td>
                       <td className="px-8 py-6">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${user.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'
+                        <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${user.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'
                           }`}>
                           {user.status}
                         </span>
                       </td>
                       <td className="px-8 py-6 text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
                           {user.role === 'PLAYER' ? (
                             <button
                               onClick={() => handleUpdateUserRole(user.id, 'ADMIN')}
-                              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all"
+                              className="whitespace-nowrap px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all"
                             >
                               Promote
                             </button>
                           ) : (
                             <button
                               onClick={() => handleUpdateUserRole(user.id, 'PLAYER')}
-                              className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all font-bold"
+                              className="whitespace-nowrap px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all font-bold"
                             >
                               Demote
                             </button>
@@ -1084,14 +1116,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ applications = [], onAp
                           {user.status === 'Active' ? (
                             <button
                               onClick={() => handleUpdateUserStatus(user.id, 'Suspended')}
-                              className="px-4 py-2 border border-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                              className="whitespace-nowrap px-4 py-2 border border-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-sm"
                             >
                               Suspend
                             </button>
                           ) : (
                             <button
                               onClick={() => handleUpdateUserStatus(user.id, 'Active')}
-                              className="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg"
+                              className="whitespace-nowrap px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg"
                             >
                               Restore
                             </button>

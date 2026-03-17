@@ -568,6 +568,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   // console.log('Dashboard Render - Role:', userRole, 'UserID:', currentUserId);
 
   const themeColor = 'blue';
+  const isCourtOwner = userRole === 'COURT_OWNER';
+  const chartAccentColor = userRole === 'ADMIN' ? '#4F46E5' : userRole === 'COURT_OWNER' ? '#0B5D3B' : '#3B82F6';
   const pendingAppsCount = applications.filter(app => app.status === 'PENDING').length;
 
   const handleBroadcastNotice = async (e: React.FormEvent) => {
@@ -889,9 +891,33 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
       case 'COURT_OWNER':
         return (
           <>
-            <StatCard label="Booking Revenue" value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`} change="+14%" icon={<PhilippinePeso className="text-blue-600" />} color="blue" delay="animate-stagger-1" />
-            <StatCard label="Court Utilization" value={`${courtOwnerStats.courtUtilization}%`} change="+5%" icon={<Activity className="text-lime-600" />} color="lime" delay="animate-stagger-2" />
-            <StatCard label="Player Retention" value={`${courtOwnerStats.playerRetention}%`} change="+2%" icon={<UserCheck className="text-blue-600" />} color="blue" delay="animate-stagger-3" />
+            <StatCard
+              label="Booking Revenue"
+              value={`₱${courtOwnerStats.bookingRevenue.toLocaleString()}`}
+              change="+14%"
+              icon={<PhilippinePeso className="text-blue-600" size={22} strokeWidth={2.35} />}
+              color="blue"
+              ownerDecor="top-orb"
+              delay="animate-stagger-1"
+            />
+            <StatCard
+              label="Court Utilization"
+              value={`${courtOwnerStats.courtUtilization}%`}
+              change="+5%"
+              icon={<Activity className="text-lime-600" size={22} strokeWidth={2.35} />}
+              color="lime"
+              ownerDecor="bottom-curve"
+              delay="animate-stagger-2"
+            />
+            <StatCard
+              label="Player Retention"
+              value={`${courtOwnerStats.playerRetention}%`}
+              change="+2%"
+              icon={<UserCheck className="text-blue-600" size={22} strokeWidth={2.35} />}
+              color="blue"
+              ownerDecor="corner-wash"
+              delay="animate-stagger-3"
+            />
           </>
         );
       case 'COACH':
@@ -936,12 +962,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   };
 
   return (
-    <div className="space-y-8 md:space-y-10 animate-fade-in">
+    <div className="space-y-8 md:space-y-10 animate-fade-in" data-dashboard-role={userRole === 'COURT_OWNER' ? 'court-owner' : 'default'}>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className={`w-2 h-2 rounded-full bg-${themeColor}-500 animate-pulse`} />
-            <p className={`text-[10px] font-black text-${themeColor}-600 uppercase tracking-[0.3em]`}>Session: {userRole.replace('_', ' ')}</p>
+            <p className={`text-[10px] font-black text-${themeColor}-600 uppercase tracking-[0.3em]`}>
+              Session: {userRole.replace('_', ' ')}
+            </p>
           </div>
           <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-tight">
             {userName ? `Welcome, ${userName.split(' ')[0]}` : 'Pickleball Intelligence'}
@@ -999,40 +1027,46 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
 
       {/* Active Trial Banner - Days 1-30 */}
-      {userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-blue-100 relative overflow-hidden animate-fade-in">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+      {false && userRole === 'COURT_OWNER' && !isLoading && subscription && subscription.status === 'trial' && daysRemaining !== null && daysRemaining > 0 && (
+        <div
+          className="p-6 md:p-8 rounded-3xl relative overflow-hidden animate-fade-in border"
+          style={{
+            background: 'linear-gradient(135deg, #16784D 0%, #1E8C5B 100%)',
+            borderColor: 'rgba(220, 231, 200, 0.34)',
+            boxShadow: '0 24px 56px -34px rgba(22, 120, 77, 0.42)',
+          }}
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#A3E635]/12 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={20} className="text-lime-400" fill="currentColor" />
-                  <span className="text-xs font-black uppercase tracking-widest text-lime-400">Exclusive Trial Access</span>
+                  <Sparkles size={20} className="text-[#ECFCCB]" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-[#ECFCCB]">Exclusive Trial Access</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight uppercase">
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight uppercase text-white">
                   FREE 30-DAY PILOT.
                 </h3>
-                <p className="text-blue-50 text-sm md:text-base leading-relaxed max-w-2xl">
+                <p className="text-white/92 text-sm md:text-base leading-relaxed max-w-2xl">
                   You're in the elite pilot program. Full access to court management,
                   revenue analytics, and player retention tools—all active now.
                 </p>
                 <div className="flex flex-wrap items-center gap-4 mt-4">
-                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Check size={16} className="text-lime-400" />
+                  <div className="flex items-center gap-2 bg-[#0B5D3B]/18 px-3 py-1.5 rounded-full border border-white/18">
+                    <Check size={16} className="text-white" />
                     <span className="text-xs font-bold text-white uppercase tracking-widest">Unlimited Courts</span>
                   </div>
-                  <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                    <Check size={16} className="text-lime-400" />
+                  <div className="flex items-center gap-2 bg-[#0B5D3B]/18 px-3 py-1.5 rounded-full border border-white/18">
+                    <Check size={16} className="text-white" />
                     <span className="text-xs font-bold text-white uppercase tracking-widest">Advanced Analytics</span>
                   </div>
                 </div>
               </div>
               <div className="shrink-0">
-                <div className="bg-white/20 backdrop-blur-sm px-8 py-6 rounded-[32px] border border-white/30 text-center">
-                  <p className="text-[10px] font-black text-blue-100 uppercase tracking-[0.2em] mb-2">Trial Ends In</p>
+                <div className="bg-[#0B5D3B]/18 px-8 py-6 rounded-[32px] border border-white/18 text-center shadow-[0_18px_36px_-28px_rgba(11,93,59,0.22)]">
+                  <p className="text-[10px] font-black text-white/80 uppercase tracking-[0.2em] mb-2">Trial Ends In</p>
                   <p className="text-5xl font-black text-white tracking-tighter">{daysRemaining}</p>
-                  <p className="text-[10px] font-black text-lime-400 uppercase tracking-widest mt-1">Days Left</p>
+                  <p className="text-[10px] font-black text-white uppercase tracking-widest mt-1">Days Left</p>
                 </div>
               </div>
             </div>
@@ -1042,27 +1076,34 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       {/* Grace Period Banner - Days 31-40 (Positive messaging!) */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && isInGracePeriod(subscription) && (
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-blue-100 relative overflow-hidden animate-fade-in">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div
+          className="p-6 md:p-8 rounded-3xl text-white relative overflow-hidden animate-fade-in border"
+          style={{
+            background: 'linear-gradient(135deg, #16784D 0%, #1E8C5B 100%)',
+            borderColor: 'rgba(220, 231, 200, 0.34)',
+            boxShadow: '0 24px 56px -34px rgba(22, 120, 77, 0.42)',
+          }}
+        >
+          <div className="absolute top-6 right-10 h-36 w-36 rounded-full border-[18px] border-[#A3E635]/10" />
+          <div className="absolute bottom-0 right-10 w-36 h-24 rounded-tl-[52px] bg-white/10" />
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={20} className="text-blue-300" fill="currentColor" />
-                  <span className="text-xs font-black uppercase tracking-widest text-blue-200">Bonus Access Period</span>
+                  <Sparkles size={20} className="text-[#A3E635]" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-[#ECFCCB]">Bonus Access Period</span>
                 </div>
                 <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight uppercase">
                   GRACE PERIOD ACTIVE.
                 </h3>
-                <p className="text-blue-100 text-sm md:text-base leading-relaxed max-w-2xl">
-                  Your trial has ended, but we've kept your features active for another <span className="text-lime-400 font-black">{calculateGraceDaysRemaining(subscription.trial_ends_at)} days</span>.
+                <p className="text-[#F4F9E8] text-sm md:text-base leading-relaxed max-w-2xl">
+                  Your trial has ended, but we've kept your features active for another <span className="text-[#A3E635] font-black">{calculateGraceDaysRemaining(subscription.trial_ends_at)} days</span>.
                   Subscribe now to prevent any interruption to your business operations.
                 </p>
               </div>
               <div className="shrink-0 space-y-3">
-                <div className="bg-white/20 backdrop-blur-sm px-8 py-6 rounded-[32px] border border-white/30 text-center">
-                  <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Days Left</p>
+                <div className="bg-[#0B5D3B]/18 px-8 py-6 rounded-[32px] border border-white/18 text-center">
+                  <p className="text-[10px] font-black text-[#ECFCCB] uppercase tracking-widest mb-1">Days Left</p>
                   <p className="text-4xl font-black text-white tracking-tighter">{calculateGraceDaysRemaining(subscription.trial_ends_at)}</p>
                 </div>
                 <button
@@ -1107,7 +1148,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {renderRoleMetrics()}
-
       </div>
 
 
@@ -1145,53 +1185,72 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden animate-fade-in-up delay-100">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-            <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
-              {userRole === 'ADMIN' ? (
-                <>
-                  <Users className="text-indigo-600" />
-                  User Growth Velocity
-                </>
-              ) : (
-                <>
-                  <Activity className={`text-${themeColor}-600`} />
-                  Rating Velocity
-                </>
-              )}
-            </h2>
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-              {(['7D', '1M', '6M', '1Y'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTimeRange(t)}
-                  className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === timeRange ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}
-                >
-                  {t}
-                </button>
-              ))}
+      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-8 ${isCourtOwner ? 'bg-slate-100 p-4 md:p-5 rounded-[36px] border border-slate-200/60' : ''}`}>
+        <div
+          className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/60 shadow-sm relative overflow-hidden animate-fade-in-up delay-100"
+          data-owner-surface={isCourtOwner ? 'secondary' : undefined}
+        >
+          {isCourtOwner && (
+            <>
+              <div aria-hidden className="absolute -top-8 right-8 h-28 w-28 rounded-full bg-[#ECFCCB]/60" />
+              <div aria-hidden className="absolute bottom-6 right-8 h-16 w-28 rounded-[28px] bg-[#F4F8EC]" />
+              <div aria-hidden className="absolute top-24 right-36 h-14 w-14 rounded-full border border-[#DCE7C8]/80" />
+            </>
+          )}
+          <div className="relative z-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-3 tracking-tighter uppercase">
+                {userRole === 'ADMIN' ? (
+                  <>
+                    <Users className="text-indigo-600" />
+                    User Growth Velocity
+                  </>
+                ) : (
+                  <>
+                    <Activity className={`text-${themeColor}-600`} />
+                    Rating Velocity
+                  </>
+                )}
+              </h2>
+              <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                {(['7D', '1M', '6M', '1Y'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTimeRange(t)}
+                    className={`w-10 h-8 rounded-lg text-[10px] font-black transition-colors ${t === timeRange ? `bg-${themeColor}-600 text-white shadow-sm` : 'text-slate-500 hover:bg-white/50'}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="h-[250px] md:h-[300px] w-full min-h-[250px]">
-            {isLoading ? (
-              <Skeleton className="w-full h-full rounded-2xl" />
-            ) : (
-              <ResponsiveContainer width="100%" height={250} minHeight={250}>
-                <LineChart data={userRole === 'ADMIN' ? (userGrowthData.length > 0 ? userGrowthData : PERFORMANCE_DATA.map(d => ({ ...d, growth: d.rating * 10 }))) : (ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                  <YAxis hide domain={userRole === 'ADMIN' ? ['auto', 'auto'] : ['dataMin - 0.2', 'dataMax + 0.2']} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', padding: '12px' }}
-                    itemStyle={{ fontWeight: 'bold' }}
-                    labelStyle={{ color: '#64748b' }}
-                    formatter={(value: any) => [value, userRole === 'ADMIN' ? 'Total Users' : 'Rating']}
-                  />
-                  <Line type="monotone" dataKey={userRole === 'ADMIN' ? "growth" : "rating"} stroke={userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6"} strokeWidth={4} dot={{ r: 5, fill: userRole === 'ADMIN' ? "#4f46e5" : "#3b82f6" }} activeDot={{ r: 8 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+            <div className="h-[250px] md:h-[300px] w-full min-h-[250px]">
+              {isLoading ? (
+                <Skeleton className="w-full h-full rounded-2xl" />
+              ) : (
+                <ResponsiveContainer width="100%" height={250} minHeight={250}>
+                  <LineChart data={userRole === 'ADMIN' ? (userGrowthData.length > 0 ? userGrowthData : PERFORMANCE_DATA.map(d => ({ ...d, growth: d.rating * 10 }))) : (ratingHistory.length > 0 ? ratingHistory : PERFORMANCE_DATA)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                    <YAxis hide domain={userRole === 'ADMIN' ? ['auto', 'auto'] : ['dataMin - 0.2', 'dataMax + 0.2']} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', padding: '12px' }}
+                      itemStyle={{ fontWeight: 'bold' }}
+                      labelStyle={{ color: '#64748b' }}
+                      formatter={(value: any) => [value, userRole === 'ADMIN' ? 'Total Users' : 'Rating']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={userRole === 'ADMIN' ? "growth" : "rating"}
+                      stroke={chartAccentColor}
+                      strokeWidth={4}
+                      dot={{ r: 5, fill: chartAccentColor }}
+                      activeDot={{ r: 8 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1208,10 +1267,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <Skeleton className="w-32 h-3 mx-auto mt-4 rounded-lg" />
                 </div>
               ) : (
-                <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-200">
+                <div
+                  className={`${isCourtOwner ? 'p-8 rounded-3xl shadow-2xl relative overflow-hidden group animate-fade-in-up delay-200 border' : 'bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-200'}`}
+                  style={isCourtOwner ? {
+                    background: 'linear-gradient(135deg, #16784D 0%, #1E8C5B 100%)',
+                    borderColor: 'rgba(220, 231, 200, 0.34)',
+                    boxShadow: '0 24px 56px -34px rgba(22, 120, 77, 0.42)',
+                  } : undefined}
+                >
                   {/* Decorative Elements */}
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+                  <div className={`absolute transition-transform duration-500 ${isCourtOwner ? 'top-6 right-6 w-28 h-28 bg-[#A3E635]/10 rounded-full group-hover:scale-110' : 'top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110'}`} />
+                  <div className={`absolute transition-transform duration-500 ${isCourtOwner ? 'bottom-0 right-0 w-32 h-20 bg-white/10 rounded-tl-[48px] group-hover:scale-105 origin-bottom-right' : 'bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110'}`} />
+                  {isCourtOwner && <div className="absolute right-20 top-12 h-24 w-24 rounded-full border-[14px] border-white/10" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <Trophy className="absolute -bottom-8 -right-8 w-32 h-32 text-white/10 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6 duration-500" />
 
@@ -1287,16 +1354,24 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
               <Skeleton className="w-36 h-3 mx-auto mt-4 rounded-lg" />
             </div>
           ) : (
-            <div className="bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-300">
+            <div
+              className={`${isCourtOwner ? 'p-8 rounded-3xl relative overflow-hidden group animate-fade-in-up delay-300 border' : 'bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 p-8 rounded-3xl shadow-2xl shadow-blue-100 relative overflow-hidden group animate-fade-in-up delay-300'}`}
+              style={isCourtOwner ? {
+                background: 'linear-gradient(135deg, #16784D 0%, #1E8C5B 100%)',
+                borderColor: 'rgba(220, 231, 200, 0.34)',
+                boxShadow: '0 24px 56px -34px rgba(22, 120, 77, 0.42)',
+              } : undefined}
+            >
               {/* Decorative Elements */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
-              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110 transition-transform duration-500" />
+              <div className={`absolute transition-transform duration-500 ${isCourtOwner ? '-right-10 top-6 w-40 h-40 bg-white/10 rounded-full group-hover:scale-110' : 'top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110'}`} />
+              <div className={`absolute transition-transform duration-500 ${isCourtOwner ? 'right-10 top-24 w-16 h-16 bg-[#A3E635]/10 rounded-[24px] group-hover:scale-110' : 'bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 group-hover:scale-110'}`} />
+              {isCourtOwner && <div className="absolute bottom-6 right-12 h-14 w-28 rounded-full border border-white/14" />}
               <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
               <div className="relative z-10">
                 <h2 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-4">Need Help?</h2>
 
-                <p className="text-blue-50 text-sm font-medium leading-relaxed mb-6">
+                <p className={`${isCourtOwner ? 'text-[#F4F9E8]' : 'text-blue-50'} text-sm font-medium leading-relaxed mb-6`}>
                   Have questions about Pickleplay? Check out our frequently asked questions for quick answers and helpful tips.
                 </p>
 
@@ -1309,8 +1384,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   <ArrowRight size={16} className="group-hover/button:translate-x-1 transition-transform" />
                 </button>
 
-                <div className="mt-4 flex items-center justify-center gap-2 text-[9px] font-bold text-white/70 uppercase tracking-wider">
-                  <Sparkles size={12} className="text-white/80" />
+                <div className={`mt-4 flex items-center justify-center gap-2 text-[9px] font-bold uppercase tracking-wider ${isCourtOwner ? 'text-[#ECFCCB]' : 'text-white/70'}`}>
+                  <Sparkles size={12} className={isCourtOwner ? 'text-[#A3E635]' : 'text-white/80'} />
                   Quick answers & guidance
                 </div>
               </div>
@@ -2272,17 +2347,64 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   );
 };
 
-const StatCard: React.FC<{ label: string, value: string, change: string, icon: React.ReactNode, color: string, delay?: string }> = ({ label, value, change, icon, color, delay }) => (
-  <div className={`bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm hover:border-slate-300 transition-all group relative animate-fade-in-up ${delay}`}>
-    <div className={`absolute top-4 right-4 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${change.startsWith('+') ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
-      <span>{change}</span>
+const StatCard: React.FC<{
+  label: string,
+  value: string,
+  change: string,
+  icon: React.ReactNode,
+  color: string,
+  ownerDecor?: 'top-orb' | 'bottom-curve' | 'corner-wash',
+  delay?: string
+}> = ({ label, value, change, icon, color, ownerDecor, delay }) => {
+  const enhancedIcon = ownerDecor && React.isValidElement(icon)
+    ? React.cloneElement(icon as React.ReactElement<any>, {
+      size: (icon as React.ReactElement<any>).props?.size ?? 24,
+      strokeWidth: (icon as React.ReactElement<any>).props?.strokeWidth ?? 2.35,
+    })
+    : icon;
+
+  const ownerDecoration = ownerDecor === 'top-orb'
+    ? (
+      <>
+        <div aria-hidden className="absolute -top-7 -right-3 h-24 w-24 rounded-full bg-[#ECFCCB]/70" />
+        <div aria-hidden className="absolute top-7 right-12 h-10 w-16 rounded-full bg-[#F4F8EC]/90" />
+      </>
+    )
+    : ownerDecor === 'bottom-curve'
+      ? (
+        <>
+          <div aria-hidden className="absolute -bottom-10 -right-8 h-28 w-28 rounded-full bg-[#F4F8EC]" />
+          <div aria-hidden className="absolute top-6 right-20 h-16 w-16 rounded-[22px] bg-[#ECFCCB]/55" />
+        </>
+      )
+      : ownerDecor === 'corner-wash'
+        ? (
+          <>
+            <div aria-hidden className="absolute top-0 right-0 h-24 w-28 rounded-bl-[34px] bg-[#F4F8EC]" />
+            <div aria-hidden className="absolute bottom-4 right-8 h-16 w-16 rounded-full border-[12px] border-[#ECFCCB]/60" />
+          </>
+        )
+        : null;
+
+  return (
+    <div
+      className={`bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm hover:border-slate-300 transition-all group relative overflow-hidden animate-fade-in-up ${delay}`}
+      data-stat-card="true"
+      data-owner-card-decor={ownerDecor ?? undefined}
+    >
+      {ownerDecoration}
+      <div className="relative z-10">
+        <div className={`absolute top-4 right-4 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${change.startsWith('+') ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+          <span>{change}</span>
+        </div>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${color}-50 mb-4 group-hover:scale-105 transition-transform`}>
+          {enhancedIcon}
+        </div>
+        <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{label}</h3>
+        <p className="text-4xl font-black text-slate-900 tracking-tighter">{value}</p>
+      </div>
     </div>
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${color}-50 mb-4 group-hover:scale-105 transition-transform`}>
-      {icon}
-    </div>
-    <h3 className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{label}</h3>
-    <p className="text-4xl font-black text-slate-900 tracking-tighter">{value}</p>
-  </div>
-);
+  );
+};
 
 export default Dashboard;
