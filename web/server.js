@@ -428,7 +428,6 @@ const managerInviteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many court manager requests. Please try again shortly.' },
-  keyGenerator: (req) => req.ip || req.headers['x-forwarded-for'] || 'unknown',
 });
 
 // 9. Block suspicious user-agents and empty requests
