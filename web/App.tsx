@@ -95,7 +95,6 @@ import SkillRatingQuiz from './components/guides/SkillRatingQuiz';
 import Students from './components/coach/Students';
 import Clinics from './components/coach/Clinics';
 import Schedule from './components/coach/Schedule';
-import Courts from './components/court-owner/Courts';
 import BookingsAdmin from './components/court-owner/BookingsAdmin';
 import Revenue from './components/court-owner/Revenue';
 import Transactions from './components/court-owner/Transactions';
@@ -108,11 +107,21 @@ import LocationDetailPage from './components/court-owner/location/LocationDetail
 import LocationPolicies from './components/court-owner/LocationPolicies';
 import CourtPricing from './components/court-owner/CourtPricing';
 import ApplicationStatus from './components/court-owner/ApplicationStatus';
+import ManagerInvitePage from './components/court-owner/ManagerInvitePage';
+import {
+  CourtManagerAssignedCourtPage,
+  CourtManagerBookingsPage,
+  CourtManagerLayout,
+  CourtManagerOverviewPage,
+  CourtManagerSchedulePage,
+} from './components/court-manager';
 import Achievements from './components/Achievements';
 import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
 import { supabase, createSession, getSecuritySettings } from './services/supabase';
 import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures, DEFAULT_FEATURES_PER_ROLE } from './services/maintenance';
+import { approveCourtManager } from './lib/court-manager/actions';
+import { COURT_MANAGER_ROUTES } from './lib/court-manager/constants';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import SoftLaunchWelcome from './components/SoftLaunchWelcome';
 import FeatureUnavailable from './components/FeatureUnavailable';
@@ -123,9 +132,16 @@ import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 const NotificationPanel: React.FC<{
   notifications: Notification[],
   onClose: () => void,
-  onNotificationClick: (notification: Notification) => void
-}> = ({ notifications, onClose, onNotificationClick }) => {
-  const getNotifIcon = (type: string) => {
+  onNotificationClick: (notification: Notification) => void,
+  onNotificationAction: (notification: Notification, action: 'approve' | 'view' | 'dismiss') => void,
+  activeActionKey?: string | null
+}> = ({ notifications, onClose, onNotificationClick, onNotificationAction, activeActionKey = null }) => {
+  const isCourtManagerPendingApprovalNotification = (notification: Notification) =>
+    notification.metadata?.kind === 'court_manager_pending_approval' && Boolean(notification.metadata?.assignmentId);
+
+  const getNotifIcon = (notification: Notification) => {
+    const type = notification.type as string;
+    if (isCourtManagerPendingApprovalNotification(notification)) return <UserCheck size={16} className="text-blue-600" />;
     if (type === 'ACHIEVEMENT') return <span className="text-base">🏆</span>;
     if (type === 'player_invitation') return <span className="text-base">🎾</span>;
     if (type === 'invitation_accepted') return <span className="text-base">✅</span>;
@@ -135,10 +151,11 @@ const NotificationPanel: React.FC<{
     if (type === 'squad_member_left') return <UserMinus size={16} className="text-amber-600" />;
     if (type === 'squad_event_created') return <Calendar size={16} className="text-violet-600" />;
     if (type === 'squad_message') return <MessageSquare size={16} className="text-blue-600" />;
+    if (type === 'SYSTEM' || type === 'system') return <Shield size={16} className="text-blue-600" />;
     return null;
   };
   const isSystemNotif = (type: string) =>
-    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined',
+    ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined', 'SYSTEM', 'system',
       'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'].includes(type);
 
   return (
@@ -157,7 +174,7 @@ const NotificationPanel: React.FC<{
             {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
             {isSystemNotif(n.type) ? (
               <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
-                {getNotifIcon(n.type)}
+                {getNotifIcon(n)}
               </div>
             ) : (
               <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
@@ -178,6 +195,41 @@ const NotificationPanel: React.FC<{
               {(n.type === 'player_invitation') && (
                 <span className="inline-block mt-1.5 px-2 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Tap to respond</span>
               )}
+              {isCourtManagerPendingApprovalNotification(n) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNotificationAction(n, 'approve');
+                    }}
+                    disabled={activeActionKey === `${n.id}:approve`}
+                    className="rounded-xl bg-blue-600 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {activeActionKey === `${n.id}:approve` ? 'Approving...' : 'Approve'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNotificationAction(n, 'view');
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-50"
+                  >
+                    View Manager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNotificationAction(n, 'dismiss');
+                    }}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )) : (
@@ -189,7 +241,7 @@ const NotificationPanel: React.FC<{
 };
 
 
-const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean, badge?: number, ownerVariant?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false, badge, ownerVariant = false }) => {
+const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean, badge?: number, ownerVariant?: boolean, showCollapsedActiveAccent?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false, badge, ownerVariant = false, showCollapsedActiveAccent = false }) => {
   const location = useLocation();
   const hasQuery = to.includes('?');
   const [toPath, toSearch] = hasQuery ? to.split('?', 2).map((s, i) => i === 1 ? '?' + s : s) : [to, ''];
@@ -253,7 +305,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
       className={`flex items-center gap-3 ${isPrimaryBook ? 'p-5' : 'p-3.5'} rounded-2xl transition-colors duration-150 group ${isActive
         ? isMobile ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/95 text-slate-900 shadow-lg'
         : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/95 hover:bg-white/10 hover:text-white'}`
-        } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''}`}
+        } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''} ${showCollapsedActiveAccent && isCollapsed && isActive && !isMobile ? 'ring-2 ring-white/35 shadow-[0_12px_24px_-12px_rgba(15,23,42,0.65)]' : ''}`}
     >
       <div
         data-owner-nav-icon={shouldUseOwnerVariant ? 'true' : undefined}
@@ -261,6 +313,9 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
         className={`relative shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'} ${shouldUseOwnerVariant ? (isActive ? 'text-[#0B5D3B]' : 'text-white/90 group-hover:text-white') : ''}`}
       >
         {renderedIcon}
+        {showCollapsedActiveAccent && isCollapsed && isActive && !isMobile && (
+          <span className="absolute -bottom-2 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-lime-400 shadow-[0_0_12px_rgba(163,230,53,0.9)]" />
+        )}
         {badge != null && badge > 0 && (
           <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-rose-500 rounded-full text-[9px] font-black text-white flex items-center justify-center px-0.5 leading-none">
             {badge > 99 ? '99+' : badge}
@@ -298,6 +353,14 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
       { to: '/revenue', icon: <BarChart3 size={20} />, label: 'Revenue' },
       { to: '/profile', icon: <User size={20} />, label: 'Me' },
     ]
+    : role === 'COURT_MANAGER'
+      ? [
+        { to: COURT_MANAGER_ROUTES.overview, icon: <LayoutDashboard size={20} />, label: 'Home' },
+        { to: COURT_MANAGER_ROUTES.assignedCourt, icon: <MapPin size={20} />, label: 'Court' },
+        { to: COURT_MANAGER_ROUTES.bookings, icon: <Calendar size={20} />, label: 'Bookings' },
+        { to: COURT_MANAGER_ROUTES.schedule, icon: <CalendarIcon size={20} />, label: 'Schedule' },
+        { to: '/profile', icon: <User size={20} />, label: 'Me' },
+      ]
     : [
       { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Home' },
       { to: '/booking', icon: <Calendar size={20} />, label: 'Book' },
@@ -338,7 +401,7 @@ const RoleSwitchOverlay: React.FC<{ targetRole: UserRole }> = ({ targetRole }) =
         >
           {targetRole === 'PLAYER' && <User size={40} />}
           {targetRole === 'COACH' && <GraduationCap size={40} />}
-          {targetRole === 'COURT_OWNER' && <Building2 size={40} />}
+          {(targetRole === 'COURT_OWNER' || targetRole === 'COURT_MANAGER') && <Building2 size={40} />}
           {targetRole === 'ADMIN' && <ShieldCheck size={40} />}
         </div>
         <div className="text-center">
@@ -412,6 +475,9 @@ const NavigationHandler: React.FC<{
   } = props;
 
   const role = currentUserId ? rawRole : 'guest';
+  const isCourtOwnerRole = role === 'COURT_OWNER';
+  const isCourtManagerRole = role === 'COURT_MANAGER';
+  const canOperateCourt = isCourtOwnerRole || isCourtManagerRole;
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
@@ -419,6 +485,7 @@ const NavigationHandler: React.FC<{
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notificationActionKey, setNotificationActionKey] = useState<string | null>(null);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isOthersOpen, setIsOthersOpen] = useState(true);
   const [isCompeteOpen, setIsCompeteOpen] = useState(true);
@@ -428,7 +495,7 @@ const NavigationHandler: React.FC<{
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/update-password';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/update-password' || location.pathname === '/manager-invite';
   const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
 
   // ── PASSWORD_RECOVERY: Handle Supabase PKCE password reset flow ──
@@ -534,6 +601,23 @@ const NavigationHandler: React.FC<{
     setIsNotificationsOpen(prev => !prev);
   };
 
+  const markNotificationRead = async (notificationId: string) => {
+    setNotifications(prev => prev.map(notification => (
+      notification.id === notificationId
+        ? { ...notification, isRead: true }
+        : notification
+    )));
+
+    try {
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId);
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
   const handleNotificationClick = (notification: Notification) => {
     const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
     const squadTypes = ['squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'];
@@ -552,9 +636,47 @@ const NavigationHandler: React.FC<{
       }
     } else if (notification.type === 'ACHIEVEMENT') {
       navigate('/achievements');
+    } else if (notification.action_url) {
+      navigate(notification.action_url);
     }
     setIsNotificationsOpen(false);
-    handleMarkNotificationsRead();
+    markNotificationRead(notification.id);
+  };
+
+  const handleNotificationAction = async (notification: Notification, action: 'approve' | 'view' | 'dismiss') => {
+    if (action === 'dismiss') {
+      await markNotificationRead(notification.id);
+      return;
+    }
+
+    if (action === 'view') {
+      if (notification.action_url) {
+        navigate(notification.action_url);
+      }
+      setIsNotificationsOpen(false);
+      await markNotificationRead(notification.id);
+      return;
+    }
+
+    const assignmentId = notification.metadata?.assignmentId as string | undefined;
+    if (!assignmentId) return;
+
+    setNotificationActionKey(`${notification.id}:approve`);
+    try {
+      await approveCourtManager(assignmentId);
+      await markNotificationRead(notification.id);
+      if (notification.action_url) {
+        navigate(notification.action_url);
+      } else {
+        navigate('/locations');
+      }
+      setIsNotificationsOpen(false);
+    } catch (error: any) {
+      console.error('Failed to approve court manager from notification:', error);
+      alert(error.message || 'Failed to approve court manager.');
+    } finally {
+      setNotificationActionKey(null);
+    }
   };
 
   const getThemeColor = () => {
@@ -609,6 +731,10 @@ const NavigationHandler: React.FC<{
       '/community': 'community', '/dashboard': 'dashboard', '/news': 'news',
       '/shop': 'shop', '/profile': 'profile', '/rankings': 'rankings',
       '/academy': 'academy', '/students': 'students', '/clinics': 'clinics',
+      '/court-manager/bookings': 'bookings-admin',
+      '/court-manager/schedule': 'court-calendar',
+      '/court-manager/assigned-court': 'locations',
+      '/court-manager': 'locations',
       '/schedule': 'schedule', '/locations': 'locations',
       '/bookings-admin': 'bookings-admin', '/court-calendar': 'court-calendar',
       '/tournaments-admin': 'tournaments-admin', '/revenue': 'revenue',
@@ -677,9 +803,9 @@ const NavigationHandler: React.FC<{
             </Link>
           </div>
 
-          <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
+          <nav className="flex-1 min-h-0 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
             {role !== 'PLAYER' && feat('dashboard') && (
-              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_OWNER'} />
+              <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_OWNER'} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />
             )}
             {role === 'ADMIN' && (
               <div className="relative space-y-1.5">
@@ -721,7 +847,7 @@ const NavigationHandler: React.FC<{
                   </Link>
                 ))}
                 {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={unreadMessagesCount || undefined} />}
-                {feat('dashboard') && <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                {feat('dashboard') && <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />}
 
                 {/* Others group (collapsible) */}
                 <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
@@ -787,6 +913,13 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
               </>
             )}
+            {role === 'COURT_MANAGER' && (
+              <>
+                <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
+                <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
+                <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
+              </>
+            )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
             <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
               <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
@@ -794,7 +927,7 @@ const NavigationHandler: React.FC<{
             </div>
           </nav>
 
-          <div className="relative p-4 border-t space-y-3 border-white/20" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+          <div className={`relative border-t border-white/20 space-y-3 ${role === 'COURT_MANAGER' ? 'shrink-0 overflow-visible p-3 md:p-4' : 'p-4'}`} style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
             {canSwitchRole && !isSidebarCollapsed && (
               <div className="relative">
                 {/* 2 roles: Simple toggle button */}
@@ -919,8 +1052,19 @@ const NavigationHandler: React.FC<{
               </div>
             )}
 
+            {isSidebarCollapsed && role === 'COURT_MANAGER' && (
+              <div className="flex justify-center">
+                <div
+                  title="Court Manager Mode"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-lime-300/30 bg-lime-400/15 text-lime-200 shadow-[0_10px_24px_-16px_rgba(163,230,53,0.85)]"
+                >
+                  <Building2 size={18} />
+                </div>
+              </div>
+            )}
+
             <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
-              <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 p-2 transition-all duration-300 group ${isSidebarCollapsed ? 'justify-center' : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
+              <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? `${role === 'COURT_MANAGER' ? 'justify-center rounded-2xl bg-white/10 hover:bg-white/20' : 'justify-center'}` : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
                 <div className={`relative shrink-0 rounded-full p-0.5`}>
                   <img
                     src={userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || role}`}
@@ -943,8 +1087,15 @@ const NavigationHandler: React.FC<{
                   </div>
                 )}
               </Link>
-              {!isSidebarCollapsed && (
-                <button onClick={toggleNotifications} className={`relative p-3 rounded-full transition-all duration-300 ${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl scale-110' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}>
+              {(!isSidebarCollapsed || role === 'COURT_MANAGER') && (
+                <button
+                  onClick={toggleNotifications}
+                  title={isSidebarCollapsed ? 'Notifications' : ''}
+                  className={`relative transition-all duration-300 ${isSidebarCollapsed
+                    ? `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl' : 'bg-white/10 text-white/85 hover:bg-white/20 hover:text-white'} w-full rounded-2xl p-3 flex items-center justify-center`
+                    : `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl scale-110' : 'text-white/80 hover:bg-white/10 hover:text-white'} p-3 rounded-full`
+                    }`}
+                >
                   <Bell size={20} />
                   {hasUnreadNotifications && (
                     <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-lg">
@@ -957,9 +1108,9 @@ const NavigationHandler: React.FC<{
             {isNotificationsOpen && <NotificationPanel notifications={notifications} onClose={() => {
               setIsNotificationsOpen(false);
               handleMarkNotificationsRead();
-            }} onNotificationClick={handleNotificationClick} />}
+            }} onNotificationClick={handleNotificationClick} onNotificationAction={handleNotificationAction} activeActionKey={notificationActionKey} />}
 
-            <button onClick={onLogoutClick} className={`w-full flex items-center gap-3 py-4 rounded-2xl transition-all text-sm font-black uppercase tracking-widest ${isSidebarCollapsed ? 'justify-center' : 'px-6'} text-white/70 hover:text-white hover:bg-white/10`} title={isSidebarCollapsed ? "Logout" : ""}>
+            <button onClick={onLogoutClick} className={`w-full min-h-[48px] flex items-center gap-3 py-3.5 rounded-2xl transition-all text-sm font-black uppercase tracking-widest ${isSidebarCollapsed ? 'justify-center' : 'px-6'} text-white/70 hover:text-white hover:bg-white/10`} title={isSidebarCollapsed ? "Logout" : ""}>
               <LogOut size={20} className="shrink-0" />
               {!isSidebarCollapsed && <span className="animate-in fade-in duration-300">Log Out</span>}
             </button>
@@ -1031,7 +1182,7 @@ const NavigationHandler: React.FC<{
             </div>
             <nav className="flex-1 space-y-2 overflow-y-auto scrollbar-hide py-2">
               {role !== 'PLAYER' && (
-                <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               )}
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'ADMIN' && <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} badge={pendingVerificationCount || undefined} />}
@@ -1045,7 +1196,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
@@ -1066,6 +1217,13 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                </>
+              )}
+              {role === 'COURT_MANAGER' && (
+                <>
+                  <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
@@ -1151,6 +1309,7 @@ const NavigationHandler: React.FC<{
                   : <AuthCallback />
               } />
               <Route path="/update-password" element={<UpdatePassword />} />
+              <Route path="/manager-invite" element={<ManagerInvitePage />} />
               <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
               <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
               <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? <FeatureUnavailable featureName="academy" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
@@ -1158,7 +1317,7 @@ const NavigationHandler: React.FC<{
               <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
               <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
               <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('rankings') ? <FeatureUnavailable featureName="rankings" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
-              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('dashboard') ? <FeatureUnavailable featureName="dashboard" /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('dashboard') ? <FeatureUnavailable featureName="dashboard" /> : role === 'COURT_MANAGER' ? <Navigate to={COURT_MANAGER_ROUTES.overview} replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <FAQ /> : <Navigate to="/" />} />
               <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
               <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
@@ -1185,18 +1344,25 @@ const NavigationHandler: React.FC<{
               <Route path="/clinics" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Clinics currentUserId={currentUserId} /> : <Navigate to="/login" />} />
               <Route path="/schedule" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/login" />} />
 
+              <Route path="/court-manager" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtManagerLayout /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />}>
+                <Route index element={!feat('locations') ? <FeatureUnavailable featureName="locations" /> : <CourtManagerOverviewPage />} />
+                <Route path="assigned-court" element={!feat('locations') ? <FeatureUnavailable featureName="locations" /> : <CourtManagerAssignedCourtPage />} />
+                <Route path="bookings" element={!feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : <CourtManagerBookingsPage />} />
+                <Route path="schedule" element={!feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : <CourtManagerSchedulePage />} />
+              </Route>
+
               {/* Specialized Court Owner Routes */}
-              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : role !== 'guest' ? <LocationsList /> : <Navigate to="/" />} />
-              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : role !== 'guest' ? <LocationDetailPage /> : <Navigate to="/" />} />
-              <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Courts /> : <Navigate to="/" />} />
-              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : role !== 'guest' ? <BookingsAdmin /> : <Navigate to="/" />} />
-              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : role !== 'guest' ? <CourtCalendar /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : role !== 'guest' ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : (role === 'COURT_OWNER' || role === 'ADMIN') ? <TournamentHub /> : <Navigate to="/" />} />
-              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : role !== 'guest' ? <Revenue /> : <Navigate to="/" />} />
-              <Route path="/transactions" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Transactions /> : <Navigate to="/" />} />
-              <Route path="/court-pricing" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtPricing /> : <Navigate to="/" />} />
-              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : role !== 'guest' ? <LocationPolicies /> : <Navigate to="/" />} />
+              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <LocationsList /> : <Navigate to="/" />} />
+              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : isCourtOwnerRole ? <LocationDetailPage /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <Navigate to="/locations" replace /> : <Navigate to="/" />} />
+              <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <Navigate to="/locations" replace /> : <Navigate to="/" />} />
+              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.bookings} replace /> : canOperateCourt ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.schedule} replace /> : canOperateCourt ? <CourtCalendar /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : isCourtOwnerRole ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : (isCourtOwnerRole || role === 'ADMIN') ? <TournamentHub /> : <Navigate to="/" />} />
+              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : isCourtOwnerRole ? <Revenue /> : <Navigate to="/" />} />
+              <Route path="/transactions" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtOwnerRole ? <Transactions /> : <Navigate to="/" />} />
+              <Route path="/court-pricing" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtOwnerRole ? <CourtPricing /> : <Navigate to="/" />} />
+              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : isCourtOwnerRole ? <LocationPolicies /> : <Navigate to="/" />} />
               <Route path="/application-status" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <ApplicationStatus /> : <Navigate to="/login" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
@@ -1608,7 +1774,7 @@ const App: React.FC = () => {
           consolidatedRoles = allPossibleRoles;
         }
 
-        const proRolesOnly = consolidatedRoles.filter(r => r === 'COACH' || r === 'COURT_OWNER' || r === 'ADMIN');
+        const proRolesOnly = consolidatedRoles.filter(r => r === 'COACH' || r === 'COURT_OWNER' || r === 'COURT_MANAGER' || r === 'ADMIN');
         setAuthorizedProRoles(proRolesOnly);
 
         // Determine active role with complete data
@@ -1802,6 +1968,7 @@ const App: React.FC = () => {
               timestamp: n.created_at,
               isRead: n.is_read,
               bookingId: n.booking_id,
+              action_url: n.action_url,
               metadata: n.metadata
             };
           });
@@ -2009,10 +2176,48 @@ const App: React.FC = () => {
           },
           timestamp: newNotif.created_at,
           isRead: newNotif.is_read,
-          bookingId: newNotif.booking_id
+          bookingId: newNotif.booking_id,
+          action_url: newNotif.action_url,
+          metadata: newNotif.metadata
         };
 
         setNotifications(prev => [mappedNewNotif, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`user-profile-role-${currentUserId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${currentUserId}`
+      }, async (payload) => {
+        const profile = payload.new as any;
+        const nextRoles = (profile?.roles as UserRole[]) || ['PLAYER'];
+        const nextActiveRole = (profile?.active_role as UserRole) || 'PLAYER';
+        const nextAuthorizedProRoles = nextRoles.filter((item) =>
+          item === 'COACH' || item === 'COURT_OWNER' || item === 'COURT_MANAGER' || item === 'ADMIN'
+        );
+        const nextIsActualAdmin = nextRoles.some((item) => (item || '').toString().toUpperCase() === 'ADMIN');
+
+        setAuthorizedProRoles(nextAuthorizedProRoles);
+        setRole(nextActiveRole);
+        setIsActualAdmin(nextIsActualAdmin);
+        localStorage.setItem('active_role', nextActiveRole);
+
+        await ensureDefaultFeatures(nextActiveRole);
+        const nextFeatures = await getEnabledFeaturesForRole(nextActiveRole);
+        setEnabledFeatures(nextFeatures);
+        setFeaturesLoaded(true);
       })
       .subscribe();
 

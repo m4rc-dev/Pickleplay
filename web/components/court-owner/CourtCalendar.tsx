@@ -30,6 +30,7 @@ import {
     deleteCourtEvent,
     getEventColorByType
 } from '../../services/courtEvents';
+import { getCurrentActiveRole, getCurrentCourtManagerContext } from '../../services/courtManagers';
 
 interface Court {
     id: string;
@@ -309,6 +310,7 @@ const CourtCalendar: React.FC = () => {
     const [events, setEvents] = useState<CourtEvent[]>([]);
     const [courts, setCourts] = useState<Court[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isManagerRole, setIsManagerRole] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<CourtEvent | null>(null);
     const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -346,16 +348,25 @@ const CourtCalendar: React.FC = () => {
             const { data: { session } } = await supabase.auth.getSession();
             const userId = session?.user?.id;
             if (!userId) return;
+            const activeRole = await getCurrentActiveRole();
+            const isManager = activeRole === 'COURT_MANAGER';
+            const managerContext = isManager ? await getCurrentCourtManagerContext() : null;
+            setIsManagerRole(isManager);
 
             // Fetch courts and events in parallel
             const [courtsResponse, eventsResponse] = await Promise.all([
-                supabase.from('courts').select('id, name').eq('owner_id', userId),
+                isManager && managerContext
+                    ? supabase.from('courts').select('id, name').eq('id', managerContext.court.id)
+                    : supabase.from('courts').select('id, name').eq('owner_id', userId),
                 getOwnerEvents()
             ]);
 
             if (courtsResponse.error) throw courtsResponse.error;
 
             setCourts(courtsResponse.data || []);
+            if (isManager && managerContext) {
+                setSelectedCourt(managerContext.court.id);
+            }
             setEvents(eventsResponse.data || []);
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -503,28 +514,33 @@ const CourtCalendar: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className={isManagerRole ? 'space-y-5' : 'space-y-6'}>
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Court Management</p>
-                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase">
+                    <h1 className={`${isManagerRole ? 'text-3xl md:text-[2.8rem]' : 'text-3xl md:text-4xl'} font-black text-slate-900 tracking-tighter uppercase`}>
                         Event Calendar
                     </h1>
-                    <p className="text-slate-500 text-sm mt-1">Manage maintenance, closures, and private events</p>
+                    <p className="text-slate-500 text-sm mt-1">
+                        {isManagerRole
+                            ? 'Manage availability, maintenance, and closures for your assigned court.'
+                            : 'Manage maintenance, closures, and private events.'}
+                    </p>
                 </div>
                 <button
                     onClick={() => {
                         setEditingEvent(null);
                         setIsModalOpen(true);
                     }}
-                    className="flex items-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-900/10 active:scale-95"
+                    className={`flex items-center gap-2 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-lg shadow-blue-900/10 active:scale-95 hover:bg-blue-600 ${isManagerRole ? 'px-5 py-3.5' : 'px-6 py-4'}`}
                 >
                     <Plus size={18} /> Block Time
                 </button>
             </div>
 
             {/* Stats Cards */}
+            {!isManagerRole && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
@@ -563,11 +579,12 @@ const CourtCalendar: React.FC = () => {
                     <p className="text-2xl font-black text-slate-900">{events.filter(e => e.event_type === 'closure').length}</p>
                 </div>
             </div>
+            )}
 
             {/* Calendar Controls */}
             <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                <div className={`${isManagerRole ? 'p-4' : 'p-6'} border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4`}>
+                    <div className={`flex items-center ${isManagerRole ? 'gap-3' : 'gap-4'}`}>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={prevMonth}
@@ -583,7 +600,7 @@ const CourtCalendar: React.FC = () => {
                             </button>
                         </div>
                         <div>
-                            <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                            <h2 className={`${isManagerRole ? 'text-lg md:text-xl' : 'text-xl'} font-black text-slate-900 tracking-tight uppercase`}>
                                 {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                             </h2>
                         </div>
@@ -596,17 +613,18 @@ const CourtCalendar: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        {/* Court Filter */}
-                        <select
-                            value={selectedCourt}
-                            onChange={(e) => setSelectedCourt(e.target.value)}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                        >
-                            <option value="all">All Courts</option>
-                            {courts.map(court => (
-                                <option key={court.id} value={court.id}>{court.name}</option>
-                            ))}
-                        </select>
+                        {!isManagerRole && (
+                            <select
+                                value={selectedCourt}
+                                onChange={(e) => setSelectedCourt(e.target.value)}
+                                className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                            >
+                                <option value="all">All Courts</option>
+                                {courts.map(court => (
+                                    <option key={court.id} value={court.id}>{court.name}</option>
+                                ))}
+                            </select>
+                        )}
 
                         {/* View Toggle */}
                         <div className="flex items-center bg-slate-100 rounded-xl p-1">
@@ -634,7 +652,7 @@ const CourtCalendar: React.FC = () => {
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : viewMode === 'month' ? (
-                    <div className="p-4">
+                    <div className={isManagerRole ? 'p-3' : 'p-4'}>
                         {/* Day Headers */}
                         <div className="grid grid-cols-7 mb-2">
                             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -645,11 +663,11 @@ const CourtCalendar: React.FC = () => {
                         </div>
 
                         {/* Calendar Days */}
-                        <div className="grid grid-cols-7 gap-1">
+                        <div className={`grid grid-cols-7 ${isManagerRole ? 'gap-1' : 'gap-1'}`}>
                             {days.map((day, idx) => (
                                 <div
                                     key={idx}
-                                    className={`min-h-[100px] md:min-h-[120px] p-2 rounded-2xl border transition-all ${day
+                                    className={`${isManagerRole ? 'min-h-[88px] md:min-h-[96px]' : 'min-h-[100px] md:min-h-[120px]'} p-2 rounded-2xl border transition-all ${day
                                         ? isToday(day)
                                             ? 'bg-blue-50 border-blue-200'
                                             : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
