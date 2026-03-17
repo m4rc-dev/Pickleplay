@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
@@ -16,7 +16,7 @@ import {
   type DirectMessage
 } from '../../services/directMessages';
 import { ConversationList } from './ConversationList';
-import { ChatArea } from './ChatArea';
+import { ChatArea, type MessageGateState } from './ChatArea';
 
 const POLL_INTERVAL_MS = 3000; // poll every 3 seconds as realtime fallback
 
@@ -37,7 +37,8 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canMessage, setCanMessage] = useState<boolean | null>(null);
-  // Set of conversation IDs that are "message requests" (non-mutual + has messages)
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  // Inbound message requests only.
   const [requestConvIds, setRequestConvIds] = useState<Set<string>>(new Set());
 
   // Friends chatheads
@@ -91,13 +92,18 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   useEffect(() => {
     if (conversationIdFromUrl && conversations.length > 0) {
       const conv = conversations.find(c => c.id === conversationIdFromUrl);
-      if (conv) selectConversation(conv);
+      if (conv) {
+        setSelectedConversation(prev => prev?.id === conv.id ? { ...prev, ...conv } : conv);
+      }
     }
   }, [conversationIdFromUrl, conversations]);
 
   // Check mutual follow whenever the selected conversation changes
   useEffect(() => {
-    if (!selectedConversation?.other_user?.id) return;
+    if (!selectedConversation?.other_user?.id) {
+      setCanMessage(null);
+      return;
+    }
     setCanMessage(null);
     checkMutualFollow(selectedConversation.other_user.id).then(setCanMessage);
   }, [selectedConversation?.id]);
@@ -194,9 +200,12 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     return () => { supabase.removeChannel(channel); };
   }, [currentUserId]);
 
-  // Compute which conversations are "message requests" (other user not a mutual follow)
+  // Compute inbound message requests (non-mutual and last message came from them).
   const computeRequestConvIds = useCallback(async (convs: ConversationWithDetails[], myId: string) => {
-    if (convs.length === 0) return;
+    if (convs.length === 0) {
+      setRequestConvIds(new Set());
+      return;
+    }
     try {
       const [iFollowRes, followsMeRes] = await Promise.all([
         supabase.from('user_follows').select('followed_id').eq('follower_id', myId),
@@ -207,21 +216,33 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
       const mutualSet = new Set([...iFollowSet].filter(id => followsMeSet.has(id)));
       const reqIds = new Set(
         convs
-          .filter(c => c.other_user?.id && c.last_message && !mutualSet.has(c.other_user.id))
+          .filter(c =>
+            c.other_user?.id &&
+            c.last_message &&
+            c.last_message.sender_id !== myId &&
+            !mutualSet.has(c.other_user.id)
+          )
           .map(c => c.id)
       );
       setRequestConvIds(reqIds);
-    } catch (_) {}
+    } catch (_) {
+      setRequestConvIds(new Set());
+    }
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setRequestConvIds(new Set());
+      return;
+    }
+    computeRequestConvIds(conversations, currentUserId);
+  }, [computeRequestConvIds, conversations, currentUserId]);
 
   const loadConversations = async () => {
     setIsLoading(true);
     try {
       const convs = await getUserConversations();
       setConversations(convs);
-      // Get current user id for follow-check (may be loaded asynchronously)
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) computeRequestConvIds(convs, user.id);
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
@@ -231,14 +252,20 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
 
   const loadMessages = async () => {
     if (!selectedConversation) return;
+    setIsMessagesLoading(true);
     try {
       setMessages(await getConversationMessages(selectedConversation.id));
     } catch (error) {
       console.error('Error loading messages:', error);
+      setMessages([]);
+    } finally {
+      setIsMessagesLoading(false);
     }
   };
 
   const selectConversation = (conversation: ConversationWithDetails) => {
+    setMessages([]);
+    setCanMessage(null);
     setSelectedConversation(conversation);
     setSearchParams({ conversation: conversation.id });
     // Mark as read immediately and clear the nav badge
@@ -247,9 +274,26 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     }).catch(() => {});
   };
 
+  const messageGateState: MessageGateState = (() => {
+    if (!selectedConversation || canMessage === null || isMessagesLoading) return 'loading';
+    if (canMessage) return 'chat';
+
+    const hasOwnMessages = currentUserId
+      ? messages.some(message => message.sender_id === currentUserId)
+      : false;
+    const hasIncomingMessages = currentUserId
+      ? messages.some(message => message.sender_id !== currentUserId)
+      : messages.length > 0;
+
+    if (hasIncomingMessages) return 'incoming_request';
+    if (hasOwnMessages) return 'outgoing_request';
+    return 'new_request';
+  })();
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation || isSending) return;
+    if (messageGateState !== 'chat' && messageGateState !== 'new_request') return;
     setIsSending(true);
     const text = newMessage.trim();
     setNewMessage('');
@@ -267,6 +311,8 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   const handleBack = () => {
+    setMessages([]);
+    setCanMessage(null);
     setSelectedConversation(null);
     setSearchParams({});
   };
@@ -277,7 +323,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     await followUser(selectedConversation.other_user.id);
     const mutual = await checkMutualFollow(selectedConversation.other_user.id);
     setCanMessage(mutual);
-    // Remove from request set since we've now followed them
+    await loadFriends();
     setRequestConvIds(prev => { const next = new Set(prev); next.delete(selectedConversation.id); return next; });
   };
 
@@ -323,7 +369,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           currentUserId={currentUserId}
           newMessage={newMessage}
           isSending={isSending}
-          canMessage={canMessage}
+          messageGateState={messageGateState}
           onAcceptRequest={handleAcceptRequest}
           onNewMessageChange={setNewMessage}
           onSendMessage={handleSendMessage}
