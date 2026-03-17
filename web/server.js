@@ -1897,10 +1897,9 @@ app.get('/api/court-managers/invite/:token', async (req, res) => {
     }
 
     const { invite, assignment, court } = inviteRecord;
-    const accountState = await resolveCourtManagerInviteAccountState({
-      email: invite.invitee_email,
-      assignment,
-    });
+    const existingInviteProfile = assignment.manager_user_id
+      ? await getProfileById(assignment.manager_user_id)
+      : await getProfileByEmail(invite.invitee_email);
 
     res.json({
       assignmentId: assignment.id,
@@ -1910,7 +1909,7 @@ app.get('/api/court-managers/invite/:token', async (req, res) => {
       managerName: assignment.manager_name,
       expiresAt: invite.expires_at,
       status: assignment.status,
-      existingAccount: accountState.isExistingAccount,
+      existingAccount: Boolean(existingInviteProfile || assignment.manager_user_id),
     });
   } catch (error) {
     console.error('Court manager invite lookup error:', error);
