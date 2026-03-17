@@ -206,6 +206,12 @@ const CourtDetail: React.FC = () => {
     const [referenceNumber, setReferenceNumber] = useState('');
     const proofInputRef = useRef<HTMLInputElement>(null);
 
+    const normalizeReferenceNumber = (value: string) => value.replace(/\s+/g, '').trim();
+    const formatReferenceNumberInput = (value: string) => {
+        const compact = normalizeReferenceNumber(value);
+        return compact.replace(/(.{4})/g, '$1 ').trim();
+    };
+
     // Location entry confirmation & policies
     const [showLocationEntryModal, setShowLocationEntryModal] = useState(true);
     const [locationConfirmed, setLocationConfirmed] = useState(false);
@@ -753,9 +759,12 @@ const CourtDetail: React.FC = () => {
         if (!court || selectedSlots.length === 0 || !user || !paymentMethod) return;
 
         // QR payment validation
-        if ((paymentMethod === 'gcash' || paymentMethod === 'maya') && !proofFile) {
-            alert('📸 Please upload your payment proof screenshot.');
-            return;
+        if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
+            const cleanRef = normalizeReferenceNumber(referenceNumber);
+            if (!proofFile || !cleanRef) {
+                alert('📸 Please enter your reference number and upload your payment proof screenshot.');
+                return;
+            }
         }
 
         setIsProcessing(true);
@@ -832,7 +841,7 @@ const CourtDetail: React.FC = () => {
                         player_id: user.id,
                         payment_type: paymentMethod,
                         account_name: selectedQRMethod?.account_name || '',
-                        reference_number: referenceNumber || null,
+                        reference_number: normalizeReferenceNumber(referenceNumber) || null,
                         proof_image_url: proofUrl,
                         amount: totalPrice,
                         status: 'pending',
@@ -1435,10 +1444,11 @@ const CourtDetail: React.FC = () => {
                                                 setPaymentMethod(method.payment_type);
                                                 setSelectedQRMethod(method);
                                             }}
+                                            aria-pressed={paymentMethod === method.payment_type && selectedQRMethod?.id === method.id}
                                             className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
                                                 paymentMethod === method.payment_type && selectedQRMethod?.id === method.id
-                                                    ? 'bg-blue-50 border-blue-500'
-                                                    : 'bg-white border-slate-200 hover:border-blue-300'
+                                                    ? 'bg-blue-50 border-blue-500 shadow-sm ring-2 ring-blue-100'
+                                                    : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 hover:-translate-y-0.5'
                                             }`}
                                         >
                                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${
@@ -1451,6 +1461,7 @@ const CourtDetail: React.FC = () => {
                                                     {method.payment_type === 'gcash' ? 'GCash' : 'Maya'}
                                                 </p>
                                                 <p className="text-[11px] font-medium text-slate-400">{method.account_name}</p>
+                                                <p className="text-[11px] font-semibold text-slate-400">Tap to select</p>
                                             </div>
                                             {paymentMethod === method.payment_type && selectedQRMethod?.id === method.id && (
                                                 <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
@@ -1463,10 +1474,11 @@ const CourtDetail: React.FC = () => {
                                     {/* Cash Payment */}
                                     <button
                                         onClick={() => { setPaymentMethod('cash'); setSelectedQRMethod(null); }}
+                                        aria-pressed={paymentMethod === 'cash'}
                                         className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
                                             paymentMethod === 'cash'
-                                                ? 'bg-blue-50 border-blue-500'
-                                                : 'bg-white border-slate-200 hover:border-blue-300'
+                                                ? 'bg-blue-50 border-blue-500 shadow-sm ring-2 ring-blue-100'
+                                                : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 hover:-translate-y-0.5'
                                         }`}
                                     >
                                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -1537,14 +1549,18 @@ const CourtDetail: React.FC = () => {
 
                                 {/* Reference Number */}
                                 <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Reference Number (Optional)</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Reference Number *</label>
                                     <input
                                         type="text"
                                         placeholder="e.g. 1234567890"
                                         value={referenceNumber}
-                                        onChange={e => setReferenceNumber(e.target.value)}
+                                        onChange={e => setReferenceNumber(formatReferenceNumberInput(e.target.value))}
                                         className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                                     />
+                                    <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                                        <Info size={12} className="text-blue-500" />
+                                        Double-check your reference number before submit.
+                                    </p>
                                 </div>
 
                                 {/* Proof Upload */}
@@ -1555,7 +1571,29 @@ const CourtDetail: React.FC = () => {
                                         className="w-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all"
                                     >
                                         {proofPreview ? (
-                                            <img src={proofPreview} alt="Proof Preview" className="max-h-40 object-contain rounded-lg" />
+                                            <div className="w-full flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-blue-50 transition-colors">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(proofPreview, '_blank', 'noopener,noreferrer');
+                                                    }}
+                                                    className="flex items-center gap-3"
+                                                >
+                                                    <img src={proofPreview} alt="Proof Preview" className="w-12 h-12 object-cover rounded-md border border-slate-200" />
+                                                    <span className="text-sm font-bold text-blue-600">View uploaded proof</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        proofInputRef.current?.click();
+                                                    }}
+                                                    className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-white text-blue-600 text-[11px] font-black uppercase tracking-wide hover:bg-blue-50"
+                                                >
+                                                    Re-upload
+                                                </button>
+                                            </div>
                                         ) : (
                                             <>
                                                 <Upload size={20} className="text-slate-300" />
@@ -1568,6 +1606,10 @@ const CourtDetail: React.FC = () => {
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
+                                        onClick={(e) => {
+                                            const input = e.currentTarget;
+                                            input.value = '';
+                                        }}
                                         onChange={e => {
                                             const file = e.target.files?.[0];
                                             if (file) {
@@ -1587,7 +1629,7 @@ const CourtDetail: React.FC = () => {
                                     </button>
                                     <button
                                         onClick={confirmBooking}
-                                        disabled={!proofFile || isProcessing}
+                                        disabled={!proofFile || !normalizeReferenceNumber(referenceNumber) || isProcessing}
                                         className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                                     >
                                         {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Submit & Book'}

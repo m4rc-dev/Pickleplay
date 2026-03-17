@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, PhilippinePeso, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, ChevronRight, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck, Banknote, QrCode, Upload, Maximize2, Download } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, PhilippinePeso, Clock, CheckCircle2, Loader2, Filter, Search, Navigation, AlertCircle, Ban, CircleCheck, List, Funnel, X, ChevronLeft, ChevronRight, Building2, ClipboardList, Receipt as ReceiptIcon, Shield, UserPlus, Send, SlidersHorizontal, CalendarCheck, Banknote, QrCode, Upload, Maximize2 } from 'lucide-react';
 import { Court } from '../types';
 import { CourtSkeleton } from './ui/Skeleton';
 import { supabase } from '../services/supabase';
@@ -443,6 +443,14 @@ const Booking: React.FC = () => {
     setShowInvitePanel(false);
     setViewMode('map');
     navigate('/booking');
+    window.setTimeout(() => {
+      const bookingSection = document.getElementById('booking-section');
+      if (bookingSection) {
+        bookingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 120);
   }, [navigate]);
 
   // Location entry confirmation & policies
@@ -473,6 +481,12 @@ const Booking: React.FC = () => {
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
   const proofInputRef = useRef<HTMLInputElement>(null);
+
+  const normalizeReferenceNumber = (value: string) => value.replace(/\s+/g, '').trim();
+  const formatReferenceNumberInput = (value: string) => {
+    const compact = normalizeReferenceNumber(value);
+    return compact.replace(/(.{4})/g, '$1 ').trim();
+  };
 
   // Post-booking invitation state
   const [postBookLoadingPlayers, setPostBookLoadingPlayers] = useState(false);
@@ -1621,40 +1635,16 @@ const Booking: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  const handleDownloadQRCode = async () => {
-    if (!selectedQRMethod?.qr_code_url) return;
-
-    const paymentLabel = selectedQRMethod.payment_type === 'gcash' ? 'gcash' : 'maya';
-    const fileName = `pickleplay-${paymentLabel}-qr.png`;
-
-    try {
-      const response = await fetch(selectedQRMethod.qr_code_url);
-      if (!response.ok) throw new Error('Failed to fetch QR image');
-
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(objectUrl);
-      showToast('QR code downloaded.', 'success');
-    } catch (error) {
-      console.error('QR download error:', error);
-      window.open(selectedQRMethod.qr_code_url, '_blank', 'noopener,noreferrer');
-      showToast('Unable to auto-download. QR opened in a new tab.', 'info');
-    }
-  };
-
   const confirmBookingWithPayment = async () => {
     if (!selectedCourt || selectedSlots.length === 0 || !paymentMethod) return;
 
     // QR payment validation
-    if ((paymentMethod === 'gcash' || paymentMethod === 'maya') && (!proofFile || !referenceNumber.trim())) {
-      alert('📸 Please enter the reference number and upload your payment proof screenshot.');
-      return;
+    if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
+      const cleanRef = normalizeReferenceNumber(referenceNumber);
+      if (!proofFile || !cleanRef) {
+        alert('📸 Please enter your reference number and upload your payment proof screenshot.');
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -1800,7 +1790,7 @@ const Booking: React.FC = () => {
             player_id: user.id,
             payment_type: paymentMethod,
             account_name: selectedQRMethod?.account_name || '',
-            reference_number: referenceNumber.trim(),
+            reference_number: normalizeReferenceNumber(referenceNumber),
             proof_image_url: proofUrl,
             amount: totalPrice,
             status: 'pending',
@@ -2507,7 +2497,7 @@ const Booking: React.FC = () => {
       </div>
 
       {/* ──────────── MAIN CONTAINER ──────────── */}
-      <div className="px-4 lg:px-6 xl:px-10 pb-10 max-w-[1400px] mx-auto">
+      <div id="booking-section" className="px-4 lg:px-6 xl:px-10 pb-10 max-w-[1400px] mx-auto">
 
         {/* ──────────── DESKTOP HEADER ──────────── */}
         <div className="hidden md:block mb-6 lg:mb-8">
@@ -3254,7 +3244,7 @@ const Booking: React.FC = () => {
                              if (!isCheckingLocationAvailability) {
                                locationCourts.forEach(c => {
                                  const av = locationAvailability.get(c.id);
-                                 if (!av?.blocked.has(slot) && !av?.booked.has(slot) && (c.status === 'Available' || c.status === 'Fully Booked')) {
+                                if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
                                     availableCount++;
                                  }
                                });
@@ -3301,7 +3291,7 @@ const Booking: React.FC = () => {
                             let availableCount = 0;
                             locationCourts.forEach(c => {
                               const av = locationAvailability.get(c.id);
-                              if (!av?.blocked.has(slot) && !av?.booked.has(slot) && (c.status === 'Available' || c.status === 'Fully Booked')) {
+                              if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
                                 availableCount++;
                               }
                             });
@@ -3345,7 +3335,7 @@ const Booking: React.FC = () => {
                       <div className="court-availability-grid grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
                         {(() => {
                           const bookableCourts = locationCourts.filter(court =>
-                            court.status === 'Available' || court.status === 'Fully Booked'
+                            court.status === 'Available'
                           );
 
                           const availableCourts = bookableCourts.filter(court => {
@@ -3361,8 +3351,6 @@ const Booking: React.FC = () => {
                             }
                             return true;
                           });
-                          const visibleCourtIds = new Set(availableCourts.map(c => c.id));
-                          
                           if (availableCourts.length === 0 && !isCheckingLocationAvailability) {
                             return (
                               <div className="col-span-full flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
@@ -3376,15 +3364,14 @@ const Booking: React.FC = () => {
                             );
                           }
                           
-                          return bookableCourts.map((court, idx) => {
-                              const isVisibleForSelectedSlots = visibleCourtIds.has(court.id);
-                              const shouldAnimateHide = locationSelectedSlots.length > 0 && !isVisibleForSelectedSlots;
-
+                          return availableCourts.map((court, idx) => {
+                              const isSlotSelected = locationSelectedSlots.length > 0;
                               return (
                               <button 
                                 key={court.id}
+                                disabled={!isSlotSelected}
                                 onClick={() => {
-                                  if (!isVisibleForSelectedSlots) return;
+                                  if (!isSlotSelected) return;
                                   setSelectedCourt(court);
                                   if (locationSelectedSlots.length > 0) {
                                     setSelectedSlots(locationSelectedSlots);
@@ -3393,19 +3380,19 @@ const Booking: React.FC = () => {
                                   setShowMobileSchedule(false);
                                   setShowBookingSummary(true);
                                 }}
-                                className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 ${shouldAnimateHide ? 'opacity-0 scale-95 -translate-y-2 h-0 min-h-0 border-transparent pointer-events-none' : 'opacity-100 scale-100 translate-y-0'}`}
-                                style={shouldAnimateHide ? undefined : { animationDelay: `${idx * 55}ms` }}
+                                className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'}`}
+                                style={{ animationDelay: `${idx * 55}ms` }}
                               >
                                  <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
-                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/>
+                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className={`w-full h-full object-cover transition-transform duration-500 ${isSlotSelected ? 'group-hover:scale-110' : ''}`}/>
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                    <span className="absolute bottom-1 right-1 bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md">Available</span>
+                                    <span className={`absolute bottom-1 right-1 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md ${isSlotSelected ? 'bg-[#a3e635] text-slate-900' : 'bg-slate-300 text-slate-600'}`}>Available</span>
                                  </div>
                                  <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
-                                    <p className="font-black text-sm text-slate-900 truncate group-hover:text-[#1E40AF] transition-colors">{court.name}</p>
+                                    <p className={`font-black text-sm truncate transition-colors ${isSlotSelected ? 'text-slate-900 group-hover:text-[#1E40AF]' : 'text-slate-500'}`}>{court.name}</p>
                                     <p className="text-[10px] font-bold text-slate-500 mb-1 truncate">{court.type}</p>
                                     <div className="mt-auto flex items-center justify-between">
-                                      <p className="text-xs font-black text-[#1E40AF]">
+                                      <p className={`text-xs font-black ${isSlotSelected ? 'text-[#1E40AF]' : 'text-slate-400'}`}>
                                         {(() => {
                                           const range = locationSlotPriceRanges.get(court.id);
                                           if (range?.hasRules && range.min !== range.max) {
@@ -3414,7 +3401,7 @@ const Booking: React.FC = () => {
                                           return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
                                         })()}
                                       </p>
-                                      <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isSlotSelected ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' : 'bg-slate-200 text-slate-400'}`}>
                                         <CheckCircle2 size={12} />
                                       </div>
                                     </div>
@@ -3771,10 +3758,11 @@ const Booking: React.FC = () => {
                       <button
                         key={method.id}
                         onClick={() => { setPaymentMethod(method.payment_type); setSelectedQRMethod(method); }}
+                        aria-pressed={paymentMethod === method.payment_type && selectedQRMethod?.id === method.id}
                         className={`w-full p-4 rounded-xl border-2 transition-all flex items-center gap-3 text-left ${
                           paymentMethod === method.payment_type && selectedQRMethod?.id === method.id
-                            ? 'bg-blue-50 border-blue-500'
-                            : 'bg-white border-slate-200 hover:border-blue-300'
+                            ? 'bg-blue-50 border-blue-500 shadow-sm ring-2 ring-blue-100'
+                            : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 hover:-translate-y-0.5'
                         }`}
                       >
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${
@@ -3784,6 +3772,7 @@ const Booking: React.FC = () => {
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-bold text-slate-900">{method.payment_type === 'gcash' ? 'GCash' : 'Maya'}</p>
+                          <p className="text-[11px] font-semibold text-slate-400">Tap to select</p>
                         </div>
                         {paymentMethod === method.payment_type && selectedQRMethod?.id === method.id && (
                           <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
@@ -3835,14 +3824,6 @@ const Booking: React.FC = () => {
                       <div className="bg-blue-50 rounded-lg px-3 py-1.5">
                         <p className="text-sm font-black text-blue-700">₱{getSelectedSlotsTotal()}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleDownloadQRCode}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-200 bg-white text-blue-700 text-xs font-black uppercase tracking-[0.12em] hover:bg-blue-50 transition-colors"
-                      >
-                        <Download size={14} />
-                        Download QR
-                      </button>
                     </div>
                   )}
 
@@ -3852,9 +3833,13 @@ const Booking: React.FC = () => {
                       type="text"
                       placeholder="e.g. 1234567890"
                       value={referenceNumber}
-                      onChange={e => setReferenceNumber(e.target.value)}
+                      onChange={e => setReferenceNumber(formatReferenceNumberInput(e.target.value))}
                       className="w-full p-3 rounded-xl border border-slate-200 text-sm font-medium focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                     />
+                    <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
+                      <AlertCircle size={12} className="text-blue-500" />
+                      Double-check your reference number before submit.
+                    </p>
                   </div>
 
                   <div>
@@ -3864,9 +3849,28 @@ const Booking: React.FC = () => {
                       className="w-full border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all"
                     >
                       {proofPreview ? (
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                          <Upload size={16} className="text-blue-500" />
-                          <span className="truncate max-w-[220px]">{proofPreview}</span>
+                        <div className="w-full flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-blue-50 transition-colors">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(proofPreview, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="flex items-center gap-3 text-sm font-bold text-slate-700"
+                          >
+                            <img src={proofPreview} alt="Uploaded proof preview" className="w-12 h-12 object-cover rounded-md border border-slate-200" />
+                            <span className="text-blue-600">View uploaded proof</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              proofInputRef.current?.click();
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-white text-blue-600 text-[11px] font-black uppercase tracking-wide hover:bg-blue-50"
+                          >
+                            Re-upload
+                          </button>
                         </div>
                       ) : (
                         <>
@@ -3880,11 +3884,15 @@ const Booking: React.FC = () => {
                       type="file"
                       accept="image/*"
                       className="hidden"
+                      onClick={(e) => {
+                        const input = e.currentTarget;
+                        input.value = '';
+                      }}
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) {
                           setProofFile(file);
-                          setProofPreview(file.name);
+                          setProofPreview(URL.createObjectURL(file));
                         }
                       }}
                     />
@@ -3899,7 +3907,7 @@ const Booking: React.FC = () => {
                     </button>
                     <button
                       onClick={confirmBookingWithPayment}
-                      disabled={!proofFile || !referenceNumber.trim() || isProcessing}
+                      disabled={!proofFile || !normalizeReferenceNumber(referenceNumber) || isProcessing}
                       className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-200/50 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                     >
                       {isProcessing ? <Loader2 size={16} className="animate-spin" /> : 'Submit & Book'}
@@ -4003,7 +4011,8 @@ const Booking: React.FC = () => {
                     </div>
                   )}
 
-                  {/* ── Invite Players Section (collapsed) ── */}
+                  {/* ── Invite Players Section (only when payment is paid) ── */}
+                  {receiptData?.paymentStatus === 'paid' && (
                   <div className="bg-violet-50/60 border border-violet-100 rounded-2xl p-4 mb-4 text-left">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -4114,18 +4123,9 @@ const Booking: React.FC = () => {
                       </>
                     )}
                   </div>
+                  )}
 
                   <div className="space-y-3">
-                    <button
-                      onClick={() => {
-                        setShowSuccessModal(false);
-                        setShowReceipt(true);
-                        setPostBookInviteQuery(''); setPostBookAllPlayers([]); setPostBookInviteSent([]);
-                      }}
-                      className="w-full py-3.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
-                    >
-                      View My Receipt
-                    </button>
                     <button
                       onClick={() => {
                         setPostBookInviteQuery(''); setPostBookAllPlayers([]); setPostBookInviteSent([]);

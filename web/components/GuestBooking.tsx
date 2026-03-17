@@ -2121,7 +2121,7 @@ const GuestBooking: React.FC = () => {
                                                         : (selectedLocation?.opening_time && selectedLocation?.closing_time
                                                             ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
                                                             : TIME_SLOTS);
-                                                    return slots.map(slot => {
+                                                    return slots.map((slot, idx) => {
                                                         const isSelected = locationSelectedSlots.includes(slot);
                                                         const isPast = isSlotInPast(slot, selectedDate);
 
@@ -2129,7 +2129,7 @@ const GuestBooking: React.FC = () => {
                                                         if (!isCheckingLocationAvailability) {
                                                             locationCourts.forEach(c => {
                                                                 const av = locationAvailability.get(c.id);
-                                                                if (!av?.blocked.has(slot) && !av?.booked.has(slot) && (c.status === 'Available' || c.status === 'Fully Booked')) {
+                                                                if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
                                                                     availableCount++;
                                                                 }
                                                             });
@@ -2140,10 +2140,11 @@ const GuestBooking: React.FC = () => {
 
                                                         return (
                                                             <button
-                                                                key={slot}
+                                                                key={`${toPhDateStr(selectedDate)}-${slot}`}
                                                                 disabled={isDisabled}
                                                                 onClick={() => !isDisabled && toggleLocationSlotSelection(slot, slots)}
-                                                                className={`flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : !hasAvailability ? 'bg-rose-50 border-rose-200 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:shadow-md'}`}
+                                                                className={`slot-lime-entrance flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : isCheckingLocationAvailability ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-wait' : !hasAvailability ? 'bg-rose-50 border-rose-300 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-lime-50 border-lime-300 text-lime-700 hover:bg-lime-100 hover:border-lime-400'}`}
+                                                                style={{ animationDelay: `${idx * 45}ms` }}
                                                             >
                                                                 <span className="text-xs font-bold uppercase whitespace-nowrap">{slotToRange(slot)}</span>
                                                             </button>
@@ -2154,63 +2155,69 @@ const GuestBooking: React.FC = () => {
                                         </div>
 
                                         {/* Bottom Row: Available Courts */}
-                                        <div className="h-[280px] shrink-0 overflow-y-auto p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
+                                        <div className="h-[280px] shrink-0 overflow-y-hidden p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
                                             <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
                                                 <Building2 className="text-[#a3e635]" size={18} />
                                                 {locationSelectedSlots.length > 0
                                                     ? `Courts available at ${slotsToRange(locationSelectedSlots)}`
-                                                    : 'Select time slots to see courts'}
+                                                    : 'Available courts'}
                                             </h3>
 
-                                            {locationSelectedSlots.length === 0 ? (
-                                                <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
-                                                    <CalendarIcon size={32} className="text-slate-300 mb-3" />
-                                                    <p className="text-slate-500 font-bold text-sm">Please pick a time slot above</p>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
+                                            <div className="court-availability-grid grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
                                                     {(() => {
-                                                        const availableCourts = locationCourts.filter(court => {
+                                                        const bookableCourts = locationCourts.filter(court =>
+                                                            court.status === 'Available'
+                                                        );
+
+                                                        const availableCourts = bookableCourts.filter(court => {
+                                                            if (locationSelectedSlots.length === 0) return true;
                                                             const av = locationAvailability.get(court.id);
                                                             if (!av) return false;
                                                             for (const slot of locationSelectedSlots) {
                                                                 if (av.blocked.has(slot) || av.booked.has(slot)) return false;
                                                             }
-                                                            if (court.status !== 'Available' && court.status !== 'Fully Booked') return false;
                                                             return true;
                                                         });
-
                                                         if (availableCourts.length === 0 && !isCheckingLocationAvailability) {
                                                             return (
                                                                 <div className="col-span-full flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
                                                                     <Ban size={32} className="text-slate-300 mb-3" />
-                                                                    <p className="text-slate-500 font-bold text-sm">No courts available at {slotsToRange(locationSelectedSlots)}</p>
+                                                                    <p className="text-slate-500 font-bold text-sm">
+                                                                        {locationSelectedSlots.length > 0
+                                                                            ? `No courts available at ${slotsToRange(locationSelectedSlots)}`
+                                                                            : 'No available courts right now'}
+                                                                    </p>
                                                                 </div>
                                                             );
                                                         }
 
-                                                        return availableCourts.map(court => (
+                                                        return availableCourts.map((court, idx) => {
+                                                            const isSlotSelected = locationSelectedSlots.length > 0;
+                                                            return (
                                                             <button
                                                                 key={court.id}
+                                                                disabled={!isSlotSelected}
                                                                 onClick={() => {
+                                                                    if (!isSlotSelected) return;
                                                                     if (window.innerWidth < 768) {
                                                                         setShowCourtDetails(true);
                                                                     }
                                                                     setHeroCourtId(court.id);
                                                                     handleBooking(); 
                                                                 }}
-                                                                className="group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 transition-all duration-300 ease-out text-left h-[100px]"
+                                                                className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'}`}
+                                                                style={{ animationDelay: `${idx * 55}ms` }}
                                                             >
                                                                 <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
-                                                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className={`w-full h-full object-cover transition-transform duration-500 ${isSlotSelected ? 'group-hover:scale-110' : ''}`} />
                                                                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                                                    <span className="absolute bottom-1 right-1 bg-[#a3e635] text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md">Available</span>
+                                                                    <span className={`absolute bottom-1 right-1 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md ${isSlotSelected ? 'bg-[#a3e635] text-slate-900' : 'bg-slate-300 text-slate-600'}`}>Available</span>
                                                                 </div>
                                                                 <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
-                                                                    <p className="font-black text-sm text-slate-900 truncate group-hover:text-[#1E40AF] transition-colors">{court.name}</p>
+                                                                    <p className={`font-black text-sm truncate transition-colors ${isSlotSelected ? 'text-slate-900 group-hover:text-[#1E40AF]' : 'text-slate-500'}`}>{court.name}</p>
                                                                     <p className="text-[10px] font-bold text-slate-500 mb-1 truncate">{court.type}</p>
                                                                     <div className="mt-auto flex items-center justify-between">
-                                                                        <p className="text-xs font-black text-[#1E40AF]">
+                                                                        <p className={`text-xs font-black ${isSlotSelected ? 'text-[#1E40AF]' : 'text-slate-400'}`}>
                                                                             {(() => {
                                                                                 const range = locationSlotPriceRanges.get(court.id);
                                                                                 if (range?.hasRules && range.min !== range.max) {
@@ -2219,16 +2226,16 @@ const GuestBooking: React.FC = () => {
                                                                                 return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
                                                                             })()}
                                                                         </p>
-                                                                        <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isSlotSelected ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' : 'bg-slate-200 text-slate-400'}`}>
                                                                             <CheckCircle2 size={12} />
                                                                         </div>
                                                                     </div>
                                                                 </div>
                                                             </button>
-                                                        ));
+                                                            );
+                                                        });
                                                     })()}
                                                 </div>
-                                            )}
                                         </div>
                                     </div>
                                     )

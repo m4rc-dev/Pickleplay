@@ -872,7 +872,10 @@ const MyBookings: React.FC = () => {
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
                                         </div>
 
-                                        {paginatedBookings.map((b, idx) => (
+                                        {paginatedBookings.map((b, idx) => {
+                                            const displayStatus = getPlayerDisplayStatus(b);
+                                            const isPaidStatus = displayStatus === 'paid';
+                                            return (
                                             <div key={b.id} className={`grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-6 md:px-8 py-5 items-center border-b border-slate-50 hover:bg-blue-50/30 transition-all duration-200 group ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
                                                 <div className="col-span-1">
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide">#{b.id.slice(0, 7)}</p>
@@ -918,7 +921,7 @@ const MyBookings: React.FC = () => {
                                                                         <Star size={14} className="shrink-0" /> Leave a Review
                                                                     </button>
                                                                 )}
-                                                                {(b.status === 'confirmed' || b.status === 'pending') && (
+                                                                {isPaidStatus && (
                                                                     <button onClick={() => { handleOpenInviteModal(b); setOpenActionsMenuId(null); }}
                                                                         className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-violet-50 hover:text-violet-700 transition-all border-b border-slate-50">
                                                                         <UserPlus size={14} className="shrink-0" /> Invite Player
@@ -936,10 +939,12 @@ const MyBookings: React.FC = () => {
                                                                         <Megaphone size={14} className="shrink-0" /> Share Poster
                                                                     </button>
                                                                 )}
-                                                                <button onClick={() => { handleOpenReceipt(b); setOpenActionsMenuId(null); }}
-                                                                    className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all border-b border-slate-50">
-                                                                    <FileText size={14} className="shrink-0" /> View Receipt
-                                                                </button>
+                                                                {isPaidStatus && (
+                                                                    <button onClick={() => { handleOpenReceipt(b); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all border-b border-slate-50">
+                                                                        <FileText size={14} className="shrink-0" /> View Receipt
+                                                                    </button>
+                                                                )}
                                                                 <button onClick={() => { setSelectedBookingForDetail(b); setShowDetailModal(true); setOpenActionsMenuId(null); }}
                                                                     className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
                                                                     <Info size={14} className="shrink-0" /> View Details
@@ -949,7 +954,8 @@ const MyBookings: React.FC = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
 
                                         {totalPages > 1 && (
                                             <div className="flex items-center justify-between px-8 py-5 border-t border-slate-100 bg-slate-50/30">
@@ -1553,11 +1559,13 @@ const MyBookings: React.FC = () => {
 
                                 <div className="flex gap-3 mt-6 pt-5 border-t border-slate-100">
                                     <button onClick={() => setShowDetailModal(false)}
-                                        className="flex-1 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 text-slate-500 font-extrabold h-12 rounded-xl uppercase tracking-wider text-[10px] transition-all active:scale-[0.98]">Close</button>
-                                    <button onClick={() => { setShowDetailModal(false); handleOpenReceipt(selectedBookingForDetail); }}
-                                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-extrabold h-12 rounded-xl uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25">
-                                        <FileText size={16} /> View Receipt
-                                    </button>
+                                        className={`${getPlayerDisplayStatus(selectedBookingForDetail) === 'paid' ? 'flex-1' : 'w-full'} bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 text-slate-500 font-extrabold h-12 rounded-xl uppercase tracking-wider text-[10px] transition-all active:scale-[0.98]`}>Close</button>
+                                    {getPlayerDisplayStatus(selectedBookingForDetail) === 'paid' && (
+                                        <button onClick={() => { setShowDetailModal(false); handleOpenReceipt(selectedBookingForDetail); }}
+                                            className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-extrabold h-12 rounded-xl uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/25">
+                                            <FileText size={16} /> View Receipt
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
