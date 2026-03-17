@@ -189,7 +189,7 @@ const NotificationPanel: React.FC<{
 };
 
 
-const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean, badge?: number, ownerVariant?: boolean }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false, badge, ownerVariant = false }) => {
+const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCollapsed: boolean, themeColor: string, onClick?: () => void, isMobile?: boolean, badge?: number }> = ({ to, icon, label, isCollapsed, themeColor, onClick, isMobile = false, badge }) => {
   const location = useLocation();
   const hasQuery = to.includes('?');
   const [toPath, toSearch] = hasQuery ? to.split('?', 2).map((s, i) => i === 1 ? '?' + s : s) : [to, ''];
@@ -197,70 +197,18 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
     ? location.pathname === toPath && location.search === toSearch
     : location.pathname === to;
   const isPrimaryBook = !isMobile && to === '/booking';
-  const shouldUseOwnerVariant = ownerVariant && !isMobile;
-  const iconSize = React.isValidElement(icon)
-    ? ((icon as React.ReactElement<any>).props?.size ?? 22)
-    : 22;
-  const enhancedIcon = React.isValidElement(icon)
-    ? React.cloneElement(icon as React.ReactElement<any>, {
-      size: iconSize,
-      strokeWidth: shouldUseOwnerVariant
-        ? (isActive ? 2.2 : 1.95)
-        : (icon as React.ReactElement<any>).props?.strokeWidth,
-      ...(shouldUseOwnerVariant
-        ? { fill: isActive ? 'currentColor' : 'none' }
-        : {}),
-    })
-    : icon;
-  const ownerActiveIcon = shouldUseOwnerVariant && isActive && React.isValidElement(icon)
-    ? (
-      <span className="relative block" style={{ width: iconSize, height: iconSize }}>
-        {React.cloneElement(icon as React.ReactElement<any>, {
-          size: iconSize,
-          strokeWidth: 2.15,
-          fill: '#16784D',
-          stroke: '#16784D',
-          className: 'absolute inset-0',
-          'data-owner-icon-layer': 'shadow',
-        })}
-        {React.cloneElement(icon as React.ReactElement<any>, {
-          size: iconSize,
-          strokeWidth: 2.1,
-          fill: 'currentColor',
-          stroke: 'currentColor',
-          className: 'absolute inset-0',
-          'data-owner-icon-layer': 'base',
-        })}
-        {React.cloneElement(icon as React.ReactElement<any>, {
-          size: iconSize,
-          strokeWidth: 1.55,
-          fill: 'none',
-          stroke: '#B7D532',
-          className: 'absolute inset-0',
-          'data-owner-icon-layer': 'accent',
-        })}
-      </span>
-    )
-    : null;
-  const renderedIcon = ownerActiveIcon ?? enhancedIcon;
 
   return (
     <Link
       to={to}
       onClick={onClick}
-      data-owner-nav={shouldUseOwnerVariant ? 'true' : undefined}
-      data-owner-active={shouldUseOwnerVariant && isActive ? 'true' : undefined}
       className={`flex items-center gap-3 ${isPrimaryBook ? 'p-5' : 'p-3.5'} rounded-2xl transition-colors duration-150 group ${isActive
         ? isMobile ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/95 text-slate-900 shadow-lg'
         : isMobile ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' : `${isPrimaryBook ? 'text-white/90 bg-white/5 hover:bg-white/10' : 'text-white/95 hover:bg-white/10 hover:text-white'}`
         } ${isCollapsed ? 'justify-center' : ''} ${isPrimaryBook && !isActive ? 'ring-1 ring-white/10' : ''}`}
     >
-      <div
-        data-owner-nav-icon={shouldUseOwnerVariant ? 'true' : undefined}
-        data-owner-nav-icon-active={shouldUseOwnerVariant && isActive ? 'true' : undefined}
-        className={`relative shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'} ${shouldUseOwnerVariant ? (isActive ? 'text-[#0B5D3B]' : 'text-white/90 group-hover:text-white') : ''}`}
-      >
-        {renderedIcon}
+      <div className={`relative shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : isPrimaryBook ? 'scale-110 group-hover:scale-115' : 'group-hover:scale-110'}`}>
+        {icon}
         {badge != null && badge > 0 && (
           <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-rose-500 rounded-full text-[9px] font-black text-white flex items-center justify-center px-0.5 leading-none">
             {badge > 99 ? '99+' : badge}
@@ -278,9 +226,7 @@ const NavItem: React.FC<{ to: string, icon: React.ReactNode, label: string, isCo
         </span>
       )}
       {!isCollapsed && isActive && !(badge != null && badge > 0) && (
-        shouldUseOwnerVariant
-          ? <div data-owner-active-marker="true" className="ml-auto h-8 w-1 rounded-full bg-[#B7D532] shadow-[0_0_0_1px_rgba(183,213,50,0.2)]" />
-          : <div className={`ml-auto w-1.5 h-1.5 rounded-full ${isMobile ? 'bg-white' : 'bg-blue-600'}`} />
+        <div className={`ml-auto w-1.5 h-1.5 rounded-full ${isMobile ? 'bg-white' : 'bg-blue-600'}`} />
       )}
     </Link>
   );
@@ -329,13 +275,10 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
 };
 
 const RoleSwitchOverlay: React.FC<{ targetRole: UserRole }> = ({ targetRole }) => {
-  const isCourtOwnerTarget = targetRole === 'COURT_OWNER';
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/20 backdrop-blur-md animate-in fade-in duration-500">
       <div className="bg-white/80 p-12 rounded-[48px] shadow-2xl border border-white flex flex-col items-center gap-6 animate-in zoom-in-95 duration-500">
-        <div
-          className={`w-24 h-24 rounded-[32px] flex items-center justify-center text-white shadow-xl animate-pulse ${isCourtOwnerTarget ? 'bg-[#0B5D3B] shadow-[#ECFCCB]' : 'bg-blue-600 shadow-blue-200'}`}
-        >
+        <div className="w-24 h-24 bg-blue-600 rounded-[32px] flex items-center justify-center text-white shadow-xl shadow-blue-200 animate-pulse">
           {targetRole === 'PLAYER' && <User size={40} />}
           {targetRole === 'COACH' && <GraduationCap size={40} />}
           {targetRole === 'COURT_OWNER' && <Building2 size={40} />}
@@ -346,9 +289,9 @@ const RoleSwitchOverlay: React.FC<{ targetRole: UserRole }> = ({ targetRole }) =
           <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Syncing Intelligence...</p>
         </div>
         <div className="flex gap-1.5 pt-4">
-          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s] ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
-          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s] ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
-          <div className={`w-2 h-2 rounded-full animate-bounce ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
+          <div className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]"></div>
+          <div className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]"></div>
+          <div className="w-2 h-2 rounded-full bg-blue-600 animate-bounce"></div>
         </div>
       </div>
     </div>
@@ -565,24 +508,6 @@ const NavigationHandler: React.FC<{
     return 'blue';
   };
   const themeColor = getThemeColor();
-  const isCourtOwnerShell = role === 'COURT_OWNER';
-  const isCourtOwnerManagementRoute = isCourtOwnerShell && (
-    location.pathname === '/dashboard' ||
-    location.pathname === '/locations' ||
-    location.pathname.startsWith('/locations/') ||
-    location.pathname === '/bookings-admin' ||
-    location.pathname === '/court-calendar' ||
-    location.pathname === '/tournaments-admin' ||
-    location.pathname.startsWith('/tournaments-admin/') ||
-    location.pathname === '/revenue' ||
-    location.pathname === '/transactions' ||
-    location.pathname === '/court-pricing' ||
-    location.pathname === '/court-policies'
-  );
-  const shellBackgroundColor = isCourtOwnerShell ? '#F4F8EC' : '#EBEBE6';
-  const sidebarBackgroundColor = isCourtOwnerShell ? '#0B5D3B' : '#1E40AF';
-  const roleDropdownBackgroundColor = isCourtOwnerShell ? '#397C61' : '#2563EB';
-  const mainBackgroundColor = isAuthPage ? '#1E40AF' : shellBackgroundColor;
 
   // Distinguish maintenance bypass (account-level admin) from feature bypass (role-based)
   const isAdminForMaintenance = isActualAdmin || localStorage.getItem('is_actual_admin') === 'true';
@@ -647,16 +572,9 @@ const NavigationHandler: React.FC<{
   }
 
   return (
-    <div
-      className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden"
-      data-role-shell={isCourtOwnerShell ? 'court-owner' : 'default'}
-      style={{ backgroundColor: shellBackgroundColor }}
-    >
+    <div className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden" style={{ backgroundColor: '#EBEBE6' }}>
       {role !== 'guest' && !isAuthPage && !isPosterPage && (
-        <aside
-          className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60] animate-slide-in-left`}
-          style={{ backgroundColor: sidebarBackgroundColor }}
-        >
+        <aside className={`hidden md:flex flex-col sticky top-0 h-screen shadow-xl transition-all duration-300 ease-in-out relative ${isSidebarCollapsed ? 'w-20' : 'w-72'} z-[60] animate-slide-in-left`} style={{ backgroundColor: '#1E40AF' }}>
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -670,8 +588,7 @@ const NavigationHandler: React.FC<{
               <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className={`${isSidebarCollapsed ? 'w-12 h-12' : 'w-20 h-20'} object-contain rounded-xl`} style={{ transition: 'width 200ms ease-in-out, height 200ms ease-in-out' }} />
               {!isSidebarCollapsed && (
                 <span className="text-white font-black leading-none animate-in fade-in slide-in-from-left-2 duration-300">
-                  <span className="block">PICKLEPLAY</span>
-                  <span>PHILIPPINES</span>
+                  PICKLEPLAY<br />PHILIPPINES
                 </span>
               )}
             </Link>
@@ -679,7 +596,7 @@ const NavigationHandler: React.FC<{
 
           <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
             {role !== 'PLAYER' && feat('dashboard') && (
-              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_OWNER'} />
+              <NavItem to="/dashboard" icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
             )}
             {role === 'ADMIN' && (
               <div className="relative space-y-1.5">
@@ -778,13 +695,13 @@ const NavigationHandler: React.FC<{
             )}
             {role === 'COURT_OWNER' && (
               <>
-                <NavItem to="/locations" icon={<MapPin size={22} />} label="My Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
+                <NavItem to="/locations" icon={<MapPin size={22} />} label="My Courts" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/bookings-admin" icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+                <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -847,10 +764,7 @@ const NavigationHandler: React.FC<{
 
                     {/* Dropdown Menu */}
                     {isRoleDropdownOpen && (
-                      <div
-                        className="absolute bottom-full left-0 right-0 mb-3 border border-white/20 rounded-[28px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50"
-                        style={{ backgroundColor: roleDropdownBackgroundColor }}
-                      >
+                      <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#2563EB] border border-white/20 rounded-[28px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
                         <div className="p-2.5 space-y-1">
                           {/* Player option */}
                           <button
@@ -1096,12 +1010,7 @@ const NavigationHandler: React.FC<{
         </header>
       )}
 
-      <main
-        ref={scrollContainerRef}
-        className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`}
-        data-page-theme={isCourtOwnerManagementRoute ? 'court-owner' : 'default'}
-        style={{ backgroundColor: mainBackgroundColor }}
-      >
+      <main ref={scrollContainerRef} className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`} style={{ backgroundColor: isAuthPage ? '#1E40AF' : '#EBEBE6' }}>
         <div className={`${role === 'guest' || isAuthPage
           ? (location.pathname.startsWith('/court/') ? 'pt-20 md:pt-28 lg:pt-32 px-4 md:px-8 lg:px-14 max-w-[1920px] mx-auto w-full' : '')
           : (
