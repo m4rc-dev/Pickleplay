@@ -9,6 +9,8 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import net from 'node:net';
 import tls from 'node:tls';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
@@ -17,6 +19,8 @@ dotenv.config({ path: '../.env.local' }); // Try root as well
 
 const app = express();
 const PORT = 5001;
+const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
+const isDirectExecution = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === CURRENT_FILE_PATH;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -2463,10 +2467,14 @@ app.post('/api/court-managers/bookings/:bookingId/action', managerInviteLimiter,
 });
 
 // Start server
-app.listen(PORT, () => {
+if (isDirectExecution) {
+  app.listen(PORT, () => {
   console.log(`📧 Email server running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
-});
+  });
+}
+
+export default app;
 
 const requireSupabaseAdmin = () => {
   if (!supabaseAdmin || !WEB_AUTH_REDIRECT_URL) {

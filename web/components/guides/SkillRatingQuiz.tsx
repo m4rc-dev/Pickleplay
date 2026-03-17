@@ -18,6 +18,7 @@ import {
     TrendingUp,
     Zap
 } from 'lucide-react';
+import useSEO from '../../hooks/useSEO';
 import {
     getGuideBySlug,
     getQuizQuestions,
@@ -101,6 +102,21 @@ const SkillRatingQuiz: React.FC<SkillRatingQuizProps> = ({ isLoggedIn }) => {
         };
         fetchData();
     }, [userId]);
+
+    useSEO({
+        title: 'Pickleball Skill Rating Quiz Philippines | PicklePlay',
+        description:
+            guide?.description || 'Take a pickleball skill rating quiz to estimate your level, compare your game, and find the right playing partners on PicklePlay.',
+        canonical: 'https://www.pickleplay.ph/guides/skill-rating',
+        structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            name: 'Pickleball Skill Rating Quiz Philippines',
+            description:
+                guide?.description || 'Interactive pickleball skill rating quiz for players in the Philippines.',
+            url: 'https://www.pickleplay.ph/guides/skill-rating',
+        },
+    });
 
     const handleStart = () => {
         setStarted(true);
