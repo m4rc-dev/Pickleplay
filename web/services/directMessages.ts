@@ -80,19 +80,13 @@ export const followUser = async (targetUserId: string): Promise<void> => {
   if (!session?.user) return;
   const myId = session.user.id;
 
-  const { count: existingFollowCount } = await supabase
-    .from('user_follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('follower_id', myId)
-    .eq('followed_id', targetUserId);
-
-  if ((existingFollowCount ?? 0) > 0) return;
-
+  // Upsert to avoid duplicate key error if already following
   await supabase.from('user_follows').upsert(
     { follower_id: myId, followed_id: targetUserId },
     { onConflict: 'follower_id,followed_id', ignoreDuplicates: true }
   );
 
+  // Fire-and-forget notification
   try {
     await supabase.from('notifications').insert({
       user_id: targetUserId,
@@ -306,7 +300,6 @@ export const sendMessage = async (conversationId: string, content: string) => {
       .neq('user_id', user.user.id);
     if (participants && participants.length > 0) {
       const recipientId = participants[0].user_id;
-      await followUser(recipientId);
       const preview = content.length > 60 ? content.substring(0, 60) + '…' : content;
       await supabase.from('notifications').insert({
         user_id: recipientId,
