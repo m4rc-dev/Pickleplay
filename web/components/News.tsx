@@ -73,6 +73,17 @@ const getNewsArticleSlug = (article: Pick<NormalizedArticle, 'slug' | 'title'>) 
   return safeSlug || 'article';
 };
 
+const stripHtml = (value: string) => value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+const buildExcerpt = (raw: ApiArticle) => {
+  const explicitExcerpt = stripHtml(raw.excerpt || '');
+  if (explicitExcerpt) return explicitExcerpt;
+
+  const plainBody = stripHtml(raw.body || raw.content || '');
+  if (!plainBody) return 'No preview available.';
+  return plainBody.length > 180 ? `${plainBody.substring(0, 180)}...` : plainBody;
+};
+
 function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
   const date = raw.published_at || raw.created_at || raw.date || '';
@@ -81,7 +92,7 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   return {
     id: String(raw.id),
     title: raw.title || 'Untitled Article',
-    excerpt: raw.excerpt || (raw.body || raw.content || '').substring(0, 180) + '...',
+    excerpt: buildExcerpt(raw),
     body: raw.body || raw.content || '',
     category: raw.category || raw.category_name || 'General',
     date: date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
