@@ -36,22 +36,29 @@ async function fetchNewsArticlesPage(baseUrl, apiKey, page = 1) {
     return response.json();
 }
 
-function isMatchingNewsArticle(article, articleId) {
-    if (!article) return false;
-    return String(article.id || '') === String(articleId) || String(article.article_id || '') === String(articleId);
+function normalizeNewsArticleSlug(value) {
+    return String(value || 'article')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'article';
 }
 
-async function findNewsArticleById(baseUrl, apiKey, articleId) {
+function isMatchingNewsArticleSlug(article, articleSlug) {
+    if (!article) return false;
+    return normalizeNewsArticleSlug(article.slug || article.title) === normalizeNewsArticleSlug(articleSlug);
+}
+
+async function findNewsArticleBySlug(baseUrl, apiKey, articleSlug) {
     const firstPage = await fetchNewsArticlesPage(baseUrl, apiKey, 1);
     const firstPageArticles = firstPage?.data?.data || [];
-    const firstMatch = firstPageArticles.find((article) => isMatchingNewsArticle(article, articleId));
+    const firstMatch = firstPageArticles.find((article) => isMatchingNewsArticleSlug(article, articleSlug));
     if (firstMatch) return firstMatch;
 
     const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
     for (let page = 2; page <= lastPage; page += 1) {
         const pageData = await fetchNewsArticlesPage(baseUrl, apiKey, page);
         const articles = pageData?.data?.data || [];
-        const match = articles.find((article) => isMatchingNewsArticle(article, articleId));
+        const match = articles.find((article) => isMatchingNewsArticleSlug(article, articleSlug));
         if (match) return match;
     }
 
@@ -70,11 +77,10 @@ export default async function handler(req, res) {
 
     const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
     const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
-    const { id } = req.query;
+    const { slug } = req.query;
 
-    // Sanitize ID — only allow alphanumeric, hyphens, underscores
-    if (!id || !/^[\w-]+$/.test(id)) {
-        return res.status(400).json({ error: 'Invalid article ID.' });
+    if (!slug || typeof slug !== 'string') {
+        return res.status(400).json({ error: 'Invalid article slug.' });
     }
 
     try {
@@ -82,7 +88,7 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'News API not configured.' });
         }
 
-        const article = await findNewsArticleById(NEWS_API_URL, NEWS_API_KEY, id);
+        const article = await findNewsArticleBySlug(NEWS_API_URL, NEWS_API_KEY, slug);
         if (!article) {
             return res.status(404).json({ error: 'Article not found' });
         }
@@ -90,9 +96,9 @@ export default async function handler(req, res) {
         return res.status(200).json({ data: article });
     } catch (error) {
         if (error.details) {
-            console.error('❌ News article detail upstream error:', error.status, error.details);
+            console.error('❌ News article slug lookup upstream error:', error.status, error.details);
         }
-        console.error('❌ News article detail error:', error.message);
+        console.error('❌ News article slug lookup error:', error.message);
         return res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
     }
 }

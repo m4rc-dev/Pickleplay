@@ -351,6 +351,81 @@ const sendAppEmail = async ({
 const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 
+const getNewsApiHeaders = () => ({
+  'X-Site-Api-Key': NEWS_API_KEY,
+  'Accept': 'application/json',
+});
+
+async function fetchNewsArticlesPage(page = 1, category = '') {
+  const params = new URLSearchParams({ page: String(page) });
+  if (category) params.set('category', String(category));
+
+  const response = await fetch(`${NEWS_API_URL}/api/external/articles?${params.toString()}`, {
+    headers: getNewsApiHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`News API returned ${response.status}`);
+    error.status = response.status;
+    error.details = errorText;
+    throw error;
+  }
+
+  return response.json();
+}
+
+function isMatchingNewsArticle(article, articleId) {
+  if (!article) return false;
+  return String(article.id || '') === String(articleId) || String(article.article_id || '') === String(articleId);
+}
+
+function normalizeNewsArticleSlug(value) {
+  return String(value || 'article')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'article';
+}
+
+function isMatchingNewsArticleSlug(article, articleSlug) {
+  if (!article) return false;
+  return normalizeNewsArticleSlug(article.slug || article.title) === normalizeNewsArticleSlug(articleSlug);
+}
+
+async function findNewsArticleById(articleId) {
+  const firstPage = await fetchNewsArticlesPage(1);
+  const firstPageArticles = firstPage?.data?.data || [];
+  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticle(article, articleId));
+  if (firstMatch) return firstMatch;
+
+  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
+  for (let page = 2; page <= lastPage; page += 1) {
+    const pageData = await fetchNewsArticlesPage(page);
+    const articles = pageData?.data?.data || [];
+    const match = articles.find(article => isMatchingNewsArticle(article, articleId));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+async function findNewsArticleBySlug(articleSlug) {
+  const firstPage = await fetchNewsArticlesPage(1);
+  const firstPageArticles = firstPage?.data?.data || [];
+  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
+  if (firstMatch) return firstMatch;
+
+  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
+  for (let page = 2; page <= lastPage; page += 1) {
+    const pageData = await fetchNewsArticlesPage(page);
+    const articles = pageData?.data?.data || [];
+    const match = articles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
+    if (match) return match;
+  }
+
+  return null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 🛡️  SECURITY MIDDLEWARE — DDoS / Abuse Protection
 // ═══════════════════════════════════════════════════════════════
@@ -472,31 +547,37 @@ app.get('/api/v1/news/articles', async (req, res) => {
     const page = req.query.page || 1;
     const category = req.query.category || ''; // Optional category filter
 
-    // Build URL with optional category filter
-    let url = `${NEWS_API_URL}/api/external/articles?page=${page}`;
-    if (category) {
-      url += `&category=${category}`;
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        'X-Site-Api-Key': NEWS_API_KEY,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ News API error:', response.status, errorText);
-      return res.status(response.status).json({ error: `News API returned ${response.status}` });
-    }
-
-    const data = await response.json();
+    const data = await fetchNewsArticlesPage(page, category);
     console.log(`📰 News API: fetched page ${page}${category ? ` (category: ${category})` : ' (all categories)'} - ${data?.data?.total || 0} total articles`);
     res.json(data);
   } catch (error) {
+    if (error.details) {
+      console.error('❌ News API error:', error.status, error.details);
+    }
     console.error('❌ News proxy error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch news articles' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch news articles' });
+  }
+});
+
+// Proxy for single article detail
+app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
+  try {
+    if (!NEWS_API_URL || !NEWS_API_KEY) {
+      return res.status(500).json({ error: 'News API not configured.' });
+    }
+
+    const article = await findNewsArticleBySlug(req.params.slug);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ data: article });
+  } catch (error) {
+    if (error.details) {
+      console.error('❌ News article slug lookup upstream error:', error.status, error.details);
+    }
+    console.error('❌ News article slug lookup error:', error.message);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
   }
 });
 
@@ -507,24 +588,18 @@ app.get('/api/v1/news/articles/:id', async (req, res) => {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 
-    const url = `${NEWS_API_URL}/api/external/articles/${req.params.id}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'X-Site-Api-Key': NEWS_API_KEY,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: `News API returned ${response.status}` });
+    const article = await findNewsArticleById(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
     }
 
-    const data = await response.json();
-    res.json(data);
+    res.json({ data: article });
   } catch (error) {
+    if (error.details) {
+      console.error('❌ News article detail upstream error:', error.status, error.details);
+    }
     console.error('❌ News article detail error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch article' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
   }
 });
 
