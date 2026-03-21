@@ -118,8 +118,10 @@ import {
 import Achievements from './components/Achievements';
 import AchievementsManager from './components/admin/AchievementsManager';
 import Coaches from '@/components/Coaches';
-import { supabase, createSession, getSecuritySettings } from './services/supabase';
+import { supabase } from './services/supabase';
 import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures, DEFAULT_FEATURES_PER_ROLE } from './services/maintenance';
+import { getTwoFactorStatus } from './services/twoFactorAuth';
+import { shouldBlockUnverifiedEmailSession } from './services/authAccess';
 import { approveCourtManager } from './lib/court-manager/actions';
 import { COURT_MANAGER_ROUTES } from './lib/court-manager/constants';
 import MaintenanceScreen from './components/MaintenanceScreen';
@@ -460,6 +462,7 @@ const NavigationHandler: React.FC<{
   enabledFeatures: Set<string>;
   featuresLoaded: boolean;
   isActualAdmin: boolean;
+  isTwoFactorPending: boolean;
 }> = (props) => {
   const {
     role: rawRole, setRole, isLoginModalOpen, setIsLoginModalOpen, handleLogout,
@@ -471,7 +474,8 @@ const NavigationHandler: React.FC<{
     isSwitchingRole, roleSwitchTarget, handleRoleSwitch,
     showUsernameModal, setShowUsernameModal, isUpdatingUsername,
     initialNameForModal, handleConfirmUsername,
-    isMaintenanceMode, maintenanceChecked, maintenanceMessage, isSoftLaunchMode, enabledFeatures, featuresLoaded, isActualAdmin
+    isMaintenanceMode, maintenanceChecked, maintenanceMessage, isSoftLaunchMode, enabledFeatures, featuresLoaded, isActualAdmin,
+    isTwoFactorPending
   } = props;
 
   const role = currentUserId ? rawRole : 'guest';
@@ -496,7 +500,6 @@ const NavigationHandler: React.FC<{
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/verify-2fa' || location.pathname === '/update-password' || location.pathname === '/manager-invite';
-  const isTwoFactorPending = localStorage.getItem('two_factor_pending') === 'true';
 
   // ── PASSWORD_RECOVERY: Handle Supabase PKCE password reset flow ──
   // The early interceptor in supabase.ts stores 'password_recovery_pending' in
@@ -1448,6 +1451,9 @@ const App: React.FC = () => {
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [isActualAdmin, setIsActualAdmin] = useState(() => localStorage.getItem('is_actual_admin') === 'true');
   const [authLoading, setAuthLoading] = useState(true);
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
+  const twoFactorStatusRequestRef = useRef<Promise<{ pending: boolean }> | null>(null);
+  const twoFactorStatusKeyRef = useRef<string | null>(null);
 
   const hasAdminRole = (roles: (string | UserRole)[] | null | undefined) =>
     Array.isArray(roles) && roles.some(r => (r || '').toString().toUpperCase() === 'ADMIN');
@@ -1472,10 +1478,13 @@ const App: React.FC = () => {
           if (session) {
             // Session still alive — silently refresh the token
             supabase.auth.refreshSession().then(({ data: { session: refreshed } }) => {
-              if (refreshed) {
-                // token refreshed successfully, no UI change needed
+              const activeSession = refreshed || session;
+              if (activeSession) {
+                refreshTwoFactorGate(activeSession).catch(() => setTwoFactorPending(true));
               }
             });
+          } else {
+            setTwoFactorPending(false);
           }
           // If session is null here the user genuinely logged out elsewhere — let onAuthStateChange handle it
         });
@@ -1523,6 +1532,37 @@ const App: React.FC = () => {
       })
       .subscribe();
 
+    const refreshTwoFactorGate = async (session: any, options?: { force?: boolean }) => {
+      if (!session?.user) {
+        twoFactorStatusRequestRef.current = null;
+        twoFactorStatusKeyRef.current = null;
+        setTwoFactorPending(false);
+        return { pending: false };
+      }
+
+      const requestKey = `${session.user.id}:${session.access_token || 'no-token'}`;
+      if (!options?.force && twoFactorStatusRequestRef.current && twoFactorStatusKeyRef.current === requestKey) {
+        return twoFactorStatusRequestRef.current;
+      }
+
+      const requestPromise = getTwoFactorStatus(session.access_token)
+        .then((status) => {
+          setTwoFactorPending(status.pending);
+          return status;
+        })
+        .finally(() => {
+          if (twoFactorStatusKeyRef.current === requestKey) {
+            twoFactorStatusRequestRef.current = null;
+          }
+        });
+
+      twoFactorStatusKeyRef.current = requestKey;
+      twoFactorStatusRequestRef.current = requestPromise;
+
+      const status = await requestPromise;
+      return status;
+    };
+
     // 1. Robust Session Sync Logic
     const syncUserSession = async (session: any) => {
       if (!session?.user) {
@@ -1531,8 +1571,25 @@ const App: React.FC = () => {
         setUserName(null);
         setUserAvatar(null);
         setCurrentUserId(null);
-        localStorage.removeItem('two_factor_pending');
+        setTwoFactorPending(false);
         localStorage.removeItem('active_role');
+        return;
+      }
+
+      if (shouldBlockUnverifiedEmailSession(session.user)) {
+        await supabase.auth.signOut();
+        setRole('guest');
+        setAuthorizedProRoles([]);
+        setUserName(null);
+        setUserAvatar(null);
+        setCurrentUserId(null);
+        setTwoFactorPending(false);
+        localStorage.removeItem('active_role');
+        localStorage.removeItem('auth_redirect');
+
+        if (!window.location.search.includes('error=verify_email_required') || window.location.pathname !== '/login') {
+          window.location.replace('/login?error=verify_email_required');
+        }
         return;
       }
 
@@ -1544,15 +1601,18 @@ const App: React.FC = () => {
 
       try {
         // Single parallel fetch: profile (full), approved apps, and maintenance status
-        const [profileRes, appsRes, maintenanceResult] = await Promise.all([
+        const [profileRes, appsRes, maintenanceResult, twoFactorStatus] = await Promise.all([
           supabase.from('profiles').select('full_name, username, active_role, roles, avatar_url, referred_by_id, email, points').eq('id', session.user.id).single(),
           supabase.from('professional_applications')
             .select('requested_role')
             .eq('profile_id', session.user.id)
             .eq('status', 'APPROVED')
             .in('requested_role', ['COACH', 'COURT_OWNER']),
-          getMaintenanceStatus()
+          getMaintenanceStatus(),
+          refreshTwoFactorGate(session),
         ]);
+
+        setTwoFactorPending(twoFactorStatus.pending);
 
         // --- Referral Capture Logic ---
         // console.log('🔍 App.tsx: Checking for pending referral code...');
@@ -1800,6 +1860,7 @@ const App: React.FC = () => {
 
       } catch (err) {
         console.error('Error syncing user data:', err);
+        setTwoFactorPending(Boolean(session?.user));
         // Fallback to allow app to load even if sync fails
         setMaintenanceChecked(true);
         setFeaturesLoaded(true);
@@ -1818,11 +1879,21 @@ const App: React.FC = () => {
       } else if (event === 'TOKEN_REFRESHED') {
         // Token silently refreshed — session is still valid, no need to re-sync UI
         // Just make sure currentUserId is set in case this is the first load
-        if (session?.user) setCurrentUserId(session.user.id);
+        if (session?.user) {
+          setCurrentUserId(session.user.id);
+          refreshTwoFactorGate(session).catch(() => setTwoFactorPending(true));
+        }
       } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') {
         syncUserSession(session);
       }
     });
+
+    const handleTwoFactorStateChanged = () => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        refreshTwoFactorGate(session, { force: true }).catch(() => setTwoFactorPending(Boolean(session?.user)));
+      });
+    };
+    window.addEventListener('pickleplay:2fa-status-changed', handleTwoFactorStateChanged);
 
     // 3. Fetch initial data
     const fetchInitialData = async () => {
@@ -1997,6 +2068,7 @@ const App: React.FC = () => {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pickleplay:2fa-status-changed', handleTwoFactorStateChanged);
       clearInterval(pollInterval);
       clearInterval(featurePollInterval);
       supabase.removeChannel(featureChannel);
@@ -2595,6 +2667,7 @@ const App: React.FC = () => {
           enabledFeatures={enabledFeatures}
           featuresLoaded={featuresLoaded}
           isActualAdmin={isActualAdmin}
+          isTwoFactorPending={twoFactorPending}
         />
         {isSwitchingRole && <RoleSwitchOverlay targetRole={roleSwitchTarget} />}
       </>
