@@ -12,6 +12,8 @@ import tls from 'node:tls';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+import { createTwoFactorRouter } from './server/twoFactorRoutes.js';
+import { createSecurityReauthToolkit } from './server/securityReauthRoutes.js';
 
 dotenv.config();
 dotenv.config({ path: '.env.local' });
@@ -34,7 +36,26 @@ const SMTP_PASSWORD = process.env.MAIL_PASSWORD;
 const SMTP_ENCRYPTION = (process.env.MAIL_ENCRYPTION || '').trim().toLowerCase();
 const SMTP_FROM_ADDRESS = (process.env.MAIL_FROM_ADDRESS || SMTP_USERNAME || '').trim();
 const SMTP_FROM_NAME = (process.env.MAIL_FROM_NAME || 'PicklePlay').trim();
+const PICKLEPLAY_EMAIL_LOGO_URL = (
+  process.env.PICKLEPLAY_EMAIL_LOGO_URL ||
+  process.env.EMAIL_LOGO_URL ||
+  ''
+).trim();
 const SMTP_SECURE = SMTP_ENCRYPTION === 'ssl' || SMTP_ENCRYPTION === 'tls' || SMTP_PORT === 465;
+const TWO_FACTOR_SECRET = (
+  process.env.TWO_FACTOR_SECRET ||
+  process.env.TWO_FACTOR_PEPPER ||
+  SUPABASE_SERVICE_ROLE_KEY ||
+  SMTP_PASSWORD ||
+  ''
+).trim();
+const SECURITY_REAUTH_TRUST_SECRET = (
+  process.env.SECURITY_REAUTH_TRUST_SECRET ||
+  TWO_FACTOR_SECRET ||
+  SUPABASE_SERVICE_ROLE_KEY ||
+  ''
+).trim();
+const SECURITY_REAUTH_CODE_EXPIRY_SECONDS = Number(process.env.SECURITY_REAUTH_CODE_EXPIRY_SECONDS || 3600);
 const SMTP_ENABLED = Boolean(
   SMTP_HOST &&
   SMTP_PORT &&
@@ -347,6 +368,390 @@ const sendAppEmail = async ({
   throw new Error('Email service is not configured. Set SMTP mail settings or RESEND_API_KEY.');
 };
 
+const getPicklePlayAppUrl = (path = '/') => {
+  const baseUrl = (WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL || 'https://www.pickleplay.ph').trim();
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+};
+
+const renderEmailBrandHeader = ({ textColor = '#ffffff', width = 188 } = {}) => {
+  if (PICKLEPLAY_EMAIL_LOGO_URL) {
+    return `
+      <img
+        src="${PICKLEPLAY_EMAIL_LOGO_URL}"
+        alt="PicklePlay"
+        width="${width}"
+        style="display:block;width:${width}px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;"
+      />
+    `;
+  }
+
+  return `
+    <p style="margin:0;font-size:24px;line-height:1.1;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:${textColor};">PicklePlay</p>
+  `;
+};
+
+const buildOtpEmailHtmlLegacy = ({
+  code,
+  expiresInMinutes,
+  openAppUrl,
+  appName = 'PicklePlay',
+  buttonLabel = 'Open PicklePlay',
+}) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${appName} Security Code</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 18%, rgba(37,99,235,0.30) 0%, rgba(37,99,235,0.10) 24%, rgba(4,19,35,0) 54%),radial-gradient(circle at 88% 10%, rgba(132,204,22,0.12) 0%, rgba(132,204,22,0.04) 16%, rgba(4,19,35,0) 40%),linear-gradient(180deg,#061428 0%,#04101f 100%);font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 18%, rgba(37,99,235,0.30) 0%, rgba(37,99,235,0.10) 24%, rgba(4,19,35,0) 54%),radial-gradient(circle at 88% 10%, rgba(132,204,22,0.12) 0%, rgba(132,204,22,0.04) 16%, rgba(4,19,35,0) 40%),linear-gradient(180deg,#061428 0%,#04101f 100%);">
+      <tr>
+        <td align="center" style="padding:34px 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:700px;">
+            <tr>
+              <td style="padding:22px;background-color:#071a31;background-image:radial-gradient(circle at 50% 0%, rgba(37,99,235,0.22) 0%, rgba(37,99,235,0.08) 30%, rgba(7,26,49,0) 62%),linear-gradient(180deg,#081a31 0%,#05111f 100%);border:1px solid #173457;border-radius:40px;box-shadow:0 24px 60px rgba(1,10,23,0.42);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                  <tr>
+                    <td align="center" style="padding:0 0 18px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                        <tr>
+                          <td style="font-size:0;line-height:0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                              <tr>
+                                <td width="44" style="font-size:0;line-height:0;border-top:1px solid #234c7a;">&nbsp;</td>
+                                <td width="10"></td>
+                                <td width="10" height="10" bgcolor="#2563eb" style="border-radius:5px;font-size:0;line-height:0;">&nbsp;</td>
+                                <td width="8"></td>
+                                <td width="8" height="8" bgcolor="#84cc16" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td>
+                                <td width="8"></td>
+                                <td width="10" height="10" style="font-size:0;line-height:0;border:1px solid #2d5f99;border-radius:5px;">&nbsp;</td>
+                                <td width="10"></td>
+                                <td width="44" style="font-size:0;line-height:0;border-top:1px solid #234c7a;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f8fbff;border:1px solid #dbe7f5;border-radius:32px;overflow:hidden;box-shadow:0 20px 44px rgba(15,23,42,0.16);">
+                        <tr>
+                          <td align="center" style="padding:30px 40px 22px;background:#ffffff;border-bottom:1px solid #e2eaf5;">
+                            ${renderEmailBrandHeader({ textColor: '#0f172a', width: 184 })}
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px auto 0;">
+                              <tr>
+                                <td width="54" height="4" bgcolor="#84cc16" style="border-radius:999px;font-size:0;line-height:0;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:38px 40px 32px;background-color:#0b1c34;background-image:linear-gradient(140deg,#081729 0%,#0d2852 55%,#1567d8 100%);border-bottom:1px solid rgba(255,255,255,0.10);">
+                            <p style="margin:0 0 12px;font-size:12px;line-height:1.4;letter-spacing:0.24em;font-weight:800;text-transform:uppercase;color:#bfdbfe;">Account Security</p>
+                            <h1 style="margin:0;font-size:38px;line-height:1.06;font-weight:900;color:#ffffff;">Verify your sign in</h1>
+                            <p style="margin:16px 0 0;font-size:15px;line-height:1.8;color:#dbeafe;">
+                              Use this one-time code to finish signing in to your PicklePlay account.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:34px 40px 0;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#eef5ff;background-image:linear-gradient(180deg,#f2f8ff 0%,#e8f1ff 100%);border:1px solid #c7dbff;border-radius:28px;box-shadow:0 18px 36px rgba(29,78,216,0.10);">
+                              <tr>
+                                <td align="center" style="padding:24px 24px 14px;">
+                                  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                                    <tr>
+                                      <td bgcolor="#0f2747" style="padding:8px 16px;border-radius:999px;">
+                                        <p style="margin:0;font-size:11px;line-height:1.2;letter-spacing:0.18em;font-weight:900;text-transform:uppercase;color:#dbeafe;">Verification Code</p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td align="center" style="padding:0 24px 14px;">
+                                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:420px;background:#ffffff;border:1px solid #d6e5fb;border-radius:22px;box-shadow:0 12px 24px rgba(37,99,235,0.10);">
+                                    <tr>
+                                      <td align="center" style="padding:22px 18px;">
+                                        <p style="margin:0;font-size:50px;line-height:1;font-weight:900;letter-spacing:0.22em;color:#0f172a;">${code}</p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td align="center" style="padding:0 24px 26px;">
+                                  <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
+                                    Enter this 6-digit code in PicklePlay to complete your sign-in.
+                                  </p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:24px 40px 0;background:#f8fbff;">
+                            <p style="margin:0 0 8px;font-size:15px;line-height:1.8;color:#334155;">
+                              This code expires in <strong>${expiresInMinutes} minutes</strong>.
+                            </p>
+                            <p style="margin:0;font-size:14px;line-height:1.8;color:#64748b;">
+                              Only the <strong>latest code</strong> remains valid, and older codes stop working as soon as a new one is sent.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:28px 40px 0;background:#f8fbff;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                              <tr>
+                                <td align="center" bgcolor="#1057a7" style="border:1px solid #0c4383;border-radius:999px;box-shadow:0 14px 32px rgba(16,87,167,0.28);">
+                                  <a href="${openAppUrl}" style="display:inline-block;padding:16px 34px;font-size:13px;line-height:1.2;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:999px;">
+                                    ${buttonLabel}
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                            <p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:#64748b;">
+                              Return to the verification screen, then enter the code manually.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:28px 40px 0;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:24px;">
+                              <tr>
+                                <td width="6" bgcolor="#84cc16" style="font-size:0;line-height:0;border-radius:24px 0 0 24px;">&nbsp;</td>
+                                <td style="padding:20px 22px;">
+                                  <p style="margin:0 0 8px;font-size:11px;line-height:1.4;letter-spacing:0.22em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Security Note</p>
+                                  <p style="margin:0 0 8px;font-size:14px;line-height:1.8;color:#334155;">
+                                    Never share this code with anyone. PicklePlay will never ask for your verification code by chat, call, or email.
+                                  </p>
+                                  <p style="margin:0;font-size:14px;line-height:1.8;color:#64748b;">
+                                    If you did not request this login, you can safely ignore this email and your account will remain secure.
+                                  </p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:26px 40px 34px;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                              <tr>
+                                <td style="font-size:0;line-height:0;border-top:1px solid #dde7f3;">&nbsp;</td>
+                              </tr>
+                            </table>
+                            <p style="margin:16px 0 6px;font-size:12px;line-height:1.7;color:#64748b;">
+                              This is an automated PicklePlay security email. Please do not reply.
+                            </p>
+                            <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                              © 2026 PicklePlay Philippines
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+const buildOtpEmailHtml = ({
+  code,
+  expiresInMinutes,
+  openAppUrl,
+  appName = 'PicklePlay',
+  buttonLabel = 'Open PicklePlay',
+}) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${appName} Security Code</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 20%, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.07) 24%, rgba(4,19,35,0) 58%),radial-gradient(circle at 82% 14%, rgba(132,204,22,0.10) 0%, rgba(132,204,22,0.03) 16%, rgba(4,19,35,0) 42%),linear-gradient(180deg,#071325 0%,#04101e 100%);font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 20%, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.07) 24%, rgba(4,19,35,0) 58%),radial-gradient(circle at 82% 14%, rgba(132,204,22,0.10) 0%, rgba(132,204,22,0.03) 16%, rgba(4,19,35,0) 42%),linear-gradient(180deg,#071325 0%,#04101e 100%);">
+      <tr>
+        <td align="center" style="padding:36px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:720px;">
+            <tr>
+              <td style="background:#f8fbff;border:1px solid #dbe7f5;border-radius:28px;overflow:hidden;box-shadow:0 28px 72px rgba(1,10,23,0.42);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                  <tr>
+                    <td style="padding:24px 34px 24px;background-color:#0a1b34;background-image:linear-gradient(135deg,#08172b 0%,#0d2854 58%,#1567d8 100%);border-bottom:1px solid rgba(255,255,255,0.12);">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                        <tr>
+                          <td valign="top" style="padding:0 18px 0 0;">
+                            ${renderEmailBrandHeader({ width: 156 })}
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 0;">
+                              <tr>
+                                <td width="44" height="4" bgcolor="#84cc16" style="border-radius:999px;font-size:0;line-height:0;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:16px 0 8px;font-size:12px;line-height:1.4;letter-spacing:0.24em;font-weight:800;text-transform:uppercase;color:#bfdbfe;">Account Security</p>
+                      <h1 style="margin:0;font-size:34px;line-height:1.08;font-weight:900;color:#ffffff;">Verify your sign in</h1>
+                      <p style="margin:10px 0 0;font-size:15px;line-height:1.7;color:#dbeafe;">
+                        Use this one-time code to finish signing in to your PicklePlay account.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:24px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#edf5ff;background-image:linear-gradient(180deg,#f4f8ff 0%,#e8f1ff 100%);border:1px solid #c8dcff;border-radius:22px;box-shadow:0 16px 32px rgba(29,78,216,0.10);">
+                        <tr>
+                          <td align="center" style="padding:18px 24px 8px;">
+                            <p style="margin:0;font-size:11px;line-height:1.2;letter-spacing:0.18em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Verification Code</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:0 18px 10px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:520px;background:#ffffff;border:1px solid #d5e4fb;border-radius:18px;box-shadow:0 10px 24px rgba(37,99,235,0.10);">
+                              <tr>
+                                <td align="center" style="padding:18px 20px;">
+                                  <p style="margin:0;font-size:54px;line-height:1;font-weight:900;letter-spacing:0.20em;color:#0f172a;font-family:'Courier New',monospace;">${code}</p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:0 24px 18px;">
+                            <p style="margin:0;font-size:14px;line-height:1.65;color:#475569;">
+                              Enter this 6-digit code in PicklePlay to complete your sign-in.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:20px;">
+                        <tr>
+                          <td valign="middle" style="padding:18px 20px;">
+                            <p style="margin:0 0 6px;font-size:14px;line-height:1.65;color:#334155;">
+                              This code expires in <strong>${expiresInMinutes} minutes</strong>. Only the <strong>latest code</strong> remains valid.
+                            </p>
+                            <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b;">
+                              Older codes stop working as soon as a new one is sent.
+                            </p>
+                          </td>
+                          <td width="210" align="center" valign="middle" style="padding:18px 20px 18px 0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                              <tr>
+                                <td align="center" bgcolor="#1057a7" style="border:1px solid #0c4383;border-radius:999px;box-shadow:0 14px 28px rgba(16,87,167,0.24);">
+                                  <a href="${openAppUrl}" style="display:inline-block;padding:15px 28px;font-size:13px;line-height:1.2;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:999px;">
+                                    ${buttonLabel}
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:10px 0 0;font-size:13px;line-height:1.65;color:#64748b;text-align:center;">
+                        Return to the verification screen, then enter the code manually.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:18px;">
+                        <tr>
+                          <td style="padding:16px 18px;border-top:3px solid #84cc16;">
+                            <p style="margin:0 0 6px;font-size:11px;line-height:1.4;letter-spacing:0.22em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Security Note</p>
+                            <p style="margin:0 0 6px;font-size:14px;line-height:1.65;color:#334155;">
+                              Never share this code with anyone. PicklePlay will never ask for your verification code by chat, call, or email.
+                            </p>
+                            <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b;">
+                              If you did not request this login, you can safely ignore this email and your account will remain secure.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:18px 34px 26px;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                        <tr>
+                          <td style="font-size:0;line-height:0;border-top:1px solid #dde7f3;">&nbsp;</td>
+                        </tr>
+                      </table>
+                      <p style="margin:12px 0 6px;font-size:12px;line-height:1.65;color:#64748b;">
+                        This is an automated PicklePlay security email. Please do not reply.
+                      </p>
+                      <p style="margin:0;font-size:12px;line-height:1.65;color:#94a3b8;">
+                        &copy; 2026 PicklePlay Philippines
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+const buildOtpEmailText = ({ code, expiresInMinutes, openAppUrl }) => `PicklePlay security code
+
+Verify your sign in
+
+Your verification code is ${code}.
+
+This code expires in ${expiresInMinutes} minutes.
+Only the latest code remains valid, and older codes stop working as soon as a new one is sent.
+Never share this code with anyone.
+
+Open PicklePlay: ${openAppUrl}
+
+If you did not request this login, you can safely ignore this email.
+
+This is an automated PicklePlay security email. Please do not reply.`;
+
+const sendTwoFactorEmail = async ({ to, code, expiresInMinutes }) => {
+  if (!SMTP_ENABLED) {
+    throw new Error('SMTP mailer is not configured for two-factor authentication.');
+  }
+
+  const subject = 'Your PicklePlay 2FA Code';
+  const openAppUrl = getPicklePlayAppUrl('/verify-2fa');
+  const html = buildOtpEmailHtml({
+    code,
+    expiresInMinutes,
+    openAppUrl,
+  });
+  const text = buildOtpEmailText({
+    code,
+    expiresInMinutes,
+    openAppUrl,
+  });
+
+  return sendSmtpEmail({
+    to,
+    subject,
+    html,
+    text,
+    fromAddress: SMTP_FROM_ADDRESS,
+    fromName: SMTP_FROM_NAME,
+  });
+};
+
 // News API config
 const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
@@ -621,10 +1026,11 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
     }
 
     // Send email via the configured transport
+    const openAppUrl = getPicklePlayAppUrl('/verify-2fa');
     const result = await sendAppEmail({
       to: email,
       subject: subject || 'Your PicklePlay 2FA Code',
-      html: `
+      /* legacyHtml: `
         <!DOCTYPE html>
         <html>
           <head>
@@ -663,7 +1069,17 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
             </div>
           </body>
         </html>
-      `,
+      `, */
+      text: buildOtpEmailText({
+        code,
+        expiresInMinutes: 10,
+        openAppUrl,
+      }),
+      html: buildOtpEmailHtml({
+        code,
+        expiresInMinutes: 10,
+        openAppUrl,
+      }),
     });
 
     // console.log('✅ Email sent successfully:', result);
@@ -1300,7 +1716,54 @@ const removeRole = (roles, role) => {
   return next.length > 0 ? next : ['PLAYER'];
 };
 
-const requireAuthenticatedUser = async (req, res) => {
+const decodeJwtPayload = (token) => {
+  try {
+    const [, payload = ''] = token.split('.');
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return {};
+  }
+};
+
+const hashAccessTokenFallback = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
+const inferSessionAuthProvider = (claims, user) => {
+  const amrEntries = Array.isArray(claims?.amr)
+    ? claims.amr.map((entry) => (typeof entry === 'string' ? entry : entry?.method)).filter(Boolean)
+    : [];
+
+  if (amrEntries.includes('password')) {
+    return 'email';
+  }
+
+  const providerFromClaims =
+    claims?.app_metadata?.provider ||
+    claims?.app_metadata?.providers?.[0] ||
+    user?.app_metadata?.provider;
+
+  if (providerFromClaims) {
+    return providerFromClaims;
+  }
+
+  if (amrEntries.includes('oauth')) {
+    const identityProviders = Array.isArray(user?.identities)
+      ? user.identities.map((identity) => identity?.provider).filter(Boolean)
+      : [];
+
+    if (identityProviders.includes('google')) {
+      return 'google';
+    }
+
+    return identityProviders[0] || 'oauth';
+  }
+
+  return 'unknown';
+};
+
+const requireAuthenticatedSession = async (req, res) => {
   const guard = requireSupabaseAdmin();
   if (!guard.ok) {
     res.status(500).json({ error: guard.message });
@@ -1321,7 +1784,22 @@ const requireAuthenticatedUser = async (req, res) => {
     return null;
   }
 
-  return data.user;
+  const claims = decodeJwtPayload(accessToken);
+  const sessionId = claims?.session_id || claims?.sessionId || hashAccessTokenFallback(accessToken);
+  const authProvider = inferSessionAuthProvider(claims, data.user);
+
+  return {
+    accessToken,
+    claims,
+    sessionId,
+    authProvider,
+    user: data.user,
+  };
+};
+
+const requireAuthenticatedUser = async (req, res) => {
+  const session = await requireAuthenticatedSession(req, res);
+  return session?.user || null;
 };
 
 const buildManagerInviteLink = (token) => {
@@ -2559,6 +3037,32 @@ const requireSupabaseAdmin = () => {
 
   return { ok: true };
 };
+
+const securityReauthToolkit = createSecurityReauthToolkit({
+  supabaseAdmin,
+  supabaseUrl: SUPABASE_URL,
+  supabaseAnonKey: SUPABASE_ANON_KEY,
+  appBaseUrl: WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL || 'https://www.pickleplay.ph',
+  requireSupabaseAdmin,
+  requireAuthenticatedSession,
+  authLimiter,
+  emailLimiter,
+  trustSecret: SECURITY_REAUTH_TRUST_SECRET,
+  codeExpirySeconds: SECURITY_REAUTH_CODE_EXPIRY_SECONDS,
+});
+
+app.use('/api/auth/security', securityReauthToolkit.router);
+
+app.use('/api/auth/2fa', createTwoFactorRouter({
+  supabaseAdmin,
+  requireSupabaseAdmin,
+  requireAuthenticatedSession,
+  authLimiter,
+  emailLimiter,
+  sendTwoFactorEmail,
+  secret: TWO_FACTOR_SECRET,
+  consumeSecurityTrust: securityReauthToolkit.consumeTrustToken,
+}));
 
 // ─── QR Login Endpoints ───────────────────────────────────────
 app.post('/api/auth/qr/start', authLimiter, async (_req, res) => {

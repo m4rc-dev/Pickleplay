@@ -13,7 +13,9 @@ dist-ssr
 *.local
 .env
 .env.local
-migrations
+migrations/*
+!migrations/010_harden_two_factor_auth.sql
+!migrations/011_normalize_two_factor_timestamps.sql
 
 # Editor directories and files
 .vscode/*

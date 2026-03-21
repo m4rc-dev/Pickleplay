@@ -45,7 +45,7 @@ export const enableTwoFactorAuth = async (userId: string) => {
     try {
         const { data, error } = await supabase
             .from('security_settings')
-            .update({ two_factor_enabled: true, two_factor_method: 'authenticator' })
+            .update({ two_factor_enabled: true, two_factor_method: 'email' })
             .eq('user_id', userId);
 
         if (error) throw error;

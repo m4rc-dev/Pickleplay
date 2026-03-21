@@ -45,16 +45,27 @@ import {
   Copy,
   Share2,
   ExternalLink,
-  Users
+  Users,
+  Mail
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
 import { UserRole, SocialPost } from '../types';
-import { supabase, updatePassword, enableTwoFactorAuth, disableTwoFactorAuth, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings, createSession } from '../services/supabase';
-import { sendEmailCode, verifyCode, generateBackupCodes, saveBackupCodes } from '../services/twoFactorAuth';
+import { supabase, getActiveSessions, revokeSession, revokeAllSessions, getSecuritySettings } from '../services/supabase';
+import { disableTwoFactorAuth, sendTwoFactorCode, verifyTwoFactorCode } from '../services/twoFactorAuth';
+import { getAuthCallbackUrl } from '../services/authRedirects';
+import {
+  isSecurityTrustStillValid,
+  startSecurityReauth,
+  type SecurityReauthAction,
+  updateEmailWithTrust,
+  updatePasswordWithReauth,
+  verifySecurityTrust,
+} from '../services/securityReauth';
 import { getReceivedRatings } from '../services/matches';
 import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
 import { PostCard } from './community';
+import SecurityReauthModal from './SecurityReauthModal';
 
 interface ProfileProps {
   userRole: UserRole;
@@ -288,10 +299,27 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [isTranslating, setIsTranslating] = useState(false);
 
   // Security-specific state
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [currentAuthEmail, setCurrentAuthEmail] = useState('');
+  const [pendingEmailChange, setPendingEmailChange] = useState('');
+  const [newEmailAddress, setNewEmailAddress] = useState('');
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [isResendingEmailChange, setIsResendingEmailChange] = useState(false);
+  const [emailChangeMessage, setEmailChangeMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showSecurityReauthModal, setShowSecurityReauthModal] = useState(false);
+  const [securityReauthAction, setSecurityReauthAction] = useState<SecurityReauthAction | null>(null);
+  const [securityReauthCode, setSecurityReauthCode] = useState('');
+  const [securityReauthMaskedEmail, setSecurityReauthMaskedEmail] = useState('');
+  const [securityReauthCodeExpiresAt, setSecurityReauthCodeExpiresAt] = useState<string | null>(null);
+  const [securityReauthResendCooldown, setSecurityReauthResendCooldown] = useState(0);
+  const [securityReauthMessage, setSecurityReauthMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
+  const [isStartingSecurityReauth, setIsStartingSecurityReauth] = useState(false);
+  const [isSubmittingSecurityReauth, setIsSubmittingSecurityReauth] = useState(false);
+  const [emailChangeTrust, setEmailChangeTrust] = useState<{ token: string; expiresAt: string } | null>(null);
 
   // Auto-select tab from URL query param (e.g. /profile?tab=referral)
   React.useEffect(() => {
@@ -311,7 +339,11 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const [show2FASetup, setShow2FASetup] = useState(false);
   const [codeSent, setCodeSent] = useState(false); // Track if code was sent
   const [verificationCode, setVerificationCode] = useState('');
+  const [isSending2FACode, setIsSending2FACode] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [setupMaskedEmail, setSetupMaskedEmail] = useState('');
+  const [setupResendCooldown, setSetupResendCooldown] = useState(0);
+  const [setupCodeExpiresAt, setSetupCodeExpiresAt] = useState<string | null>(null);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
   // Confirmation Dialog State
@@ -325,6 +357,30 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
   // Profile message state
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  useEffect(() => {
+    if (setupResendCooldown <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSetupResendCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [setupResendCooldown]);
+
+  useEffect(() => {
+    if (securityReauthResendCooldown <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSecurityReauthResendCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [securityReauthResendCooldown]);
 
   // QR Code state (for mobile app deep link)
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
@@ -424,6 +480,337 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
     setPasswordStrength(calculatePasswordStrength(value));
   };
 
+  const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
+
+  const getEmailChangeRedirectUrl = () => {
+    return getAuthCallbackUrl({
+      redirect: '/profile?tab=security&emailChange=confirmed',
+    });
+  };
+
+  const getEmailUpdateErrorMessage = (message?: string) => {
+    const normalizedMessage = message?.toLowerCase() || '';
+
+    if (!normalizedMessage) {
+      return 'Unable to update your email address right now. Please try again.';
+    }
+
+    if (normalizedMessage.includes('session') || normalizedMessage.includes('jwt') || normalizedMessage.includes('sign in')) {
+      return 'Your session expired. Please sign in again to change your email address.';
+    }
+
+    if (
+      normalizedMessage.includes('invalid email') ||
+      normalizedMessage.includes('email address is invalid') ||
+      normalizedMessage.includes('unable to validate email')
+    ) {
+      return 'Enter a valid email address.';
+    }
+
+    if (
+      normalizedMessage.includes('already registered') ||
+      normalizedMessage.includes('already in use') ||
+      normalizedMessage.includes('already been registered') ||
+      normalizedMessage.includes('email exists')
+    ) {
+      return 'That email address is already in use. Try a different one.';
+    }
+
+    return message || 'Unable to update your email address right now. Please try again.';
+  };
+
+  const getPasswordUpdateErrorMessage = (message?: string, code?: string) => {
+    const normalizedCode = String(code || '').toLowerCase();
+    const normalizedMessage = message?.toLowerCase() || '';
+
+    if (
+      normalizedCode === 'invalid_code' ||
+      normalizedCode === 'reauthentication_not_valid' ||
+      normalizedMessage.includes('security code') ||
+      normalizedMessage.includes('reauthentication')
+    ) {
+      return 'That security code is invalid or has expired. Request a new one and try again.';
+    }
+
+    if (normalizedCode === 'current_password_mismatch') {
+      return 'Your current password is incorrect.';
+    }
+
+    if (normalizedCode === 'current_password_required') {
+      return 'Enter your current password to continue.';
+    }
+
+    if (normalizedCode === 'same_password') {
+      return 'Your new password must be different from your current password.';
+    }
+
+    if (normalizedCode === 'weak_password') {
+      return message || 'Your new password is too weak. Use a stronger password and try again.';
+    }
+
+    if (normalizedMessage.includes('session') || normalizedMessage.includes('sign in') || normalizedMessage.includes('token')) {
+      return 'Your session expired. Please sign in again to continue.';
+    }
+
+    return message || 'Unable to update your password right now. Please try again.';
+  };
+
+  const getSecurityReauthErrorMessage = (message?: string, code?: string) => {
+    const normalizedCode = String(code || '').toLowerCase();
+    const normalizedMessage = message?.toLowerCase() || '';
+
+    if (
+      normalizedCode === 'invalid_code' ||
+      normalizedCode === 'expired_code' ||
+      normalizedCode === 'reauthentication_not_valid'
+    ) {
+      return normalizedCode === 'expired_code'
+        ? 'That security code expired. Request a new one to continue.'
+        : 'That security code is invalid. Check the latest email and try again.';
+    }
+
+    if (normalizedCode.startsWith('trust_')) {
+      if (normalizedCode === 'trust_action_mismatch') {
+        return 'That security approval belongs to a different action. Please verify again.';
+      }
+
+      if (normalizedCode === 'trust_expired') {
+        return 'Your security approval expired. Please verify again to continue.';
+      }
+
+      if (normalizedCode === 'trust_already_used') {
+        return 'That security approval was already used. Please verify again.';
+      }
+
+      return 'For your security, please verify again before continuing.';
+    }
+
+    if (normalizedCode === 'email_not_confirmed') {
+      return 'Please verify your email address before requesting a security code.';
+    }
+
+    if (normalizedMessage.includes('session') || normalizedMessage.includes('sign in') || normalizedMessage.includes('token')) {
+      return 'Your session expired. Please sign in again to continue.';
+    }
+
+    return message || 'We could not verify this secure action. Please try again.';
+  };
+
+  const closeSecurityReauthModal = () => {
+    setShowSecurityReauthModal(false);
+    setSecurityReauthAction(null);
+    setSecurityReauthCode('');
+    setSecurityReauthMaskedEmail('');
+    setSecurityReauthCodeExpiresAt(null);
+    setSecurityReauthResendCooldown(0);
+    setSecurityReauthMessage(null);
+    setIsStartingSecurityReauth(false);
+    setIsSubmittingSecurityReauth(false);
+  };
+
+  const openSecurityReauthFlow = async (
+    action: SecurityReauthAction,
+    forceResend = false,
+    initialMessage: { type: 'success' | 'error' | 'info', text: string } | null = null
+  ) => {
+    setShowSecurityReauthModal(true);
+    setSecurityReauthAction(action);
+    setSecurityReauthMessage(initialMessage);
+    setSecurityReauthMaskedEmail('');
+    setSecurityReauthCodeExpiresAt(null);
+    setSecurityReauthResendCooldown(0);
+    if (!forceResend) {
+      setSecurityReauthCode('');
+    }
+
+    setIsStartingSecurityReauth(true);
+
+    try {
+      const result = await startSecurityReauth(action, forceResend);
+      setSecurityReauthMaskedEmail(result.maskedEmail);
+      setSecurityReauthCodeExpiresAt(result.codeExpiresAt);
+      setSecurityReauthResendCooldown(result.resendCooldownSeconds || 0);
+      setSecurityReauthMessage({
+        type: forceResend || !result.alreadySent ? 'success' : 'info',
+        text: result.message,
+      });
+    } catch (err: any) {
+      setSecurityReauthMessage({
+        type: 'error',
+        text: getSecurityReauthErrorMessage(err?.message, err?.code),
+      });
+    } finally {
+      setIsStartingSecurityReauth(false);
+    }
+  };
+
+  const syncSecurityAuthState = useCallback(async () => {
+    if (!isCurrentUser) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setCurrentAuthEmail('');
+      setPendingEmailChange('');
+      setHasPasswordAuth(false);
+      setEmailChangeTrust(null);
+      return;
+    }
+
+    setCurrentAuthEmail(user.email || '');
+    setPendingEmailChange(user.new_email || '');
+    setProfileData((prev: any) => prev ? { ...prev, email: user.email || prev.email } : prev);
+
+    const hasPassword = user.identities?.some((id: any) => id.provider === 'email') ?? false;
+    const { data: settings } = await getSecuritySettings(user.id);
+    const hasSetPassword = settings?.password_set_at != null;
+    setHasPasswordAuth(hasPassword || hasSetPassword);
+  }, [isCurrentUser]);
+
+  const handleOpenEmailModal = () => {
+    setEmailChangeMessage(null);
+    setSecurityMessage(null);
+    setNewEmailAddress(pendingEmailChange || '');
+    setEmailChangeTrust(null);
+    setShowEmailModal(true);
+  };
+
+  const handleCloseEmailModal = () => {
+    setShowEmailModal(false);
+    setNewEmailAddress('');
+    setEmailChangeMessage(null);
+    setEmailChangeTrust(null);
+    if (securityReauthAction === 'change_email') {
+      closeSecurityReauthModal();
+    }
+  };
+
+  const submitEmailChangeWithTrust = async (trustToken: string) => {
+    const normalizedNewEmail = normalizeEmailAddress(newEmailAddress);
+
+    setIsUpdatingEmail(true);
+    setEmailChangeMessage(null);
+
+    try {
+      const result = await updateEmailWithTrust({
+        email: normalizedNewEmail,
+        trustToken,
+      });
+
+      setPendingEmailChange(result.pendingEmail || normalizedNewEmail);
+      setEmailChangeTrust(null);
+      setNewEmailAddress('');
+      setEmailChangeMessage({
+        type: 'success',
+        text: result.message || 'We sent a confirmation link to your new email address. Your current sign-in email stays active until you verify the change.',
+      });
+      setSecurityMessage({
+        type: 'success',
+        text: 'Email change started. Check your new inbox to confirm the update.',
+      });
+      window.setTimeout(() => setSecurityMessage(null), 5000);
+    } catch (err: any) {
+      const errorCode = String(err?.code || '').toLowerCase();
+
+      if (errorCode.startsWith('trust_')) {
+        setEmailChangeTrust(null);
+        setEmailChangeMessage({
+          type: 'error',
+          text: getSecurityReauthErrorMessage(err?.message, err?.code),
+        });
+        await openSecurityReauthFlow('change_email', false, {
+          type: 'info',
+          text: 'For your security, please verify again before we submit the email change.',
+        });
+        return;
+      }
+
+      setEmailChangeMessage({ type: 'error', text: getEmailUpdateErrorMessage(err?.message) });
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
+
+  const handleUpdateEmailAddress = async () => {
+    const normalizedCurrentEmail = normalizeEmailAddress(currentAuthEmail);
+    const normalizedNewEmail = normalizeEmailAddress(newEmailAddress);
+
+    if (!normalizedCurrentEmail) {
+      setEmailChangeMessage({ type: 'error', text: 'Unable to load your current email. Please refresh and try again.' });
+      return;
+    }
+
+    if (!normalizedNewEmail) {
+      setEmailChangeMessage({ type: 'error', text: 'Enter a new email address.' });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedNewEmail)) {
+      setEmailChangeMessage({ type: 'error', text: 'Enter a valid email address.' });
+      return;
+    }
+
+    if (normalizedNewEmail === normalizedCurrentEmail) {
+      setEmailChangeMessage({ type: 'error', text: 'Your new email must be different from your current email address.' });
+      return;
+    }
+
+    if (pendingEmailChange && normalizedNewEmail === normalizeEmailAddress(pendingEmailChange)) {
+      setEmailChangeMessage({ type: 'error', text: 'That email change is already pending confirmation. You can resend the confirmation email below.' });
+      return;
+    }
+
+    setEmailChangeMessage(null);
+    setSecurityMessage(null);
+
+    if (emailChangeTrust && !isSecurityTrustStillValid(emailChangeTrust.expiresAt)) {
+      setEmailChangeTrust(null);
+    }
+
+    if (emailChangeTrust && isSecurityTrustStillValid(emailChangeTrust.expiresAt)) {
+      await submitEmailChangeWithTrust(emailChangeTrust.token);
+      return;
+    }
+
+    await openSecurityReauthFlow('change_email', false, {
+      type: 'info',
+      text: 'For your security, please verify before we request the email change.',
+    });
+  };
+
+  const handleResendEmailChange = async () => {
+    const emailToResend = normalizeEmailAddress(pendingEmailChange);
+
+    if (!emailToResend) {
+      setEmailChangeMessage({ type: 'error', text: 'There is no pending email change to resend.' });
+      return;
+    }
+
+    setIsResendingEmailChange(true);
+    setEmailChangeMessage(null);
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'email_change',
+        email: emailToResend,
+        options: {
+          emailRedirectTo: getEmailChangeRedirectUrl(),
+        },
+      });
+
+      if (error) throw error;
+
+      setEmailChangeMessage({
+        type: 'success',
+        text: `We sent another confirmation link to ${emailToResend}.`,
+      });
+    } catch (err: any) {
+      setEmailChangeMessage({ type: 'error', text: getEmailUpdateErrorMessage(err?.message) });
+    } finally {
+      setIsResendingEmailChange(false);
+    }
+  };
+
   const handleUpdatePassword = async () => {
     if (!newPassword || !confirmPassword) {
       setSecurityMessage({ type: 'error', text: 'Please fill in all password fields' });
@@ -440,58 +827,11 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
       return;
     }
 
-    try {
-      const result = await updatePassword(newPassword);
-      if (result.success) {
-        const isSettingNew = !hasPasswordAuth;
-        // Mark password as set in database for Google users
-        if (isSettingNew && currentUserId) {
-          await supabase
-            .from('security_settings')
-            .upsert({
-              user_id: currentUserId,
-              password_set_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
-        }
-        setSecurityMessage({ type: 'success', text: isSettingNew ? 'Password set! You can now enable 2FA.' : 'Password updated successfully!' });
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setShowPasswordModal(false);
-        // Refresh auth provider status after setting password
-        if (isSettingNew) {
-          setHasPasswordAuth(true);
-        }
-        setTimeout(() => setSecurityMessage(null), 4000);
-      } else {
-        setSecurityMessage({ type: 'error', text: result.message });
-      }
-    } catch (err) {
-      setSecurityMessage({ type: 'error', text: 'Failed to update password' });
-    }
-  };
-
-  const handleToggleTwoFactor = async () => {
-    if (!currentUserId || !isCurrentUser) return;
-
-    try {
-      let result;
-      if (twoFactorEnabled) {
-        result = await disableTwoFactorAuth(currentUserId);
-      } else {
-        result = await enableTwoFactorAuth(currentUserId);
-      }
-
-      if (result.success) {
-        setTwoFactorEnabled(!twoFactorEnabled);
-        setSecurityMessage({ type: 'success', text: result.message });
-        setTimeout(() => setSecurityMessage(null), 3000);
-      } else {
-        setSecurityMessage({ type: 'error', text: result.message });
-      }
-    } catch (err) {
-      setSecurityMessage({ type: 'error', text: 'Failed to update 2FA settings' });
-    }
+    setSecurityMessage(null);
+    await openSecurityReauthFlow('change_password', false, {
+      type: 'info',
+      text: 'For your security, we’ll send a verification code before updating your password.',
+    });
   };
 
   const loadActiveSessions = async () => {
@@ -587,19 +927,21 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
   const handleSetup2FA = async () => {
     if (!currentUserId || !isCurrentUser) return;
 
+    setIsSending2FACode(true);
     try {
-      const { data: authUser } = await supabase.auth.getUser();
-      if (authUser.user?.email) {
-        const result = await sendEmailCode(authUser.user.email, currentUserId);
-        if (result.success) {
-          setCodeSent(true); // Mark code as sent
-          setSecurityMessage({ type: 'success', text: `Code sent to ${authUser.user.email}` });
-        } else {
-          setSecurityMessage({ type: 'error', text: result.message });
-        }
+      const result = await sendTwoFactorCode('setup', codeSent);
+      setCodeSent(true);
+      setSetupMaskedEmail(result.maskedEmail);
+      setSetupResendCooldown(result.resendCooldownSeconds || 0);
+      setSetupCodeExpiresAt(result.codeExpiresAt);
+      setSecurityMessage({ type: 'success', text: result.message || `Code sent to ${result.maskedEmail}` });
+    } catch (err: any) {
+      setSecurityMessage({ type: 'error', text: err.message || 'Failed to send code' });
+      if (typeof err.cooldownSeconds === 'number') {
+        setSetupResendCooldown(err.cooldownSeconds);
       }
-    } catch (err) {
-      setSecurityMessage({ type: 'error', text: 'Failed to send code' });
+    } finally {
+      setIsSending2FACode(false);
     }
   };
 
@@ -612,28 +954,141 @@ const Profile: React.FC<ProfileProps> = ({ userRole, authorizedProRoles, current
 
     setIsVerifying(true);
     try {
-      const result = await verifyCode(currentUserId, verificationCode);
-      if (result.success) {
-        setSecurityMessage({ type: 'success', text: result.message });
-
-        // Generate and save backup codes
-        const codes = generateBackupCodes();
-        await saveBackupCodes(currentUserId, codes);
-        setBackupCodes(codes);
-
-        // Update 2FA status
-        await enableTwoFactorAuth(currentUserId);
-        setTwoFactorEnabled(true);
-
-        // Don't auto-close - let user see and copy backup codes
-        // User can manually click Cancel when done
-      } else {
-        setSecurityMessage({ type: 'error', text: result.message });
-      }
-    } catch (err) {
-      setSecurityMessage({ type: 'error', text: 'Verification failed' });
+      const result = await verifyTwoFactorCode(verificationCode, 'setup');
+      setSecurityMessage({ type: 'success', text: result.message });
+      setBackupCodes(result.backupCodes || []);
+      setTwoFactorEnabled(true);
+      setSetupCodeExpiresAt(null);
+      setSetupResendCooldown(0);
+    } catch (err: any) {
+      setSecurityMessage({ type: 'error', text: err.message || 'Verification failed' });
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleDisableTwoFactor = async () => {
+    if (!currentUserId || !isCurrentUser) return;
+
+    setSecurityMessage(null);
+    await openSecurityReauthFlow('disable_2fa', false, {
+      type: 'info',
+      text: 'For your security, confirm it’s you before disabling two-factor authentication.',
+    });
+  };
+
+  const handleResendSecurityReauth = async () => {
+    if (!securityReauthAction) {
+      return;
+    }
+
+    await openSecurityReauthFlow(securityReauthAction, true);
+  };
+
+  const handleSubmitSecurityReauth = async () => {
+    if (!securityReauthAction) {
+      return;
+    }
+
+    const normalizedCode = securityReauthCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!normalizedCode) {
+      setSecurityReauthMessage({
+        type: 'error',
+        text: 'Enter the security code from your email to continue.',
+      });
+      return;
+    }
+
+    setIsSubmittingSecurityReauth(true);
+    setSecurityReauthMessage(null);
+
+    try {
+      if (securityReauthAction === 'change_password') {
+        const result = await updatePasswordWithReauth({
+          password: newPassword,
+          nonce: normalizedCode,
+          ...(hasPasswordAuth && currentPassword ? { currentPassword } : {}),
+        });
+
+        const isSettingNewPassword = !hasPasswordAuth;
+
+        if (isSettingNewPassword && currentUserId) {
+          await supabase
+            .from('security_settings')
+            .upsert({
+              user_id: currentUserId,
+              password_set_at: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+        }
+
+        closeSecurityReauthModal();
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setShowPasswordModal(false);
+        if (isSettingNewPassword) {
+          setHasPasswordAuth(true);
+        }
+        setSecurityMessage({
+          type: 'success',
+          text: isSettingNewPassword
+            ? 'Password set successfully. You can now enable 2FA.'
+            : result.message || 'Password updated successfully.',
+        });
+        setTimeout(() => setSecurityMessage(null), 4000);
+        return;
+      }
+
+      const trustVerification = await verifySecurityTrust(
+        securityReauthAction as 'change_email' | 'disable_2fa',
+        normalizedCode
+      );
+
+      if (securityReauthAction === 'change_email') {
+        setEmailChangeTrust({
+          token: trustVerification.trustToken,
+          expiresAt: trustVerification.trustExpiresAt,
+        });
+        closeSecurityReauthModal();
+        await submitEmailChangeWithTrust(trustVerification.trustToken);
+        return;
+      }
+
+      const result = await disableTwoFactorAuth(trustVerification.trustToken);
+      closeSecurityReauthModal();
+      setTwoFactorEnabled(false);
+      setShow2FASetup(false);
+      setCodeSent(false);
+      setVerificationCode('');
+      setBackupCodes([]);
+      setSetupMaskedEmail('');
+      setSetupResendCooldown(0);
+      setSetupCodeExpiresAt(null);
+      setSecurityMessage({ type: 'success', text: result.message });
+      setTimeout(() => setSecurityMessage(null), 3000);
+    } catch (err: any) {
+      const errorCode = String(err?.code || '').toLowerCase();
+
+      if (
+        securityReauthAction === 'change_password' &&
+        ['current_password_mismatch', 'current_password_required', 'same_password', 'weak_password'].includes(errorCode)
+      ) {
+        closeSecurityReauthModal();
+        setSecurityMessage({
+          type: 'error',
+          text: getPasswordUpdateErrorMessage(err?.message, err?.code),
+        });
+        return;
+      }
+
+      setSecurityReauthMessage({
+        type: 'error',
+        text: securityReauthAction === 'change_password'
+          ? getPasswordUpdateErrorMessage(err?.message, err?.code)
+          : getSecurityReauthErrorMessage(err?.message, err?.code),
+      });
+    } finally {
+      setIsSubmittingSecurityReauth(false);
     }
   };
 
@@ -669,20 +1124,31 @@ Never share them with anyone.`;
   useEffect(() => {
     if (isCurrentUser && activeTab === 'security') {
       loadActiveSessions();
-      // Check if user has password-based authentication
-      const checkAuthProvider = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.identities) {
-          const hasPassword = user.identities.some((id: any) => id.provider === 'email');
-          // Also check if user previously set password (stored in security_settings)
-          const { data: settings } = await getSecuritySettings(user.id);
-          const hasSetPassword = settings?.password_set_at != null;
-          setHasPasswordAuth(hasPassword || hasSetPassword);
-        }
-      };
-      checkAuthProvider();
+      void syncSecurityAuthState();
     }
-  }, [activeTab]);
+  }, [activeTab, isCurrentUser, syncSecurityAuthState]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const emailChangeStatus = params.get('emailChange');
+
+    if (!isCurrentUser || emailChangeStatus !== 'confirmed') {
+      return;
+    }
+
+    setActiveTab('security');
+    setEmailChangeTrust(null);
+    setSecurityMessage({
+      type: 'success',
+      text: 'Your email address has been updated successfully.',
+    });
+    window.setTimeout(() => setSecurityMessage(null), 5000);
+    void syncSecurityAuthState();
+
+    params.delete('emailChange');
+    const nextSearch = params.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+  }, [isCurrentUser, location.pathname, location.search, navigate, syncSecurityAuthState]);
 
   const groupedSessions = activeSessions.reduce((acc: any[], session: any) => {
     const deviceLabel = getDeviceLabel(session.user_agent, session.device_name);
@@ -3293,7 +3759,7 @@ Never share them with anyone.`;
           {activeTab === 'security' && (
             <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm space-y-8">
               {/* Only show security message here when modals are closed */}
-              {securityMessage && !show2FASetup && !showPasswordModal && (
+              {securityMessage && !show2FASetup && !showPasswordModal && !showEmailModal && !showSecurityReauthModal && (
                 <div className={`flex items-center gap-3 p-4 rounded-2xl ${securityMessage.type === 'success' ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
                   {securityMessage.type === 'success' ? (
                     <CheckCircle className="text-emerald-600" size={20} />
@@ -3311,6 +3777,29 @@ Never share them with anyone.`;
               </h3>
 
               <div className="space-y-6 border-t border-slate-100 pt-8">
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                  <div>
+                    <p className="font-bold text-slate-900">Change Email Address</p>
+                    <p className="text-xs text-slate-500">Update your sign-in and recovery email</p>
+                    {currentAuthEmail && (
+                      <p className="text-xs text-slate-400 mt-2">
+                        Current: <span className="font-bold text-slate-700">{currentAuthEmail}</span>
+                      </p>
+                    )}
+                    {pendingEmailChange && (
+                      <p className="text-xs text-amber-600 mt-1 font-bold">
+                        Pending confirmation: {pendingEmailChange}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleOpenEmailModal}
+                    className="px-6 py-2 rounded-xl font-bold text-xs transition-all bg-slate-900 text-white hover:bg-slate-800"
+                  >
+                    Update
+                  </button>
+                </div>
+
                 {/* Password Management Section */}
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
                   <div>
@@ -3357,11 +3846,16 @@ Never share them with anyone.`;
                       <button
                         onClick={() => {
                           if (!twoFactorEnabled) {
+                            setSecurityMessage(null);
+                            setCodeSent(false);
+                            setVerificationCode('');
+                            setBackupCodes([]);
+                            setSetupMaskedEmail('');
+                            setSetupResendCooldown(0);
+                            setSetupCodeExpiresAt(null);
                             setShow2FASetup(true);
                           } else {
-                            setTwoFactorEnabled(false);
-                            disableTwoFactorAuth(currentUserId!);
-                            setSecurityMessage({ type: 'success', text: '2FA disabled' });
+                            void handleDisableTwoFactor();
                           }
                         }}
                         className={`px-6 py-2 rounded-xl font-bold text-xs transition-all ${twoFactorEnabled
@@ -3634,13 +4128,23 @@ Never share them with anyone.`;
                     {/* Send Code Button */}
                     <button
                       onClick={handleSetup2FA}
-                      className="w-full py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all"
+                      disabled={isSending2FACode}
+                      className="w-full py-3 px-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
                     >
-                      Send Code to Email
+                      {isSending2FACode ? 'Sending...' : 'Send Code to Email'}
                     </button>
                   </div>
                 ) : backupCodes.length === 0 ? (
                   <div className="space-y-5">
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-700">Email Delivery</p>
+                      <p className="mt-2 text-sm font-semibold text-blue-950">{setupMaskedEmail || 'Checking your account email...'}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs font-medium text-blue-700">
+                        <span>{setupCodeExpiresAt ? `Expires at ${new Date(setupCodeExpiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'New codes stay valid for 10 minutes.'}</span>
+                        <span>{setupResendCooldown > 0 ? `Resend in ${setupResendCooldown}s` : 'Ready to resend'}</span>
+                      </div>
+                    </div>
+
                     {/* Code Verification */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-3">Enter verification code</label>
@@ -3662,6 +4166,14 @@ Never share them with anyone.`;
                     >
                       {isVerifying ? 'Verifying...' : 'Verify Code'}
                     </button>
+
+                    <button
+                      onClick={handleSetup2FA}
+                      disabled={isSending2FACode || setupResendCooldown > 0}
+                      className="w-full py-3 px-4 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-all disabled:opacity-50"
+                    >
+                      {isSending2FACode ? 'Sending...' : setupResendCooldown > 0 ? `Resend in ${setupResendCooldown}s` : 'Resend Code'}
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -3677,7 +4189,7 @@ Never share them with anyone.`;
                           </div>
                         ))}
                       </div>
-                      <p className="text-xs text-blue-900 font-medium leading-relaxed">⚠️ Save these codes in a secure location. You'll need them if you lose access to your email.</p>
+                      <p className="text-xs text-blue-900 font-medium leading-relaxed">Save these codes in a secure location. You'll need them if you lose access to your email.</p>
                     </div>
                   </div>
                 )}
@@ -3698,6 +4210,9 @@ Never share them with anyone.`;
                       setCodeSent(false);
                       setVerificationCode('');
                       setBackupCodes([]);
+                      setSetupMaskedEmail('');
+                      setSetupResendCooldown(0);
+                      setSetupCodeExpiresAt(null);
                       setSecurityMessage(null);
                     }}
                     className={`${backupCodes.length > 0 ? 'flex-1' : 'w-full'} py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all`}
@@ -4370,6 +4885,26 @@ Never share them with anyone.`;
                   </div>
                 </div>
 
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Security Check</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Before this password change is completed, PicklePlay will send a security code to your current email so you can confirm it&apos;s you.
+                  </p>
+                </div>
+
+                {securityMessage && (
+                  <div className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 ${securityMessage.type === 'success' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                    {securityMessage.type === 'success' ? (
+                      <CheckCircle className="text-emerald-600 mt-0.5 shrink-0" size={18} />
+                    ) : (
+                      <AlertCircle className="text-red-600 mt-0.5 shrink-0" size={18} />
+                    )}
+                    <p className={`text-sm font-bold leading-6 ${securityMessage.type === 'success' ? 'text-emerald-900' : 'text-red-900'}`}>
+                      {securityMessage.text}
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex gap-3 mt-8">
                   <button
                     onClick={() => {
@@ -4378,6 +4913,9 @@ Never share them with anyone.`;
                       setNewPassword('');
                       setConfirmPassword('');
                       setSecurityMessage(null);
+                      if (securityReauthAction === 'change_password') {
+                        closeSecurityReauthModal();
+                      }
                     }}
                     className="flex-1 py-3 px-4 bg-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-300 transition-all"
                   >
@@ -4394,6 +4932,136 @@ Never share them with anyone.`;
             </div>,
             document.body
           )}
+
+          {showEmailModal && ReactDOM.createPortal(
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+              <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="text-xl font-black text-slate-950 mb-2 flex items-center gap-2">
+                      <Mail size={20} className="text-blue-600" /> Change Email Address
+                    </h4>
+                    <p className="text-sm text-slate-500 leading-6">
+                      Update your sign-in and recovery email. Your new email must be confirmed before the change takes effect.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseEmailModal}
+                    className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                    aria-label="Close change email modal"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {pendingEmailChange && (
+                  <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+                    <div className="flex items-start gap-3">
+                      <Clock size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-black text-amber-900 uppercase tracking-wide">Confirmation Pending</p>
+                        <p className="mt-1 text-sm text-amber-800 leading-6">
+                          We are waiting for confirmation from <span className="font-bold">{pendingEmailChange}</span>. Your current email stays active and your account remains protected until the new address is verified.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4 mt-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Email Address</label>
+                    <input
+                      type="email"
+                      readOnly
+                      value={currentAuthEmail}
+                      className="w-full mt-2 bg-slate-100 border-2 border-slate-200 rounded-2xl py-3 px-4 font-bold text-slate-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">New Email Address</label>
+                    <input
+                      type="email"
+                      value={newEmailAddress}
+                      onChange={(e) => setNewEmailAddress(e.target.value)}
+                      className="w-full mt-2 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-2xl py-3 px-4 font-bold text-slate-700 transition-all outline-none"
+                      placeholder="Enter your new email address"
+                      autoComplete="email"
+                    />
+                    <p className="mt-2 text-xs text-slate-500 leading-5">
+                      Your sign-in email will only change after you confirm the new address from the email we send.
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 leading-5">
+                      Before we submit the change, we&apos;ll ask you to confirm it&apos;s you with a security code sent to your current email.
+                    </p>
+                  </div>
+                </div>
+
+                {emailChangeMessage && (
+                  <div className={`mt-6 flex items-start gap-3 rounded-2xl border p-4 ${emailChangeMessage.type === 'success' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                    {emailChangeMessage.type === 'success' ? (
+                      <CheckCircle className="text-emerald-600 mt-0.5 shrink-0" size={18} />
+                    ) : (
+                      <AlertCircle className="text-red-600 mt-0.5 shrink-0" size={18} />
+                    )}
+                    <p className={`text-sm font-bold leading-6 ${emailChangeMessage.type === 'success' ? 'text-emerald-900' : 'text-red-900'}`}>
+                      {emailChangeMessage.text}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-8">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={handleCloseEmailModal}
+                      className="px-5 py-3 bg-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-300 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    {pendingEmailChange && (
+                      <button
+                        type="button"
+                        onClick={handleResendEmailChange}
+                        disabled={isResendingEmailChange}
+                        className="px-5 py-3 rounded-2xl border border-slate-200 text-slate-700 font-bold hover:border-blue-200 hover:text-blue-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                      >
+                        {isResendingEmailChange && <Loader2 size={16} className="animate-spin" />}
+                        {isResendingEmailChange ? 'Sending...' : 'Resend Confirmation'}
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleUpdateEmailAddress}
+                    disabled={isUpdatingEmail}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                  >
+                    {isUpdatingEmail && <Loader2 size={16} className="animate-spin" />}
+                    {isUpdatingEmail ? 'Sending Link...' : 'Send Confirmation Link'}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          <SecurityReauthModal
+            open={showSecurityReauthModal}
+            action={securityReauthAction}
+            code={securityReauthCode}
+            maskedEmail={securityReauthMaskedEmail}
+            codeExpiresAt={securityReauthCodeExpiresAt}
+            resendCooldown={securityReauthResendCooldown}
+            isSending={isStartingSecurityReauth}
+            isSubmitting={isSubmittingSecurityReauth}
+            message={securityReauthMessage}
+            onCodeChange={setSecurityReauthCode}
+            onClose={closeSecurityReauthModal}
+            onSubmit={handleSubmitSecurityReauth}
+            onResend={handleResendSecurityReauth}
+          />
 
           {/* Preferences Tab */}
           {activeTab === 'preferences' && (

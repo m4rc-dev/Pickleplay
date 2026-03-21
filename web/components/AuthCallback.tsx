@@ -1,10 +1,25 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, getSecuritySettings } from '../services/supabase';
+import { supabase } from '../services/supabase';
+import { bootstrapTwoFactorSession } from '../services/twoFactorAuth';
+import { shouldBlockUnverifiedEmailSession } from '../services/authAccess';
 import { Loader2 } from 'lucide-react';
 
 const AuthCallback: React.FC = () => {
     const navigate = useNavigate();
+
+    const getSafeRedirectPath = () => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const hashFragment = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+        const hashParams = new URLSearchParams(hashFragment);
+        const redirect = searchParams.get('redirect') || hashParams.get('redirect');
+
+        if (!redirect || !redirect.startsWith('/')) {
+            return null;
+        }
+
+        return redirect;
+    };
 
     useEffect(() => {
         const handleAuthCallback = async () => {
@@ -102,20 +117,32 @@ const AuthCallback: React.FC = () => {
                         return;
                     }
 
-                    // 2. Handle MFA check
-                    const settings = await getSecuritySettings(session.user.id);
-                    if (settings.data?.two_factor_enabled) {
-                        localStorage.setItem('two_factor_pending', 'true');
+                    if (shouldBlockUnverifiedEmailSession(session.user)) {
+                        await supabase.auth.signOut();
+                        localStorage.removeItem('auth_redirect');
+                        navigate('/login?error=verify_email_required', { replace: true });
+                        return;
+                    }
+
+                    const twoFactorStatus = await bootstrapTwoFactorSession(session.access_token).catch(async (bootstrapError) => {
+                        await supabase.auth.signOut();
+                        throw bootstrapError;
+                    });
+
+                    if (twoFactorStatus.pending) {
                         navigate('/verify-2fa');
                         return;
                     }
 
                     // 4. Handle Redirection
+                    const callbackRedirect = getSafeRedirectPath();
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     localStorage.removeItem('auth_redirect');
 
 
-                    if (storedRedirect) {
+                    if (callbackRedirect) {
+                        navigate(callbackRedirect);
+                    } else if (storedRedirect) {
                         navigate(storedRedirect);
                     } else {
                         navigate('/');
