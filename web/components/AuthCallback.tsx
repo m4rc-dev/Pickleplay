@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { bootstrapTwoFactorSession } from '../services/twoFactorAuth';
-import { shouldBlockUnverifiedEmailSession } from '../services/authAccess';
+import { isGoogleSession, shouldBlockUnverifiedEmailSession } from '../services/authAccess';
 import { Loader2 } from 'lucide-react';
 
 const AuthCallback: React.FC = () => {
@@ -121,6 +121,21 @@ const AuthCallback: React.FC = () => {
                         await supabase.auth.signOut();
                         localStorage.removeItem('auth_redirect');
                         navigate('/login?error=verify_email_required', { replace: true });
+                        return;
+                    }
+
+                    if (isGoogleSession(session.user)) {
+                        const callbackRedirect = getSafeRedirectPath();
+                        const storedRedirect = localStorage.getItem('auth_redirect');
+                        localStorage.removeItem('auth_redirect');
+
+                        if (callbackRedirect) {
+                            navigate(callbackRedirect);
+                        } else if (storedRedirect) {
+                            navigate(storedRedirect);
+                        } else {
+                            navigate('/');
+                        }
                         return;
                     }
 
