@@ -121,7 +121,7 @@ import Coaches from '@/components/Coaches';
 import { supabase } from './services/supabase';
 import { getMaintenanceStatus, getEnabledFeaturesForRole, isFeatureEnabled, ensureDefaultFeatures, DEFAULT_FEATURES_PER_ROLE } from './services/maintenance';
 import { getTwoFactorStatus } from './services/twoFactorAuth';
-import { shouldBlockUnverifiedEmailSession } from './services/authAccess';
+import { isGoogleSession, shouldBlockUnverifiedEmailSession } from './services/authAccess';
 import { approveCourtManager } from './lib/court-manager/actions';
 import { COURT_MANAGER_ROUTES } from './lib/court-manager/constants';
 import MaintenanceScreen from './components/MaintenanceScreen';
@@ -1538,6 +1538,18 @@ const App: React.FC = () => {
         twoFactorStatusKeyRef.current = null;
         setTwoFactorPending(false);
         return { pending: false };
+      }
+
+      if (isGoogleSession(session.user)) {
+        twoFactorStatusRequestRef.current = null;
+        twoFactorStatusKeyRef.current = null;
+        setTwoFactorPending(false);
+        return {
+          pending: false,
+          verified: true,
+          requiresTwoFactor: false,
+          authProvider: 'google',
+        };
       }
 
       const requestKey = `${session.user.id}:${session.access_token || 'no-token'}`;
