@@ -11,7 +11,7 @@ export interface Player {
   winRate: number;
 }
 
-export type CourtStatus = 'Available' | 'Fully Booked' | 'Coming Soon' | 'Maintenance';
+export type CourtStatus = 'Available' | 'Fully Booked' | 'Coming Soon' | 'Maintenance' | 'Setup Required';
 
 export interface Court {
   id: string;

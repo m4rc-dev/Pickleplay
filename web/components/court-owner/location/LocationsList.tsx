@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield, PhilippinePeso } from 'lucide-react';
@@ -70,7 +70,7 @@ const LocationsList: React.FC = () => {
     const [courtLocationId, setCourtLocationId] = useState('');
     const [courtName, setCourtName] = useState('');
     const [courtType, setCourtType] = useState<'Indoor' | 'Outdoor'>('Indoor');
-    const [courtStatus, setCourtStatus] = useState<CourtStatus>('Available');
+    const [courtStatus, setCourtStatus] = useState<CourtStatus>('Setup Required');
     const [courtSurface, setCourtSurface] = useState('');
     const [courtPrice, setCourtPrice] = useState(0);
     const [isCourtFree, setIsCourtFree] = useState(false);
@@ -80,6 +80,8 @@ const LocationsList: React.FC = () => {
     const [locationDropdownSearch, setLocationDropdownSearch] = useState('');
     const [courtImageFile, setCourtImageFile] = useState<File | null>(null);
     const [courtImagePreview, setCourtImagePreview] = useState<string | null>(null);
+    const [isImageGalleryOpen, setIsImageGalleryOpen] = useState(false);
+    const [imageGalleryTarget, setImageGalleryTarget] = useState<'location' | 'court' | null>(null);
     const courtImageInputRef = useRef<HTMLInputElement>(null);
     const surfaceDropdownRef = useRef<HTMLDivElement>(null);
     const locationDropdownRef = useRef<HTMLDivElement>(null);
@@ -100,7 +102,7 @@ const LocationsList: React.FC = () => {
     const [formImageFile, setFormImageFile] = useState<File | null>(null);
     const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
     const [formCourtType, setFormCourtType] = useState<'Indoor' | 'Outdoor' | 'Both'>('Indoor');
-    const [formStatus, setFormStatus] = useState<'Active' | 'Closed' | 'Maintenance' | 'Coming Soon'>('Active');
+    const [formStatus, setFormStatus] = useState<'Active' | 'Closed' | 'Maintenance' | 'Coming Soon'>('Coming Soon');
 
     // Amenities dropdown state (for Add/Edit Location form)
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
@@ -425,7 +427,7 @@ const LocationsList: React.FC = () => {
         setFormImageFile(null);
         setFormImagePreview(null);
         setFormCourtType('Indoor');
-        setFormStatus('Active');
+        setFormStatus('Coming Soon');
         setClosures([]);
         setSelectedClosureDate(null);
         setClosureReason('Holiday');
@@ -453,7 +455,7 @@ const LocationsList: React.FC = () => {
             if (!user) throw new Error('Not authenticated');
 
             // 1. Handle image upload if exists
-            let imageUrl = null;
+            let imageUrl = formImagePreview;
             if (formImageFile) {
                 const uploadResult = await uploadCourtImage(formImageFile, user.id);
                 if (uploadResult.success) {
@@ -476,7 +478,8 @@ const LocationsList: React.FC = () => {
                     base_cleaning_time: formCleaningTime,
                     latitude: previewCoords?.lat || 14.5995,
                     longitude: previewCoords?.lng || 120.9842,
-                    is_active: true,
+                    is_active: false,
+                    status: 'Coming Soon',
                     image_url: imageUrl,
                     court_type: formCourtType
                 });
@@ -499,7 +502,7 @@ const LocationsList: React.FC = () => {
         setIsSubmitting(true);
         try {
             // 1. Handle image upload if exists
-            let imageUrl = editingLocation.image_url;
+            let imageUrl = formImagePreview || editingLocation.image_url;
             if (formImageFile) {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
@@ -907,7 +910,7 @@ const LocationsList: React.FC = () => {
         setCourtLocationId('');
         setCourtName('');
         setCourtType('Indoor');
-        setCourtStatus('Available');
+        setCourtStatus('Setup Required');
         setCourtSurface('');
         setSurfaceSearch('');
         setCourtPrice(0);
@@ -929,12 +932,15 @@ const LocationsList: React.FC = () => {
             const selectedLoc = locations.find(l => l.id === courtLocationId);
 
             // Upload image if provided
-            let imageUrl: string | null = null;
+            let imageUrl: string | null = courtImagePreview;
             if (courtImageFile) {
                 const uploadResult = await uploadCourtPhoto(courtImageFile, user.id);
                 if (!uploadResult.success) throw new Error(`Image upload failed: ${uploadResult.message}`);
                 imageUrl = uploadResult.publicUrl || null;
             }
+
+            const initialStatus: CourtStatus = 'Setup Required';
+            const initialActive = false;
 
             const { error } = await supabase
                 .from('courts')
@@ -945,8 +951,9 @@ const LocationsList: React.FC = () => {
                     surface_type: courtSurface,
                     base_price: 0,
                     court_type: courtType,
-                    is_active: courtStatus === 'Available',
-                    status: courtStatus,
+                    is_active: initialActive,
+                    status: initialStatus,
+                    setup_complete: false,
                     latitude: selectedLoc?.latitude,
                     longitude: selectedLoc?.longitude,
                     image_url: imageUrl,
@@ -975,7 +982,7 @@ const LocationsList: React.FC = () => {
             const selectedLoc = locations.find(l => l.id === courtLocationId);
 
             // Upload new image if provided, else keep existing
-            let imageUrl: string | null | undefined = editingCourt.image_url;
+            let imageUrl: string | null | undefined = courtImagePreview || editingCourt.image_url;
             if (courtImageFile) {
                 const uploadResult = await uploadCourtPhoto(courtImageFile, user.id, editingCourt.id);
                 if (!uploadResult.success) throw new Error(`Image upload failed: ${uploadResult.message}`);
@@ -1036,7 +1043,7 @@ const LocationsList: React.FC = () => {
         setCourtLocationId(court.location_id);
         setCourtName(court.name);
         setCourtType((court.court_type as 'Indoor' | 'Outdoor') || 'Indoor');
-        setCourtStatus((court.status as CourtStatus) || 'Available');
+        setCourtStatus((court.status as CourtStatus) || 'Setup Required');
         setCourtSurface(court.surface_type || '');
         setSurfaceSearch('');
         setCourtPrice(court.base_price || 0);
@@ -1061,6 +1068,25 @@ const LocationsList: React.FC = () => {
         loc.address.toLowerCase().includes(locationModalSearch.toLowerCase()) ||
         loc.city.toLowerCase().includes(locationModalSearch.toLowerCase())
     );
+
+    const reusableImages = useMemo(() => {
+        const urls = new Set<string>();
+        locations.forEach(loc => { if (loc.image_url) urls.add(loc.image_url); });
+        allCourts.forEach(court => { if (court.image_url) urls.add(court.image_url); });
+        return Array.from(urls);
+    }, [locations, allCourts]);
+
+    const handleSelectGalleryImage = (url: string) => {
+        if (imageGalleryTarget === 'location') {
+            setFormImagePreview(url);
+            setFormImageFile(null);
+        } else if (imageGalleryTarget === 'court') {
+            setCourtImagePreview(url);
+            setCourtImageFile(null);
+        }
+        setIsImageGalleryOpen(false);
+        setImageGalleryTarget(null);
+    };
 
     const filteredCourts = allCourts.filter(c => {
         const matchesSearch = c.name.toLowerCase().includes(courtSearchQuery.toLowerCase()) ||
@@ -1124,6 +1150,17 @@ const LocationsList: React.FC = () => {
                             </div>
                         )}
                     </div>
+                    {reusableImages.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            <button
+                                type="button"
+                                onClick={() => { setImageGalleryTarget('location'); setIsImageGalleryOpen(true); }}
+                                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-blue-300 hover:text-blue-700 transition-all"
+                            >
+                                Use from Gallery
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -1316,93 +1353,6 @@ const LocationsList: React.FC = () => {
                 </div>
 
 
-                <div className="space-y-2" ref={amenityDropdownRef}>
-                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-2">Amenities <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">(Optional)</span></label>
-
-                    {/* Selected amenities tags */}
-                    {selectedAmenities.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-2 px-1">
-                            {selectedAmenities.map((a, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
-                                    {a}
-                                    <button type="button" onClick={() => setSelectedAmenities(prev => prev.filter((_, i) => i !== idx))}
-                                        className="text-blue-400 hover:text-rose-500 transition-colors">
-                                        <X size={12} />
-                                    </button>
-                                </span>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Dropdown trigger / search */}
-                    <div className="relative">
-                        <div
-                            onClick={() => setIsAmenityDropdownOpen(!isAmenityDropdownOpen)}
-                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors"
-                        >
-                            <input
-                                type="text"
-                                value={amenitySearch}
-                                onChange={e => { setAmenitySearch(e.target.value); setIsAmenityDropdownOpen(true); }}
-                                onFocus={() => setIsAmenityDropdownOpen(true)}
-                                placeholder={selectedAmenities.length > 0 ? 'Add more...' : 'Select or type amenities...'}
-                                className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
-                            />
-                            <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isAmenityDropdownOpen ? 'rotate-180' : ''}`} />
-                        </div>
-
-                        {/* Dropdown list */}
-                        {isAmenityDropdownOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                {(() => {
-                                    const filtered = allKnownAmenities.filter(a =>
-                                        !selectedAmenities.some(s => s.toLowerCase() === a.toLowerCase()) &&
-                                        a.toLowerCase().includes(amenitySearch.toLowerCase())
-                                    );
-                                    const trimmedSearch = amenitySearch.trim();
-                                    const isCustom = trimmedSearch &&
-                                        !allKnownAmenities.some(a => a.toLowerCase() === trimmedSearch.toLowerCase()) &&
-                                        !selectedAmenities.some(a => a.toLowerCase() === trimmedSearch.toLowerCase());
-
-                                    return (
-                                        <>
-                                            {isCustom && (
-                                                <button type="button"
-                                                    onClick={() => {
-                                                        setSelectedAmenities(prev => [...prev, trimmedSearch]);
-                                                        setAmenitySearch('');
-                                                    }}
-                                                    className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-slate-100"
-                                                >
-                                                    <Plus size={14} className="text-blue-600 shrink-0" />
-                                                    <span className="font-bold text-sm text-blue-600">Add "{trimmedSearch}"</span>
-                                                </button>
-                                            )}
-                                            {filtered.length > 0 ? filtered.map((a, idx) => (
-                                                <button type="button" key={idx}
-                                                    onClick={() => {
-                                                        setSelectedAmenities(prev => [...prev, a]);
-                                                        setAmenitySearch('');
-                                                    }}
-                                                    className="w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm text-slate-700 flex items-center gap-3"
-                                                >
-                                                    <span className="w-5 h-5 rounded-md border border-slate-200 flex items-center justify-center shrink-0">
-                                                        {selectedAmenities.includes(a) && <Check size={12} className="text-blue-600" />}
-                                                    </span>
-                                                    {a}
-                                                </button>
-                                            )) : !isCustom && (
-                                                <div className="px-5 py-4 text-center">
-                                                    <p className="text-[10px] text-slate-400 font-bold">No amenities found. Type to add a custom one.</p>
-                                                </div>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                    </div>
-                </div>
             </div>
 
             {/* Right Column: Map & Submit */}
@@ -1452,20 +1402,107 @@ const LocationsList: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Court Status Selector */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
-                            <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
-                                {(['Active', 'Closed', 'Maintenance', 'Coming Soon'] as const).map((s) => (
-                                    <button key={s} type="button" onClick={() => setFormStatus(s)}
-                                        className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${formStatus === s
-                                            ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
-                                                : s === 'Closed' ? 'bg-white text-rose-500 shadow-lg shadow-rose-100/50'
-                                                    : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
-                                            : 'text-slate-400 hover:text-slate-600'}`}>
-                                        {s}
-                                    </button>
-                                ))}
+                        {isEdit && (
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
+                                <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 gap-1 shadow-inner h-[54px]">
+                                    {(['Active', 'Closed', 'Maintenance', 'Coming Soon'] as const).map((s) => (
+                                        <button key={s} type="button" onClick={() => setFormStatus(s)}
+                                            className={`flex-1 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all duration-300 ${formStatus === s
+                                                ? s === 'Active' ? 'bg-white text-emerald-500 shadow-lg shadow-emerald-100/50'
+                                                    : s === 'Closed' ? 'bg-white text-rose-500 shadow-lg shadow-rose-100/50'
+                                                        : 'bg-white text-blue-500 shadow-lg shadow-blue-100/50'
+                                                : 'text-slate-400 hover:text-slate-600'}`}>
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Amenities Selector */}
+                        <div className="space-y-2" ref={amenityDropdownRef}>
+                            <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 flex items-center gap-2">Amenities <span className="text-[9px] font-bold text-slate-400 normal-case tracking-normal">(Optional)</span></label>
+
+                            {selectedAmenities.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-2 px-1">
+                                    {selectedAmenities.map((a, idx) => (
+                                        <span key={idx} className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                                            {a}
+                                            <button type="button" onClick={() => setSelectedAmenities(prev => prev.filter((_, i) => i !== idx))}
+                                                className="text-blue-400 hover:text-rose-500 transition-colors">
+                                                <X size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="relative">
+                                <div
+                                    onClick={() => setIsAmenityDropdownOpen(!isAmenityDropdownOpen)}
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 cursor-pointer flex items-center justify-between hover:border-blue-200 transition-colors"
+                                >
+                                    <input
+                                        type="text"
+                                        value={amenitySearch}
+                                        onChange={e => { setAmenitySearch(e.target.value); setIsAmenityDropdownOpen(true); }}
+                                        onFocus={() => setIsAmenityDropdownOpen(true)}
+                                        placeholder={selectedAmenities.length > 0 ? 'Add more...' : 'Select or type amenities...'}
+                                        className="bg-transparent outline-none font-bold text-sm flex-1 w-full text-slate-900 placeholder:text-slate-400"
+                                    />
+                                    <ChevronDown size={16} className={`text-slate-400 transition-transform shrink-0 ${isAmenityDropdownOpen ? 'rotate-180' : ''}`} />
+                                </div>
+
+                                {isAmenityDropdownOpen && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                                        {(() => {
+                                            const filtered = allKnownAmenities.filter(a =>
+                                                !selectedAmenities.some(s => s.toLowerCase() === a.toLowerCase()) &&
+                                                a.toLowerCase().includes(amenitySearch.toLowerCase())
+                                            );
+                                            const trimmedSearch = amenitySearch.trim();
+                                            const isCustom = trimmedSearch &&
+                                                !allKnownAmenities.some(a => a.toLowerCase() === trimmedSearch.toLowerCase()) &&
+                                                !selectedAmenities.some(a => a.toLowerCase() === trimmedSearch.toLowerCase());
+
+                                            return (
+                                                <>
+                                                    {isCustom && (
+                                                        <button type="button"
+                                                            onClick={() => {
+                                                                setSelectedAmenities(prev => [...prev, trimmedSearch]);
+                                                                setAmenitySearch('');
+                                                            }}
+                                                            className="w-full text-left px-5 py-3 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-slate-100"
+                                                        >
+                                                            <Plus size={14} className="text-blue-600 shrink-0" />
+                                                            <span className="font-bold text-sm text-blue-600">Add "{trimmedSearch}"</span>
+                                                        </button>
+                                                    )}
+                                                    {filtered.length > 0 ? filtered.map((a, idx) => (
+                                                        <button type="button" key={idx}
+                                                            onClick={() => {
+                                                                setSelectedAmenities(prev => [...prev, a]);
+                                                                setAmenitySearch('');
+                                                            }}
+                                                            className="w-full text-left px-5 py-3 hover:bg-slate-50 transition-colors font-bold text-sm text-slate-700 flex items-center gap-3"
+                                                        >
+                                                            <span className="w-5 h-5 rounded-md border border-slate-200 flex items-center justify-center shrink-0">
+                                                                {selectedAmenities.includes(a) && <Check size={12} className="text-blue-600" />}
+                                                            </span>
+                                                            {a}
+                                                        </button>
+                                                    )) : !isCustom && (
+                                                        <div className="px-5 py-4 text-center">
+                                                            <p className="text-[10px] text-slate-400 font-bold">No amenities found. Type to add a custom one.</p>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1822,9 +1859,10 @@ const LocationsList: React.FC = () => {
                                     const usedSlots = todayBooked + passedSlots; // booked + expired
                                     const isFull = availableSlots === 0;
                                     const slotPercent = totalSlots > 0 ? Math.min((usedSlots / totalSlots) * 100, 100) : 0;
+                                    const isSetupRequired = cStatus === 'Setup Required';
                                     return (
-                                        <tr key={court.id} className="group hover:bg-blue-50/30 transition-colors cursor-pointer"
-                                            onClick={() => openViewCourtModal(court)}>
+                                        <tr key={court.id} className={`group hover:bg-blue-50/30 transition-colors ${isSetupRequired ? 'cursor-default' : 'cursor-pointer'}`}
+                                            onClick={() => { if (!isSetupRequired) openViewCourtModal(court); }}>
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
                                                     <div className={`p-2 rounded-xl ${isFull ? 'bg-rose-50 text-rose-500'
@@ -1841,72 +1879,97 @@ const LocationsList: React.FC = () => {
                                                 <span className="text-xs font-bold text-slate-500">{court.location_name}</span>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${court.court_type === 'Indoor' ? 'bg-purple-50 border-purple-100 text-purple-600'
-                                                    : court.court_type === 'Outdoor' ? 'bg-orange-50 border-orange-100 text-orange-600'
-                                                        : 'bg-slate-50 border-slate-200 text-slate-400'
-                                                    }`}>
-                                                    {court.court_type || 'N/A'}
-                                                </span>
+                                                {isSetupRequired ? (
+                                                    <span className="text-xs font-bold text-slate-300">—</span>
+                                                ) : (
+                                                    <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${court.court_type === 'Indoor' ? 'bg-purple-50 border-purple-100 text-purple-600'
+                                                        : court.court_type === 'Outdoor' ? 'bg-orange-50 border-orange-100 text-orange-600'
+                                                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                        }`}>
+                                                        {court.court_type || 'N/A'}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className="text-xs font-bold text-slate-500">{court.surface_type || '—'}</span>
+                                                <span className={`text-xs font-bold ${isSetupRequired ? 'text-slate-300' : 'text-slate-500'}`}>{isSetupRequired ? '—' : (court.surface_type || '—')}</span>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
-                                                    className="text-xs font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
-                                                    Set Pricing
-                                                </button>
+                                                {isSetupRequired ? (
+                                                    <span className="text-xs font-bold text-slate-300">—</span>
+                                                ) : (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
+                                                        className="text-xs font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
+                                                        Set Pricing
+                                                    </button>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <div className="flex flex-col items-center gap-1.5">
-                                                    {isFull ? (
-                                                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-rose-50 border border-rose-100 text-rose-600">
-                                                            {todayBooked > 0 && availableSlots === 0 ? 'Fully Booked' : 'No Slots Left'}
-                                                        </span>
-                                                    ) : availableSlots > 0 ? (
-                                                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-50 border border-emerald-100 text-emerald-600">
-                                                            {availableSlots} Slot{availableSlots !== 1 ? 's' : ''} Left
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-50 border border-slate-100 text-slate-400">
-                                                            Closed
-                                                        </span>
-                                                    )}
-                                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-rose-500' : slotPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                                                            }`} style={{ width: `${slotPercent}%` }} />
+                                                {isSetupRequired ? (
+                                                    <span className="text-xs font-bold text-slate-300">—</span>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1.5">
+                                                        {isFull ? (
+                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-rose-50 border border-rose-100 text-rose-600">
+                                                                {todayBooked > 0 && availableSlots === 0 ? 'Fully Booked' : 'No Slots Left'}
+                                                            </span>
+                                                        ) : availableSlots > 0 ? (
+                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-50 border-emerald-100 text-emerald-600">
+                                                                {availableSlots} Slot{availableSlots !== 1 ? 's' : ''} Left
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-50 border border-slate-100 text-slate-400">
+                                                                Closed
+                                                            </span>
+                                                        )}
+                                                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-rose-500' : slotPercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                                                }`} style={{ width: `${slotPercent}%` }} />
+                                                        </div>
+                                                        {passedSlots > 0 && (
+                                                            <span className="text-[8px] font-bold text-slate-400">{passedSlots} expired</span>
+                                                        )}
                                                     </div>
-                                                    {passedSlots > 0 && (
-                                                        <span className="text-[8px] font-bold text-slate-400">{passedSlots} expired</span>
-                                                    )}
-                                                </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${cStatus === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                                    : cStatus === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
-                                                        : cStatus === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
-                                                            : cStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                                                : 'bg-slate-50 border-slate-200 text-slate-400'
-                                                    }`}>
-                                                    {cStatus}
-                                                </span>
+                                                {isSetupRequired ? (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
+                                                        className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-50 border-amber-100 text-amber-700 hover:bg-amber-100 transition-colors">
+                                                        Setup Required →
+                                                    </button>
+                                                ) : (
+                                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${cStatus === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                                        : cStatus === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                                            : cStatus === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
+                                                                : cStatus === 'Setup Required' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                                    : cStatus === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                        }`}>
+                                                        {cStatus}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-right">
-                                                <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={() => navigate(`/court-pricing?court=${court.id}`)}
-                                                        className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Set Pricing">
-                                                        <PhilippinePeso size={16} />
-                                                    </button>
-                                                    <button onClick={() => openEditCourtModal(court)}
-                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit Court">
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                    <button onClick={() => handleDeleteCourt(court.id)}
-                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Delete Court">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
+                                                {isSetupRequired ? (
+                                                    <span className="text-xs font-bold text-slate-300">—</span>
+                                                ) : (
+                                                    <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                                        <button onClick={() => navigate(`/court-pricing?court=${court.id}`)}
+                                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Set Pricing">
+                                                            <PhilippinePeso size={16} />
+                                                        </button>
+                                                        <button onClick={() => openEditCourtModal(court)}
+                                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Edit Court">
+                                                            <Pencil size={16} />
+                                                        </button>
+                                                        <button onClick={() => handleDeleteCourt(court.id)}
+                                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Delete Court">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -1978,8 +2041,9 @@ const LocationsList: React.FC = () => {
                                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${(viewingCourt.status || 'Available') === 'Available' ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
                                         : (viewingCourt.status) === 'Fully Booked' ? 'bg-blue-50 border-blue-100 text-blue-600'
                                             : (viewingCourt.status) === 'Coming Soon' ? 'bg-violet-50 border-violet-100 text-violet-600'
-                                                : (viewingCourt.status) === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-400'
+                                                : (viewingCourt.status) === 'Setup Required' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                    : (viewingCourt.status) === 'Maintenance' ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-400'
                                         }`}>
                                         {viewingCourt.status || 'Available'}
                                     </span>
@@ -2190,36 +2254,7 @@ const LocationsList: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Court Status */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {([
-                                            { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
-                                            { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
-                                            { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
-                                            { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'amber', icon: '🔧' },
-                                        ]).map((opt) => {
-                                            const isSelected = courtStatus === opt.value;
-                                            const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
-                                                emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-                                                blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-                                                violet: { bg: 'bg-violet-50', border: 'border-violet-400', text: 'text-violet-700', ring: 'ring-violet-500/20' },
-                                                amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
-                                            };
-                                            const c = colorMap[opt.color];
-                                            return (
-                                                <button key={opt.value} type="button" onClick={() => setCourtStatus(opt.value)}
-                                                    className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
-                                                        ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
-                                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                                                        }`}>
-                                                    <span>{opt.icon}</span> {opt.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                                {/* Court Status is locked to Setup Required on create to prevent early booking */}
 
                                 {/* Surface Type & Price */}
                                 <div className="grid grid-cols-2 gap-4">
@@ -2329,6 +2364,17 @@ const LocationsList: React.FC = () => {
                                             <span className="text-[9px] text-slate-300 font-medium">JPG, PNG, or WEBP</span>
                                         </button>
                                     )}
+                                    {reusableImages.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setImageGalleryTarget('court'); setIsImageGalleryOpen(true); }}
+                                                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-blue-300 hover:text-blue-700 transition-all"
+                                            >
+                                                Use from Gallery
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button type="submit" disabled={isCourtSubmitting}
@@ -2422,6 +2468,7 @@ const LocationsList: React.FC = () => {
                                     <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4">Court Status</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {([
+                                            { value: 'Setup Required' as CourtStatus, label: 'Setup Required', color: 'amber', icon: '🛠' },
                                             { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
                                             { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
                                             { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'violet', icon: '🔜' },
@@ -2556,6 +2603,17 @@ const LocationsList: React.FC = () => {
                                             <span className="text-[9px] text-slate-300 font-medium">JPG, PNG, or WEBP</span>
                                         </button>
                                     )}
+                                    {reusableImages.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setImageGalleryTarget('court'); setIsImageGalleryOpen(true); }}
+                                                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-blue-300 hover:text-blue-700 transition-all"
+                                            >
+                                                Use from Gallery
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-4 mt-4">
@@ -2570,6 +2628,43 @@ const LocationsList: React.FC = () => {
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Reusable Image Gallery Modal */}
+            {isImageGalleryOpen && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Image Library</p>
+                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Reuse existing uploads</h3>
+                            </div>
+                            <button onClick={() => { setIsImageGalleryOpen(false); setImageGalleryTarget(null); }} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {reusableImages.length === 0 ? (
+                            <div className="py-10 text-center text-slate-500 font-semibold">No reusable images yet.</div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                {reusableImages.map((url, idx) => (
+                                    <button
+                                        key={`${url}-${idx}`}
+                                        type="button"
+                                        onClick={() => handleSelectGalleryImage(url)}
+                                        className="relative group rounded-2xl overflow-hidden border border-slate-200 hover:border-blue-300 transition-all"
+                                    >
+                                        <img src={url} alt="Reusable upload" className="w-full h-32 object-cover" />
+                                        <div className="absolute inset-0 bg-slate-900/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <span className="absolute bottom-2 right-2 text-[10px] font-black px-2 py-1 rounded-full bg-white/90 text-slate-800 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">Use</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>,
                 document.body

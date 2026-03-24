@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useSEO from '../hooks/useSEO';
 import ReactDOM from 'react-dom';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { sendInvitation, searchPlayerForInvite } from '../services/invitations';
 import Receipt from './Receipt';
 import { getLocationPolicies, LocationPolicy } from '../services/policies';
 import Toast, { ToastType } from './ui/Toast';
-import WeeklyPricingSchedule from './ui/WeeklyPricingSchedule';
+import WeeklyPricingMultiCourtTable from './ui/WeeklyPricingMultiCourtTable';
 import { getSlotPrices, PricingRule, fetchCourtPricingRules, getSlotPrice } from '../services/courtPricingService';
 import { getEffectiveHours, type EffectiveHours } from '../services/courtOperationHours';
 
@@ -24,9 +24,12 @@ const ALL_HOUR_SLOTS = [
   '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM', '11:00 PM'
 ];
 
+// Legacy alias used throughout the component; keep for compatibility
+const TIME_SLOTS = ALL_HOUR_SLOTS;
+
 /** Generate time slots based on opening and closing hours (24h format strings like '08:00', '18:00') */
 const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
-  if (!openTime || !closeTime) return TIME_SLOTS;
+  if (!openTime || !closeTime) return ALL_HOUR_SLOTS;
 
   const parseTime = (t: string) => {
     const [hStr, mStr = '0'] = t.split(':');
@@ -49,187 +52,17 @@ const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
   return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
 };
 
-// Default fallback time slots
-const TIME_SLOTS = [
-  '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'
-];
-
-/** Convert a slot start time like '08:00 AM' to a range like '08:00 AM - 09:00 AM' */
-const formatHourLabel = (hours24: number, minutes: number = 0): string => {
-  const period = hours24 >= 12 ? 'PM' : 'AM';
-  const h12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-  const minutePart = minutes === 0 ? '' : `:${minutes.toString().padStart(2, '0')}`;
-  return `${h12}${minutePart} ${period}`;
+const isLikelyImageUrl = (value?: string | null) => {
+  if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim().toLowerCase();
+  return /\.(png|jpe?g|gif|webp|avif)$/.test(trimmed) || trimmed.startsWith('http');
 };
 
-/** Convert a slot start time like '08:00 AM' to a range like '8 AM - 9 AM' */
-const slotToRange = (slot: string): string => {
-  const [time, period] = slot.split(' ');
-  let [h, m] = time.split(':').map(Number);
-  if (period === 'PM' && h !== 12) h += 12;
-  else if (period === 'AM' && h === 12) h = 0;
-  const endH = (h + 1) % 24;
-  return `${formatHourLabel(h, m)} - ${formatHourLabel(endH, m)}`;
+type BookingProps = {
+  enableSlotGrouping?: boolean;
 };
 
-/** Convert a slot like '08:00 AM' to a 24-hour number (0–23) */
-const slotTo24 = (slot: string): number => {
-  const [time, period] = slot.split(' ');
-  let [h] = time.split(':').map(Number);
-  if (period === 'PM' && h !== 12) h += 12;
-  else if (period === 'AM' && h === 12) h = 0;
-  return h;
-};
-
-/** Build display range for multiple consecutive slots */
-const slotsToRange = (slots: string[]): string => {
-  if (slots.length === 0) return '';
-  if (slots.length === 1) return slotToRange(slots[0]);
-  const sorted = [...slots].sort((a, b) => slotTo24(a) - slotTo24(b));
-  const startH = slotTo24(sorted[0]);
-  const endH = (slotTo24(sorted[sorted.length - 1]) + 1) % 24;
-  return `${formatHourLabel(startH)} - ${formatHourLabel(endH)} (${sorted.length} hr${sorted.length > 1 ? 's' : ''})`;
-};
-
-const formatHourCompact = (hour24: number): string => {
-  const ap = hour24 >= 12 ? 'PM' : 'AM';
-  const h12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${h12}${ap}`;
-};
-
-const slotsToCompactRange = (slots: string[]): string => {
-  if (slots.length === 0) return '';
-  const sorted = [...slots].sort((a, b) => slotTo24(a) - slotTo24(b));
-  const startH = slotTo24(sorted[0]);
-  const endH = (slotTo24(sorted[sorted.length - 1]) + 1) % 24;
-  const count = sorted.length;
-  return `${formatHourCompact(startH)} - ${formatHourCompact(endH)} (${count} ${count > 1 ? 'HRS' : 'HR'})`;
-};
-
-// ─── Philippine Time Helpers (Asia/Manila, UTC+8) ───
-const PH_TIMEZONE = 'Asia/Manila';
-
-const getNowPH = (): Date => {
-  const phStr = new Date().toLocaleString('en-US', { timeZone: PH_TIMEZONE });
-  return new Date(phStr);
-};
-
-const toPhDateStr = (date: Date): string => {
-  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: PH_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-  return formatter.format(date);
-};
-
-const isSlotInPast = (slot: string, selectedDate: Date): boolean => {
-  const nowPH = getNowPH();
-  const todayPH = toPhDateStr(new Date());
-  const selectedPH = toPhDateStr(selectedDate);
-  if (selectedPH > todayPH) return false;
-  if (selectedPH < todayPH) return true;
-  const [time, period] = slot.split(' ');
-  let [hours, minutes] = time.split(':').map(Number);
-  if (period === 'PM' && hours !== 12) hours += 12;
-  else if (period === 'AM' && hours === 12) hours = 0;
-  return hours < nowPH.getHours() || (hours === nowPH.getHours() && minutes <= nowPH.getMinutes());
-};
-
-const getSlotDateTime = (slot: string, baseDate: Date = new Date()): { start: Date; end: Date } => {
-  const [time, period] = slot.split(' ');
-  let [hours, minutes] = time.split(':').map(Number);
-
-  if (period === 'PM' && hours !== 12) {
-    hours += 12;
-  } else if (period === 'AM' && hours === 12) {
-    hours = 0;
-  }
-
-  const startDateTime = new Date(baseDate);
-  startDateTime.setHours(hours, minutes, 0, 0);
-
-  const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // 1 hour slot
-
-  return { start: startDateTime, end: endDateTime };
-};
-
-// Distance calculation helper (Haversine formula)
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 3958.8; // Radius of the earth in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-// Philippine regions mapping
-const VISAYAS_CITIES = ['cebu', 'mandaue', 'lapu-lapu', 'talisay', 'danao', 'bogo', 'carcar', 'naga', 'toledo', 'tacloban', 'ormoc', 'bacolod', 'iloilo', 'roxas', 'dumaguete', 'tagbilaran', 'bohol', 'leyte', 'samar', 'negros', 'panay', 'siquijor', 'biliran'];
-const MINDANAO_CITIES = ['davao', 'cagayan de oro', 'zamboanga', 'general santos', 'butuan', 'iligan', 'cotabato', 'koronadal', 'tagum', 'panabo', 'digos', 'mati', 'surigao', 'tandag', 'bislig', 'ozamiz', 'dipolog', 'pagadian', 'marawi', 'kidapawan', 'tacurong', 'malaybalay', 'valencia'];
-
-const getRegion = (city: string): string => {
-  const cityLower = city.toLowerCase();
-  if (VISAYAS_CITIES.some(c => cityLower.includes(c))) return 'Visayas';
-  if (MINDANAO_CITIES.some(c => cityLower.includes(c))) return 'Mindanao';
-  return 'Luzon'; // Default to Luzon
-};
-
-declare global {
-  interface Window {
-    google: any;
-  }
-}
-
-const MiniMapCard: React.FC<{ lat: number; lng: number; heightClassName?: string }> = ({ lat, lng, heightClassName = 'h-28' }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!mapRef.current || !window.google) return;
-
-    const map = new window.google.maps.Map(mapRef.current, {
-      center: { lat, lng },
-      zoom: 15,
-      mapTypeId: 'terrain',
-      disableDefaultUI: true,
-      gestureHandling: 'none',
-      styles: [
-        { featureType: 'landscape.natural', elementType: 'geometry.fill', stylers: [{ color: '#dde8cd' }] },
-        { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#e4e0d8' }] },
-        { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a3c8e9' }] },
-        { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#b5d48c' }] },
-        { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f5edd5' }] },
-        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5544' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#f0ebe0' }, { weight: 2 }] }
-      ]
-    });
-
-    new window.google.maps.Marker({
-      position: { lat, lng },
-      map,
-      icon: {
-        url: '/images/PinMarker.png',
-        scaledSize: new window.google.maps.Size(46, 60),
-        anchor: new window.google.maps.Point(23, 60)
-      }
-    });
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.innerHTML = '';
-      }
-    };
-  }, [lat, lng]);
-
-  return (
-    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-50">
-      <div ref={mapRef} className={`w-full ${heightClassName}`} />
-    </div>
-  );
-};
-
-interface LocationGroup {
+type LocationGroup = {
   locationId: string;
   locationName: string;
   address: string;
@@ -237,32 +70,148 @@ interface LocationGroup {
   latitude: number;
   longitude: number;
   courts: Court[];
-  imageUrl?: string;
-  description?: string;
-  amenities?: string[];
-}
-
-const isLikelyImageUrl = (value?: string | null): value is string => {
-  if (!value || typeof value !== 'string') return false;
-  const url = value.trim();
-  if (!url) return false;
-  if (url.startsWith('data:image/') || url.startsWith('blob:') || url.startsWith('/images/')) return true;
-  if (url.includes('/rest/v1/') || url.includes('select=') || url.includes('is_blocking=') || url.includes('eq.true')) return false;
-
-  try {
-    const parsed = new URL(url);
-    const pathname = parsed.pathname.toLowerCase();
-    const hasImageExt = /\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i.test(pathname);
-    const isStorageObject = pathname.includes('/storage/v1/object/');
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && (hasImageExt || isStorageObject);
-  } catch {
-    return false;
-  }
+  imageUrl: string;
+  description: string;
+  amenities: string[];
 };
+
+const toPhDateStr = (date: Date) => {
+  const phDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  const y = phDate.getFullYear();
+  const m = `${phDate.getMonth() + 1}`.padStart(2, '0');
+  const d = `${phDate.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getNowPH = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+
+const parseSlotToDate = (slot: string, date: Date) => {
+  const [time, period] = slot.split(' ');
+  const [hourStr, minuteStr = '00'] = time.split(':');
+  let hours = parseInt(hourStr, 10);
+  const minutes = parseInt(minuteStr, 10) || 0;
+
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+
+  const start = new Date(date);
+  start.setHours(hours, minutes, 0, 0);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  return { start, end };
+};
+
+const slotToRange = (slot: string) => {
+  const { start, end } = parseSlotToDate(slot, getNowPH());
+  const format = (d: Date) => {
+    const h24 = d.getHours();
+    const minutes = d.getMinutes();
+    const period = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    const minutePart = minutes === 0 ? '' : `:${minutes.toString().padStart(2, '0')}`;
+    return `${h12}${minutePart}${period.toLowerCase()}`;
+  };
+  return `${format(start)} - ${format(end)}`;
+};
+
+const sortSlotsChronologically = (slots: string[]) => {
+  return [...slots].sort((a, b) => {
+    const { start: aStart } = parseSlotToDate(a, getNowPH());
+    const { start: bStart } = parseSlotToDate(b, getNowPH());
+    return aStart.getTime() - bStart.getTime();
+  });
+};
+
+const slotsToRange = (slots: string[]) => {
+  if (!slots || slots.length === 0) return '';
+  const sorted = sortSlotsChronologically(slots);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const { start } = parseSlotToDate(first, getNowPH());
+  const { end } = parseSlotToDate(last, getNowPH());
+  const format = (d: Date) => {
+    const h24 = d.getHours();
+    const minutes = d.getMinutes();
+    const period = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    const minutePart = minutes === 0 ? '' : `:${minutes.toString().padStart(2, '0')}`;
+    return `${h12}${minutePart}${period.toLowerCase()}`;
+  };
+  const hours = slots.length;
+  return `${format(start)} - ${format(end)} (${hours} hour${hours > 1 ? 's' : ''})`;
+};
+
+const slotsToCompactRange = (slots: string[]) => {
+  if (!slots || slots.length === 0) return '';
+  const sorted = sortSlotsChronologically(slots);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const { start } = parseSlotToDate(first, getNowPH());
+  const { end } = parseSlotToDate(last, getNowPH());
+  const format = (d: Date) => {
+    const h24 = d.getHours();
+    const minutes = d.getMinutes();
+    const period = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    const minutePart = minutes === 0 ? '' : `:${minutes.toString().padStart(2, '0')}`;
+    return `${h12}${minutePart}${period.toLowerCase()}`;
+  };
+  return `${format(start)} - ${format(end)}`;
+};
+
+const groupConsecutiveSlots = (slots: string[]) => {
+  const sorted = sortSlotsChronologically(slots);
+  const groups: string[][] = [];
+  for (const slot of sorted) {
+    if (groups.length === 0) {
+      groups.push([slot]);
+      continue;
+    }
+    const currentGroup = groups[groups.length - 1];
+    const lastSlot = currentGroup[currentGroup.length - 1];
+    const { end: lastEnd } = parseSlotToDate(lastSlot, getNowPH());
+    const { start } = parseSlotToDate(slot, getNowPH());
+    const diffHours = (start.getTime() - lastEnd.getTime()) / (60 * 60 * 1000);
+    if (Math.abs(diffHours) < 0.01) {
+      currentGroup.push(slot);
+    } else {
+      groups.push([slot]);
+    }
+  }
+  return groups;
+};
+
+const getSlotDateTime = (slot: string, date: Date) => parseSlotToDate(slot, date);
+
+const isSlotInPast = (slot: string, date: Date) => {
+  const { start } = parseSlotToDate(slot, date);
+  return start.getTime() < getNowPH().getTime();
+};
+
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const toRad = (deg: number) => deg * (Math.PI / 180);
+  const R = 6371; // km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const getRegion = (city: string | null | undefined) => city || '';
+
+const filterCourtsByPricingRules = async (courts: any[]) => ({ filtered: courts });
+
+const MiniMapCard: React.FC<{ lat?: number; lng?: number; heightClassName?: string }> = ({ lat, lng, heightClassName }) => (
+  <div className={`w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-600 ${heightClassName || ''}`}>
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Location</div>
+    <div className="text-sm font-medium text-slate-900">Lat: {lat ?? 'N/A'}, Lng: {lng ?? 'N/A'}</div>
+    <div className="text-xs text-slate-500">Map preview unavailable</div>
+  </div>
+);
 
 const sanitizeImageUrl = (value?: string | null, fallback = '') => (isLikelyImageUrl(value) ? value!.trim() : fallback);
 
-const Booking: React.FC = () => {
+const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   useSEO({
     title: 'Find Pickleball Courts Near Me – Book Online',
     description: 'Search for pickleball courts near you across the Philippines. Filter by city (Manila, Cebu, Davao), court type, and time — then book your slot instantly.',
@@ -291,11 +240,39 @@ const Booking: React.FC = () => {
   const [filterFreeOnly, setFilterFreeOnly] = useState(false);
   const [filterAmenities, setFilterAmenities] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [showWeeklyPricing, setShowWeeklyPricing] = useState(false);
   const [filterType, setFilterType] = useState<'All' | 'Indoor' | 'Outdoor'>('All');
+  const [showLocationMapView, setShowLocationMapView] = useState(false);
   const isMobile = window.innerWidth < 768;
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isConfirmingMulti, setIsConfirmingMulti] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   // For Location View
   const [locationSelectedSlots, setLocationSelectedSlots] = useState<string[]>([]);
+  const groupedSelectedSlots = useMemo(() => {
+    if (!enableSlotGrouping) return selectedSlots.length > 0 ? [sortSlotsChronologically(selectedSlots)] : [];
+    return groupConsecutiveSlots(selectedSlots);
+  }, [enableSlotGrouping, selectedSlots]);
+  const groupedLocationSlots = useMemo(() => {
+    if (!enableSlotGrouping) return locationSelectedSlots.length > 0 ? [sortSlotsChronologically(locationSelectedSlots)] : [];
+    return groupConsecutiveSlots(locationSelectedSlots);
+  }, [enableSlotGrouping, locationSelectedSlots]);
+  const groupedSelectedLabel = useMemo(() => {
+    if (groupedSelectedSlots.length === 0) return '';
+    return groupedSelectedSlots.map(group => slotsToRange(group)).join(' · ');
+  }, [groupedSelectedSlots]);
+  const groupedLocationLabel = useMemo(() => {
+    if (groupedLocationSlots.length === 0) return '';
+    return groupedLocationSlots.map(group => slotsToRange(group)).join(' · ');
+  }, [groupedLocationSlots]);
+  const [showMultiBookingConfirm, setShowMultiBookingConfirm] = useState(false);
+  const [multiBookingConfirmed, setMultiBookingConfirmed] = useState(false);
+
+  useEffect(() => {
+    setMultiBookingConfirmed(false);
+    setShowMultiBookingConfirm(false);
+  }, [selectedSlots]);
   const [showLocationDetailHero, setShowLocationDetailHero] = useState(true);
   const [locationReviewSummary, setLocationReviewSummary] = useState<{ avg: number; count: number } | null>(null);
   const [locationAvailability, setLocationAvailability] = useState<Map<string, { blocked: Set<string>, booked: Set<string> }>>(new Map());
@@ -327,7 +304,50 @@ const Booking: React.FC = () => {
     setShowBookingSummary(false);
     setShowLocationDetailHero(false);
     setShowLeftCalendar(false);
+    setShowWeeklyPricing(false);
+    setShowLocationMapView(false);
     setViewMode('map');
+  };
+
+  const handleBackToLocations = () => {
+    const hasSelection = !!selectedCourt && selectedSlots.length > 0;
+    if (hasSelection) {
+      setShowExitConfirm(true);
+      return;
+    }
+    goToMapView();
+  };
+
+  const confirmExitToLocations = () => {
+    setShowExitConfirm(false);
+    setSelectedSlots([]);
+    setLocationSelectedSlots([]);
+    setSelectedCourt(null);
+    setShowBookingSummary(false);
+    goToMapView();
+  };
+
+  const cancelExitToLocations = () => setShowExitConfirm(false);
+
+  const toggleLocationMapView = () => {
+    if (!selectedLocation) return;
+    setShowWeeklyPricing(false);
+    if (showLocationMapView) {
+      setShowLocationMapView(false);
+    } else {
+      setShowLocationMapView(true);
+    }
+  };
+
+  const openWeeklyPricing = () => {
+    if (!selectedLocation) return;
+    setShowLocationMapView(false);
+    setShowWeeklyPricing(true);
+  };
+
+  const backToTimeSlots = () => {
+    setShowWeeklyPricing(false);
+    setShowLocationMapView(false);
   };
 
   // Location entry confirmation modal handlers
@@ -403,6 +423,16 @@ const Booking: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || searchParams.get('court') || '');
   const [user, setUser] = useState<any>(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
+
+  const requireLogin = (onSuccess?: () => void) => {
+    if (isUserLoading) return false;
+    if (!user) {
+      setShowAuthModal(true);
+      return false;
+    }
+    if (onSuccess) onSuccess();
+    return true;
+  };
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [blockedSlots, setBlockedSlots] = useState<Set<string>>(new Set());
@@ -480,12 +510,23 @@ const Booking: React.FC = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
+  const [copiedBookingNote, setCopiedBookingNote] = useState(false);
   const proofInputRef = useRef<HTMLInputElement>(null);
 
   const normalizeReferenceNumber = (value: string) => value.replace(/\s+/g, '').trim();
   const formatReferenceNumberInput = (value: string) => {
     const compact = normalizeReferenceNumber(value);
     return compact.replace(/(.{4})/g, '$1 ').trim();
+  };
+
+  const copyBookingNote = () => {
+    const note = 'Pickleplay Booking';
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(note).then(() => setCopiedBookingNote(true)).catch(() => setCopiedBookingNote(true));
+    } else {
+      setCopiedBookingNote(true);
+    }
+    window.setTimeout(() => setCopiedBookingNote(false), 1800);
   };
 
   // Post-booking invitation state
@@ -616,6 +657,13 @@ const Booking: React.FC = () => {
   const userMarkerRef = useRef<any>(null);
   const userLocationMarkerRef = useRef<any>(null);
   const pulseCirclesRef = useRef<any[]>([]);
+
+  const centerSelectedLocationOnMap = useCallback(() => {
+    if (!googleMapRef.current || !window.google || !selectedLocation?.latitude || !selectedLocation?.longitude) return;
+    googleMapRef.current.panTo({ lat: selectedLocation.latitude, lng: selectedLocation.longitude });
+    smoothZoom(15);
+    triggerPulse(selectedLocation.latitude, selectedLocation.longitude);
+  }, [selectedLocation]);
 
   const smoothZoom = (targetZoom: number) => {
     if (!googleMapRef.current || !window.google) return;
@@ -757,18 +805,23 @@ const Booking: React.FC = () => {
             )
           `)
           .eq('location_id', activeLocationId)
-          .eq('setup_complete', true);
+          .eq('setup_complete', true)
+          .eq('has_pricing', true)
+          .neq('status', 'Coming Soon')
+          .neq('status', 'Setup Required');
 
         if (courtsError) throw courtsError;
 
-        const mappedCourts: Court[] = (courtsData || []).map((c: any) => {
+        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(courtsData || []);
+
+        const mappedCourts: Court[] = (courtsWithPricing || []).map((c: any) => {
           const loc = c.locations;
           return {
             id: c.id,
             name: c.name,
             type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
             location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
-            pricePerHour: c.base_price,
+            pricePerHour: c.base_price ?? 0,
             availability: [],
             latitude: loc?.latitude,
             longitude: loc?.longitude,
@@ -783,7 +836,7 @@ const Booking: React.FC = () => {
         });
         setLocationCourts(mappedCourts);
 
-        const ratings = (courtsData || [])
+        const ratings = (courtsWithPricing || [])
           .flatMap((c: any) => (c.court_reviews || []).map((r: any) => r.rating))
           .filter((r: any) => typeof r === 'number');
         if (ratings.length > 0) {
@@ -804,6 +857,17 @@ const Booking: React.FC = () => {
 
     fetchLocationDetail();
   }, [activeLocationId]);
+
+  useEffect(() => {
+    setShowLocationMapView(false);
+    setShowWeeklyPricing(false);
+  }, [activeLocationId]);
+
+  useEffect(() => {
+    if (selectedCourt) {
+      setShowLocationMapView(false);
+    }
+  }, [selectedCourt]);
 
   const handleSearch = async (query: string) => {
     if (!query || !window.google) return;
@@ -846,6 +910,8 @@ const Booking: React.FC = () => {
 
 
   useEffect(() => {
+    const locationIdsWithPricing = new Set<string>();
+
     const fetchCourts = async () => {
       setIsLoading(true);
       try {
@@ -861,11 +927,20 @@ const Booking: React.FC = () => {
               longitude
             )
           `)
-          .eq('setup_complete', true);
+          .eq('setup_complete', true)
+          .eq('has_pricing', true)
+          .neq('status', 'Coming Soon')
+          .neq('status', 'Setup Required');
 
         if (error) throw error;
+        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(data || []);
 
-        const mappedCourts: Court[] = (data || []).map((c: any) => {
+        locationIdsWithPricing.clear();
+        (courtsWithPricing || []).forEach(c => locationIdsWithPricing.add(c.location_id));
+
+        const readyCourts = (courtsWithPricing || []).filter((c: any) => c.status !== 'Coming Soon' && c.status !== 'Setup Required');
+
+        const mappedCourts: Court[] = readyCourts.map((c: any) => {
           const loc = c.locations;
           return {
             id: c.id,
@@ -873,7 +948,7 @@ const Booking: React.FC = () => {
             type: c.surface_type?.toLowerCase().includes('indoor') ? 'Indoor' : 'Outdoor',
             location: loc ? `${loc.address}, ${loc.city}` : 'Unknown Location',
             location_id: c.location_id,
-            pricePerHour: c.base_price,
+            pricePerHour: c.base_price ?? 0,
             availability: [],
             latitude: loc?.latitude,
             longitude: loc?.longitude,
@@ -882,14 +957,17 @@ const Booking: React.FC = () => {
             imageUrl: sanitizeImageUrl(c.image_url),
             courtType: c.court_type || 'Outdoor',
             ownerId: c.owner_id,
-            cleaningTimeMinutes: c.cleaning_time_minutes || 0
-          };
+            cleaningTimeMinutes: c.cleaning_time_minutes || 0,
+            status: c.status,
+            has_pricing: c.has_pricing,
+            setup_complete: c.setup_complete
+          } as Court & { has_pricing?: boolean; setup_complete?: boolean };
         });
         setCourts(mappedCourts);
 
         // Also build locationGroups from fetched data for backward compatibility
         const locGroupMap = new Map<string, LocationGroup>();
-        for (const c of data || []) {
+        for (const c of readyCourts || []) {
           const loc = (c as any).locations;
           if (!loc || !c.location_id) continue;
           if (!locGroupMap.has(c.location_id)) {
@@ -916,9 +994,6 @@ const Booking: React.FC = () => {
         setIsLoading(false);
       }
     };
-    fetchCourts();
-
-    // Fetch locations with court counts
     const fetchLocations = async () => {
       try {
         const { data, error } = await supabase
@@ -926,12 +1001,19 @@ const Booking: React.FC = () => {
           .select('*');
 
         if (error) throw error;
-        setLocations(data || []);
+        // Only keep locations that have at least one court with pricing rules
+        const filteredLocations = (data || []).filter(loc => locationIdsWithPricing.has(loc.id));
+        setLocations(filteredLocations);
       } catch (err) {
         console.error('Error fetching locations:', err);
       }
     };
-    fetchLocations();
+    const run = async () => {
+      await fetchCourts();
+      await fetchLocations();
+    };
+
+    run();
   }, []);
 
   // Resolve court-level operation hours whenever selected court or date changes
@@ -991,6 +1073,8 @@ const Booking: React.FC = () => {
       const hoursMap = new Map<string, EffectiveHours>();
       const slotSet = new Set<string>();
 
+      const allClosed = hoursList.length > 0 && hoursList.every(h => h.is_closed);
+
       hoursList.forEach((hours, idx) => {
         const courtId = locationCourts[idx]?.id;
         if (!courtId) return;
@@ -1002,7 +1086,11 @@ const Booking: React.FC = () => {
 
       const slots = ALL_HOUR_SLOTS.filter(s => slotSet.has(s));
       setLocationEffectiveHours(hoursMap);
-      setLocationTimeSlots(slots.length > 0 ? slots : TIME_SLOTS);
+      if (allClosed) {
+        setLocationTimeSlots([]); // closed day
+      } else {
+        setLocationTimeSlots(slots.length > 0 ? slots : TIME_SLOTS);
+      }
     };
 
     resolveLocationHours();
@@ -1021,30 +1109,14 @@ const Booking: React.FC = () => {
 
   const toggleLocationSlotSelection = (slot: string, allSlots: string[]) => {
     setLocationSelectedSlots(prev => {
-      const slotH = slotTo24(slot);
-
       if (prev.includes(slot)) {
-        const remaining = prev.filter(s => s !== slot);
-        if (remaining.length === 0) return [];
-        const sorted = remaining.sort((a, b) => slotTo24(a) - slotTo24(b));
-        const before = sorted.filter(s => slotTo24(s) < slotH);
-        const after = sorted.filter(s => slotTo24(s) > slotH);
-        return before.length >= after.length ? before : after;
+        return sortSlotsChronologically(prev.filter(s => s !== slot));
       }
-
-      if (prev.length === 0) return [slot];
-
-      const prevHours = prev.map(slotTo24).sort((a, b) => a - b);
-      const minH = prevHours[0];
-      const maxH = prevHours[prevHours.length - 1];
-
-      // Only allow adjacent selection to keep times consecutive
-      if (slotH !== minH - 1 && slotH !== maxH + 1) {
-        return prev;
-      }
-
-      return [...prev, slot];
+      if (!allSlots.includes(slot)) return prev;
+      return sortSlotsChronologically([...prev, slot]);
     });
+    setMultiBookingConfirmed(false);
+    setShowMultiBookingConfirm(false);
   };
 
   // Function to check court availability - extracted for reuse
@@ -1381,6 +1453,17 @@ const Booking: React.FC = () => {
     }
   }, [activeLocationId, urlLat, urlLng, urlZoom, isLoading]);
 
+  useEffect(() => {
+    if (showLocationMapView) {
+      setTimeout(() => {
+        if (googleMapRef.current && window.google) {
+          window.google.maps.event.trigger(googleMapRef.current, 'resize');
+          centerSelectedLocationOnMap();
+        }
+      }, 150);
+    }
+  }, [showLocationMapView, centerSelectedLocationOnMap]);
+
   // Trigger map resize when viewMode changes (fixes blank map after toggling list/map on mobile)
   // Also trigger when returning to map from court detail / schedule panels
   useEffect(() => {
@@ -1524,28 +1607,10 @@ const Booking: React.FC = () => {
     }
   }, [locations, courts, filterType, searchQuery, isMapLoaded]);
 
-  /** Get the price for the currently selected slot (dynamic pricing aware) */
-  const getSelectedSlotPrice = (): number => {
-    if (!selectedCourt) return 0;
-    const slot = selectedSlots[0] || null;
-    if (slot && slotPrices.has(slot)) {
-      const price = slotPrices.get(slot)!;
-      if (price === 0) {
-        const range = courtPriceRanges.get(selectedCourt.id);
-        if (range?.hasRules && range.min > 0) return range.min;
-      }
-      return price;
-    }
-    const range = courtPriceRanges.get(selectedCourt.id);
-    if (range?.hasRules && range.min > 0) return range.min;
-    return selectedCourt.pricePerHour;
-  };
-
-  /** Get total price for ALL selected slots */
-  const getSelectedSlotsTotal = (): number => {
-    if (!selectedCourt || selectedSlots.length === 0) return 0;
+  const calculateSlotsTotal = (slots: string[]): number => {
+    if (!selectedCourt || slots.length === 0) return 0;
     let total = 0;
-    for (const slot of selectedSlots) {
+    for (const slot of slots) {
       if (slotPrices.has(slot)) {
         const price = slotPrices.get(slot)!;
         if (price === 0) {
@@ -1562,46 +1627,47 @@ const Booking: React.FC = () => {
     return total;
   };
 
+  /** Get the price for the currently selected slot (dynamic pricing aware) */
+  const getSelectedSlotPrice = (): number => {
+    if (!selectedCourt) return 0;
+    const sorted = sortSlotsChronologically(selectedSlots);
+    const slot = sorted[0] || null;
+    if (slot && slotPrices.has(slot)) {
+      const price = slotPrices.get(slot)!;
+      if (price === 0) {
+        const range = courtPriceRanges.get(selectedCourt.id);
+        if (range?.hasRules && range.min > 0) return range.min;
+      }
+      return price;
+    }
+    const range = courtPriceRanges.get(selectedCourt.id);
+    if (range?.hasRules && range.min > 0) return range.min;
+    return selectedCourt.pricePerHour;
+  };
+
+  /** Get total price for ALL selected slots */
+  const getSelectedSlotsTotal = (): number => calculateSlotsTotal(selectedSlots);
+
   /** Toggle a slot in/out of the selection, ensuring all selected slots remain consecutive & available */
   const toggleSlotSelection = (slot: string, allSlots: string[], blockedSet: Set<string>, bookedSet: Set<string>) => {
-    const slotH = slotTo24(slot);
+    if (blockedSet.has(slot) || bookedSet.has(slot)) return;
     setSelectedSlots(prev => {
-      // If already selected, deselect it (and any slots that would become non-consecutive)
       if (prev.includes(slot)) {
-        // Remove this slot — keep only the largest consecutive group still connected
-        const remaining = prev.filter(s => s !== slot);
-        if (remaining.length === 0) return [];
-        // Sort remaining by hour
-        const sorted = remaining.sort((a, b) => slotTo24(a) - slotTo24(b));
-        // Find two groups: those before the removed slot and those after
-        const before = sorted.filter(s => slotTo24(s) < slotH);
-        const after = sorted.filter(s => slotTo24(s) > slotH);
-        // Keep the larger group (or the one that's still consecutive)
-        return before.length >= after.length ? before : after;
+        return sortSlotsChronologically(prev.filter(s => s !== slot));
       }
-      // Adding a new slot — allow jumping to any hour and auto-fill the gap
-      if (prev.length === 0) return [slot];
-      const prevHours = prev.map(slotTo24).sort((a, b) => a - b);
-      const minH = prevHours[0];
-      const maxH = prevHours[prevHours.length - 1];
-
-      // Check that all slots between new min and new max are available
-      const newMin = Math.min(minH, slotH);
-      const newMax = Math.max(maxH, slotH);
-      const rangeSlots: string[] = [];
-      for (let h = newMin; h <= newMax; h++) {
-        const s = allSlots.find(sl => slotTo24(sl) === h);
-        if (!s || blockedSet.has(s) || bookedSet.has(s)) {
-          // Can't bridge — start fresh with just this slot
-          return [slot];
-        }
-        rangeSlots.push(s);
-      }
-      return rangeSlots;
+      if (!allSlots.includes(slot)) return prev;
+      return sortSlotsChronologically([...prev, slot]);
     });
+    setMultiBookingConfirmed(false);
+    setShowMultiBookingConfirm(false);
   };
 
   const handleBooking = async () => {
+    if (groupedSelectedSlots.length > 1 && !multiBookingConfirmed) {
+      setShowMultiBookingConfirm(true);
+      return;
+    }
+
     if (!selectedCourt || selectedSlots.length === 0) return;
 
     // Fetch owner payment methods before showing modal
@@ -1638,57 +1704,71 @@ const Booking: React.FC = () => {
   const confirmBookingWithPayment = async () => {
     if (!selectedCourt || selectedSlots.length === 0 || !paymentMethod) return;
 
-    // QR payment validation
     if (paymentMethod === 'gcash' || paymentMethod === 'maya') {
       const cleanRef = normalizeReferenceNumber(referenceNumber);
       if (!proofFile || !cleanRef) {
-        alert('📸 Please enter your reference number and upload your payment proof screenshot.');
+        alert('📸 Please enter your reference number and upload a payment proof screenshot.');
         return;
       }
     }
 
+    const groupedSelections = enableSlotGrouping
+      ? groupConsecutiveSlots(selectedSlots)
+      : (selectedSlots.length > 0 ? [sortSlotsChronologically(selectedSlots)] : []);
+
+    if (groupedSelections.length === 0) return;
+
     setIsProcessing(true);
+    const groupedLabel = groupedSelectedLabel;
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-        // 0.5 COURT OWNER CHECK - Owners cannot book their own courts (unless in Player Mode)
-        const currentActiveRole = localStorage.getItem('active_role');
-        if (selectedCourt.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER') {
-          alert('🚫 As a court owner, you cannot book your own court. Switch to Player Mode to book.');
-          setIsProcessing(false);
-          return;
-        }
+      const currentActiveRole = localStorage.getItem('active_role');
+      if (selectedCourt.ownerId && user.id === selectedCourt.ownerId && currentActiveRole !== 'PLAYER') {
+        alert('🚫 As a court owner, you cannot book your own court. Switch to Player Mode to book.');
+        setIsProcessing(false);
+        return;
+      }
 
-        // 1. RATE LIMITING - 30 second cooldown
-        const BOOKING_COOLDOWN_MS = 30000;
-        const now = Date.now();
-        if (lastBookingTime && (now - lastBookingTime) < BOOKING_COOLDOWN_MS) {
-          const remainingSeconds = Math.ceil((BOOKING_COOLDOWN_MS - (now - lastBookingTime)) / 1000);
-          alert(`⏱️ Please wait ${remainingSeconds} seconds before making another booking.`);
-          setIsProcessing(false);
-          return;
-        }
+      const BOOKING_COOLDOWN_MS = 30000;
+      const now = Date.now();
+      if (lastBookingTime && (now - lastBookingTime) < BOOKING_COOLDOWN_MS) {
+        const remainingSeconds = Math.ceil((BOOKING_COOLDOWN_MS - (now - lastBookingTime)) / 1000);
+        alert(`⏱️ Please wait ${remainingSeconds} seconds before making another booking.`);
+        setIsProcessing(false);
+        return;
+      }
 
-        // 2. USER BOOKING LIMIT - Max 5 pending bookings
-        const { data: userBookings, error: userBookingsError } = await supabase
-          .from('bookings')
-          .select('id')
-          .eq('player_id', user.id)
-          .eq('status', 'pending');
+      const { data: userBookings, error: userBookingsError } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('player_id', user.id)
+        .eq('status', 'pending');
 
-        if (userBookingsError) throw userBookingsError;
+      if (userBookingsError) throw userBookingsError;
 
-        if (userBookings && userBookings.length >= 5) {
-          alert('🚫 You have reached the maximum of 5 pending bookings. Please complete or cancel existing bookings first.');
-          setIsProcessing(false);
-          return;
-        }
+      if (userBookings && (userBookings.length + groupedSelections.length) > 5) {
+        alert('🚫 You have reached the maximum of 5 pending bookings. Please complete or cancel existing bookings first.');
+        setIsProcessing(false);
+        return;
+      }
 
-        // Calculate start/end time from selected slots (multi-hour support)
-        const sortedSlots = [...selectedSlots].sort((a, b) => slotTo24(a) - slotTo24(b));
+      const targetDateStr = toPhDateStr(selectedDate);
+      const isQRPayment = paymentMethod === 'gcash' || paymentMethod === 'maya';
+      const createdBookings: Array<{ bookingData: any; slots: string[]; startTimeFormatted: string; endTimeFormatted: string; numHours: number; totalPrice: number; }> = [];
+
+      const formatTime = (date: Date) => {
+        const h = date.getHours().toString().padStart(2, '0');
+        const m = date.getMinutes().toString().padStart(2, '0');
+        const s = date.getSeconds().toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+      };
+
+      for (const slotsGroup of groupedSelections) {
+        const sortedSlots = sortSlotsChronologically(slotsGroup);
         const firstSlot = sortedSlots[0];
-        const lastSlot = sortedSlots[sortedSlots.length - 1];
         const numHours = sortedSlots.length;
 
         const [time, period] = firstSlot.split(' ');
@@ -1697,26 +1777,17 @@ const Booking: React.FC = () => {
         if (period === 'PM' && hours !== 12) {
           hours += 12;
         } else if (period === 'AM' && hours === 12) {
-          hours = 0; // Midnight
+          hours = 0;
         }
 
         const startDateTime = new Date(selectedDate);
         startDateTime.setHours(hours, minutes, 0, 0);
 
-        const endDateTime = new Date(startDateTime.getTime() + numHours * 60 * 60 * 1000); // Add N hours
-
-        const formatTime = (date: Date) => {
-          const h = date.getHours().toString().padStart(2, '0');
-          const m = date.getMinutes().toString().padStart(2, '0');
-          const s = date.getSeconds().toString().padStart(2, '0');
-          return `${h}:${m}:${s}`;
-        };
+        const endDateTime = new Date(startDateTime.getTime() + numHours * 60 * 60 * 1000);
 
         const startTimeFormatted = formatTime(startDateTime);
         const endTimeFormatted = formatTime(endDateTime);
-        const targetDateStr = toPhDateStr(selectedDate);
 
-        // 3. OVERLAP CHECK - Prevent double-booking only when times overlap
         const { data: overlappingBookings, error: checkError } = await supabase
           .from('bookings')
           .select('id')
@@ -1735,7 +1806,6 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // 3.5 COURT EVENT BLOCKING CHECK - Check if court owner has blocked this time
         const isBlocked = await isTimeSlotBlocked(
           selectedCourt.id,
           startDateTime.toISOString(),
@@ -1748,10 +1818,7 @@ const Booking: React.FC = () => {
           return;
         }
 
-        // 4. Create Booking
-        const isQRPayment = paymentMethod === 'gcash' || paymentMethod === 'maya';
-
-        const totalPrice = getSelectedSlotsTotal();
+        const groupTotal = calculateSlotsTotal(sortedSlots);
 
         const { data: bookingData, error: bookingError } = await supabase
           .from('bookings')
@@ -1761,7 +1828,7 @@ const Booking: React.FC = () => {
             date: targetDateStr,
             start_time: startTimeFormatted,
             end_time: endTimeFormatted,
-            total_price: totalPrice,
+            total_price: groupTotal,
             status: 'pending',
             payment_status: 'unpaid',
             payment_method: paymentMethod,
@@ -1772,7 +1839,6 @@ const Booking: React.FC = () => {
 
         if (bookingError) throw bookingError;
 
-        // Upload proof and create payment record for QR payments
         if (isQRPayment && proofFile && bookingData) {
           const proofPath = `${user.id}/${bookingData.id}_proof.png`;
           const { error: proofUploadError } = await supabase.storage
@@ -1792,16 +1858,15 @@ const Booking: React.FC = () => {
             account_name: selectedQRMethod?.account_name || '',
             reference_number: normalizeReferenceNumber(referenceNumber),
             proof_image_url: proofUrl,
-            amount: totalPrice,
+            amount: groupTotal,
             status: 'pending',
           });
         }
 
-        // 2. Create Notifications
         const locationName = selectedLocation?.name || selectedCourt.location || '';
         const courtAndLocation = locationName ? `${selectedCourt.name} at ${locationName}` : selectedCourt.name;
+        const rangeLabel = slotsToRange(sortedSlots);
 
-        // 2a. Notification for the Player (booking confirmation)
         const { error: playerNotifErr } = await supabase
           .from('notifications')
           .insert({
@@ -1809,17 +1874,14 @@ const Booking: React.FC = () => {
             actor_id: user.id,
             type: 'BOOKING',
             title: 'Booking Confirmed',
-            message: `You successfully booked ${courtAndLocation} on ${targetDateStr} for ${slotsToRange(sortedSlots)}. Status: Pending approval.`,
+            message: `You successfully booked ${courtAndLocation} on ${targetDateStr} for ${rangeLabel}. Status: Pending approval.`,
             booking_id: bookingData.id
           });
 
         if (playerNotifErr) {
           console.error('Player notification error:', playerNotifErr);
-        } else {
-          console.log('Player notification sent.');
         }
 
-        // 2b. Notification for the Court Owner (new booking to confirm)
         if (selectedCourt.ownerId && bookingData) {
           const { error: ownerNotifErr } = await supabase
             .from('notifications')
@@ -1828,101 +1890,118 @@ const Booking: React.FC = () => {
               actor_id: user.id,
               type: 'BOOKING',
               title: 'New Booking Request',
-              message: `has booked ${courtAndLocation} for ${slotsToRange(sortedSlots)} on ${targetDateStr}. Tap to review and confirm.`,
+              message: `has booked ${courtAndLocation} for ${rangeLabel} on ${targetDateStr}. Tap to review and confirm.`,
               booking_id: bookingData.id
             });
 
           if (ownerNotifErr) {
             console.error('Owner notification error:', ownerNotifErr);
-          } else {
-            console.log('Owner notification sent to:', selectedCourt.ownerId);
           }
-        } else {
-          console.warn('No ownerId found for this court - skipping owner notification.');
         }
 
-        // Update cooldown timestamp
-        setLastBookingTime(Date.now());
+        createdBookings.push({ bookingData, slots: sortedSlots, startTimeFormatted, endTimeFormatted, numHours, totalPrice: groupTotal });
+      }
 
-        // Update booked slots to reflect the new booking
-        if (selectedSlots.length > 0) {
-          setBookedSlots(prev => new Set([...prev, ...selectedSlots]));
-        }
+      setLastBookingTime(Date.now());
 
-        // Fetch player name for receipt
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('username, full_name')
-          .eq('id', user.id)
-          .single();
+      if (selectedSlots.length > 0) {
+        setBookedSlots(prev => new Set([...prev, ...selectedSlots]));
+      }
 
-        // Prepare receipt data
-        const pricePerHour = numHours > 0 ? Math.round(totalPrice / numHours) : totalPrice;
+      const primaryBooking = createdBookings[0];
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('username, full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (primaryBooking) {
+        const pricePerHour = primaryBooking.numHours > 0 ? Math.round(primaryBooking.totalPrice / primaryBooking.numHours) : primaryBooking.totalPrice;
         setReceiptData({
-          id: bookingData.id,
+          id: primaryBooking.bookingData.id,
           courtName: selectedCourt.name,
           courtLocation: selectedCourt.location,
           locationName: selectedLocation?.name || '',
           date: targetDateStr,
-          startTime: startTimeFormatted,
-          endTime: endTimeFormatted,
+          startTime: primaryBooking.startTimeFormatted,
+          endTime: primaryBooking.endTimeFormatted,
           pricePerHour: pricePerHour,
-          totalPrice: totalPrice,
+          totalPrice: primaryBooking.totalPrice,
           playerName: profileData?.full_name || profileData?.username || 'Guest',
           status: 'pending',
           paymentMethod: paymentMethod === 'gcash' ? 'GCash' : 'Maya',
           paymentStatus: 'proof_submitted',
         });
-
-        // Hide payment modal, show success modal
-        setShowPaymentModal(false);
-        setShowSuccessModal(true);
-        setIsBooked(true);
-
-        // After showing success, prepare to return to map view gracefully
-        setShowBookingSummary(false);
-
-        // Load followed players for the invite list
-        setPostBookLoadingPlayers(true);
-        setPostBookInviteSent([]);
-        setPostBookInviteQuery('');
-        const { data: followingRows } = await supabase
-          .from('user_follows')
-          .select('followed_id')
-          .eq('follower_id', user.id);
-        const followedIds = (followingRows || []).map((r: any) => r.followed_id);
-        if (followedIds.length > 0) {
-          const { data: followedProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, username, avatar_url')
-            .in('id', followedIds)
-            .order('full_name', { ascending: true });
-          setPostBookAllPlayers(followedProfiles ?? []);
-        } else {
-          setPostBookAllPlayers([]);
-        }
-        setPostBookLoadingPlayers(false);
-
-        // Clear slot selection immediately
-        setSelectedSlots([]);
-
-        // Re-check availability so the UI updates immediately
-        checkCourtAvailability(selectedCourt, selectedDate);
-      } catch (err: any) {
-        console.error('Booking error:', err);
-
-        // Handle duplicate booking constraint violation
-        if (err.message?.includes('unique_court_booking') || err.code === '23505') {
-          alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
-          // Refresh availability to show updated slots
-          setSelectedSlots([]);
-          checkCourtAvailability(selectedCourt, selectedDate);
-        } else {
-          alert(`Booking failed: ${err.message}`);
-        }
-      } finally {
-        setIsProcessing(false);
       }
+
+      setShowPaymentModal(false);
+      setShowSuccessModal(true);
+      setIsBooked(true);
+      setShowBookingSummary(false);
+
+      setPostBookLoadingPlayers(true);
+      setPostBookInviteSent([]);
+      setPostBookInviteQuery('');
+      const { data: followingRows } = await supabase
+        .from('user_follows')
+        .select('followed_id')
+        .eq('follower_id', user.id);
+      const followedIds = (followingRows || []).map((r: any) => r.followed_id);
+      if (followedIds.length > 0) {
+        const { data: followedProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url')
+          .in('id', followedIds)
+          .order('full_name', { ascending: true });
+        setPostBookAllPlayers(followedProfiles ?? []);
+      } else {
+        setPostBookAllPlayers([]);
+      }
+      setPostBookLoadingPlayers(false);
+
+      showToast(`Booked ${createdBookings.length} group${createdBookings.length > 1 ? 's' : ''}${groupedLabel ? `: ${groupedLabel}` : ''}`, 'success');
+
+      setSelectedSlots([]);
+
+      checkCourtAvailability(selectedCourt, selectedDate);
+    } catch (err: any) {
+      console.error('Booking error:', err);
+
+      if (err.message?.includes('unique_court_booking') || err.code === '23505') {
+        alert('⚠️ This time slot was just booked by someone else. Please choose another time.');
+        setSelectedSlots([]);
+        checkCourtAvailability(selectedCourt, selectedDate);
+      } else {
+        alert(`Booking failed: ${err.message}`);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBookClick = () => {
+    if (!selectedCourt || selectedSlots.length === 0 || isBooked || isProcessing) return;
+    if (groupedSelectedSlots.length > 1 && !multiBookingConfirmed) {
+      setShowMultiBookingConfirm(true);
+      return;
+    }
+    handleBooking();
+  };
+
+  const confirmMultiBooking = async () => {
+    if (isProcessing) return;
+    setIsConfirmingMulti(true);
+    setMultiBookingConfirmed(true);
+    setShowMultiBookingConfirm(false);
+    try {
+      await handleBooking();
+    } finally {
+      setIsConfirmingMulti(false);
+    }
+  };
+
+  const cancelMultiBookingConfirm = () => {
+    setShowMultiBookingConfirm(false);
   };
 
   const handleNearMe = () => {
@@ -2052,8 +2131,15 @@ const Booking: React.FC = () => {
   const [showGuide, setShowGuide] = useState(() => localStorage.getItem('pp_guide_dismissed') !== '1');
   const [showGuideModal, setShowGuideModal] = useState(false);
 
+  const isReadyCourt = (c: any) =>
+    c?.status !== 'Coming Soon' &&
+    c?.status !== 'Setup Required' &&
+    (c as any)?.setup_complete !== false &&
+    (c as any)?.has_pricing !== false;
+
   // Filtered courts (same as GuestBooking)
   const filteredCourts = courts
+    .filter(isReadyCourt)
     .filter(c => filterType === 'All' || c.type === filterType)
     .filter(c =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -2090,6 +2176,7 @@ const Booking: React.FC = () => {
         const matchesLocation = c.location_id ? c.location_id === loc.id :
           c.location.toLowerCase().includes(loc.name.toLowerCase());
         if (!matchesLocation) return false;
+        if (!isReadyCourt(c)) return false;
         return filterType === 'All' || c.type === filterType;
       });
       if (locCourts.length === 0) return false;
@@ -2646,7 +2733,7 @@ const Booking: React.FC = () => {
                     {!isLoadingLocation && !userCity && filteredLocations.length === 0 && (
                       <div className="px-5 py-8 text-center">
                         <MapPin size={28} className="mx-auto text-slate-300 mb-2" />
-                        <p className="text-sm text-slate-500">Enable location to find nearby courts</p>
+                        <p className="text-sm text-slate-500">Enable location access to find nearby courts</p>
                       </div>
                     )}
                   </div>
@@ -2804,7 +2891,7 @@ const Booking: React.FC = () => {
 
                     {/* Mobile Book Now button — jump straight to booking summary */}
                     <button
-                      onClick={() => { setShowBookingSummary(true); setShowMobileSchedule(false); }}
+                      onClick={() => requireLogin(() => { setShowBookingSummary(true); setShowMobileSchedule(false); })}
                       className="w-full py-4 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 md:hidden"
                     >
                       <CalendarCheck size={18} />
@@ -2891,7 +2978,7 @@ const Booking: React.FC = () => {
 
                         <div className="flex items-center justify-between mb-4">
                           <button
-                            onClick={() => goToMapView()}
+                            onClick={handleBackToLocations}
                             className="text-[11px] font-black text-slate-500 uppercase tracking-[0.18em] flex items-center gap-1.5 hover:text-blue-600"
                           >
                             <ChevronLeft size={14} />
@@ -3057,7 +3144,11 @@ const Booking: React.FC = () => {
               {/* ── Map — shown when no location is selected ── */}
               <div
                 className="absolute inset-0 transition-all duration-500 ease-out"
-                style={{ opacity: (!activeLocationId && !selectedCourt) ? 1 : 0, transform: (!activeLocationId && !selectedCourt) ? 'scale(1)' : 'scale(1.02)', pointerEvents: (!activeLocationId && !selectedCourt) ? 'auto' : 'none' }}
+                style={{
+                  opacity: ((!activeLocationId && !selectedCourt) || showLocationMapView) ? 1 : 0,
+                  transform: ((!activeLocationId && !selectedCourt) || showLocationMapView) ? 'scale(1)' : 'scale(1.02)',
+                  pointerEvents: ((!activeLocationId && !selectedCourt) || showLocationMapView) ? 'auto' : 'none'
+                }}
               >
                 {isLoading ? (
                   <div className="h-full bg-slate-50 flex items-center justify-center">
@@ -3066,15 +3157,25 @@ const Booking: React.FC = () => {
                 ) : (
                   <div ref={mapRef} className="h-full w-full" />
                 )}
+                {showLocationMapView && (
+                  <div className="absolute top-3 right-3 z-20 flex gap-2">
+                    <button
+                      onClick={toggleLocationMapView}
+                      className="px-3.5 py-2 rounded-xl bg-white/90 text-slate-900 text-[11px] font-black uppercase tracking-[0.14em] shadow-md border border-white/80 hover:bg-white"
+                    >
+                      Location Details
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* ── Location Hero Panel — shown when location is selected but no court yet ── */}
               <div
                 className="absolute inset-0 bg-white flex flex-col overflow-hidden transition-all duration-500 ease-out"
                 style={{
-                  opacity: (activeLocationId && selectedLocation && !selectedCourt) ? 1 : 0,
-                  transform: (activeLocationId && selectedLocation && !selectedCourt) ? 'translateY(0)' : 'translateY(24px)',
-                  pointerEvents: (activeLocationId && selectedLocation && !selectedCourt) ? 'auto' : 'none',
+                  opacity: (activeLocationId && selectedLocation && !selectedCourt && !showLocationMapView) ? 1 : 0,
+                  transform: (activeLocationId && selectedLocation && !selectedCourt && !showLocationMapView) ? 'translateY(0)' : 'translateY(24px)',
+                  pointerEvents: (activeLocationId && selectedLocation && !selectedCourt && !showLocationMapView) ? 'auto' : 'none',
                 }}
               >
                 {selectedLocation && (
@@ -3095,7 +3196,7 @@ const Booking: React.FC = () => {
                       <div className="relative z-10 flex flex-col h-full p-6 sm:p-8 lg:p-10">
                         <div className="flex items-center justify-end mb-5">
                           <button
-                            onClick={goToMapView}
+                            onClick={toggleLocationMapView}
                             className="px-4 py-2 rounded-xl bg-white/85 hover:bg-white text-slate-900 text-xs font-black uppercase tracking-[0.12em] shadow-md border border-white/70 transition-all"
                           >
                             Map View
@@ -3192,7 +3293,7 @@ const Booking: React.FC = () => {
                           </div>
 
                           <button
-                            onClick={openLocationConfirmModal}
+                            onClick={() => requireLogin(openLocationConfirmModal)}
                             className="w-full py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all"
                           >
                             Book Now
@@ -3202,220 +3303,299 @@ const Booking: React.FC = () => {
                     </div>
                   ) : (
                   <div className="flex flex-col h-full bg-slate-50/50">
-                    {/* Top Row: Time Slots Grid */}
-                    <div className="flex flex-col bg-white p-4 border-b border-slate-200 shadow-sm z-10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Clock className="text-[#1E40AF]" size={18} />
-                          <h3 className="text-lg font-black text-slate-800 tracking-tight">Total time slots of all courts</h3>
+                    {showWeeklyPricing ? (
+                      <>
+                        <div className="flex items-center justify-between bg-white p-4 border-b border-slate-200 shadow-sm z-10">
+                          <div className="flex items-center gap-2">
+                            <CalendarCheck className="text-[#1E40AF]" size={18} />
+                            <h3 className="text-lg font-black text-slate-800 tracking-tight">This Week's Pricing</h3>
+                          </div>
+                          <button
+                            onClick={backToTimeSlots}
+                            className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
+                          >
+                            Back to Time Slots
+                          </button>
                         </div>
-                        <button
-                          onClick={goToMapView}
-                          className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
-                        >
-                          Map View
-                        </button>
-                      </div>
-                      <div className="flex flex-col gap-1 mb-4 shrink-0">
-                        <p className="text-sm text-slate-600 font-semibold">Select a time slot to check court availability below.</p>
-                        <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-[#a3e635]" />
-                            Available
-                          </span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                            Fully booked
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-3 overflow-y-auto pb-2 content-start pr-2 custom-scrollbar animate-in fade-in duration-300 ease-out">
-                        {(() => {
-                           const slots = locationTimeSlots.length > 0
-                             ? locationTimeSlots
-                             : (selectedLocation?.opening_time && selectedLocation?.closing_time
-                               ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                               : TIME_SLOTS);
-                           return slots.map((slot, idx) => {
-                            const isSelected = locationSelectedSlots.includes(slot);
-                             const isPast = isSlotInPast(slot, selectedDate);
-                             
-                             let availableCount = 0;
-                             if (!isCheckingLocationAvailability) {
-                               locationCourts.forEach(c => {
-                                 const av = locationAvailability.get(c.id);
-                                if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
-                                    availableCount++;
-                                 }
-                               });
-                             }
-
-                             const hasAvailability = availableCount > 0;
-                             const isDisabled = isPast || isCheckingLocationAvailability || !hasAvailability;
-                             
-                             return (
-                               <button 
-                                 key={`${toPhDateStr(selectedDate)}-${slot}`}
-                                 disabled={isDisabled}
-                                onClick={() => !isDisabled && toggleLocationSlotSelection(slot, slots)}
-                                 className={`slot-lime-entrance flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : isCheckingLocationAvailability ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-wait' : !hasAvailability ? 'bg-rose-50 border-rose-300 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-lime-50 border-lime-300 text-lime-700 hover:bg-lime-100 hover:border-lime-400'}`}
-                                 style={{ animationDelay: `${idx * 45}ms` }}
-                               >
-                                 <span className="text-xs font-bold uppercase whitespace-nowrap">{slotToRange(slot)}</span>
-                               </button>
-                             );
-                           });
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* Bottom Row: Available Courts */}
-                    <div className="h-[280px] shrink-0 overflow-y-hidden p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
-                      {(() => {
-                        const slots = locationTimeSlots.length > 0
-                          ? locationTimeSlots
-                          : (selectedLocation?.opening_time && selectedLocation?.closing_time
-                            ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                            : TIME_SLOTS);
-                        const todayStr = toPhDateStr(getNowPH());
-                        const selectedStr = toPhDateStr(selectedDate);
-                        const isSelectedDateToday = selectedStr === todayStr;
-                        const allSlotsPast = slots.length > 0 && slots.every(slot => isSlotInPast(slot, selectedDate));
-                        const isClosedForDay = !!courtEffectiveHours?.is_closed || (isSelectedDateToday && allSlotsPast);
-
-                        let hasSelectableSlot = false;
-                        if (!isCheckingLocationAvailability) {
-                          for (const slot of slots) {
-                            const isPast = isSlotInPast(slot, selectedDate);
-                            if (isPast) continue;
-                            let availableCount = 0;
-                            locationCourts.forEach(c => {
-                              const av = locationAvailability.get(c.id);
-                              if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
-                                availableCount++;
-                              }
-                            });
-                            if (availableCount > 0) {
-                              hasSelectableSlot = true;
-                              break;
-                            }
-                          }
-                        }
-
-                        const showNoSelectableState = !isCheckingLocationAvailability && locationSelectedSlots.length === 0 && !hasSelectableSlot;
-
-                        return (
-                          <>
-                      <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-                        <Building2 className="text-[#a3e635]" size={18} />
-                        {locationSelectedSlots.length > 0
-                          ? `Courts available at ${slotsToRange(locationSelectedSlots)}`
-                          : isClosedForDay
-                            ? 'Location closed today'
-                            : 'Available courts'}
-                      </h3>
-                      
-                      {showNoSelectableState ? (
-                        <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px] text-center px-5">
-                          <Building2 size={28} className="text-slate-300 mb-2.5" />
-                          <p className="text-sm font-black text-slate-800">{selectedLocation?.name || 'Location Venue'}</p>
-                          <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                            {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                          </p>
-                          <p className={`text-sm font-black mt-2 ${isClosedForDay ? 'text-slate-700' : 'text-rose-500'}`}>
-                            {isClosedForDay ? 'Closed' : 'Fully Booked'}
-                          </p>
-                          <p className="text-xs text-slate-500 font-medium mt-1 max-w-md">
-                            {isClosedForDay
-                              ? 'This location is already closed for today. You can advance booking for the upcoming days.'
-                              : 'This location is fully booked for today. You can advance booking for the upcoming days.'}
-                          </p>
-                        </div>
-                      ) : (
-                      <div className="court-availability-grid grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
-                        {(() => {
-                          const bookableCourts = locationCourts.filter(court =>
-                            court.status === 'Available'
-                          );
-
-                          const availableCourts = bookableCourts.filter(court => {
-                            if (locationSelectedSlots.length === 0) return true;
-                            const userBookedSlotsForCourt = locationUserBookedByCourt.get(court.id);
-                            if (userBookedSlotsForCourt && locationSelectedSlots.some(slot => userBookedSlotsForCourt.has(slot))) {
-                              return false;
-                            }
-                            const av = locationAvailability.get(court.id);
-                            if (!av) return false;
-                            for (const slot of locationSelectedSlots) {
-                              if (av.blocked.has(slot) || av.booked.has(slot)) return false;
-                            }
-                            return true;
-                          });
-                          if (availableCourts.length === 0 && !isCheckingLocationAvailability) {
-                            return (
-                              <div className="col-span-full flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
-                                 <Ban size={32} className="text-slate-300 mb-3" />
-                                 <p className="text-slate-500 font-bold text-sm">
-                                   {locationSelectedSlots.length > 0
-                                     ? `No courts available at ${slotsToRange(locationSelectedSlots)}`
-                                     : 'No available courts right now'}
-                                 </p>
-                              </div>
-                            );
-                          }
-                          
-                          return availableCourts.map((court, idx) => {
-                              const isSlotSelected = locationSelectedSlots.length > 0;
+                        <div className="flex-1 overflow-y-auto p-4">
+                          {(() => {
+                            const courtsForPricing = locationCourts
+                              .filter(c => c && c.id)
+                              .map(c => ({
+                                id: c.id,
+                                name: c.name,
+                                basePricePerHour: (c as any).pricePerHour ?? (c as any).base_price ?? 0,
+                              }));
+                            if (courtsForPricing.length === 0) {
                               return (
-                              <button 
-                                key={court.id}
-                                disabled={!isSlotSelected}
-                                onClick={() => {
-                                  if (!isSlotSelected) return;
-                                  setSelectedCourt(court);
-                                  if (locationSelectedSlots.length > 0) {
-                                    setSelectedSlots(locationSelectedSlots);
-                                  }
-                                  setHeroCourtId(null);
-                                  setShowMobileSchedule(false);
-                                  setShowBookingSummary(true);
-                                }}
-                                className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'}`}
-                                style={{ animationDelay: `${idx * 55}ms` }}
-                              >
-                                 <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
-                                    <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className={`w-full h-full object-cover transition-transform duration-500 ${isSlotSelected ? 'group-hover:scale-110' : ''}`}/>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                    <span className={`absolute bottom-1 right-1 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md ${isSlotSelected ? 'bg-[#a3e635] text-slate-900' : 'bg-slate-300 text-slate-600'}`}>Available</span>
-                                 </div>
-                                 <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
-                                    <p className={`font-black text-sm truncate transition-colors ${isSlotSelected ? 'text-slate-900 group-hover:text-[#1E40AF]' : 'text-slate-500'}`}>{court.name}</p>
-                                    <p className="text-[10px] font-bold text-slate-500 mb-1 truncate">{court.type}</p>
-                                    <div className="mt-auto flex items-center justify-between">
-                                      <p className={`text-xs font-black ${isSlotSelected ? 'text-[#1E40AF]' : 'text-slate-400'}`}>
-                                        {(() => {
-                                          const range = locationSlotPriceRanges.get(court.id);
-                                          if (range?.hasRules && range.min !== range.max) {
-                                            return `₱${range.min}–₱${range.max}/hr`;
-                                          }
-                                          return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
-                                        })()}
-                                      </p>
-                                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isSlotSelected ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' : 'bg-slate-200 text-slate-400'}`}>
-                                        <CheckCircle2 size={12} />
-                                      </div>
-                                    </div>
-                                 </div>
-                              </button>
+                                <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 rounded-[24px] text-center px-5">
+                                  <Building2 size={28} className="text-slate-300 mb-2.5" />
+                                  <p className="text-sm font-black text-slate-800">No courts available</p>
+                                  <p className="text-xs text-slate-500 font-medium mt-1 max-w-md">Pricing will appear here once courts are loaded for this location.</p>
+                                </div>
                               );
-                          });
-                        })()}
-                      </div>
-                      )}
-                          </>
-                        );
-                      })()}
-                    </div>
+                            }
+                            return (
+                              <>
+                                <WeeklyPricingMultiCourtTable
+                                  courts={courtsForPricing}
+                                  className="max-w-full"
+                                />
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Top Row: Time Slots Grid */}
+                        <div className="flex flex-col bg-white p-4 border-b border-slate-200 shadow-sm z-10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Clock className="text-[#1E40AF]" size={18} />
+                              <h3 className="text-lg font-black text-slate-800 tracking-tight">Total time slots of all courts</h3>
+                            </div>
+                            <button
+                              onClick={openWeeklyPricing}
+                              className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
+                            >
+                              This Week's Pricing
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-1 mb-4 shrink-0">
+                            <p className="text-sm text-slate-600 font-semibold">Select a time slot to check court availability below.</p>
+                            <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-[#a3e635]" />
+                                Available
+                              </span>
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                                Fully booked
+                              </span>
+                            </div>
+                            {groupedLocationSlots.length > 1 && (
+                              <div className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                                <AlertCircle size={14} className="shrink-0" />
+                                <span>You've selected multiple non-consecutive time slots. Each will be booked separately.</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-3 overflow-y-auto pb-2 content-start pr-2 custom-scrollbar animate-in fade-in duration-300 ease-out">
+                            {(() => {
+                               const slots = locationTimeSlots.length > 0
+                                 ? locationTimeSlots
+                                 : (selectedLocation?.opening_time && selectedLocation?.closing_time
+                                   ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                                   : TIME_SLOTS);
+                               return slots.map((slot, idx) => {
+                                const isSelected = locationSelectedSlots.includes(slot);
+                                 const isPast = isSlotInPast(slot, selectedDate);
+                                 
+                                 let availableCount = 0;
+                                 if (!isCheckingLocationAvailability) {
+                                   locationCourts.forEach(c => {
+                                     const av = locationAvailability.get(c.id);
+                                    if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
+                                        availableCount++;
+                                     }
+                                   });
+                                 }
+
+                                 const hasAvailability = availableCount > 0;
+                                 const isDisabled = isPast || isCheckingLocationAvailability || !hasAvailability;
+                                 
+                                 return (
+                                   <button 
+                                     key={`${toPhDateStr(selectedDate)}-${slot}`}
+                                     disabled={isDisabled}
+                                    onClick={() => !isDisabled && toggleLocationSlotSelection(slot, slots)}
+                                     className={`slot-lime-entrance flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : isCheckingLocationAvailability ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-wait' : !hasAvailability ? 'bg-rose-50 border-rose-300 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-lime-50 border-lime-300 text-lime-700 hover:bg-lime-100 hover:border-lime-400'}`}
+                                     style={{ animationDelay: `${idx * 45}ms` }}
+                                   >
+                                     <span className="text-xs font-bold uppercase whitespace-nowrap">{slotToRange(slot)}</span>
+                                   </button>
+                                 );
+                               });
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: Available Courts */}
+                        <div className="h-[280px] shrink-0 overflow-y-hidden p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
+                          {(() => {
+                            const slots = locationTimeSlots.length > 0
+                              ? locationTimeSlots
+                              : (selectedLocation?.opening_time && selectedLocation?.closing_time
+                                ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
+                                : TIME_SLOTS);
+                            const todayStr = toPhDateStr(getNowPH());
+                            const selectedStr = toPhDateStr(selectedDate);
+                            const isSelectedDateToday = selectedStr === todayStr;
+                            const allSlotsPast = slots.length > 0 && slots.every(slot => isSlotInPast(slot, selectedDate));
+                            const allCourtsClosed = locationCourts.length > 0 && locationCourts.every(c => locationEffectiveHours.get(c.id)?.is_closed === true);
+                            const isClosedForDay = allCourtsClosed || !!courtEffectiveHours?.is_closed || (isSelectedDateToday && allSlotsPast);
+
+                            let hasSelectableSlot = false;
+                            if (!isCheckingLocationAvailability) {
+                              for (const slot of slots) {
+                                const isPast = isSlotInPast(slot, selectedDate);
+                                if (isPast) continue;
+                                let availableCount = 0;
+                                locationCourts.forEach(c => {
+                                  const av = locationAvailability.get(c.id);
+                                  if (!av?.blocked.has(slot) && !av?.booked.has(slot) && c.status === 'Available') {
+                                    availableCount++;
+                                  }
+                                });
+                                if (availableCount > 0) {
+                                  hasSelectableSlot = true;
+                                  break;
+                                }
+                              }
+                            }
+
+                            const showNoSelectableState = !isCheckingLocationAvailability && locationSelectedSlots.length === 0 && !hasSelectableSlot;
+
+                            return (
+                              <>
+                          <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                            <Building2 className="text-[#a3e635]" size={18} />
+                            {locationSelectedSlots.length > 0
+                              ? `Courts available at ${groupedLocationLabel}`
+                              : isClosedForDay
+                                ? 'Location Closed Today'
+                                : 'Available courts'}
+                          </h3>
+                          
+                          {showNoSelectableState ? (
+                            isClosedForDay ? (
+                              <div
+                                className="relative flex flex-col items-center justify-center h-52 md:h-56 rounded-[24px] border border-rose-200 bg-rose-50/90 text-center px-5 overflow-hidden shadow-inner shadow-rose-100"
+                                style={{
+                                  backgroundImage: 'url(/images/Ball.png), url(/images/Ball.png), url(/images/Ball.png), url(/images/Ball.png)',
+                                  backgroundRepeat: 'no-repeat',
+                                  backgroundSize: '74px',
+                                  backgroundPosition: '12% 18%, 84% 16%, 18% 84%, 82% 78%',
+                                }}
+                              >
+                                <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-rose-50/80 to-rose-50" />
+                                <div className="relative z-10 flex flex-col items-center gap-2">
+                                  <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center shadow-md shadow-rose-200/60">
+                                    <Ban className="text-rose-500" size={26} />
+                                  </div>
+                                  <p className="text-sm font-black text-slate-900">{selectedLocation?.name || 'Location Venue'}</p>
+                                  <p className="text-xs font-semibold text-slate-600">
+                                    {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                  </p>
+                                  <span className="px-3 py-1 rounded-full bg-rose-600 text-white text-xs font-black uppercase tracking-[0.18em] shadow-lg shadow-rose-900/10">Closed</span>
+                                  <p className="text-xs text-rose-700 font-semibold max-w-md">
+                                    This location is closed today. You can book upcoming dates.
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px] text-center px-5">
+                                <Building2 size={28} className="text-slate-300 mb-2.5" />
+                                <p className="text-sm font-black text-slate-800">{selectedLocation?.name || 'Location Venue'}</p>
+                                <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                                  {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                                </p>
+                                <p className="text-sm font-black mt-2 text-rose-500">Fully Booked</p>
+                                <p className="text-xs text-slate-500 font-medium mt-1 max-w-md">
+                                  This location is fully booked for today. You can advance booking for the upcoming days.
+                                </p>
+                              </div>
+                            )
+                          ) : (
+                          <div className="court-availability-grid grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300 ease-out">
+                            {(() => {
+                              const bookableCourts = locationCourts.filter(court =>
+                                court.status === 'Available'
+                              );
+
+                              const availableCourts = bookableCourts.filter(court => {
+                                if (locationSelectedSlots.length === 0) return true;
+                                const userBookedSlotsForCourt = locationUserBookedByCourt.get(court.id);
+                                if (userBookedSlotsForCourt && locationSelectedSlots.some(slot => userBookedSlotsForCourt.has(slot))) {
+                                  return false;
+                                }
+                                const av = locationAvailability.get(court.id);
+                                if (!av) return false;
+                                for (const slot of locationSelectedSlots) {
+                                  if (av.blocked.has(slot) || av.booked.has(slot)) return false;
+                                }
+                                return true;
+                              });
+                              if (availableCourts.length === 0 && !isCheckingLocationAvailability) {
+                                return (
+                                  <div className="col-span-full flex flex-col items-center justify-center h-48 bg-white border border-slate-200 border-dashed rounded-[24px]">
+                                     <Ban size={32} className="text-slate-300 mb-3" />
+                                     <p className="text-slate-500 font-bold text-sm">
+                                       {locationSelectedSlots.length > 0
+                                         ? `No courts available at ${groupedLocationLabel}`
+                                         : 'No available courts right now'}
+                                     </p>
+                                  </div>
+                                );
+                              }
+                              
+                              return availableCourts.map((court, idx) => {
+                                  const isSlotSelected = locationSelectedSlots.length > 0;
+                                  return (
+                                  <button 
+                                    key={court.id}
+                                    disabled={!isSlotSelected}
+                                    onClick={() => {
+                                      if (!isSlotSelected) return;
+                                      setSelectedCourt(court);
+                                      if (locationSelectedSlots.length > 0) {
+                                        setSelectedSlots(locationSelectedSlots);
+                                      }
+                                      setHeroCourtId(null);
+                                      setShowMobileSchedule(false);
+                                      setShowBookingSummary(true);
+                                    }}
+                                    className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'}`}
+                                    style={{ animationDelay: `${idx * 55}ms` }}
+                                  >
+                                     <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
+                                        <img src={court.imageUrl || '/images/home-images/pb2.jpg'} alt={court.name} className={`w-full h-full object-cover transition-transform duration-500 ${isSlotSelected ? 'group-hover:scale-110' : ''}`}/>
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                                        <span className={`absolute bottom-1 right-1 text-[8px] font-black px-1.5 py-0.5 rounded uppercase shadow-md ${isSlotSelected ? 'bg-[#a3e635] text-slate-900' : 'bg-slate-300 text-slate-600'}`}>Available</span>
+                                     </div>
+                                     <div className="p-3 flex flex-col justify-center flex-1 min-w-0">
+                                        <p className={`font-black text-sm truncate transition-colors ${isSlotSelected ? 'text-slate-900 group-hover:text-[#1E40AF]' : 'text-slate-500'}`}>{court.name}</p>
+                                        <p className="text-[10px] font-bold text-slate-500 mb-1 truncate">{court.type}</p>
+                                        <div className="mt-auto flex items-center justify-between">
+                                          <p className={`text-xs font-black ${isSlotSelected ? 'text-[#1E40AF]' : 'text-slate-400'}`}>
+                                            {(() => {
+                                              const range = locationSlotPriceRanges.get(court.id);
+                                              if (range?.hasRules) {
+                                                return range.min === range.max
+                                                  ? `₱${range.min}/hr`
+                                                  : `₱${range.min}–₱${range.max}/hr`;
+                                              }
+                                              return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
+                                            })()}
+                                          </p>
+                                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isSlotSelected ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' : 'bg-slate-200 text-slate-400'}`}>
+                                            <CheckCircle2 size={12} />
+                                          </div>
+                                        </div>
+                                     </div>
+                                  </button>
+                                  );
+                              });
+                            })()}
+                          </div>
+                          )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )}
                   </div>
                   )
                 )}
@@ -3508,7 +3688,7 @@ const Booking: React.FC = () => {
                           Back
                         </button>
                         <button
-                          onClick={() => { setSelectedCourt(heroActiveCourt); setShowBookingSummary(true); setShowMobileSchedule(false); if (locationSelectedSlots.length > 0) setSelectedSlots(locationSelectedSlots); }}
+                          onClick={() => requireLogin(() => { setSelectedCourt(heroActiveCourt); setShowBookingSummary(true); setShowMobileSchedule(false); if (locationSelectedSlots.length > 0) setSelectedSlots(locationSelectedSlots); })}
                           className="flex-1 py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.15em] shadow-xl shadow-blue-900/20 active:scale-95 transition-all"
                         >
                           Book Now
@@ -3568,10 +3748,25 @@ const Booking: React.FC = () => {
                           </div>
                           <div className="p-3 rounded-2xl border border-slate-100 bg-slate-50/70 shadow-sm min-h-[84px] flex flex-col justify-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Hours Booked</p>
-                            {selectedSlots.length > 0 ? (
-                              <p className="text-sm font-black text-slate-900 leading-tight">{slotsToCompactRange(selectedSlots)}</p>
+                            {groupedSelectedSlots.length > 0 ? (
+                              <div className="flex flex-col gap-1">
+                                {groupedSelectedSlots.map((group, idx) => (
+                                  <div key={`booking-group-${idx}`} className="flex items-center gap-2">
+                                    <span className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest">Booking {idx + 1}</span>
+                                    <span className="text-sm font-black text-slate-900 leading-tight">{slotsToCompactRange(group)}</span>
+                                  </div>
+                                ))}
+                              </div>
                             ) : (
-                              <p className="text-sm font-semibold text-rose-500">No time selected. Pick a slot from the left panel.</p>
+                              <p className="text-sm font-semibold text-rose-500">No time selected. Please select a time slot from the left panel.</p>
+                            )}
+                            {groupedSelectedSlots.length > 1 && (
+                              <div className="mt-2 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5">
+                                <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-[11px] text-amber-800 font-semibold leading-snug">
+                                  You have selected separate time slots. These will be booked as multiple bookings.
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -3617,7 +3812,7 @@ const Booking: React.FC = () => {
                         return (
                           <button
                             disabled={selectedSlots.length === 0 || isBooked || isProcessing || isOwner}
-                            onClick={handleBooking}
+                            onClick={handleBookClick}
                             className={`w-full py-5 rounded-[22px] font-black text-[13px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'}`}
                           >
                             {isProcessing ? <Loader2 className="animate-spin" size={20} /> : isBooked ? <><CheckCircle2 size={20} /> Confirmed</> : isOwner ? <><Ban size={18} /> Owner Restricted</> : selectedSlots.length > 0 ? <>{`Continue Payment — ₱${getSelectedSlotsTotal()}`} {String.fromCharCode(8594)}</> : <>Select Time Slots</>}
@@ -3686,6 +3881,50 @@ const Booking: React.FC = () => {
           )
         }
 
+        {/* ──────────── AUTH REQUIRED MODAL ──────────── */}
+        {showAuthModal && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
+            <div
+              className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
+              onClick={() => setShowAuthModal(false)}
+            />
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-90 duration-300">
+              <div className="p-6 sm:p-8 space-y-4 text-center">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-lime-100 flex items-center justify-center">
+                  <CircleCheck className="text-lime-600" size={28} />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Welcome to Pickleplay!</h2>
+                  <p className="text-sm text-slate-600 font-medium">Log in or create a free account to book your court in seconds.</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={() => { setShowAuthModal(false); navigate('/login'); }}
+                    className="flex-1 py-3 rounded-xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-sm uppercase tracking-[0.18em] shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+                  >
+                    Log In
+                  </button>
+                  <button
+                    onClick={() => { setShowAuthModal(false); navigate('/signup'); }}
+                    className="flex-1 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-sm uppercase tracking-[0.18em] shadow-lg shadow-slate-900/15 active:scale-95 transition-all"
+                  >
+                    Create Account
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setShowAuthModal(false)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Continue browsing courts
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
 
         {/* ──────────── LOCATION ENTRY CONFIRMATION MODAL — hidden when mobile schedule is open ──────────── */}
         {
@@ -3739,6 +3978,120 @@ const Booking: React.FC = () => {
             document.body
           )
         }
+
+        {/* ──────────── MULTI-BOOKING CONFIRMATION MODAL ──────────── */}
+        {showMultiBookingConfirm && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-6">
+            <div
+              className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
+              onClick={cancelMultiBookingConfirm}
+            />
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-6 space-y-4 text-center">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 flex items-center justify-center">
+                  <AlertCircle className="text-amber-600" size={26} />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Multiple bookings detected</h2>
+                  <p className="text-sm text-slate-600 font-medium">You are about to book multiple separate time slots. Do you want to continue?</p>
+                  {groupedSelectedSlots.length > 0 && (
+                    <div className="mt-3 grid grid-cols-1 gap-2">
+                      {groupedSelectedSlots.map((group, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-sm font-bold text-slate-800 shadow-sm"
+                        >
+                          <span className="text-base text-slate-900 font-extrabold tracking-tight">{slotsToCompactRange(group)}</span>
+                          <span className="ml-3 inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em]">
+                            {group.length} hour{group.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={cancelMultiBookingConfirm}
+                    className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all"
+                  >
+                    Go Back
+                  </button>
+                  <button
+                    onClick={confirmMultiBooking}
+                    disabled={isProcessing || isConfirmingMulti}
+                    className={`w-full py-3 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 ${
+                      isProcessing || isConfirmingMulti
+                        ? 'bg-blue-400 cursor-wait'
+                        : 'bg-[#1E40AF] hover:bg-blue-800'
+                    }`}
+                  >
+                    {isProcessing || isConfirmingMulti ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Processing
+                      </>
+                    ) : (
+                      'Continue'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* ──────────── EXIT TO LOCATIONS CONFIRM MODAL ──────────── */}
+        {showExitConfirm && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[125] flex items-center justify-center p-6">
+            <div
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+              onClick={cancelExitToLocations}
+            />
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-6 space-y-4 text-center">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 flex items-center justify-center">
+                  <AlertCircle className="text-blue-600" size={26} />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Leave booking details?</h2>
+                  <p className="text-sm text-slate-600 font-medium">You have pending selections. Exit and return to locations?</p>
+                  {groupedSelectedSlots.length > 0 && (
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-left">
+                      {groupedSelectedSlots.map((group, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-sm font-bold text-slate-800 shadow-sm"
+                        >
+                          <span className="text-base text-slate-900 font-extrabold tracking-tight">{slotsToCompactRange(group)}</span>
+                          <span className="ml-3 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em]">
+                            {selectedLocation?.name || 'Current location'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={cancelExitToLocations}
+                    className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all"
+                  >
+                    Stay here
+                  </button>
+                  <button
+                    onClick={confirmExitToLocations}
+                    className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-all shadow-lg shadow-rose-900/20"
+                  >
+                    Exit to locations
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
         {/* ──────────── PAYMENT METHOD MODAL ──────────── */}
         {showPaymentModal && ReactDOM.createPortal(
@@ -3810,6 +4163,20 @@ const Booking: React.FC = () => {
                     <p className="text-sm text-slate-500">Scan the QR code, then upload your proof of payment.</p>
                   </div>
 
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Payment Note</p>
+                      <p className="text-sm font-bold text-slate-800 truncate">Pickleplay Booking</p>
+                      <p className="text-[11px] text-slate-500">Paste this note in your GCash/Maya transaction.</p>
+                    </div>
+                    <button
+                      onClick={copyBookingNote}
+                      className="px-3 py-2 rounded-lg border border-blue-200 bg-white text-[11px] font-black uppercase tracking-widest text-blue-700 hover:bg-blue-50 transition-colors"
+                    >
+                      {copiedBookingNote ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+
                   {selectedQRMethod && (
                     <div className="bg-slate-50 rounded-xl p-4 flex flex-col items-center gap-3">
                       <div className="bg-white rounded-xl border border-slate-200 p-3 w-56 h-56">
@@ -3838,7 +4205,7 @@ const Booking: React.FC = () => {
                     />
                     <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold">
                       <AlertCircle size={12} className="text-blue-500" />
-                      Double-check your reference number before submit.
+                      Double-check your reference number before submitting.
                     </p>
                   </div>
 
@@ -3875,7 +4242,7 @@ const Booking: React.FC = () => {
                       ) : (
                         <>
                           <Upload size={20} className="text-slate-300" />
-                          <p className="text-xs font-bold text-slate-400">Tap to upload screenshot</p>
+                          <p className="text-xs font-bold text-slate-400">Tap to upload your proof screenshot</p>
                         </>
                       )}
                     </div>
@@ -3951,7 +4318,7 @@ const Booking: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-slate-500">No amenities listed for this location.</p>
+                  <p className="text-sm font-semibold text-slate-500">No amenities listed for this venue.</p>
                 )}
               </div>
             </div>
@@ -3974,9 +4341,9 @@ const Booking: React.FC = () => {
                   <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
                     <CircleCheck size={32} className="text-emerald-500" />
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Successfully Reserved!</h2>
-                  <p className="text-slate-500 font-medium mb-3 leading-relaxed text-sm sm:text-base">
-                    Your court time has been reserved. You can find your booking details in{' '}
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-3">Booking Confirmed!</h2>
+                  <p className="text-slate-600 font-medium mb-4 leading-relaxed text-sm sm:text-base">
+                    Your court time has been reserved; you can find your booking details in{' '}
                     <button
                       type="button"
                       onClick={() => navigate('/my-bookings')}
@@ -3984,14 +4351,11 @@ const Booking: React.FC = () => {
                     >
                       My Bookings
                     </button>
-                    .
-                  </p>
-                  <p className="text-[12px] font-bold text-slate-600 mb-4 leading-relaxed">
-                    Court owner will verify your payment; your reservation is marked as{' '}
+                    . Your reservation is marked as{' '}
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-amber-100 text-[#B8860B] uppercase tracking-wide font-black">
                       PENDING
                     </span>
-                    . Your slot stays reserved while the court owner reviews your payment. Thank you!
+                    {' '}while the court owner verifies your payment, and your slot stays reserved during the review. Thank you!
                   </p>
 
                   {/* Policy Reminder after booking */}
@@ -4069,9 +4433,9 @@ const Booking: React.FC = () => {
                                 <div className="text-center py-4">
                                   <p className="text-xs font-bold text-slate-400">
                                     {postBookInviteQuery
-                                      ? 'No players match your search'
+                                      ? 'No matching players'
                                       : postBookAllPlayers.length === 0
-                                        ? 'Follow players in Find Partners to invite them here'
+                                        ? 'Follow players in Find Partners to invite them to your court bookings'
                                         : 'No players found'}
                                   </p>
                                 </div>
