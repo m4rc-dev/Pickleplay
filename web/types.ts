@@ -1,6 +1,6 @@
 
 // Fix: Moved UserRole type from App.tsx to types.ts to centralize type definitions.
-export type UserRole = 'guest' | 'ADMIN' | 'PLAYER' | 'CUSTOMER' | 'COURT_OWNER' | 'COACH';
+export type UserRole = 'guest' | 'ADMIN' | 'PLAYER' | 'CUSTOMER' | 'COURT_OWNER' | 'COACH' | 'COURT_MANAGER';
 
 export interface Player {
   id: string;
@@ -387,7 +387,7 @@ export interface TournamentRegistration {
 
 export interface Notification {
   id: string;
-  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT' | 'new_message' |
+  type: 'FOLLOW' | 'MENTION' | 'SYSTEM' | 'system' | 'MATCH_RESULT' | 'BOOKING' | 'ACHIEVEMENT' | 'new_message' |
     'squad_join_request' | 'squad_member_joined' | 'squad_member_left' |
     'squad_message' | 'squad_event_created' | 'squad_invitation' |
     'player_invitation' | 'invitation_accepted' | 'invitation_declined';
@@ -435,6 +435,28 @@ export interface CourtReview {
     full_name: string;
     avatar_url: string;
   };
+}
+
+export type CourtManagerStatus = 'pending_invite' | 'pending_approval' | 'active' | 'removed';
+
+export interface CourtManagerAssignment {
+  id: string;
+  court_id: string;
+  owner_id: string;
+  manager_user_id?: string | null;
+  manager_name: string;
+  manager_email: string;
+  manager_contact_number?: string | null;
+  status: CourtManagerStatus;
+  invite_sent_at?: string | null;
+  invite_expires_at?: string | null;
+  invite_accepted_at?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  removed_at?: string | null;
+  removed_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 export interface Subscription {
   id: string;

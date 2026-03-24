@@ -55,6 +55,7 @@ import { getPendingRatings, getMatchDetails, updateMatchStatus } from '../servic
 import MatchVerification from './MatchVerification';
 import PlayerRatingModal from './PlayerRatingModal';
 import CourtOwnerVerificationForm from './court-owner/CourtOwnerVerificationForm';
+import { getCurrentPendingCourtManagerContext, type PendingCourtManagerContext } from '../services/courtManagers';
 
 const PERFORMANCE_DATA = [
   { name: 'Jan', rating: 3.8 },
@@ -149,6 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
   // Court Owner Verification Form state
   const [showVerificationForm, setShowVerificationForm] = useState(false);
   const [lastApplicationId, setLastApplicationId] = useState<string | undefined>();
+  const [pendingManagerContext, setPendingManagerContext] = useState<PendingCourtManagerContext | null>(null);
 
   // Auto-open Pro Upgrade modal if user arrived via court-owner referral
   useEffect(() => {
@@ -236,6 +238,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
     if (userRole === 'PLAYER' && currentUserId) {
       fetchPlayerLessons();
       fetchPlayerCourts();
+    }
+
+    if (!currentUserId || userRole === 'COURT_MANAGER') {
+      setPendingManagerContext(null);
+    } else {
+      getCurrentPendingCourtManagerContext()
+        .then(setPendingManagerContext)
+        .catch((error) => {
+          console.error('Failed to load pending court manager context:', error);
+          setPendingManagerContext(null);
+        });
     }
 
     if (userRole === 'COURT_OWNER' && currentUserId) {
@@ -1023,6 +1036,36 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
           </div>
         )}
       </div>
+
+      {pendingManagerContext && userRole !== 'COURT_MANAGER' && (
+        <div className="relative overflow-hidden rounded-[32px] border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-blue-50 p-6 shadow-sm">
+          <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-amber-200/40" />
+          <div className="absolute -bottom-12 left-10 h-24 w-24 rounded-full bg-blue-100/60" />
+          <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-700">
+                <Shield size={14} />
+                Court Manager Pending Approval
+              </div>
+              <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">
+                Your Court Manager invitation has been accepted and is now waiting for Court Owner approval.
+              </h2>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                You can keep using your normal PicklePlay account while you wait. Court Manager mode for <strong>{pendingManagerContext.court.name}</strong> will unlock only after the owner approves this assignment.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 transition-all hover:bg-slate-50"
+              >
+                Open Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
 
@@ -2388,5 +2431,4 @@ const StatCard: React.FC<{
     </div>
   );
 };
-
 export default Dashboard;

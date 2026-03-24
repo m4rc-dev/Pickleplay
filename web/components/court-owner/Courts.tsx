@@ -5,6 +5,8 @@ import { Building2, MapPin, Activity, CheckCircle, AlertCircle, Clock, Plus, Lay
 import { supabase } from '../../services/supabase';
 import MarketingPosterModal, { PosterData } from '../MarketingPosterModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import type { CourtManagerAssignment } from '../../types';
+import { approveCourtManager, assignCourtManager, getCourtManagerAssignments, getCurrentActiveRole, getCurrentCourtManagerContext, removeCourtManager } from '../../services/courtManagers';
 
 interface Court {
     id: string;
@@ -19,6 +21,7 @@ interface Court {
     longitude?: number;
     amenities?: string[];
     status?: 'Available' | 'Occupied' | 'Maintenance'; // Virtual status for UI
+    managerAssignment?: CourtManagerAssignment | null;
 }
 
 const Courts: React.FC = () => {
@@ -31,6 +34,8 @@ const Courts: React.FC = () => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [isPosterOpen, setIsPosterOpen] = useState(false);
     const [posterData, setPosterData] = useState<PosterData | null>(null);
+    const [activeRole, setActiveRole] = useState<'COURT_OWNER' | 'COURT_MANAGER' | 'OTHER'>('OTHER');
+    const [managerModalCourt, setManagerModalCourt] = useState<Court | null>(null);
     const navigate = useNavigate();
 
     // Confirm dialog state
@@ -124,17 +129,48 @@ const Courts: React.FC = () => {
             const user = session?.user;
             if (!user) return;
 
-            const { data, error } = await supabase
-                .from('courts')
-                .select('*')
-                .eq('owner_id', user.id);
+            const role = await getCurrentActiveRole();
+            const isManager = role === 'COURT_MANAGER';
+            setActiveRole(isManager ? 'COURT_MANAGER' : role === 'COURT_OWNER' ? 'COURT_OWNER' : 'OTHER');
+
+            let data: any[] | null = null;
+            let error: any = null;
+
+            if (isManager) {
+                const context = await getCurrentCourtManagerContext();
+
+                if (!context?.court.id) {
+                    setCourts([]);
+                    return;
+                }
+
+                const response = await supabase
+                    .from('courts')
+                    .select('*')
+                    .eq('id', context.court.id);
+
+                data = response.data;
+                error = response.error;
+            } else {
+                const response = await supabase
+                    .from('courts')
+                    .select('*')
+                    .eq('owner_id', user.id);
+
+                data = response.data;
+                error = response.error;
+            }
 
             if (error) throw error;
+
+            const assignments = await getCourtManagerAssignments((data || []).map((court) => court.id));
+            const assignmentMap = new Map(assignments.map((assignment) => [assignment.court_id, assignment]));
 
             // Map statuses for UI (In a real app, this would come from a live status API or bookings)
             const courtsWithStatus = (data || []).map((c, i) => ({
                 ...c,
-                status: i % 3 === 0 ? 'Occupied' : i % 4 === 0 ? 'Maintenance' : 'Available'
+                status: i % 3 === 0 ? 'Occupied' : i % 4 === 0 ? 'Maintenance' : 'Available',
+                managerAssignment: assignmentMap.get(c.id) || null,
             })) as Court[];
 
             setCourts(courtsWithStatus);
@@ -147,6 +183,7 @@ const Courts: React.FC = () => {
 
     const handleAddCourt = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (activeRole === 'COURT_MANAGER') return;
         setIsSubmitting(true);
 
         try {
@@ -195,6 +232,7 @@ const Courts: React.FC = () => {
 
     const handleUpdateCourt = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (activeRole === 'COURT_MANAGER') return;
         if (!editingCourt) return;
         setIsSubmitting(true);
 
@@ -228,6 +266,7 @@ const Courts: React.FC = () => {
     };
 
     const handleDeleteCourt = async (id: string) => {
+        if (activeRole === 'COURT_MANAGER') return;
         showConfirm(
             'Remove Court?',
             'This will permanently remove this court from your listings. All associated bookings and data will be preserved but the court will no longer accept new bookings. This action cannot be undone.',
@@ -252,6 +291,7 @@ const Courts: React.FC = () => {
     };
 
     const openEditModal = (court: Court) => {
+        if (activeRole === 'COURT_MANAGER') return;
         setEditingCourt(court);
         setNewName(court.name);
         setNewAddress(court.address);
@@ -269,14 +309,42 @@ const Courts: React.FC = () => {
         setIsEditModalOpen(true);
     };
 
+    const handleManagerSubmit = async (payload: { fullName: string; email: string; contactNumber: string }) => {
+        if (!managerModalCourt) return;
+        await assignCourtManager({
+            courtId: managerModalCourt.id,
+            fullName: payload.fullName,
+            email: payload.email,
+            contactNumber: payload.contactNumber,
+        });
+        setManagerModalCourt(null);
+        await fetchCourts();
+    };
+
+    const handleApproveManager = async (assignmentId: string) => {
+        await approveCourtManager(assignmentId);
+        await fetchCourts();
+    };
+
+    const handleRemoveManager = async (assignmentId: string) => {
+        await removeCourtManager(assignmentId);
+        await fetchCourts();
+    };
+
     return (
         <>
             <div className="space-y-10 animate-in fade-in duration-700">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                     <div>
-                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Manage Courts</h1>
-                        <p className="text-slate-500 font-medium tracking-tight">Real-time utilization and status monitoring.</p>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">
+                            {activeRole === 'COURT_MANAGER' ? 'Assigned Court' : 'Manage Courts'}
+                        </h1>
+                        <p className="text-slate-500 font-medium tracking-tight">
+                            {activeRole === 'COURT_MANAGER'
+                                ? 'Operational access is limited to your assigned court only.'
+                                : 'Real-time utilization and status monitoring.'}
+                        </p>
                     </div>
 
                     <div className="flex gap-2">
@@ -292,12 +360,14 @@ const Courts: React.FC = () => {
                         >
                             <List size={20} />
                         </button>
-                        <button
-                            onClick={() => setIsAddModalOpen(true)}
-                            className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 ml-2"
-                        >
-                            Add Court
-                        </button>
+                        {activeRole !== 'COURT_MANAGER' && (
+                            <button
+                                onClick={() => setIsAddModalOpen(true)}
+                                className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-blue-900/10 ml-2"
+                            >
+                                Add Court
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -322,8 +392,10 @@ const Courts: React.FC = () => {
                                     key={court.id}
                                     court={court}
                                     onBook={() => navigate('/bookings-admin')}
-                                    onSettings={() => openEditModal(court)}
-                                    onPromote={() => handlePromoteCourt(court)}
+                                    onSettings={activeRole === 'COURT_MANAGER' ? undefined : () => openEditModal(court)}
+                                    onPromote={activeRole === 'COURT_MANAGER' ? undefined : () => handlePromoteCourt(court)}
+                                    onManageManager={activeRole === 'COURT_OWNER' ? () => setManagerModalCourt(court) : undefined}
+                                    isManagerView={activeRole === 'COURT_MANAGER'}
                                 />
                             ))
                         ) : (
@@ -344,8 +416,10 @@ const Courts: React.FC = () => {
                                                     key={court.id}
                                                     court={court}
                                                     onBook={() => navigate('/bookings-admin')}
-                                                    onSettings={() => openEditModal(court)}
-                                                    onPromote={() => handlePromoteCourt(court)}
+                                                    onSettings={activeRole === 'COURT_MANAGER' ? undefined : () => openEditModal(court)}
+                                                    onPromote={activeRole === 'COURT_MANAGER' ? undefined : () => handlePromoteCourt(court)}
+                                                    onManageManager={activeRole === 'COURT_OWNER' ? () => setManagerModalCourt(court) : undefined}
+                                                    isManagerView={activeRole === 'COURT_MANAGER'}
                                                 />
                                             ))}
                                         </tbody>
@@ -765,6 +839,16 @@ const Courts: React.FC = () => {
                     document.body
                 )}
 
+                {managerModalCourt && (
+                    <CourtManagerModal
+                        court={managerModalCourt}
+                        onClose={() => setManagerModalCourt(null)}
+                        onSubmit={handleManagerSubmit}
+                        onApprove={handleApproveManager}
+                        onRemove={handleRemoveManager}
+                    />
+                )}
+
                 {/* Utilization Heatmap Placeholder */}
                 <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm overflow-hidden relative">
                     <div className="flex items-center justify-between mb-8">
@@ -831,6 +915,107 @@ const StatusMetric: React.FC<{ label: string, count: string, subtext: string, co
         </div>
     </div>
 );
+
+const managerStatusStyles: Record<string, string> = {
+    pending_invite: 'bg-amber-50 text-amber-700 border-amber-200',
+    pending_approval: 'bg-blue-50 text-blue-700 border-blue-200',
+    active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    removed: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+const CourtManagerModal: React.FC<{
+    court: Court;
+    onClose: () => void;
+    onSubmit: (payload: { fullName: string; email: string; contactNumber: string }) => Promise<void>;
+    onApprove: (assignmentId: string) => Promise<void>;
+    onRemove: (assignmentId: string) => Promise<void>;
+}> = ({ court, onClose, onSubmit, onApprove, onRemove }) => {
+    const assignment = court.managerAssignment;
+    const [fullName, setFullName] = useState(assignment?.manager_name || '');
+    const [email, setEmail] = useState(assignment?.manager_email || '');
+    const [contactNumber, setContactNumber] = useState(assignment?.manager_contact_number || '');
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setIsSaving(true);
+        setError('');
+
+        try {
+            await onSubmit({ fullName, email, contactNumber });
+        } catch (err: any) {
+            setError(err.message || 'Failed to send manager invite.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-[36px] border border-slate-100 bg-white p-8 shadow-2xl">
+                <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Court Manager</p>
+                        <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900">{court.name}</h2>
+                    </div>
+                    <button onClick={onClose} className="rounded-full bg-slate-100 p-2 text-slate-400 hover:text-slate-900">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {assignment && (
+                    <div className="mb-6 rounded-[28px] border border-slate-100 bg-slate-50 p-5">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-black uppercase tracking-tight text-slate-900">{assignment.manager_name}</p>
+                                <p className="text-xs font-bold text-slate-500">{assignment.manager_email}</p>
+                                <p className="text-xs font-bold text-slate-400">{assignment.manager_contact_number}</p>
+                            </div>
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${managerStatusStyles[assignment.status] || managerStatusStyles.removed}`}>
+                                {assignment.status.replace('_', ' ')}
+                            </span>
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                            {assignment.status === 'pending_approval' && (
+                                <button type="button" onClick={() => onApprove(assignment.id)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white">
+                                    Approve Manager
+                                </button>
+                            )}
+                            {assignment.status !== 'removed' && (
+                                <button type="button" onClick={() => onRemove(assignment.id)} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-rose-600">
+                                    Remove Manager
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {(!assignment || assignment.status === 'pending_invite' || assignment.status === 'removed') && (
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Full Name</label>
+                            <input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Email Address</label>
+                            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Contact Number</label>
+                            <input required value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        {error && <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600">{error}</p>}
+                        <button type="submit" disabled={isSaving} className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-white disabled:opacity-60">
+                            {isSaving ? 'Sending Invite...' : assignment ? 'Resend Invite' : 'Send Invite'}
+                        </button>
+                    </form>
+                )}
+            </div>
+        </div>,
+        document.body
+    );
+};
 
 const MapPreview: React.FC<{
     coords: { lat: number, lng: number },
@@ -984,7 +1169,7 @@ const MapPreview: React.FC<{
     );
 };
 
-const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => void, onPromote: () => void }> = ({ court, onBook, onSettings, onPromote }) => (
+const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings?: () => void, onPromote?: () => void, onManageManager?: () => void, isManagerView?: boolean }> = ({ court, onBook, onSettings, onPromote, onManageManager, isManagerView = false }) => (
     <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
         <div className="p-8 pb-4">
             <div className="flex items-center justify-between mb-6">
@@ -997,7 +1182,13 @@ const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => 
             </div>
 
             <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase group-hover:text-blue-600 transition-colors">{court.name}</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">{court.num_courts} Courts • {court.surface_type || 'Acrylic'}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">{court.num_courts} Courts - {court.surface_type || 'Acrylic'}</p>
+            {court.managerAssignment && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest text-slate-700">
+                    <span className={`h-2 w-2 rounded-full ${court.managerAssignment.status === 'active' ? 'bg-emerald-500' : court.managerAssignment.status === 'pending_approval' ? 'bg-blue-500' : 'bg-amber-500'}`} />
+                    {isManagerView ? 'Assigned to you' : `${court.managerAssignment.manager_name} - ${court.managerAssignment.status.replace('_', ' ')}`}
+                </div>
+            )}
         </div>
 
         <div className="px-8 pb-8 pt-4">
@@ -1034,24 +1225,33 @@ const CourtCard: React.FC<{ court: Court, onBook: () => void, onSettings: () => 
                 >
                     Book Manually
                 </button>
-                <button
-                    onClick={onPromote}
-                    className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
-                >
-                    <Megaphone size={18} />
-                </button>
-                <button
-                    onClick={onSettings}
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl border border-slate-100 transition-colors"
-                >
-                    <Settings2 size={18} />
-                </button>
+                {onManageManager && (
+                    <button onClick={onManageManager} className="px-4 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl border border-blue-100 transition-all text-[10px] font-black uppercase tracking-widest">
+                        Manager
+                    </button>
+                )}
+                {onPromote && (
+                    <button
+                        onClick={onPromote}
+                        className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
+                    >
+                        <Megaphone size={18} />
+                    </button>
+                )}
+                {onSettings && (
+                    <button
+                        onClick={onSettings}
+                        className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl border border-slate-100 transition-colors"
+                    >
+                        <Settings2 size={18} />
+                    </button>
+                )}
             </div>
         </div>
     </div>
 );
 
-const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () => void, onPromote: () => void }> = ({ court, onBook, onSettings, onPromote }) => (
+const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings?: () => void, onPromote?: () => void, onManageManager?: () => void, isManagerView?: boolean }> = ({ court, onBook, onSettings, onPromote, onManageManager, isManagerView = false }) => (
     <tr className="group hover:bg-slate-50/50 transition-colors">
         <td className="px-8 py-6">
             <div className="flex items-center gap-4">
@@ -1061,6 +1261,11 @@ const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () 
                 <div>
                     <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">{court.name}</h3>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{court.address}, {court.city}</p>
+                    {court.managerAssignment && (
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            {isManagerView ? 'Assigned to you' : `${court.managerAssignment.manager_name} - ${court.managerAssignment.status.replace('_', ' ')}`}
+                        </p>
+                    )}
                 </div>
             </div>
         </td>
@@ -1083,18 +1288,27 @@ const CourtListRow: React.FC<{ court: Court, onBook: () => void, onSettings: () 
                 >
                     Book Manually
                 </button>
-                <button
-                    onClick={onPromote}
-                    className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
-                >
-                    <Megaphone size={18} />
-                </button>
-                <button
-                    onClick={onSettings}
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl border border-slate-100 transition-colors"
-                >
-                    <Settings2 size={18} />
-                </button>
+                {onManageManager && (
+                    <button onClick={onManageManager} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 text-[9px] font-black uppercase tracking-widest">
+                        Manager
+                    </button>
+                )}
+                {onPromote && (
+                    <button
+                        onClick={onPromote}
+                        className="p-3 bg-orange-50 text-orange-500 hover:bg-orange-500 hover:text-white rounded-xl border border-orange-100 transition-all" title="Promote Court"
+                    >
+                        <Megaphone size={18} />
+                    </button>
+                )}
+                {onSettings && (
+                    <button
+                        onClick={onSettings}
+                        className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl border border-slate-100 transition-colors"
+                    >
+                        <Settings2 size={18} />
+                    </button>
+                )}
             </div>
         </td>
     </tr>

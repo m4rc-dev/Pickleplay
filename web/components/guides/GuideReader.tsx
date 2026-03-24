@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { getGuideBySlug, updateGuideProgress, getUserGuideProgress, Guide, GuideSection } from '../../services/guides';
 import { supabase } from '../../services/supabase';
+import useSEO from '../../hooks/useSEO';
 
 interface GuideReaderProps {
     isLoggedIn: boolean;
@@ -70,6 +71,28 @@ const GuideReader: React.FC<GuideReaderProps> = ({ isLoggedIn }) => {
             updateGuideProgress(userId, guide.id, currentSection, guide.content.length);
         }
     }, [currentSection, userId, guide]);
+
+    useSEO({
+        title: guide ? `${guide.title} | Pickleball Guide Philippines` : 'Pickleball Guides',
+        description: guide?.description || 'Learn pickleball rules, strategy, and equipment guides on PicklePlay Philippines.',
+        canonical: slug ? `https://www.pickleplay.ph/guides/${slug}` : 'https://www.pickleplay.ph/guides',
+        noIndex: !loading && !guide,
+        structuredData: guide
+            ? {
+                '@context': 'https://schema.org',
+                '@type': 'HowTo',
+                name: guide.title,
+                description: guide.description,
+                image: guide.thumbnail_url || undefined,
+                totalTime: guide.estimated_read_time ? `PT${guide.estimated_read_time}M` : undefined,
+                step: guide.content.map((item) => ({
+                    '@type': 'HowToStep',
+                    name: item.title,
+                    text: item.content,
+                })),
+            }
+            : null,
+    });
 
     const handleNextSection = () => {
         if (!guide) return;

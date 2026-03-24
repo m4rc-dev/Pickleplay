@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { supabase, createSession, getSecuritySettings } from '../services/supabase';
+import { supabase, createSession } from '../services/supabase';
+import { getCourtManagerLoginState } from '../services/courtManagers';
 import { canAttemptLogin, canRequestPasswordReset } from '../services/rateLimiter';
+import { bootstrapTwoFactorSession } from '../services/twoFactorAuth';
+import { getAuthCallbackUrl } from '../services/authRedirects';
 import {
     Eye,
     EyeOff,
@@ -47,6 +50,8 @@ const Login: React.FC = () => {
         const errorParam = searchParams.get('error');
         if (errorParam === 'email_required') {
             setError('Your social account does not have a verified email address. Please sign up with an email and password instead, or use a social account that has an email.');
+        } else if (errorParam === 'verify_email_required') {
+            setError('Please verify your email before signing in.');
         }
     }, []);
     const redirectUrl = searchParams.get('redirect') || '/';
@@ -55,11 +60,24 @@ const Login: React.FC = () => {
         value.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30);
 
     const ensureProfileFields = async (user: any) => {
-        const { data: existingProfile } = await supabase
+        const { data: existingProfile, error: profileLookupError } = await supabase
             .from('profiles')
             .select('email, full_name, username')
             .eq('id', user.id)
             .maybeSingle();
+
+        if (profileLookupError) {
+            if (profileLookupError.code === '42501') {
+                console.warn('Skipping profile sync during login because profile permissions are restricted for this session.');
+                return;
+            }
+            console.error('Failed to load profile during login:', profileLookupError);
+            return;
+        }
+
+        if (!existingProfile) {
+            return;
+        }
 
         const resolvedFullName = existingProfile?.full_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '';
         const resolvedEmail = existingProfile?.email || user?.email || null;
@@ -71,13 +89,18 @@ const Login: React.FC = () => {
         for (let attempt = 0; attempt < 5; attempt++) {
             const { error } = await supabase
                 .from('profiles')
-                .upsert({ id: user.id, email: resolvedEmail, full_name: resolvedFullName, username: candidateUsername }, { onConflict: 'id' });
+                .update({ email: resolvedEmail, full_name: resolvedFullName, username: candidateUsername })
+                .eq('id', user.id);
             if (!error) return;
             if (error.code === '23505') {
                 candidateUsername = `${baseUsername.slice(0, 22)}_${Math.random().toString(36).slice(2, 7)}`;
                 continue;
             }
-            console.error('Failed to upsert profile fields during login:', error);
+            if (error.code === '42501') {
+                console.warn('Skipping profile sync during login because profile permissions are restricted for this session.');
+                return;
+            }
+            console.error('Failed to update profile fields during login:', error);
             return;
         }
     };
@@ -89,11 +112,9 @@ const Login: React.FC = () => {
             const referralCode = searchParams.get('ref');
             if (referralCode) localStorage.setItem('referral_code', referralCode);
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
-            const appUrl = 'https://www.pickleplay.ph';
-            const callbackUrl = referralCode
-                ? `${appUrl}/auth/callback?ref=${referralCode}`
-                : `${appUrl}/auth/callback`;
-            const oauthOptions: any = { redirectTo: callbackUrl };
+            const oauthOptions: any = {
+                redirectTo: getAuthCallbackUrl({ ref: referralCode }),
+            };
             // Force Facebook to request email permission
             if (provider === 'facebook') {
                 oauthOptions.scopes = 'email';
@@ -127,22 +148,54 @@ const Login: React.FC = () => {
                     await createSession(data.user.id, deviceName, ipData.ip);
                 } catch { await createSession(data.user.id, deviceName); }
 
-                const settings = await getSecuritySettings(data.user.id);
-                if (settings.data?.two_factor_enabled) {
-                    localStorage.setItem('two_factor_pending', 'true');
-                    const storedRedirect = localStorage.getItem('auth_redirect');
-                    const finalRedirect = storedRedirect || redirectUrl;
-                    if (finalRedirect && finalRedirect !== '/dashboard') localStorage.setItem('auth_redirect', finalRedirect);
+                const twoFactorStatus = await bootstrapTwoFactorSession(data.session?.access_token).catch(async (bootstrapError) => {
+                    await supabase.auth.signOut();
+                    throw bootstrapError;
+                });
+                if (twoFactorStatus.pending) {
+                    const finalRedirect = localStorage.getItem('auth_redirect') || redirectUrl;
+                    if (finalRedirect && finalRedirect !== '/dashboard') {
+                        localStorage.setItem('auth_redirect', finalRedirect);
+                    }
                     navigate('/verify-2fa');
                 } else {
-                    localStorage.removeItem('two_factor_pending');
                     const storedRedirect = localStorage.getItem('auth_redirect');
                     localStorage.removeItem('auth_redirect');
                     navigate(storedRedirect || redirectUrl);
                 }
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to sign in. Please check your credentials.');
+            const message = err.message || 'Failed to sign in. Please check your credentials.';
+            const normalizedMessage = message.toLowerCase();
+            if (normalizedMessage.includes('email not confirmed') || normalizedMessage.includes('confirm your email')) {
+                setError('Please confirm your email before logging in. Check your inbox and spam folder for the PicklePlay confirmation email.');
+            } else if (normalizedMessage.includes('banned')) {
+                try {
+                    const loginState = await getCourtManagerLoginState(email);
+                    if (loginState.state === 'pending_invite_registration') {
+                        setError('This court manager invite setup is not complete yet. Open your invitation link and finish registration first.');
+                    } else if (loginState.state === 'pending_owner_approval') {
+                        if (loginState.restoredLoginAccess) {
+                            const { error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+                            if (!retryError) {
+                                const redirectUrl = searchParams.get('redirect') || '/dashboard';
+                                const storedRedirect = localStorage.getItem('auth_redirect');
+                                localStorage.removeItem('auth_redirect');
+                                navigate(storedRedirect || redirectUrl);
+                                return;
+                            }
+                        }
+
+                        setError('Your Court Manager assignment is still waiting for owner approval. Once approved, Court Manager mode will appear alongside your normal PicklePlay access.');
+                    } else {
+                        setError('This court manager account is not active yet. If you have not finished the invitation, reopen your invite link. If you already completed registration, wait for owner approval.');
+                    }
+                } catch {
+                    setError('This court manager account is not active yet. If you have not finished the invitation, reopen your invite link. If you already completed registration, wait for owner approval.');
+                }
+            } else {
+                setError(message);
+            }
         } finally {
             setLoading(false);
         }
@@ -160,9 +213,8 @@ const Login: React.FC = () => {
         setSendingReset(true);
         setError(null);
         try {
-            const appUrl = window.location.origin;
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${appUrl}/auth/callback`,
+                redirectTo: getAuthCallbackUrl(),
             });
             if (resetError) throw resetError;
             setResetSent(true);

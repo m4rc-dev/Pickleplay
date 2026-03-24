@@ -1,5 +1,30 @@
 import { supabase } from './supabase';
 import { CourtEvent, CourtEventType } from '../types';
+import { getCurrentActiveRole, getCurrentCourtManagerContext } from './courtManagers';
+
+const getCourtOperationsScope = async () => {
+  const role = await getCurrentActiveRole();
+
+  if (role === 'COURT_MANAGER') {
+    const context = await getCurrentCourtManagerContext();
+    if (!context) throw new Error('No active court manager assignment found');
+    return {
+      role,
+      ownerId: context.court.owner_id,
+      assignedCourtId: context.court.id,
+    };
+  }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error('User not authenticated');
+
+  return {
+    role,
+    ownerId: userId,
+    assignedCourtId: null,
+  };
+};
 
 /**
  * Create a new court event (maintenance, closure, etc.)
@@ -15,18 +40,16 @@ export const createCourtEvent = async (
   color: string = '#ef4444'
 ) => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      throw new Error('User not authenticated');
+    const scope = await getCourtOperationsScope();
+    if (scope.assignedCourtId && scope.assignedCourtId !== courtId) {
+      throw new Error('Court manager can only manage the assigned court');
     }
 
     const { data, error } = await supabase
       .from('court_events')
       .insert({
         court_id: courtId,
-        owner_id: userId,
+        owner_id: scope.ownerId,
         title,
         description,
         start_datetime: startDateTime,
@@ -70,18 +93,18 @@ export const getCourtEvents = async (courtId: string) => {
  */
 export const getOwnerEvents = async () => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
+    const scope = await getCourtOperationsScope();
 
-    if (!userId) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data, error } = await supabase
+    let query = supabase
       .from('court_events')
       .select('*')
-      .eq('owner_id', userId)
       .order('start_datetime', { ascending: true });
+
+    query = scope.assignedCourtId
+      ? query.eq('court_id', scope.assignedCourtId)
+      : query.eq('owner_id', scope.ownerId);
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return { data: data as CourtEvent[], error: null };
@@ -178,6 +201,19 @@ export const updateCourtEvent = async (
   }
 ) => {
   try {
+    const scope = await getCourtOperationsScope();
+    const { data: currentEvent, error: lookupError } = await supabase
+      .from('court_events')
+      .select('id, court_id')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+    if (!currentEvent) throw new Error('Event not found');
+    if (scope.assignedCourtId && currentEvent.court_id !== scope.assignedCourtId) {
+      throw new Error('Court manager can only update events for the assigned court');
+    }
+
     const { data, error } = await supabase
       .from('court_events')
       .update(updates)
@@ -198,20 +234,25 @@ export const updateCourtEvent = async (
  */
 export const deleteCourtEvent = async (eventId: string) => {
   try {
-    // Get current user session
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
+    const scope = await getCourtOperationsScope();
 
-    if (!userId) {
-      throw new Error('User not authenticated');
+    const { data: event, error: lookupError } = await supabase
+      .from('court_events')
+      .select('id, court_id, owner_id')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+    if (!event) throw new Error('Event not found');
+    if (scope.assignedCourtId && event.court_id !== scope.assignedCourtId) {
+      throw new Error('Court manager can only delete events for the assigned court');
     }
 
-    // Delete event - RLS policy will ensure only owner can delete
-    const { error, count } = await supabase
+    const { error } = await supabase
       .from('court_events')
       .delete()
       .eq('id', eventId)
-      .eq('owner_id', userId); // Extra safety check
+      .eq('owner_id', scope.ownerId);
 
     if (error) {
       console.error('Supabase delete error:', error);

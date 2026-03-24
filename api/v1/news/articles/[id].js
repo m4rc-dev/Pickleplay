@@ -14,6 +14,50 @@ function isRateLimited(ip) {
     return entry.count > RATE_MAX;
 }
 
+const getNewsApiHeaders = (apiKey) => ({
+    'X-Site-Api-Key': apiKey,
+    'Accept': 'application/json',
+});
+
+async function fetchNewsArticlesPage(baseUrl, apiKey, page = 1) {
+    const params = new URLSearchParams({ page: String(page) });
+    const response = await fetch(`${baseUrl}/api/external/articles?${params.toString()}`, {
+        headers: getNewsApiHeaders(apiKey),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`News API returned ${response.status}`);
+        error.status = response.status;
+        error.details = errorText;
+        throw error;
+    }
+
+    return response.json();
+}
+
+function isMatchingNewsArticle(article, articleId) {
+    if (!article) return false;
+    return String(article.id || '') === String(articleId) || String(article.article_id || '') === String(articleId);
+}
+
+async function findNewsArticleById(baseUrl, apiKey, articleId) {
+    const firstPage = await fetchNewsArticlesPage(baseUrl, apiKey, 1);
+    const firstPageArticles = firstPage?.data?.data || [];
+    const firstMatch = firstPageArticles.find((article) => isMatchingNewsArticle(article, articleId));
+    if (firstMatch) return firstMatch;
+
+    const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
+    for (let page = 2; page <= lastPage; page += 1) {
+        const pageData = await fetchNewsArticlesPage(baseUrl, apiKey, page);
+        const articles = pageData?.data?.data || [];
+        const match = articles.find((article) => isMatchingNewsArticle(article, articleId));
+        if (match) return match;
+    }
+
+    return null;
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -38,23 +82,17 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'News API not configured.' });
         }
 
-        const url = `${NEWS_API_URL}/api/external/articles/${id}`;
-
-        const response = await fetch(url, {
-            headers: {
-                'X-Site-Api-Key': NEWS_API_KEY,
-                'Accept': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            return res.status(response.status).json({ error: `News API returned ${response.status}` });
+        const article = await findNewsArticleById(NEWS_API_URL, NEWS_API_KEY, id);
+        if (!article) {
+            return res.status(404).json({ error: 'Article not found' });
         }
 
-        const data = await response.json();
-        return res.status(200).json(data);
+        return res.status(200).json({ data: article });
     } catch (error) {
+        if (error.details) {
+            console.error('❌ News article detail upstream error:', error.status, error.details);
+        }
         console.error('❌ News article detail error:', error.message);
-        return res.status(500).json({ error: 'Failed to fetch article' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
     }
 }

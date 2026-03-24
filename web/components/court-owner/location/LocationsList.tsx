@@ -1,16 +1,39 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, AlertCircle, Shield, PhilippinePeso } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Building2, MapPin, Plus, LayoutGrid, List, X, Search, ChevronRight, Clock, Trash2, Target, Phone, FileText, Camera, Image, Check, ChevronDown, Sparkles, Pencil, Loader2, Calendar, Shield, PhilippinePeso } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
 import { uploadCourtImage, uploadCourtPhoto } from '../../../services/locations';
-import { Location, LocationClosure, LocationClosureReason, CourtStatus } from '../../../types';
+import { Location, LocationClosure, LocationClosureReason, CourtStatus, CourtManagerAssignment } from '../../../types';
+import { approveCourtManager, assignCourtManager, copyCourtManagerInviteLink, getCourtManagerAssignments, getCurrentActiveRole, getCurrentCourtManagerContext, removeCourtManager, type CourtManagerContext } from '../../../services/courtManagers';
+import type { ActiveCourtRole } from '../../../types/court-manager';
+import { getCourtManagerStatusClasses, getCourtManagerStatusLabel, getCourtOperationsRoute } from '../../../lib/court-manager/mapper';
 import ConfirmDialog from '../../ui/ConfirmDialog';
 
 declare global {
     interface Window {
         google: any;
     }
+}
+
+interface CourtItem {
+    id: string;
+    location_id: string;
+    owner_id: string;
+    name: string;
+    num_courts: number;
+    surface_type: string;
+    base_price: number;
+    cleaning_time_minutes: number;
+    is_active: boolean;
+    amenities?: string[];
+    latitude?: number;
+    longitude?: number;
+    image_url?: string;
+    court_type?: 'Indoor' | 'Outdoor' | 'Both';
+    status?: CourtStatus;
+    location_name?: string;
+    managerAssignment?: CourtManagerAssignment | null;
 }
 
 const LocationsList: React.FC = () => {
@@ -24,28 +47,13 @@ const LocationsList: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isLocationListModalOpen, setIsLocationListModalOpen] = useState(false);
     const [locationModalSearch, setLocationModalSearch] = useState('');
+    const [activeRole, setActiveRole] = useState<ActiveCourtRole>('OTHER');
+    const [managerContext, setManagerContext] = useState<CourtManagerContext | null>(null);
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const handledManagerDeepLinkRef = useRef<string | null>(null);
 
     // ── Court Management State ──
-    interface CourtItem {
-        id: string;
-        location_id: string;
-        owner_id: string;
-        name: string;
-        num_courts: number;
-        surface_type: string;
-        base_price: number;
-        cleaning_time_minutes: number;
-        is_active: boolean;
-        amenities?: string[];
-        latitude?: number;
-        longitude?: number;
-        image_url?: string;
-        court_type?: 'Indoor' | 'Outdoor' | 'Both';
-        status?: CourtStatus;
-        location_name?: string;
-    }
-
     const [allCourts, setAllCourts] = useState<CourtItem[]>([]);
     const [isLoadingCourts, setIsLoadingCourts] = useState(true);
     const [isAddCourtModalOpen, setIsAddCourtModalOpen] = useState(false);
@@ -62,6 +70,9 @@ const LocationsList: React.FC = () => {
     const [isViewCourtModalOpen, setIsViewCourtModalOpen] = useState(false);
     const [viewCourtBookings, setViewCourtBookings] = useState<any[]>([]);
     const [isLoadingViewBookings, setIsLoadingViewBookings] = useState(false);
+    const [managerModalCourt, setManagerModalCourt] = useState<CourtItem | null>(null);
+    const [managerActionKey, setManagerActionKey] = useState<string | null>(null);
+    const [copiedInviteAssignmentId, setCopiedInviteAssignmentId] = useState<string | null>(null);
 
     // Today's bookings count per court (with time-aware availability)
     const [courtBookingCounts, setCourtBookingCounts] = useState<Record<string, { booked: number; passed: number; available: number; totalSlots: number }>>({});
@@ -171,6 +182,11 @@ const LocationsList: React.FC = () => {
     const [closureReason, setClosureReason] = useState<LocationClosureReason>('Holiday');
     const [closureDescription, setClosureDescription] = useState('');
     const [isSavingClosure, setIsSavingClosure] = useState(false);
+
+    const isOwnerView = activeRole === 'COURT_OWNER';
+    const isManagerView = activeRole === 'COURT_MANAGER';
+    const bookingsRoute = getCourtOperationsRoute(activeRole, 'bookings');
+    const scheduleRoute = getCourtOperationsRoute(activeRole, 'schedule');
 
     const geocodeAddress = async (address: string, city: string): Promise<{ lat: number; lng: number } | null> => {
         if (!window.google || !address || !city) return null;
@@ -379,22 +395,73 @@ const LocationsList: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchLocations();
-        fetchMasterAmenities();
+        initializePage();
     }, []);
 
-    const fetchLocations = async () => {
+    const initializePage = async () => {
+        setIsLoading(true);
+        setIsLoadingCourts(true);
+
+        try {
+            const role = await getCurrentActiveRole();
+            const resolvedRole: ActiveCourtRole = role === 'COURT_MANAGER'
+                ? 'COURT_MANAGER'
+                : role === 'COURT_OWNER'
+                    ? 'COURT_OWNER'
+                    : 'OTHER';
+            const context = resolvedRole === 'COURT_MANAGER'
+                ? await getCurrentCourtManagerContext()
+                : null;
+
+            setActiveRole(resolvedRole);
+            setManagerContext(context);
+
+            if (resolvedRole === 'OTHER') {
+                setLocations([]);
+                setAllCourts([]);
+                return;
+            }
+
+            await Promise.all([
+                fetchLocations(resolvedRole, context),
+                fetchAllCourts(resolvedRole, context),
+                resolvedRole === 'COURT_OWNER' ? fetchMasterAmenities() : Promise.resolve(),
+            ]);
+        } catch (err) {
+            console.error('Error initializing locations page:', err);
+        } finally {
+            setIsLoading(false);
+            setIsLoadingCourts(false);
+        }
+    };
+
+    const fetchLocations = async (
+        roleOverride: ActiveCourtRole = activeRole,
+        contextOverride: CourtManagerContext | null = managerContext
+    ) => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const user = session?.user;
             if (!user) return;
 
-            // Fetch locations with court count
-            const { data, error } = await supabase
+            let query = supabase
                 .from('locations')
-                .select('*, courts(id)')
-                .eq('owner_id', user.id)
-                .order('created_at', { ascending: false });
+                .select('*, courts(id)');
+
+            if (roleOverride === 'COURT_MANAGER') {
+                if (!contextOverride?.court.location_id) {
+                    setLocations([]);
+                    return;
+                }
+
+                query = query.eq('id', contextOverride.court.location_id);
+            } else {
+                query = query
+                    .eq('owner_id', user.id)
+                    .order('created_at', { ascending: false });
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
@@ -449,6 +516,7 @@ const LocationsList: React.FC = () => {
 
     const handleAddLocation = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isOwnerView) return;
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -498,6 +566,7 @@ const LocationsList: React.FC = () => {
 
     const handleUpdateLocation = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isOwnerView) return;
         if (!editingLocation) return;
         setIsSubmitting(true);
         try {
@@ -548,6 +617,7 @@ const LocationsList: React.FC = () => {
     };
 
     const handleDeleteLocation = async (id: string) => {
+        if (!isOwnerView) return;
         showConfirm(
             'Delete Location & All Courts?',
             'This will permanently delete this location and ALL courts within it, along with all associated bookings, closures, and data. This is the most destructive action and cannot be undone.',
@@ -580,6 +650,7 @@ const LocationsList: React.FC = () => {
     };
 
     const handleAddClosure = async () => {
+        if (!isOwnerView) return;
         if (!editingLocation || !selectedClosureDate) return;
         setIsSavingClosure(true);
         try {
@@ -605,6 +676,7 @@ const LocationsList: React.FC = () => {
     };
 
     const handleRemoveClosure = async (closureId: string) => {
+        if (!isOwnerView) return;
         if (!editingLocation) return;
         try {
             await supabase.from('location_closures').delete().eq('id', closureId);
@@ -613,6 +685,7 @@ const LocationsList: React.FC = () => {
     };
 
     const openEditModal = (loc: Location) => {
+        if (!isOwnerView) return;
         setEditingLocation(loc);
         setFormName(loc.name);
         setFormAddress(loc.address);
@@ -783,29 +856,57 @@ const LocationsList: React.FC = () => {
     };
 
     // ── Court Fetch & CRUD ──
-    const fetchAllCourts = async () => {
+    const fetchAllCourts = async (
+        roleOverride: ActiveCourtRole = activeRole,
+        contextOverride: CourtManagerContext | null = managerContext
+    ) => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.user) return;
-            const { data, error } = await supabase
+
+            let query = supabase
                 .from('courts')
-                .select('*, locations(name)')
-                .eq('owner_id', session.user.id)
-                .order('created_at', { ascending: false });
+                .select('*, locations(name)');
+
+            if (roleOverride === 'COURT_MANAGER') {
+                if (!contextOverride?.court.id) {
+                    setAllCourts([]);
+                    return;
+                }
+
+                query = query.eq('id', contextOverride.court.id);
+            } else {
+                query = query
+                    .eq('owner_id', session.user.id)
+                    .order('created_at', { ascending: false });
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
+
+            const assignments = roleOverride === 'COURT_OWNER'
+                ? await getCourtManagerAssignments((data || []).map((court: any) => court.id))
+                : contextOverride?.assignment
+                    ? [contextOverride.assignment]
+                    : [];
+            const assignmentMap = new Map(assignments.map((assignment) => [assignment.court_id, assignment]));
+
             const mapped = (data || []).map((c: any) => ({
                 ...c,
-                location_name: c.locations?.name || 'Unknown'
+                location_name: c.locations?.name || 'Unknown',
+                managerAssignment: assignmentMap.get(c.id) || null,
             }));
             setAllCourts(mapped);
+
+            if (roleOverride === 'COURT_MANAGER' && contextOverride?.court.location_id) {
+                setCourtLocationFilter(contextOverride.court.location_id);
+            }
         } catch (err) {
             console.error('Error fetching courts:', err);
         } finally {
             setIsLoadingCourts(false);
         }
     };
-
-    useEffect(() => { fetchAllCourts(); }, []);
 
     // Fetch today's booking counts with time-aware slot availability
     const fetchTodayBookingCounts = async (courts: CourtItem[]) => {
@@ -889,6 +990,29 @@ const LocationsList: React.FC = () => {
         }
     };
 
+    useEffect(() => {
+        const targetCourtId = searchParams.get('court');
+        const managerParam = searchParams.get('manager') || '';
+        const deepLinkKey = targetCourtId ? `${targetCourtId}:${managerParam}` : null;
+        if (!targetCourtId || allCourts.length === 0 || handledManagerDeepLinkRef.current === deepLinkKey) return;
+
+        const matchedCourt = allCourts.find((court) => court.id === targetCourtId);
+        if (!matchedCourt) return;
+
+        handledManagerDeepLinkRef.current = deepLinkKey;
+
+        if (managerParam === '1' && isOwnerView) {
+            setManagerModalCourt(matchedCourt);
+        } else {
+            void openViewCourtModal(matchedCourt);
+        }
+
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('court');
+        nextParams.delete('manager');
+        setSearchParams(nextParams, { replace: true });
+    }, [allCourts, isOwnerView, searchParams, setSearchParams]);
+
     // Close court dropdowns on outside click
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
@@ -924,6 +1048,7 @@ const LocationsList: React.FC = () => {
 
     const handleAddCourt = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isOwnerView) return;
         if (!courtLocationId) { alert('Please select a location.'); return; }
         setIsCourtSubmitting(true);
         try {
@@ -973,6 +1098,7 @@ const LocationsList: React.FC = () => {
 
     const handleUpdateCourt = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isOwnerView) return;
         if (!editingCourt) return;
         if (!courtLocationId) { alert('Please select a location.'); return; }
         setIsCourtSubmitting(true);
@@ -1018,6 +1144,7 @@ const LocationsList: React.FC = () => {
     };
 
     const handleDeleteCourt = async (id: string) => {
+        if (!isOwnerView) return;
         showConfirm(
             'Remove Court?',
             'This will permanently remove this court. All associated bookings data will be preserved but the court will no longer accept new bookings. This action cannot be undone.',
@@ -1039,6 +1166,7 @@ const LocationsList: React.FC = () => {
     };
 
     const openEditCourtModal = (court: CourtItem) => {
+        if (!isOwnerView) return;
         setEditingCourt(court);
         setCourtLocationId(court.location_id);
         setCourtName(court.name);
@@ -1055,6 +1183,219 @@ const LocationsList: React.FC = () => {
         setCourtImageFile(null);
         setCourtImagePreview(court.image_url || null);
         setIsEditCourtModalOpen(true);
+    };
+
+    const handleManagerSubmit = async (payload: { fullName: string; email: string; contactNumber: string }) => {
+        if (!managerModalCourt) return;
+
+        const response = await assignCourtManager({
+            courtId: managerModalCourt.id,
+            fullName: payload.fullName,
+            email: payload.email,
+            contactNumber: payload.contactNumber,
+        });
+
+        if (viewingCourt?.id === managerModalCourt.id) {
+            setViewingCourt((current) => current ? { ...current, managerAssignment: response.assignment } : current);
+        }
+
+        setManagerModalCourt(null);
+        await fetchAllCourts();
+    };
+
+    const handleResendManagerInvite = async (court: CourtItem) => {
+        const assignment = court.managerAssignment;
+        if (!assignment || assignment.status !== 'pending_invite') return;
+
+        setManagerActionKey(`resend:${assignment.id}`);
+        try {
+            const response = await assignCourtManager({
+                courtId: court.id,
+                fullName: assignment.manager_name,
+                email: assignment.manager_email,
+                contactNumber: assignment.manager_contact_number || '',
+            });
+
+            if (viewingCourt?.id === court.id) {
+                setViewingCourt((current) => current ? { ...current, managerAssignment: response.assignment } : current);
+            }
+            if (managerModalCourt?.id === court.id) {
+                setManagerModalCourt((current) => current ? { ...current, managerAssignment: response.assignment } : current);
+            }
+
+            await fetchAllCourts();
+        } finally {
+            setManagerActionKey(null);
+        }
+    };
+
+    const handleCopyInviteLink = async (assignment: CourtManagerAssignment) => {
+        setManagerActionKey(`copy:${assignment.id}`);
+        try {
+            const response = await copyCourtManagerInviteLink(assignment.id);
+            await navigator.clipboard.writeText(response.inviteLink || '');
+            setCopiedInviteAssignmentId(assignment.id);
+            window.setTimeout(() => {
+                setCopiedInviteAssignmentId((current) => current === assignment.id ? null : current);
+            }, 2500);
+            setViewingCourt((current) => current?.id === response.assignment.court_id
+                ? { ...current, managerAssignment: response.assignment }
+                : current);
+            setManagerModalCourt((current) => current?.id === response.assignment.court_id
+                ? { ...current, managerAssignment: response.assignment }
+                : current);
+            await fetchAllCourts();
+        } catch (error) {
+            console.error('Failed to copy court manager invite link:', error);
+            alert('Failed to copy invite link.');
+        } finally {
+            setManagerActionKey(null);
+        }
+    };
+
+    const handleApproveManager = async (assignmentId: string) => {
+        setManagerActionKey(`approve:${assignmentId}`);
+        try {
+            const response = await approveCourtManager(assignmentId);
+            setViewingCourt((current) => current?.id === response.assignment.court_id
+                ? { ...current, managerAssignment: response.assignment }
+                : current);
+            setManagerModalCourt(null);
+            await fetchAllCourts();
+        } finally {
+            setManagerActionKey(null);
+        }
+    };
+
+    const renderManagerStatusPill = (status: CourtManagerAssignment['status']) => (
+        <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${getCourtManagerStatusClasses(status)}`}>
+            {getCourtManagerStatusLabel(status)}
+        </span>
+    );
+
+    const renderManagerActionButtons = (court: CourtItem, context: 'table' | 'panel' = 'table') => {
+        const assignment = court.managerAssignment;
+        const baseButtonClass = context === 'table'
+            ? 'rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all'
+            : 'rounded-2xl border px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all';
+
+        if (!assignment || assignment.status === 'removed') {
+            return (
+                <button
+                    type="button"
+                    onClick={() => setManagerModalCourt(court)}
+                    className={`${baseButtonClass} border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100`}
+                >
+                    Assign Manager
+                </button>
+            );
+        }
+
+        if (assignment.status === 'pending_invite') {
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => void handleResendManagerInvite(court)}
+                        disabled={managerActionKey === `resend:${assignment.id}`}
+                        className={`${baseButtonClass} border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-60`}
+                    >
+                        {managerActionKey === `resend:${assignment.id}` ? 'Sending...' : 'Resend Invite'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleCopyInviteLink(assignment)}
+                        disabled={managerActionKey === `copy:${assignment.id}`}
+                        className={`${baseButtonClass} border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60`}
+                    >
+                        {copiedInviteAssignmentId === assignment.id ? 'Copied' : 'Copy Invite Link'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setManagerModalCourt(court)}
+                        className={`${baseButtonClass} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}
+                    >
+                        Edit Details
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleRemoveManager(assignment)}
+                        className={`${baseButtonClass} border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100`}
+                    >
+                        Remove Invite
+                    </button>
+                </>
+            );
+        }
+
+        if (assignment.status === 'pending_approval') {
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => void handleApproveManager(assignment.id)}
+                        disabled={managerActionKey === `approve:${assignment.id}`}
+                        className={`${baseButtonClass} border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-60`}
+                    >
+                        {managerActionKey === `approve:${assignment.id}` ? 'Approving...' : 'Approve Manager'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleRemoveManager(assignment)}
+                        className={`${baseButtonClass} border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100`}
+                    >
+                        Reject
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setManagerModalCourt(court)}
+                        className={`${baseButtonClass} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`}
+                    >
+                        View Details
+                    </button>
+                </>
+            );
+        }
+
+        return (
+            <>
+                <button
+                    type="button"
+                    onClick={() => setManagerModalCourt(court)}
+                    className={`${baseButtonClass} border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100`}
+                >
+                    Manage Manager
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleRemoveManager(assignment)}
+                    className={`${baseButtonClass} border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100`}
+                >
+                    Remove Manager
+                </button>
+            </>
+        );
+    };
+
+    const handleRemoveManager = (assignment: CourtManagerAssignment) => {
+        const removalTitle = assignment.status === 'pending_invite' ? 'Cancel invitation?' : 'Remove manager?';
+        const removalMessage = assignment.status === 'pending_invite'
+            ? `This will cancel the invitation for ${assignment.manager_email}. The invite link will stop working immediately.`
+            : `This will remove ${assignment.manager_name || assignment.manager_email} from this court manager assignment.`;
+
+        showConfirm(
+            removalTitle,
+            removalMessage,
+            async () => {
+                const response = await removeCourtManager(assignment.id);
+                setViewingCourt((current) => current?.id === response.assignment.court_id
+                    ? { ...current, managerAssignment: response.assignment }
+                    : current);
+                setManagerModalCourt(null);
+                await fetchAllCourts();
+            },
+            'danger'
+        );
     };
 
     const filteredLocations = locations.filter(loc =>
@@ -1747,32 +2088,49 @@ const LocationsList: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
-                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURT OWNER / 2026</p>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">My Courts</h1>
-                    <p className="text-slate-500 font-medium tracking-tight">Manage your venues and courts in one place.</p>
+                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">{isManagerView ? 'COURT MANAGER / 2026' : 'COURT OWNER / 2026'}</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">{isManagerView ? 'Assigned Court' : 'My Courts'}</h1>
+                    <p className="text-slate-500 font-medium tracking-tight">
+                        {isManagerView
+                            ? 'Review your assigned court and jump into day-to-day court operations.'
+                            : 'Manage your venues and courts in one place.'}
+                    </p>
                 </div>
 
-                <div className="flex gap-3">
-                    <button onClick={() => { setIsLocationListModalOpen(true); setLocationModalSearch(''); }}
-                        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
-                        <Building2 size={16} /> Location
-                    </button>
-                    <button onClick={() => { resetCourtForm(); setIsAddCourtModalOpen(true); }}
-                        className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 flex items-center gap-2">
-                        <Plus size={16} /> Court
-                    </button>
-                    <button onClick={() => navigate('/court-policies')}
-                        className="px-8 py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
-                        <Shield size={16} /> Court Policies
-                    </button>
-                </div>
+                {isOwnerView ? (
+                    <div className="flex gap-3">
+                        <button onClick={() => { setIsLocationListModalOpen(true); setLocationModalSearch(''); }}
+                            className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
+                            <Building2 size={16} /> Location
+                        </button>
+                        <button onClick={() => { resetCourtForm(); setIsAddCourtModalOpen(true); }}
+                            className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 flex items-center gap-2">
+                            <Plus size={16} /> Court
+                        </button>
+                        <button onClick={() => navigate('/court-policies')}
+                            className="px-8 py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
+                            <Shield size={16} /> Court Policies
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex gap-3">
+                        <button onClick={() => navigate(bookingsRoute)}
+                            className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
+                            <Calendar size={16} /> Bookings
+                        </button>
+                        <button onClick={() => navigate(scheduleRoute)}
+                            className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
+                            <Clock size={16} /> Schedule
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <MetricCard label="Total Locations" count={locations.length.toString()} subtext="Active venues" />
-                <MetricCard label="Total Courts" count={totalCourts.toString()} subtext="Across all locations" color="text-blue-600" />
-                <MetricCard label="Active" count={allCourts.filter(c => c.is_active).length.toString()} subtext="Ready for bookings" color="text-emerald-500" />
+                <MetricCard label={isManagerView ? 'Assigned Location' : 'Total Locations'} count={locations.length.toString()} subtext={isManagerView ? 'Visible to you' : 'Active venues'} />
+                <MetricCard label={isManagerView ? 'Assigned Court' : 'Total Courts'} count={totalCourts.toString()} subtext={isManagerView ? 'Operational scope' : 'Across all locations'} color="text-blue-600" />
+                <MetricCard label={isManagerView ? 'Ready Today' : 'Active'} count={allCourts.filter(c => c.is_active).length.toString()} subtext={isManagerView ? 'Available for bookings' : 'Ready for bookings'} color="text-emerald-500" />
             </div>
 
             {/* Search + Location Filter */}
@@ -1842,9 +2200,12 @@ const LocationsList: React.FC = () => {
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Location</th>
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Type</th>
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Surface</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Price</th>
+                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Pricing</th>
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Today's Slots</th>
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                                    {isOwnerView && (
+                                        <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Manager</th>
+                                    )}
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -1951,6 +2312,27 @@ const LocationsList: React.FC = () => {
                                                     </span>
                                                 )}
                                             </td>
+                                            {isOwnerView && (
+                                                <td className="px-6 py-5 text-center">
+                                                    {court.managerAssignment ? (
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <div className="text-center">
+                                                                <p className="text-xs font-black text-slate-900">{court.managerAssignment.manager_name}</p>
+                                                                <p className="text-[10px] font-bold text-slate-400">{court.managerAssignment.manager_email}</p>
+                                                            </div>
+                                                            {renderManagerStatusPill(court.managerAssignment.status)}
+                                                            <div className="flex max-w-[15rem] flex-wrap justify-center gap-2">
+                                                                {renderManagerActionButtons(court)}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Unassigned</span>
+                                                            {renderManagerActionButtons(court)}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            )}
                                             <td className="px-6 py-5 text-right">
                                                 {isSetupRequired ? (
                                                     <span className="text-xs font-bold text-slate-300">—</span>
@@ -1982,12 +2364,16 @@ const LocationsList: React.FC = () => {
                 <div className="py-20 text-center bg-white rounded-[48px] border border-dashed border-slate-200">
                     <MapPin className="w-16 h-16 text-slate-200 mx-auto mb-4" />
                     <h3 className="text-xl font-black text-slate-400 uppercase tracking-tighter">
-                        {(courtSearchQuery || courtLocationFilter) ? 'No courts match your filter' : 'No courts yet'}
+                        {(courtSearchQuery || courtLocationFilter) ? 'No courts match your filter' : isManagerView ? 'No assigned court found' : 'No courts yet'}
                     </h3>
                     <p className="text-slate-400 text-sm font-medium mb-6">
-                        {(courtSearchQuery || courtLocationFilter) ? 'Try a different search or filter.' : 'Add your first court to start accepting bookings.'}
+                        {(courtSearchQuery || courtLocationFilter)
+                            ? 'Try a different search or filter.'
+                            : isManagerView
+                                ? 'This account needs an active court assignment from the court owner.'
+                                : 'Add your first court to start accepting bookings.'}
                     </p>
-                    {!courtSearchQuery && !courtLocationFilter && (
+                    {isOwnerView && !courtSearchQuery && !courtLocationFilter && (
                         <button onClick={() => { resetCourtForm(); setIsAddCourtModalOpen(true); }}
                             className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 inline-flex items-center gap-2">
                             <Plus size={16} /> Add Your First Court
@@ -2030,11 +2416,15 @@ const LocationsList: React.FC = () => {
                                 </div>
                                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                                    <button
-                                        onClick={() => { setViewingCourt(null); navigate(`/court-pricing?court=${viewingCourt.id}`); }}
-                                        className="text-sm font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
-                                        Manage Pricing
-                                    </button>
+                                    {isOwnerView ? (
+                                        <button
+                                            onClick={() => { setViewingCourt(null); navigate(`/court-pricing?court=${viewingCourt.id}`); }}
+                                            className="text-sm font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
+                                            Manage Pricing
+                                        </button>
+                                    ) : (
+                                        <p className="text-sm font-black uppercase tracking-widest text-slate-300">Owner only</p>
+                                    )}
                                 </div>
                                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
@@ -2107,6 +2497,35 @@ const LocationsList: React.FC = () => {
                                 })()}
                             </div>
 
+                            {isOwnerView && (
+                                <div className="mb-8 rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Court Manager</p>
+                                            {viewingCourt.managerAssignment ? (
+                                                <>
+                                                    <p className="mt-2 text-lg font-black uppercase tracking-tight text-slate-900">{viewingCourt.managerAssignment.manager_name}</p>
+                                                    <p className="text-sm font-bold text-slate-500">{viewingCourt.managerAssignment.manager_email}</p>
+                                                    {viewingCourt.managerAssignment.manager_contact_number && (
+                                                        <p className="text-xs font-bold text-slate-400">{viewingCourt.managerAssignment.manager_contact_number}</p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <p className="mt-2 text-sm font-bold text-slate-400">No manager assigned to this court yet.</p>
+                                            )}
+                                        </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                                            {viewingCourt.managerAssignment && (
+                                                renderManagerStatusPill(viewingCourt.managerAssignment.status)
+                                            )}
+                                            <div className="flex flex-wrap justify-end gap-2">
+                                                {renderManagerActionButtons(viewingCourt, 'panel')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Upcoming Bookings */}
                             <div>
                                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -2125,7 +2544,7 @@ const LocationsList: React.FC = () => {
                                             const isToday = booking.date === new Date().toISOString().split('T')[0];
                                             return (
                                                 <div key={booking.id}
-                                                    onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate('/bookings-admin'); }}
+                                                    onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate(bookingsRoute); }}
                                                     className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-3.5 border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 transition-all cursor-pointer group/booking">
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-center ${isToday ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600'
@@ -2162,19 +2581,48 @@ const LocationsList: React.FC = () => {
 
                             {/* Actions */}
                             <div className="flex gap-3 mt-8">
-                                <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); openEditCourtModal(viewingCourt); }}
-                                    className="flex-1 h-14 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
-                                    <Pencil size={16} /> Edit Court
-                                </button>
-                                <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); handleDeleteCourt(viewingCourt.id); }}
-                                    className="h-14 px-6 border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
-                                    <Trash2 size={16} /> Remove
-                                </button>
+                                {isOwnerView ? (
+                                    <>
+                                        <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); openEditCourtModal(viewingCourt); }}
+                                            className="flex-1 h-14 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg flex items-center justify-center gap-2">
+                                            <Pencil size={16} /> Edit Court
+                                        </button>
+                                        <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); handleDeleteCourt(viewingCourt.id); }}
+                                            className="h-14 px-6 border border-rose-100 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center justify-center gap-2">
+                                            <Trash2 size={16} /> Remove
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate(bookingsRoute); }}
+                                            className="flex-1 h-14 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2">
+                                            <Calendar size={16} /> Bookings
+                                        </button>
+                                        <button onClick={() => { setIsViewCourtModalOpen(false); setViewingCourt(null); navigate(scheduleRoute); }}
+                                            className="flex-1 h-14 border border-slate-200 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                                            <Clock size={16} /> Schedule
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>,
                 document.body
+            )}
+
+            {managerModalCourt && (
+                <CourtManagerModal
+                    court={managerModalCourt}
+                    onClose={() => setManagerModalCourt(null)}
+                    onSubmit={handleManagerSubmit}
+                    onApprove={handleApproveManager}
+                    onResendInvite={handleResendManagerInvite}
+                    onCopyInviteLink={handleCopyInviteLink}
+                    onRemove={handleRemoveManager}
+                    copiedInviteAssignmentId={copiedInviteAssignmentId}
+                    managerActionKey={managerActionKey}
+                />
             )}
 
             {/* Add Court Modal */}
@@ -2944,6 +3392,130 @@ const MetricCard: React.FC<{ label: string; count: string; subtext: string; colo
         </div>
     </div>
 );
+
+const CourtManagerModal: React.FC<{
+    court: CourtItem;
+    onClose: () => void;
+    onSubmit: (payload: { fullName: string; email: string; contactNumber: string }) => Promise<void>;
+    onApprove: (assignmentId: string) => Promise<void>;
+    onResendInvite: (court: CourtItem) => Promise<void>;
+    onCopyInviteLink: (assignment: CourtManagerAssignment) => Promise<void>;
+    onRemove: (assignment: CourtManagerAssignment) => void;
+    copiedInviteAssignmentId: string | null;
+    managerActionKey: string | null;
+}> = ({ court, onClose, onSubmit, onApprove, onResendInvite, onCopyInviteLink, onRemove, copiedInviteAssignmentId, managerActionKey }) => {
+    const assignment = court.managerAssignment;
+    const [fullName, setFullName] = useState(assignment?.manager_name || '');
+    const [email, setEmail] = useState(assignment?.manager_email || '');
+    const [contactNumber, setContactNumber] = useState(assignment?.manager_contact_number || '');
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setIsSaving(true);
+        setError('');
+
+        try {
+            await onSubmit({ fullName, email, contactNumber });
+        } catch (err: any) {
+            setError(err.message || 'Failed to send manager invite.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-[36px] border border-slate-100 bg-white p-8 shadow-2xl">
+                <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Court Manager</p>
+                        <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900">{court.name}</h2>
+                        <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-400">{court.location_name}</p>
+                    </div>
+                    <button onClick={onClose} className="rounded-full bg-slate-100 p-2 text-slate-400 hover:text-slate-900">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {assignment && (
+                    <div className="mb-6 rounded-[28px] border border-slate-100 bg-slate-50 p-5">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-black uppercase tracking-tight text-slate-900">{assignment.manager_name}</p>
+                                <p className="text-xs font-bold text-slate-500">{assignment.manager_email}</p>
+                                <p className="text-xs font-bold text-slate-400">{assignment.manager_contact_number}</p>
+                            </div>
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${getCourtManagerStatusClasses(assignment.status)}`}>
+                                {getCourtManagerStatusLabel(assignment.status)}
+                            </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {assignment.status === 'pending_invite' && (
+                                <>
+                                    <button type="button" onClick={() => void onResendInvite(court)} disabled={managerActionKey === `resend:${assignment.id}`} className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-blue-600 disabled:opacity-60">
+                                        {managerActionKey === `resend:${assignment.id}` ? 'Sending...' : 'Resend Invite'}
+                                    </button>
+                                    <button type="button" onClick={() => void onCopyInviteLink(assignment)} disabled={managerActionKey === `copy:${assignment.id}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-60">
+                                        {copiedInviteAssignmentId === assignment.id ? 'Copied' : 'Copy Invite Link'}
+                                    </button>
+                                </>
+                            )}
+                            {assignment.status === 'pending_approval' && (
+                                <button type="button" onClick={() => onApprove(assignment.id)} disabled={managerActionKey === `approve:${assignment.id}`} className="rounded-2xl bg-emerald-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-60">
+                                    {managerActionKey === `approve:${assignment.id}` ? 'Approving...' : 'Approve Manager'}
+                                </button>
+                            )}
+                            {assignment.status !== 'removed' && (
+                                <button type="button" onClick={() => onRemove(assignment)} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-rose-600">
+                                    {assignment.status === 'pending_invite' ? 'Remove Invite' : assignment.status === 'pending_approval' ? 'Reject' : 'Remove Manager'}
+                                </button>
+                            )}
+                        </div>
+                        {assignment.status === 'pending_approval' && (
+                            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
+                                This manager already accepted the invite or signed in with the invited email. Owner approval is still required before Court Manager mode becomes available.
+                            </p>
+                        )}
+                        {assignment.status === 'active' && (
+                            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
+                                This manager is active for this assigned court only. Their other PicklePlay roles stay separate.
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {(!assignment || assignment.status === 'pending_invite' || assignment.status === 'removed') && (
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {assignment?.status === 'pending_invite' && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                                Invite sent. Updating these details will issue a fresh secure invite link and expire the previous one.
+                            </div>
+                        )}
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Full Name</label>
+                            <input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Email Address</label>
+                            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Contact Number</label>
+                            <input required value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 font-bold outline-none focus:border-blue-500" />
+                        </div>
+                        {error && <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-600">{error}</p>}
+                        <button type="submit" disabled={isSaving} className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-[10px] font-black uppercase tracking-[0.22em] text-white disabled:opacity-60">
+                            {isSaving ? 'Sending Invite...' : assignment ? 'Resend Invite' : 'Send Invite'}
+                        </button>
+                    </form>
+                )}
+            </div>
+        </div>,
+        document.body
+    );
+};
 
 const LocationCard: React.FC<{
     location: Location;

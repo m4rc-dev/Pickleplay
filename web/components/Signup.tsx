@@ -3,6 +3,7 @@ import useSEO from '../hooks/useSEO';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { canAttemptSignup } from '../services/rateLimiter';
+import { getAuthCallbackUrl } from '../services/authRedirects';
 import {
     Eye,
     EyeOff,
@@ -148,6 +149,9 @@ const Signup: React.FC = () => {
     const [sendingReset, setSendingReset] = useState(false);
     const [guestName, setGuestName] = useState('');
     const [guestLoading, setGuestLoading] = useState(false);
+    const [requiresEmailConfirmation, setRequiresEmailConfirmation] = useState(false);
+    const [isResendingVerification, setIsResendingVerification] = useState(false);
+    const [verificationActionMessage, setVerificationActionMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const redirectUrl = searchParams.get('redirect') || '/dashboard';
@@ -191,6 +195,16 @@ const Signup: React.FC = () => {
     const normalizeUsername = (value: string) =>
         value.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30);
 
+    const getVerificationRedirectUrl = () => {
+        const referralCode = searchParams.get('ref');
+        const referralType = searchParams.get('type');
+
+        return getAuthCallbackUrl({
+            ref: referralCode,
+            type: referralType === 'court-owner' ? 'court-owner' : undefined,
+        });
+    };
+
     const handleSocialLogin = async (provider: 'google' | 'facebook') => {
         if (!agreedToTerms) { setError('You must agree to the Terms & Conditions before signing up.'); return; }
         setLoading(true);
@@ -202,11 +216,10 @@ const Signup: React.FC = () => {
             if (referralType === 'court-owner') localStorage.setItem('referral_type', 'court-owner');
             if (redirectUrl && redirectUrl !== '/dashboard') localStorage.setItem('auth_redirect', redirectUrl);
             localStorage.setItem('terms_accepted_at', new Date().toISOString());
-            const appUrl = 'https://www.pickleplay.ph';
-            let callbackUrl = referralCode
-                ? `${appUrl}/auth/callback?ref=${referralCode}`
-                : `${appUrl}/auth/callback`;
-            if (referralType === 'court-owner') callbackUrl += `${callbackUrl.includes('?') ? '&' : '?'}type=court-owner`;
+            const callbackUrl = getAuthCallbackUrl({
+                ref: referralCode,
+                type: referralType === 'court-owner' ? 'court-owner' : undefined,
+            });
             const oauthOptions: any = { redirectTo: callbackUrl };
             // Force Facebook to request email permission
             if (provider === 'facebook') {
@@ -231,15 +244,21 @@ const Signup: React.FC = () => {
         }
         setLoading(true);
         setError(null);
+        setRequiresEmailConfirmation(false);
+        setVerificationActionMessage(null);
         try {
             const referralCode = searchParams.get('ref');
             const referralType = searchParams.get('type');
             if (referralCode) localStorage.setItem('referral_code', referralCode);
             if (referralType === 'court-owner') localStorage.setItem('referral_type', 'court-owner');
+            const emailRedirectTo = getVerificationRedirectUrl();
 
             const { data, error: authError } = await supabase.auth.signUp({
                 email, password,
-                options: { data: { full_name: fullName, username: fullName.toLowerCase().replace(/\s+/g, '_'), referred_by_code: referralCode } }
+                options: {
+                    data: { full_name: fullName, username: fullName.toLowerCase().replace(/\s+/g, '_'), referred_by_code: referralCode },
+                    emailRedirectTo,
+                }
             });
             if (authError) throw authError;
             if (data.user) {
@@ -259,10 +278,14 @@ const Signup: React.FC = () => {
                 }
 
                 setSuccess(true);
-                const loginUrl = isGuestFlow
-                    ? `/login?email=${encodeURIComponent(email)}`
-                    : redirectUrl !== '/dashboard' ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login';
-                setTimeout(() => navigate(loginUrl), 3000);
+                const emailConfirmationRequired = Boolean(data.user.email) && !data.user.email_confirmed_at;
+                setRequiresEmailConfirmation(emailConfirmationRequired);
+                if (!emailConfirmationRequired) {
+                    const loginUrl = isGuestFlow
+                        ? `/login?email=${encodeURIComponent(email)}`
+                        : redirectUrl !== '/dashboard' ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : '/login';
+                    setTimeout(() => navigate(loginUrl), 3000);
+                }
             }
         } catch (err: any) {
             const msg = err.message || 'Failed to create account. Please try again.';
@@ -299,13 +322,46 @@ const Signup: React.FC = () => {
         } finally { setLoading(false); }
     };
 
+    const handleResendVerificationEmail = async () => {
+        setIsResendingVerification(true);
+        setVerificationActionMessage(null);
+        try {
+            const { error: resendError } = await supabase.auth.resend({
+                type: 'signup',
+                email,
+                options: {
+                    emailRedirectTo: getVerificationRedirectUrl(),
+                },
+            });
+
+            if (resendError) throw resendError;
+
+            setVerificationActionMessage({
+                type: 'success',
+                text: 'Verification email sent again. Please check your inbox, spam, or promotions folder.',
+            });
+        } catch (err: any) {
+            setVerificationActionMessage({
+                type: 'error',
+                text: err.message || 'Failed to resend verification email. Please try again in a moment.',
+            });
+        } finally {
+            setIsResendingVerification(false);
+        }
+    };
+
+    const handleUseDifferentEmail = () => {
+        setSuccess(false);
+        setRequiresEmailConfirmation(false);
+        setVerificationActionMessage(null);
+    };
+
     // Send password reset email for already-registered users
     const handleSendResetEmail = async () => {
         setSendingReset(true);
         try {
-            const appUrl = window.location.origin;
             const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${appUrl}/auth/callback`,
+                redirectTo: getAuthCallbackUrl(),
             });
             if (resetError) throw resetError;
             setResetEmailSent(true);
@@ -316,21 +372,177 @@ const Signup: React.FC = () => {
 
     /* ── Success ── */
     if (success) {
+        const successTitle = isGuestFlow ? 'Account Successfully Set Up!' : requiresEmailConfirmation ? 'Check Your Email' : 'Account Created!';
+        const successDescription = isGuestFlow
+            ? 'Your account is ready. Redirecting you to login...'
+            : requiresEmailConfirmation
+                ? 'We sent a verification link to your inbox. Open the email and confirm your address to activate your PicklePlay account.'
+                : "You're all set. Redirecting you to login...";
+
         return (
-            <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center px-4">
-                <div className="text-center space-y-5 max-w-sm">
-                    <div className="inline-flex items-center justify-center w-20 h-20 bg-lime-400 rounded-full shadow-xl shadow-lime-400/30 animate-bounce">
-                        <CheckCircle2 size={40} className="text-slate-900" />
+            <div className="min-h-screen w-full bg-[#030712] flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+                <style>{`
+                    @keyframes float {
+                        0%, 100% { transform: translateY(0) rotate(var(--rot)); }
+                        50% { transform: translateY(-30px) rotate(var(--rot)); }
+                    }
+                    @keyframes fadeInBlur {
+                        from { opacity: 0; filter: blur(10px); transform: scale(0.98) translateY(20px); }
+                        to { opacity: 1; filter: blur(0); transform: scale(1) translateY(0); }
+                    }
+                    .animate-float { animation: float var(--dur) ease-in-out infinite; }
+                    .animate-fade-in-blur { animation: fadeInBlur 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                `}</style>
+
+                <div className="absolute top-[12%] left-[8%] w-[34rem] h-[34rem] rounded-full bg-blue-600/14 blur-[130px] pointer-events-none" />
+                <div className="absolute bottom-[8%] right-[10%] w-[30rem] h-[30rem] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none animate-pulse" />
+                <div className="absolute top-[38%] right-[28%] w-[22rem] h-[22rem] rounded-full bg-indigo-500/10 blur-[130px] pointer-events-none" />
+
+                <img src="/images/Ball.png" alt="" style={{ '--dur': '15s', '--rot': '18deg' } as any} className="absolute -top-12 right-[4%] w-56 h-56 opacity-[0.05] animate-float pointer-events-none select-none blur-[1px]" />
+                <img src="/images/Ball.png" alt="" style={{ '--dur': '18s', '--rot': '-22deg' } as any} className="absolute bottom-[4%] left-[4%] w-64 h-64 opacity-[0.05] animate-float pointer-events-none select-none blur-[2px]" />
+
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-[0.03] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(#ffffff05_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+
+                <div className="relative z-10 w-full max-w-[56.25rem] mb-4">
+                    <Link
+                        to="/"
+                        className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-white/80 transition-colors"
+                    >
+                        <ArrowLeft size={14} />
+                        Back to Home
+                    </Link>
+                </div>
+
+                <div className="relative z-10 w-full max-w-[56.25rem] bg-white rounded-[32px] shadow-2xl shadow-black/50 border border-white/5 overflow-hidden animate-fade-in-blur">
+                    <div className="flex flex-col lg:flex-row min-h-[35rem]">
+                        <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden rounded-l-3xl">
+                            <img
+                                src="/images/home-images/pb7.jpg"
+                                alt="Pickleball action"
+                                className="absolute inset-0 w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-br from-slate-900/75 via-slate-900/55 to-slate-900/75" />
+
+                            <div className="relative z-10 flex flex-col justify-between p-9 w-full">
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <div className="absolute -inset-1.5 bg-white/20 rounded-xl blur-md" />
+                                        <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="relative w-11 h-11 rounded-xl object-contain shadow-lg ring-2 ring-white/20" />
+                                    </div>
+                                    <div>
+                                        <span className="text-white font-black text-base tracking-tight">PicklePlay</span>
+                                        <p className="text-white/40 text-[0.5625rem] font-bold uppercase tracking-widest">Philippines</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-5">
+                                    <h2 className="text-3xl xl:text-4xl font-black text-white leading-[1.15] tracking-tight">
+                                        You're one step<br />
+                                        <span className="text-lime-400">from the court.</span>
+                                    </h2>
+                                    <div className="flex gap-3">
+                                        <div className="w-1 rounded-full bg-blue-500 shrink-0" />
+                                        <p className="text-white/50 text-sm leading-relaxed">
+                                            Verify your email to unlock bookings,
+                                            tournaments, and the full PicklePlay experience.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <p className="text-white/20 text-[0.625rem] font-bold uppercase tracking-widest">© 2026 PicklePlay PH</p>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-center px-7 py-9 sm:px-10 lg:px-12 lg:border-l border-slate-200">
+                            <div className="lg:hidden flex justify-center mb-5">
+                                <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-12 h-12 rounded-xl object-contain shadow-md" />
+                            </div>
+
+                            <div className="mx-auto w-full max-w-md text-center">
+                                <div className="flex flex-col items-center mb-8">
+                                    <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-lime-400 shadow-[0_0_35px_rgba(163,230,53,0.38)]">
+                                        <CheckCircle2 size={44} className="text-slate-950" />
+                                    </div>
+                                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[0.625rem] font-black uppercase tracking-[0.28em] text-blue-700 shadow-sm">
+                                        <Mail size={13} />
+                                        Email Verification
+                                    </div>
+                                </div>
+
+                                <h1 className="text-3xl font-black text-slate-950 tracking-tight uppercase">
+                                    {successTitle}
+                                </h1>
+
+                                <p className="mt-4 text-base leading-8 text-slate-500">
+                                    {successDescription}
+                                </p>
+
+                                {requiresEmailConfirmation && (
+                                    <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-sm text-slate-700 shadow-sm">
+                                        <p className="text-[0.625rem] font-black uppercase tracking-[0.24em] text-slate-400">
+                                            Verification Email Sent To
+                                        </p>
+                                        <p className="mt-2 truncate text-base font-bold text-slate-900">
+                                            {email}
+                                        </p>
+                                        <p className="mt-2 leading-6 text-slate-500">
+                                            Check your inbox first, then spam or promotions if it does not appear within a minute.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {requiresEmailConfirmation && verificationActionMessage && (
+                                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+                                        verificationActionMessage.type === 'success'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-rose-200 bg-rose-50 text-rose-700'
+                                    }`}>
+                                        {verificationActionMessage.text}
+                                    </div>
+                                )}
+
+                                <div className="mt-7">
+                                    {requiresEmailConfirmation ? (
+                                        <div className="space-y-4">
+                                            <Link
+                                                to={`/login?email=${encodeURIComponent(email)}`}
+                                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-3.5 text-xs font-black uppercase tracking-widest text-white transition-all shadow-xl shadow-blue-900/20 hover:from-blue-700 hover:to-blue-800"
+                                            >
+                                                Back To Login
+                                            </Link>
+
+                                            <div className="flex flex-wrap items-center justify-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleResendVerificationEmail}
+                                                    disabled={isResendingVerification}
+                                                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-[0.6875rem] font-black uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    {isResendingVerification ? 'Sending...' : 'Resend Email'}
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={handleUseDifferentEmail}
+                                                    className="inline-flex items-center justify-center rounded-xl border border-transparent px-4 py-3 text-[0.6875rem] font-black uppercase tracking-[0.18em] text-slate-500 transition-colors hover:text-slate-800"
+                                                >
+                                                    Use A Different Email
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-3">
+                                            <Loader2 className="animate-spin text-lime-400" size={28} />
+                                            <p className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">
+                                                Redirecting securely
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <h1 className="text-3xl font-black text-white tracking-tight uppercase">
-                        {isGuestFlow ? 'Account Successfully Set Up!' : 'Account Created!'}
-                    </h1>
-                    <p className="text-white/50 text-base leading-relaxed">
-                        {isGuestFlow
-                            ? 'Your account is ready. Redirecting you to login...'
-                            : "You're all set. Redirecting you to login..."}
-                    </p>
-                    <Loader2 className="animate-spin text-lime-400 mx-auto" size={28} />
                 </div>
             </div>
         );

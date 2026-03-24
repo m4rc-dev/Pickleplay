@@ -24,6 +24,7 @@ import MatchLineupPanel from './MatchLineupPanel';
 import PlayerApprovalCard from './PlayerApprovalCard';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import Toast, { ToastType } from '../ui/Toast';
+import useSEO from '../../hooks/useSEO';
 
 type Tab = 'overview' | 'bracket' | 'participants';
 
@@ -400,6 +401,51 @@ const TournamentPage: React.FC = () => {
     && (!isSquadMode || !hasActiveSquadReg)
     && (!tournament.registrationDeadline || new Date() <= new Date(tournament.registrationDeadline));
   const isPast = tournament?.status === 'COMPLETED';
+
+  useSEO({
+    title: tournament ? `${tournament.name} | Pickleball Tournament Philippines` : 'Pickleball Tournament Details',
+    description: tournament
+      ? `${tournament.name} in ${tournament.location}. View tournament details, schedule, format, prize pool, and registration information on PicklePlay.`
+      : 'View pickleball tournament details, schedule, participants, and registration information on PicklePlay.',
+    canonical: tournamentId ? `https://www.pickleplay.ph/tournaments/${tournamentId}` : undefined,
+    ogType: 'event',
+    structuredData: tournament
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Event',
+          name: tournament.name,
+          description: tournament.description || `Pickleball tournament in ${tournament.location}`,
+          startDate: tournament.startTime || tournament.date,
+          endDate: tournament.date,
+          eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+          eventStatus:
+            tournament.status === 'COMPLETED'
+              ? 'https://schema.org/EventCompleted'
+              : tournament.status === 'CANCELLED'
+                ? 'https://schema.org/EventCancelled'
+                : 'https://schema.org/EventScheduled',
+          image: tournament.image ? [tournament.image] : undefined,
+          location: {
+            '@type': 'Place',
+            name: tournament.location,
+            address: tournament.location,
+          },
+          organizer: {
+            '@type': 'Organization',
+            name: 'PicklePlay Philippines',
+            url: 'https://www.pickleplay.ph',
+          },
+          offers: {
+            '@type': 'Offer',
+            availability:
+              tournament.status === 'UPCOMING'
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/SoldOut',
+            url: `https://www.pickleplay.ph/tournaments/${tournament.id}`,
+          },
+        }
+      : null,
+  });
 
   if (!tournamentId) return null;
 

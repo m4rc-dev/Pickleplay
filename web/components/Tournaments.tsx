@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { Tournament, TournamentCategory, TournamentFormat, TournamentEventType, UserRole } from '../types';
 import { fetchTournaments as fetchTournamentsService, registerPlayer, withdrawRegistration } from '../services/tournaments';
+import useSEO from '../hooks/useSEO';
 
 const DEMO_TOURNAMENTS: (Tournament & { isJoined?: boolean; registrationStatus?: string })[] = [
     {
@@ -186,6 +187,30 @@ const Tournaments: React.FC<{ userRole?: UserRole }> = ({ userRole }) => {
 
         return result;
     }, [displayTournaments, searchQuery, filter, categoryFilter, formatFilter, eventTypeFilter, showMyOnly, sortBy]);
+
+    useSEO({
+        title: 'Pickleball Tournaments in the Philippines | PicklePlay',
+        description:
+            'Browse upcoming pickleball tournaments in the Philippines. Discover tournament dates, venues, skill levels, prize pools, and registration details on PicklePlay.',
+        canonical: 'https://www.pickleplay.ph/tournaments',
+        structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: 'Pickleball Tournaments in the Philippines',
+            url: 'https://www.pickleplay.ph/tournaments',
+            description:
+                'Browse upcoming pickleball tournaments in the Philippines with dates, venues, skill levels, and registration details.',
+            mainEntity: {
+                '@type': 'ItemList',
+                itemListElement: filteredTournaments.slice(0, 12).map((tournament, index) => ({
+                    '@type': 'ListItem',
+                    position: index + 1,
+                    url: `https://www.pickleplay.ph/tournaments/${tournament.id}`,
+                    name: tournament.name,
+                })),
+            },
+        },
+    });
 
     const activeFilterCount = [filter !== 'All', categoryFilter !== 'all', formatFilter !== 'all', eventTypeFilter !== 'all', showMyOnly, searchQuery.trim().length > 0].filter(Boolean).length;
     const hasActiveFilters = activeFilterCount > 0;

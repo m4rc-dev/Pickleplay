@@ -7,7 +7,13 @@ import hpp from 'hpp';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import net from 'node:net';
+import tls from 'node:tls';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+import { createTwoFactorRouter } from './server/twoFactorRoutes.js';
+import { createSecurityReauthToolkit } from './server/securityReauthRoutes.js';
 
 dotenv.config();
 dotenv.config({ path: '.env.local' });
@@ -15,10 +21,49 @@ dotenv.config({ path: '../.env.local' }); // Try root as well
 
 const app = express();
 const PORT = 5001;
+const CURRENT_FILE_PATH = fileURLToPath(import.meta.url);
+const isDirectExecution = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === CURRENT_FILE_PATH;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const WEB_AUTH_REDIRECT_URL = process.env.WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL;
+const MAILER = (process.env.MAIL_MAILER || process.env.AIL_MAILER || '').trim().toLowerCase();
+const SMTP_HOST = process.env.MAIL_HOST?.trim();
+const SMTP_PORT = Number(process.env.MAIL_PORT || 465);
+const SMTP_USERNAME = process.env.MAIL_USERNAME?.trim();
+const SMTP_PASSWORD = process.env.MAIL_PASSWORD;
+const SMTP_ENCRYPTION = (process.env.MAIL_ENCRYPTION || '').trim().toLowerCase();
+const SMTP_FROM_ADDRESS = (process.env.MAIL_FROM_ADDRESS || SMTP_USERNAME || '').trim();
+const SMTP_FROM_NAME = (process.env.MAIL_FROM_NAME || 'PicklePlay').trim();
+const PICKLEPLAY_EMAIL_LOGO_URL = (
+  process.env.PICKLEPLAY_EMAIL_LOGO_URL ||
+  process.env.EMAIL_LOGO_URL ||
+  ''
+).trim();
+const SMTP_SECURE = SMTP_ENCRYPTION === 'ssl' || SMTP_ENCRYPTION === 'tls' || SMTP_PORT === 465;
+const TWO_FACTOR_SECRET = (
+  process.env.TWO_FACTOR_SECRET ||
+  process.env.TWO_FACTOR_PEPPER ||
+  SUPABASE_SERVICE_ROLE_KEY ||
+  SMTP_PASSWORD ||
+  ''
+).trim();
+const SECURITY_REAUTH_TRUST_SECRET = (
+  process.env.SECURITY_REAUTH_TRUST_SECRET ||
+  TWO_FACTOR_SECRET ||
+  SUPABASE_SERVICE_ROLE_KEY ||
+  ''
+).trim();
+const SECURITY_REAUTH_CODE_EXPIRY_SECONDS = Number(process.env.SECURITY_REAUTH_CODE_EXPIRY_SECONDS || 3600);
+const SMTP_ENABLED = Boolean(
+  SMTP_HOST &&
+  SMTP_PORT &&
+  SMTP_USERNAME &&
+  SMTP_PASSWORD &&
+  SMTP_FROM_ADDRESS &&
+  (MAILER ? MAILER === 'smtp' : true)
+);
 
 // ═══════════════════════════════════════════════════════════════
 // 🛡️  SECURITY: Allowed origins (update for your domains)
@@ -32,13 +77,19 @@ const ALLOWED_ORIGINS = [
 ];
 
 let supabaseAdmin = null;
-if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+const hasDistinctServiceRoleKey =
+  Boolean(SUPABASE_SERVICE_ROLE_KEY) &&
+  (!SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY !== SUPABASE_ANON_KEY);
+
+if (SUPABASE_URL && hasDistinctServiceRoleKey) {
   supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
   });
+} else if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY === SUPABASE_ANON_KEY) {
+  console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY matches the anon key. Admin endpoints will fail RLS checks until you replace it with the real service_role key.');
 } else {
   console.warn('⚠️ Supabase admin credentials missing. QR login endpoints will be disabled.');
 }
@@ -56,9 +107,729 @@ if (process.env.RESEND_API_KEY) {
   console.warn('⚠️ RESEND_API_KEY is missing. Email features will be disabled.');
 }
 
+if (SMTP_ENABLED) {
+  console.log(`✅ SMTP mailer initialized (${SMTP_HOST}:${SMTP_PORT}, secure=${SMTP_SECURE})`);
+} else {
+  console.warn('⚠️ SMTP mailer is not fully configured. Set MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, and MAIL_FROM_ADDRESS.');
+}
+
+const hasEmailTransport = () => SMTP_ENABLED || Boolean(resend);
+
+const formatEmailAddress = (address, name) => {
+  if (!name) return address;
+  const safeName = name.replace(/"/g, '\\"');
+  return `"${safeName}" <${address}>`;
+};
+
+const encodeMimeWord = (value) => {
+  if (!value) return '';
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+};
+
+const chunkBase64 = (value) =>
+  Buffer.from(value || '', 'utf8')
+    .toString('base64')
+    .match(/.{1,76}/g)
+    ?.join('\r\n') || '';
+
+const htmlToPlainText = (html) =>
+  (html || '')
+    .replace(/<(br|\/p|\/div|\/tr|\/h[1-6])\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+const buildMimeMessage = ({ fromAddress, fromName, recipients, subject, html, text }) => {
+  const boundary = `PicklePlayBoundary-${crypto.randomBytes(12).toString('hex')}`;
+  const fromHeader = fromName ? `${encodeMimeWord(fromName)} <${fromAddress}>` : fromAddress;
+  const toHeader = recipients.join(', ');
+  const messageIdDomain = fromAddress.split('@')[1] || 'pickleplay.local';
+  const plainText = text || htmlToPlainText(html);
+
+  return [
+    `From: ${fromHeader}`,
+    `To: ${toHeader}`,
+    `Subject: ${encodeMimeWord(subject)}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: <${crypto.randomBytes(12).toString('hex')}@${messageIdDomain}>`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    chunkBase64(plainText),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    chunkBase64(html || ''),
+    '',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
+};
+
+const createSmtpResponseQueue = (socket) => {
+  let buffer = '';
+  let currentLines = [];
+  const queuedResponses = [];
+  const pendingReaders = [];
+
+  const flushResponse = (response) => {
+    const nextReader = pendingReaders.shift();
+    if (nextReader) {
+      nextReader.resolve(response);
+      return;
+    }
+    queuedResponses.push(response);
+  };
+
+  const rejectAll = (error) => {
+    while (pendingReaders.length > 0) {
+      pendingReaders.shift().reject(error);
+    }
+  };
+
+  socket.on('data', (chunk) => {
+    buffer += chunk.toString('utf8');
+
+    while (buffer.includes('\n')) {
+      const newlineIndex = buffer.indexOf('\n');
+      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '');
+      buffer = buffer.slice(newlineIndex + 1);
+      currentLines.push(line);
+
+      if (/^\d{3} /.test(line)) {
+        flushResponse({
+          code: Number(line.slice(0, 3)),
+          lines: [...currentLines],
+          text: currentLines.join('\n'),
+        });
+        currentLines = [];
+      }
+    }
+  });
+
+  socket.on('error', rejectAll);
+  socket.on('close', () => rejectAll(new Error('SMTP connection closed before completing the response.')));
+  socket.on('timeout', () => rejectAll(new Error('SMTP connection timed out.')));
+
+  return {
+    next() {
+      if (queuedResponses.length > 0) {
+        return Promise.resolve(queuedResponses.shift());
+      }
+      return new Promise((resolve, reject) => pendingReaders.push({ resolve, reject }));
+    },
+  };
+};
+
+const sendSmtpEmail = async ({ to, subject, html, text, fromAddress = SMTP_FROM_ADDRESS, fromName = SMTP_FROM_NAME }) => {
+  const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
+  if (recipients.length === 0) {
+    throw new Error('At least one recipient email address is required.');
+  }
+
+  const socket = SMTP_SECURE
+    ? tls.connect({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        servername: SMTP_HOST,
+      })
+    : net.createConnection({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+      });
+
+  socket.setTimeout(20000);
+  const responses = createSmtpResponseQueue(socket);
+
+  await new Promise((resolve, reject) => {
+    const eventName = SMTP_SECURE ? 'secureConnect' : 'connect';
+    socket.once(eventName, resolve);
+    socket.once('error', reject);
+  });
+
+  const sendCommand = async (command, expectedCodes) => {
+    socket.write(`${command}\r\n`);
+    const response = await responses.next();
+    if (!expectedCodes.includes(response.code)) {
+      throw new Error(`SMTP ${command.split(' ')[0]} failed (${response.code}): ${response.text}`);
+    }
+    return response;
+  };
+
+  const greeting = await responses.next();
+  if (greeting.code !== 220) {
+    throw new Error(`SMTP greeting failed (${greeting.code}): ${greeting.text}`);
+  }
+
+  const heloHost = SMTP_FROM_ADDRESS.split('@')[1] || 'localhost';
+  const ehloResponse = await sendCommand(`EHLO ${heloHost}`, [250]);
+  const supportsLogin = /AUTH[^\n]*LOGIN/i.test(ehloResponse.text);
+  const supportsPlain = /AUTH[^\n]*PLAIN/i.test(ehloResponse.text);
+
+  if (supportsLogin) {
+    await sendCommand('AUTH LOGIN', [334]);
+    await sendCommand(Buffer.from(SMTP_USERNAME, 'utf8').toString('base64'), [334]);
+    await sendCommand(Buffer.from(SMTP_PASSWORD, 'utf8').toString('base64'), [235]);
+  } else if (supportsPlain) {
+    const loginToken = Buffer.from(`\u0000${SMTP_USERNAME}\u0000${SMTP_PASSWORD}`, 'utf8').toString('base64');
+    await sendCommand(`AUTH PLAIN ${loginToken}`, [235]);
+  } else {
+    throw new Error('SMTP server does not advertise a supported auth mechanism.');
+  }
+
+  await sendCommand(`MAIL FROM:<${fromAddress}>`, [250]);
+  for (const recipient of recipients) {
+    await sendCommand(`RCPT TO:<${recipient}>`, [250, 251]);
+  }
+  await sendCommand('DATA', [354]);
+
+  const mimeMessage = buildMimeMessage({
+    fromAddress,
+    fromName,
+    recipients,
+    subject,
+    html,
+    text,
+  });
+  const dotStuffedMessage = mimeMessage
+    .replace(/\r?\n/g, '\r\n')
+    .split('\r\n')
+    .map((line) => (line.startsWith('.') ? `.${line}` : line))
+    .join('\r\n');
+
+  socket.write(`${dotStuffedMessage}\r\n.\r\n`);
+  const dataResponse = await responses.next();
+  if (dataResponse.code !== 250) {
+    throw new Error(`SMTP DATA failed (${dataResponse.code}): ${dataResponse.text}`);
+  }
+
+  try {
+    await sendCommand('QUIT', [221]);
+  } finally {
+    socket.end();
+  }
+
+  return {
+    id: dataResponse.text,
+    data: { id: dataResponse.text },
+    error: null,
+    transport: 'smtp',
+  };
+};
+
+const sendAppEmail = async ({
+  to,
+  subject,
+  html,
+  text,
+  fromAddress = SMTP_FROM_ADDRESS || process.env.RESEND_FROM_EMAIL || 'noreply@pickleplays.com',
+  fromName = SMTP_FROM_NAME,
+}) => {
+  if (SMTP_ENABLED) {
+    return sendSmtpEmail({ to, subject, html, text, fromAddress, fromName });
+  }
+
+  if (resend) {
+    const result = await resend.emails.send({
+      from: formatEmailAddress(fromAddress, fromName),
+      to,
+      subject,
+      html,
+      text: text || htmlToPlainText(html),
+    });
+
+    if (result?.error) {
+      throw new Error(result.error.message || 'Failed to send email');
+    }
+
+    return {
+      id: result.data?.id || null,
+      data: result.data || { id: result.data?.id || null },
+      error: null,
+      transport: 'resend',
+    };
+  }
+
+  throw new Error('Email service is not configured. Set SMTP mail settings or RESEND_API_KEY.');
+};
+
+const getPicklePlayAppUrl = (path = '/') => {
+  const baseUrl = (WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL || 'https://www.pickleplay.ph').trim();
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+};
+
+const renderEmailBrandHeader = ({ textColor = '#ffffff', width = 188 } = {}) => {
+  if (PICKLEPLAY_EMAIL_LOGO_URL) {
+    return `
+      <img
+        src="${PICKLEPLAY_EMAIL_LOGO_URL}"
+        alt="PicklePlay"
+        width="${width}"
+        style="display:block;width:${width}px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;"
+      />
+    `;
+  }
+
+  return `
+    <p style="margin:0;font-size:24px;line-height:1.1;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:${textColor};">PicklePlay</p>
+  `;
+};
+
+const buildOtpEmailHtmlLegacy = ({
+  code,
+  expiresInMinutes,
+  openAppUrl,
+  appName = 'PicklePlay',
+  buttonLabel = 'Open PicklePlay',
+}) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${appName} Security Code</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 18%, rgba(37,99,235,0.30) 0%, rgba(37,99,235,0.10) 24%, rgba(4,19,35,0) 54%),radial-gradient(circle at 88% 10%, rgba(132,204,22,0.12) 0%, rgba(132,204,22,0.04) 16%, rgba(4,19,35,0) 40%),linear-gradient(180deg,#061428 0%,#04101f 100%);font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 18%, rgba(37,99,235,0.30) 0%, rgba(37,99,235,0.10) 24%, rgba(4,19,35,0) 54%),radial-gradient(circle at 88% 10%, rgba(132,204,22,0.12) 0%, rgba(132,204,22,0.04) 16%, rgba(4,19,35,0) 40%),linear-gradient(180deg,#061428 0%,#04101f 100%);">
+      <tr>
+        <td align="center" style="padding:34px 14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:700px;">
+            <tr>
+              <td style="padding:22px;background-color:#071a31;background-image:radial-gradient(circle at 50% 0%, rgba(37,99,235,0.22) 0%, rgba(37,99,235,0.08) 30%, rgba(7,26,49,0) 62%),linear-gradient(180deg,#081a31 0%,#05111f 100%);border:1px solid #173457;border-radius:40px;box-shadow:0 24px 60px rgba(1,10,23,0.42);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                  <tr>
+                    <td align="center" style="padding:0 0 18px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                        <tr>
+                          <td style="font-size:0;line-height:0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                              <tr>
+                                <td width="44" style="font-size:0;line-height:0;border-top:1px solid #234c7a;">&nbsp;</td>
+                                <td width="10"></td>
+                                <td width="10" height="10" bgcolor="#2563eb" style="border-radius:5px;font-size:0;line-height:0;">&nbsp;</td>
+                                <td width="8"></td>
+                                <td width="8" height="8" bgcolor="#84cc16" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td>
+                                <td width="8"></td>
+                                <td width="10" height="10" style="font-size:0;line-height:0;border:1px solid #2d5f99;border-radius:5px;">&nbsp;</td>
+                                <td width="10"></td>
+                                <td width="44" style="font-size:0;line-height:0;border-top:1px solid #234c7a;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f8fbff;border:1px solid #dbe7f5;border-radius:32px;overflow:hidden;box-shadow:0 20px 44px rgba(15,23,42,0.16);">
+                        <tr>
+                          <td align="center" style="padding:30px 40px 22px;background:#ffffff;border-bottom:1px solid #e2eaf5;">
+                            ${renderEmailBrandHeader({ textColor: '#0f172a', width: 184 })}
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px auto 0;">
+                              <tr>
+                                <td width="54" height="4" bgcolor="#84cc16" style="border-radius:999px;font-size:0;line-height:0;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:38px 40px 32px;background-color:#0b1c34;background-image:linear-gradient(140deg,#081729 0%,#0d2852 55%,#1567d8 100%);border-bottom:1px solid rgba(255,255,255,0.10);">
+                            <p style="margin:0 0 12px;font-size:12px;line-height:1.4;letter-spacing:0.24em;font-weight:800;text-transform:uppercase;color:#bfdbfe;">Account Security</p>
+                            <h1 style="margin:0;font-size:38px;line-height:1.06;font-weight:900;color:#ffffff;">Verify your sign in</h1>
+                            <p style="margin:16px 0 0;font-size:15px;line-height:1.8;color:#dbeafe;">
+                              Use this one-time code to finish signing in to your PicklePlay account.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:34px 40px 0;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#eef5ff;background-image:linear-gradient(180deg,#f2f8ff 0%,#e8f1ff 100%);border:1px solid #c7dbff;border-radius:28px;box-shadow:0 18px 36px rgba(29,78,216,0.10);">
+                              <tr>
+                                <td align="center" style="padding:24px 24px 14px;">
+                                  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                                    <tr>
+                                      <td bgcolor="#0f2747" style="padding:8px 16px;border-radius:999px;">
+                                        <p style="margin:0;font-size:11px;line-height:1.2;letter-spacing:0.18em;font-weight:900;text-transform:uppercase;color:#dbeafe;">Verification Code</p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td align="center" style="padding:0 24px 14px;">
+                                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:420px;background:#ffffff;border:1px solid #d6e5fb;border-radius:22px;box-shadow:0 12px 24px rgba(37,99,235,0.10);">
+                                    <tr>
+                                      <td align="center" style="padding:22px 18px;">
+                                        <p style="margin:0;font-size:50px;line-height:1;font-weight:900;letter-spacing:0.22em;color:#0f172a;">${code}</p>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td align="center" style="padding:0 24px 26px;">
+                                  <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
+                                    Enter this 6-digit code in PicklePlay to complete your sign-in.
+                                  </p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:24px 40px 0;background:#f8fbff;">
+                            <p style="margin:0 0 8px;font-size:15px;line-height:1.8;color:#334155;">
+                              This code expires in <strong>${expiresInMinutes} minutes</strong>.
+                            </p>
+                            <p style="margin:0;font-size:14px;line-height:1.8;color:#64748b;">
+                              Only the <strong>latest code</strong> remains valid, and older codes stop working as soon as a new one is sent.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:28px 40px 0;background:#f8fbff;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                              <tr>
+                                <td align="center" bgcolor="#1057a7" style="border:1px solid #0c4383;border-radius:999px;box-shadow:0 14px 32px rgba(16,87,167,0.28);">
+                                  <a href="${openAppUrl}" style="display:inline-block;padding:16px 34px;font-size:13px;line-height:1.2;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:999px;">
+                                    ${buttonLabel}
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                            <p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:#64748b;">
+                              Return to the verification screen, then enter the code manually.
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:28px 40px 0;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:24px;">
+                              <tr>
+                                <td width="6" bgcolor="#84cc16" style="font-size:0;line-height:0;border-radius:24px 0 0 24px;">&nbsp;</td>
+                                <td style="padding:20px 22px;">
+                                  <p style="margin:0 0 8px;font-size:11px;line-height:1.4;letter-spacing:0.22em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Security Note</p>
+                                  <p style="margin:0 0 8px;font-size:14px;line-height:1.8;color:#334155;">
+                                    Never share this code with anyone. PicklePlay will never ask for your verification code by chat, call, or email.
+                                  </p>
+                                  <p style="margin:0;font-size:14px;line-height:1.8;color:#64748b;">
+                                    If you did not request this login, you can safely ignore this email and your account will remain secure.
+                                  </p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:26px 40px 34px;background:#f8fbff;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                              <tr>
+                                <td style="font-size:0;line-height:0;border-top:1px solid #dde7f3;">&nbsp;</td>
+                              </tr>
+                            </table>
+                            <p style="margin:16px 0 6px;font-size:12px;line-height:1.7;color:#64748b;">
+                              This is an automated PicklePlay security email. Please do not reply.
+                            </p>
+                            <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                              © 2026 PicklePlay Philippines
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+const buildOtpEmailHtml = ({
+  code,
+  expiresInMinutes,
+  openAppUrl,
+  appName = 'PicklePlay',
+  buttonLabel = 'Open PicklePlay',
+}) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${appName} Security Code</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 20%, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.07) 24%, rgba(4,19,35,0) 58%),radial-gradient(circle at 82% 14%, rgba(132,204,22,0.10) 0%, rgba(132,204,22,0.03) 16%, rgba(4,19,35,0) 42%),linear-gradient(180deg,#071325 0%,#04101e 100%);font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0;padding:0;background-color:#041323;background-image:radial-gradient(circle at 50% 20%, rgba(37,99,235,0.20) 0%, rgba(37,99,235,0.07) 24%, rgba(4,19,35,0) 58%),radial-gradient(circle at 82% 14%, rgba(132,204,22,0.10) 0%, rgba(132,204,22,0.03) 16%, rgba(4,19,35,0) 42%),linear-gradient(180deg,#071325 0%,#04101e 100%);">
+      <tr>
+        <td align="center" style="padding:36px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:720px;">
+            <tr>
+              <td style="background:#f8fbff;border:1px solid #dbe7f5;border-radius:28px;overflow:hidden;box-shadow:0 28px 72px rgba(1,10,23,0.42);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                  <tr>
+                    <td style="padding:24px 34px 24px;background-color:#0a1b34;background-image:linear-gradient(135deg,#08172b 0%,#0d2854 58%,#1567d8 100%);border-bottom:1px solid rgba(255,255,255,0.12);">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                        <tr>
+                          <td valign="top" style="padding:0 18px 0 0;">
+                            ${renderEmailBrandHeader({ width: 156 })}
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 0;">
+                              <tr>
+                                <td width="44" height="4" bgcolor="#84cc16" style="border-radius:999px;font-size:0;line-height:0;">&nbsp;</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:16px 0 8px;font-size:12px;line-height:1.4;letter-spacing:0.24em;font-weight:800;text-transform:uppercase;color:#bfdbfe;">Account Security</p>
+                      <h1 style="margin:0;font-size:34px;line-height:1.08;font-weight:900;color:#ffffff;">Verify your sign in</h1>
+                      <p style="margin:10px 0 0;font-size:15px;line-height:1.7;color:#dbeafe;">
+                        Use this one-time code to finish signing in to your PicklePlay account.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:24px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#edf5ff;background-image:linear-gradient(180deg,#f4f8ff 0%,#e8f1ff 100%);border:1px solid #c8dcff;border-radius:22px;box-shadow:0 16px 32px rgba(29,78,216,0.10);">
+                        <tr>
+                          <td align="center" style="padding:18px 24px 8px;">
+                            <p style="margin:0;font-size:11px;line-height:1.2;letter-spacing:0.18em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Verification Code</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:0 18px 10px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:520px;background:#ffffff;border:1px solid #d5e4fb;border-radius:18px;box-shadow:0 10px 24px rgba(37,99,235,0.10);">
+                              <tr>
+                                <td align="center" style="padding:18px 20px;">
+                                  <p style="margin:0;font-size:54px;line-height:1;font-weight:900;letter-spacing:0.20em;color:#0f172a;font-family:'Courier New',monospace;">${code}</p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td align="center" style="padding:0 24px 18px;">
+                            <p style="margin:0;font-size:14px;line-height:1.65;color:#475569;">
+                              Enter this 6-digit code in PicklePlay to complete your sign-in.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:20px;">
+                        <tr>
+                          <td valign="middle" style="padding:18px 20px;">
+                            <p style="margin:0 0 6px;font-size:14px;line-height:1.65;color:#334155;">
+                              This code expires in <strong>${expiresInMinutes} minutes</strong>. Only the <strong>latest code</strong> remains valid.
+                            </p>
+                            <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b;">
+                              Older codes stop working as soon as a new one is sent.
+                            </p>
+                          </td>
+                          <td width="210" align="center" valign="middle" style="padding:18px 20px 18px 0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                              <tr>
+                                <td align="center" bgcolor="#1057a7" style="border:1px solid #0c4383;border-radius:999px;box-shadow:0 14px 28px rgba(16,87,167,0.24);">
+                                  <a href="${openAppUrl}" style="display:inline-block;padding:15px 28px;font-size:13px;line-height:1.2;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:999px;">
+                                    ${buttonLabel}
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:10px 0 0;font-size:13px;line-height:1.65;color:#64748b;text-align:center;">
+                        Return to the verification screen, then enter the code manually.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 34px 0;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#ffffff;border:1px solid #dbe5f2;border-radius:18px;">
+                        <tr>
+                          <td style="padding:16px 18px;border-top:3px solid #84cc16;">
+                            <p style="margin:0 0 6px;font-size:11px;line-height:1.4;letter-spacing:0.22em;font-weight:900;text-transform:uppercase;color:#1d4ed8;">Security Note</p>
+                            <p style="margin:0 0 6px;font-size:14px;line-height:1.65;color:#334155;">
+                              Never share this code with anyone. PicklePlay will never ask for your verification code by chat, call, or email.
+                            </p>
+                            <p style="margin:0;font-size:13px;line-height:1.65;color:#64748b;">
+                              If you did not request this login, you can safely ignore this email and your account will remain secure.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:18px 34px 26px;background:#f8fbff;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;">
+                        <tr>
+                          <td style="font-size:0;line-height:0;border-top:1px solid #dde7f3;">&nbsp;</td>
+                        </tr>
+                      </table>
+                      <p style="margin:12px 0 6px;font-size:12px;line-height:1.65;color:#64748b;">
+                        This is an automated PicklePlay security email. Please do not reply.
+                      </p>
+                      <p style="margin:0;font-size:12px;line-height:1.65;color:#94a3b8;">
+                        &copy; 2026 PicklePlay Philippines
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+const buildOtpEmailText = ({ code, expiresInMinutes, openAppUrl }) => `PicklePlay security code
+
+Verify your sign in
+
+Your verification code is ${code}.
+
+This code expires in ${expiresInMinutes} minutes.
+Only the latest code remains valid, and older codes stop working as soon as a new one is sent.
+Never share this code with anyone.
+
+Open PicklePlay: ${openAppUrl}
+
+If you did not request this login, you can safely ignore this email.
+
+This is an automated PicklePlay security email. Please do not reply.`;
+
+const sendTwoFactorEmail = async ({ to, code, expiresInMinutes }) => {
+  if (!SMTP_ENABLED) {
+    throw new Error('SMTP mailer is not configured for two-factor authentication.');
+  }
+
+  const subject = 'Your PicklePlay 2FA Code';
+  const openAppUrl = getPicklePlayAppUrl('/verify-2fa');
+  const html = buildOtpEmailHtml({
+    code,
+    expiresInMinutes,
+    openAppUrl,
+  });
+  const text = buildOtpEmailText({
+    code,
+    expiresInMinutes,
+    openAppUrl,
+  });
+
+  return sendSmtpEmail({
+    to,
+    subject,
+    html,
+    text,
+    fromAddress: SMTP_FROM_ADDRESS,
+    fromName: SMTP_FROM_NAME,
+  });
+};
+
 // News API config
 const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
+
+const getNewsApiHeaders = () => ({
+  'X-Site-Api-Key': NEWS_API_KEY,
+  'Accept': 'application/json',
+});
+
+async function fetchNewsArticlesPage(page = 1, category = '') {
+  const params = new URLSearchParams({ page: String(page) });
+  if (category) params.set('category', String(category));
+
+  const response = await fetch(`${NEWS_API_URL}/api/external/articles?${params.toString()}`, {
+    headers: getNewsApiHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`News API returned ${response.status}`);
+    error.status = response.status;
+    error.details = errorText;
+    throw error;
+  }
+
+  return response.json();
+}
+
+function isMatchingNewsArticle(article, articleId) {
+  if (!article) return false;
+  return String(article.id || '') === String(articleId) || String(article.article_id || '') === String(articleId);
+}
+
+function normalizeNewsArticleSlug(value) {
+  return String(value || 'article')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'article';
+}
+
+function isMatchingNewsArticleSlug(article, articleSlug) {
+  if (!article) return false;
+  return normalizeNewsArticleSlug(article.slug || article.title) === normalizeNewsArticleSlug(articleSlug);
+}
+
+async function findNewsArticleById(articleId) {
+  const firstPage = await fetchNewsArticlesPage(1);
+  const firstPageArticles = firstPage?.data?.data || [];
+  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticle(article, articleId));
+  if (firstMatch) return firstMatch;
+
+  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
+  for (let page = 2; page <= lastPage; page += 1) {
+    const pageData = await fetchNewsArticlesPage(page);
+    const articles = pageData?.data?.data || [];
+    const match = articles.find(article => isMatchingNewsArticle(article, articleId));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+async function findNewsArticleBySlug(articleSlug) {
+  const firstPage = await fetchNewsArticlesPage(1);
+  const firstPageArticles = firstPage?.data?.data || [];
+  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
+  if (firstMatch) return firstMatch;
+
+  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
+  for (let page = 2; page <= lastPage; page += 1) {
+    const pageData = await fetchNewsArticlesPage(page);
+    const articles = pageData?.data?.data || [];
+    const match = articles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
+    if (match) return match;
+  }
+
+  return null;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // 🛡️  SECURITY MIDDLEWARE — DDoS / Abuse Protection
@@ -133,6 +904,12 @@ const accountCreationLimiter = rateLimit({
   message: { error: 'Too many account creation attempts. Please try again later.' },
 });
 
+const managerInviteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many court manager requests. Please try again shortly.' },
+});
+
 // 9. Block suspicious user-agents and empty requests
 app.use((req, res, next) => {
   const ua = (req.headers['user-agent'] || '').toLowerCase();
@@ -175,31 +952,37 @@ app.get('/api/v1/news/articles', async (req, res) => {
     const page = req.query.page || 1;
     const category = req.query.category || ''; // Optional category filter
 
-    // Build URL with optional category filter
-    let url = `${NEWS_API_URL}/api/external/articles?page=${page}`;
-    if (category) {
-      url += `&category=${category}`;
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        'X-Site-Api-Key': NEWS_API_KEY,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ News API error:', response.status, errorText);
-      return res.status(response.status).json({ error: `News API returned ${response.status}` });
-    }
-
-    const data = await response.json();
+    const data = await fetchNewsArticlesPage(page, category);
     console.log(`📰 News API: fetched page ${page}${category ? ` (category: ${category})` : ' (all categories)'} - ${data?.data?.total || 0} total articles`);
     res.json(data);
   } catch (error) {
+    if (error.details) {
+      console.error('❌ News API error:', error.status, error.details);
+    }
     console.error('❌ News proxy error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch news articles' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch news articles' });
+  }
+});
+
+// Proxy for single article detail
+app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
+  try {
+    if (!NEWS_API_URL || !NEWS_API_KEY) {
+      return res.status(500).json({ error: 'News API not configured.' });
+    }
+
+    const article = await findNewsArticleBySlug(req.params.slug);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ data: article });
+  } catch (error) {
+    if (error.details) {
+      console.error('❌ News article slug lookup upstream error:', error.status, error.details);
+    }
+    console.error('❌ News article slug lookup error:', error.message);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
   }
 });
 
@@ -210,24 +993,18 @@ app.get('/api/v1/news/articles/:id', async (req, res) => {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 
-    const url = `${NEWS_API_URL}/api/external/articles/${req.params.id}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'X-Site-Api-Key': NEWS_API_KEY,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: `News API returned ${response.status}` });
+    const article = await findNewsArticleById(req.params.id);
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
     }
 
-    const data = await response.json();
-    res.json(data);
+    res.json({ data: article });
   } catch (error) {
+    if (error.details) {
+      console.error('❌ News article detail upstream error:', error.status, error.details);
+    }
     console.error('❌ News article detail error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch article' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch article' });
   }
 });
 
@@ -243,17 +1020,17 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and code are required' });
     }
 
-    if (!resend) {
-      console.error('❌ Email attempt failed: Resend not initialized (missing API key)');
+    if (!hasEmailTransport()) {
+      console.error('❌ Email attempt failed: no email transport is configured');
       return res.status(503).json({ error: 'Email service is currently unavailable' });
     }
 
-    // Send email via Resend
-    const result = await resend.emails.send({
-      from: 'onboarding@resend.dev', // Default Resend address for unverified domains
+    // Send email via the configured transport
+    const openAppUrl = getPicklePlayAppUrl('/verify-2fa');
+    const result = await sendAppEmail({
       to: email,
       subject: subject || 'Your PicklePlay 2FA Code',
-      html: `
+      /* legacyHtml: `
         <!DOCTYPE html>
         <html>
           <head>
@@ -292,16 +1069,22 @@ app.post('/api/send-email', emailLimiter, async (req, res) => {
             </div>
           </body>
         </html>
-      `,
+      `, */
+      text: buildOtpEmailText({
+        code,
+        expiresInMinutes: 10,
+        openAppUrl,
+      }),
+      html: buildOtpEmailHtml({
+        code,
+        expiresInMinutes: 10,
+        openAppUrl,
+      }),
     });
 
     // console.log('✅ Email sent successfully:', result);
 
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to send email');
-    }
-
-    res.json({ success: true, id: result.data?.id });
+    res.json({ success: true, id: result.id });
   } catch (error) {
     console.error('❌ Email sending error:', error);
     res.status(500).json({ error: error.message || 'Failed to send email' });
@@ -330,8 +1113,8 @@ app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Missing required booking parameters' });
     }
 
-    if (!resend) {
-      console.error('❌ Receipt email failed: Resend not initialized');
+    if (!hasEmailTransport()) {
+      console.error('❌ Receipt email failed: no email transport is configured');
       return res.status(503).json({ error: 'Email service is currently unavailable' });
     }
 
@@ -430,8 +1213,7 @@ app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
 </div>
     `.trim();
 
-    const result = await resend.emails.send({
-      from: 'onboarding@resend.dev',
+    const result = await sendAppEmail({
       to: email,
       subject: `Payment Verified – Booking Confirmed | PicklePlay`,
       html: htmlContent,
@@ -463,8 +1245,8 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
       return res.status(500).json({ error: 'Supabase admin client not configured. Set SUPABASE_SERVICE_ROLE_KEY.' });
     }
 
-    if (!resend) {
-      return res.status(503).json({ error: 'Email service (Resend) not initialized.' });
+    if (!hasEmailTransport()) {
+      return res.status(503).json({ error: 'Email service is currently unavailable.' });
     }
 
     const guestName = `${guestFirstName.trim()} ${(guestLastName || '').trim()}`.trim();
@@ -809,9 +1591,10 @@ app.post('/api/auth/create-guest-account', accountCreationLimiter, async (req, r
 </body>
 </html>`;
 
-    // Send email via Resend
-    const emailResult = await resend.emails.send({
-      from: 'PicklePlay Philippines <noreply@pickleplays.com>',
+    // Send email via the configured transport
+    const emailResult = await sendAppEmail({
+      fromName: 'PicklePlay Philippines',
+      fromAddress: SMTP_FROM_ADDRESS || 'noreply@pickleplays.com',
       to: guestEmail,
       subject: `🏸 Your PicklePlay Account & Booking Confirmation – ${courtName} | ${formattedDate}`,
       html: htmlContent,
@@ -917,11 +1700,1332 @@ app.post('/api/auth/set-guest-password', authLimiter, async (req, res) => {
   }
 });
 
+const normalizeEmail = (email) => (email || '').trim().toLowerCase();
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+const appendRole = (roles, role) => {
+  const next = Array.isArray(roles) ? [...roles] : [];
+  if (!next.includes(role)) next.push(role);
+  if (!next.includes('PLAYER')) next.unshift('PLAYER');
+  return [...new Set(next)];
+};
+
+const removeRole = (roles, role) => {
+  const next = (Array.isArray(roles) ? roles : []).filter((item) => item !== role);
+  return next.length > 0 ? next : ['PLAYER'];
+};
+
+const decodeJwtPayload = (token) => {
+  try {
+    const [, payload = ''] = token.split('.');
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return {};
+  }
+};
+
+const hashAccessTokenFallback = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
+const inferSessionAuthProvider = (claims, user) => {
+  const amrEntries = Array.isArray(claims?.amr)
+    ? claims.amr.map((entry) => (typeof entry === 'string' ? entry : entry?.method)).filter(Boolean)
+    : [];
+
+  if (amrEntries.includes('password')) {
+    return 'email';
+  }
+
+  const providerFromClaims =
+    claims?.app_metadata?.provider ||
+    claims?.app_metadata?.providers?.[0] ||
+    user?.app_metadata?.provider;
+
+  if (providerFromClaims) {
+    return providerFromClaims;
+  }
+
+  if (amrEntries.includes('oauth')) {
+    const identityProviders = Array.isArray(user?.identities)
+      ? user.identities.map((identity) => identity?.provider).filter(Boolean)
+      : [];
+
+    if (identityProviders.includes('google')) {
+      return 'google';
+    }
+
+    return identityProviders[0] || 'oauth';
+  }
+
+  return 'unknown';
+};
+
+const requireAuthenticatedSession = async (req, res) => {
+  const guard = requireSupabaseAdmin();
+  if (!guard.ok) {
+    res.status(500).json({ error: guard.message });
+    return null;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  const accessToken = authHeader.replace('Bearer ', '').trim();
+
+  if (!accessToken) {
+    res.status(401).json({ error: 'Missing access token' });
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+  if (error || !data?.user) {
+    res.status(401).json({ error: 'Invalid access token' });
+    return null;
+  }
+
+  const claims = decodeJwtPayload(accessToken);
+  const sessionId = claims?.session_id || claims?.sessionId || hashAccessTokenFallback(accessToken);
+  const authProvider = inferSessionAuthProvider(claims, data.user);
+
+  return {
+    accessToken,
+    claims,
+    sessionId,
+    authProvider,
+    user: data.user,
+  };
+};
+
+const requireAuthenticatedUser = async (req, res) => {
+  const session = await requireAuthenticatedSession(req, res);
+  return session?.user || null;
+};
+
+const buildManagerInviteLink = (token) => {
+  const baseUrl = (WEB_AUTH_REDIRECT_URL || 'http://localhost:5173').replace(/\/$/, '');
+  return `${baseUrl}/manager-invite?token=${encodeURIComponent(token)}`;
+};
+
+const buildManagerInviteHtml = ({ ownerName, managerName, courtName, inviteLink, expiresInHours }) => `
+  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f8fafc;padding:32px;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:24px;padding:32px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#2563eb;">PicklePlay Court Manager Invite</p>
+      <h1 style="margin:0 0 16px;font-size:28px;line-height:1.1;color:#0f172a;">You were invited to manage ${courtName}</h1>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#475569;">${ownerName} assigned you as the court manager for <strong>${courtName}</strong>.</p>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#475569;">This invite is tied to <strong>${managerName}</strong>, expires in ${expiresInHours} hours, and can only be used once.</p>
+      <a href="${inviteLink}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:14px;font-weight:800;">Accept Invite</a>
+      <div style="margin-top:24px;padding:16px;border-radius:16px;background:#eff6ff;color:#1e3a8a;font-size:13px;line-height:1.7;">
+        Use the exact invited email address. If you already have a PicklePlay account with that email, sign in to accept the invite. Owner approval is still required before manager access becomes active.
+      </div>
+    </div>
+  </div>
+`;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const createCourtManagerInviteLinkRecord = async ({
+  assignmentId,
+  courtId,
+  ownerId,
+  inviteeEmail,
+  ttlHours = 48,
+}) => {
+  const nowIso = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+
+  const { error: revokeError } = await supabaseAdmin
+    .from('court_manager_invites')
+    .update({ revoked_at: nowIso })
+    .eq('assignment_id', assignmentId)
+    .is('used_at', null)
+    .is('revoked_at', null);
+
+  if (revokeError) throw revokeError;
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const { error: inviteInsertError } = await supabaseAdmin
+    .from('court_manager_invites')
+    .insert({
+      assignment_id: assignmentId,
+      court_id: courtId,
+      owner_id: ownerId,
+      invitee_email: inviteeEmail,
+      token_hash: hashToken(rawToken),
+      expires_at: expiresAt,
+    });
+
+  if (inviteInsertError) throw inviteInsertError;
+
+  return {
+    inviteLink: buildManagerInviteLink(rawToken),
+    expiresAt,
+    inviteSentAt: nowIso,
+  };
+};
+
+const getProfileById = async (userId) => {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, full_name, email, username, active_role, roles, account_status')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+const getProfileByEmail = async (email) => {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, full_name, email, username, active_role, roles, account_status')
+    .ilike('email', normalizedEmail)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+const waitForProfileById = async (userId, attempts = 5, delayMs = 150) => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const profile = await getProfileById(userId);
+    if (profile) return profile;
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return null;
+};
+
+const getAuthUserByEmail = async (email) => {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const existingProfile = await getProfileByEmail(normalizedEmail);
+  if (existingProfile?.id) {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(existingProfile.id);
+    if (!error && data?.user) {
+      return data.user;
+    }
+  }
+
+  const perPage = 200;
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const users = data?.users || [];
+    const matchedUser = users.find((user) => normalizeEmail(user.email) === normalizedEmail);
+    if (matchedUser) return matchedUser;
+    if (users.length < perPage) break;
+  }
+
+  return null;
+};
+
+const isFutureTimestamp = (value) => {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp > Date.now();
+};
+
+const resolveCourtManagerInviteAccountState = async ({ email, assignment = null }) => {
+  const authUser = await getAuthUserByEmail(email);
+  if (!authUser) {
+    return {
+      authUser: null,
+      profile: null,
+      isIncompleteInviteAccount: false,
+      isExistingAccount: false,
+    };
+  }
+
+  let profile = null;
+  try {
+    profile = await getProfileById(authUser.id);
+  } catch (error) {
+    console.warn('Unable to load profile for court manager invite account state:', error.message);
+  }
+
+  const isIncompleteInviteAccount = Boolean(
+    assignment &&
+    assignment.status === 'pending_invite' &&
+    !assignment.manager_user_id &&
+    isFutureTimestamp(authUser.banned_until) &&
+    (
+      authUser.app_metadata?.court_manager_invite_only === true ||
+      !profile ||
+      !authUser.last_sign_in_at
+    )
+  );
+
+  return {
+    authUser,
+    profile,
+    isIncompleteInviteAccount,
+    isExistingAccount: Boolean(authUser && !isIncompleteInviteAccount),
+  };
+};
+
+const createHttpError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+
+const getCourtManagerInviteRecord = async (token) => {
+  const { data: invite, error } = await supabaseAdmin
+    .from('court_manager_invites')
+    .select(`
+      id,
+      assignment_id,
+      invitee_email,
+      expires_at,
+      used_at,
+      revoked_at,
+      consumed_by,
+      court_manager_assignments!inner (
+        id,
+        court_id,
+        owner_id,
+        manager_user_id,
+        manager_name,
+        manager_email,
+        manager_contact_number,
+        status,
+        courts!inner (
+          id,
+          name
+        )
+      )
+    `)
+    .eq('token_hash', hashToken(token || ''))
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!invite) return null;
+
+  const assignment = Array.isArray(invite.court_manager_assignments)
+    ? invite.court_manager_assignments[0]
+    : invite.court_manager_assignments;
+  const court = Array.isArray(assignment?.courts) ? assignment.courts[0] : assignment?.courts;
+
+  return {
+    invite,
+    assignment,
+    court,
+  };
+};
+
+const validateCourtManagerInvite = (inviteRecord, options = {}) => {
+  const { allowPendingApprovalForUserId = null } = options;
+  const { invite, assignment } = inviteRecord || {};
+
+  if (!invite || !assignment) {
+    throw createHttpError(404, 'Invite not found.');
+  }
+
+  if (invite.revoked_at) {
+    throw createHttpError(410, 'Invite link is no longer valid.');
+  }
+
+  if (new Date(invite.expires_at).getTime() < Date.now()) {
+    throw createHttpError(410, 'Invite link has expired.');
+  }
+
+  const alreadyAcceptedBySameUser = Boolean(
+    allowPendingApprovalForUserId &&
+    invite.used_at &&
+    invite.consumed_by === allowPendingApprovalForUserId &&
+    assignment.manager_user_id === allowPendingApprovalForUserId &&
+    assignment.status === 'pending_approval'
+  );
+
+  if (invite.used_at && !alreadyAcceptedBySameUser) {
+    throw createHttpError(410, 'Invite link is no longer valid.');
+  }
+
+  if (assignment.status === 'pending_invite' || alreadyAcceptedBySameUser) {
+    return;
+  }
+
+  if (assignment.status === 'pending_approval') {
+    throw createHttpError(409, 'This invite has already been accepted and is waiting for owner approval.');
+  }
+
+  throw createHttpError(410, 'Invite link is no longer available.');
+};
+
+const moveInviteToPendingApproval = async ({
+  inviteId,
+  assignment,
+  court,
+  managerUserId,
+  managerName,
+  managerEmail,
+  managerContactNumber,
+  notificationMessage,
+}) => {
+  const nowIso = new Date().toISOString();
+  const { data: updatedAssignment, error: assignmentUpdateError } = await supabaseAdmin
+    .from('court_manager_assignments')
+    .update({
+      manager_user_id: managerUserId,
+      manager_name: managerName,
+      manager_email: managerEmail,
+      manager_contact_number: managerContactNumber,
+      status: 'pending_approval',
+      invite_accepted_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq('id', assignment.id)
+    .select()
+    .single();
+
+  if (assignmentUpdateError) throw assignmentUpdateError;
+
+  const { error: inviteConsumeError } = await supabaseAdmin
+    .from('court_manager_invites')
+    .update({
+      used_at: nowIso,
+      consumed_by: managerUserId,
+    })
+    .eq('id', inviteId);
+
+  if (inviteConsumeError) throw inviteConsumeError;
+
+  try {
+    await releasePendingCourtManagerAuthState(managerUserId);
+  } catch (authStateError) {
+    console.warn('Unable to release pending court manager auth state:', authStateError.message);
+  }
+
+  await insertNotification({
+    user_id: assignment.owner_id,
+    type: 'SYSTEM',
+    title: 'Court manager awaiting approval',
+    message: notificationMessage,
+    related_user_id: managerUserId,
+    action_url: `/locations?court=${encodeURIComponent(assignment.court_id)}&manager=1`,
+    metadata: {
+      kind: 'court_manager_pending_approval',
+      assignmentId: updatedAssignment.id,
+      courtId: assignment.court_id,
+      courtName: court?.name || null,
+      managerUserId,
+      managerName,
+      managerEmail,
+    },
+  });
+
+  return updatedAssignment;
+};
+
+const insertNotification = async (notification) => {
+  await supabaseAdmin
+    .from('notifications')
+    .insert({
+      is_read: false,
+      created_at: new Date().toISOString(),
+      ...notification,
+    });
+};
+
+const releasePendingCourtManagerAuthState = async (managerUserId) => {
+  if (!managerUserId) return false;
+
+  let updated = false;
+  const { data: userRecord, error: userError } = await supabaseAdmin.auth.admin.getUserById(managerUserId);
+  if (userError || !userRecord?.user) throw userError || new Error('Auth user not found');
+
+  if (isFutureTimestamp(userRecord.user.banned_until)) {
+    const { error: unbanError } = await supabaseAdmin.auth.admin.updateUserById(managerUserId, {
+      ban_duration: 'none',
+    });
+    if (unbanError) throw unbanError;
+    updated = true;
+  }
+
+  if (userRecord.user.app_metadata?.court_manager_invite_only) {
+    try {
+      await setCourtManagerInviteOnlyFlag(managerUserId, false);
+      updated = true;
+    } catch (metaError) {
+      console.warn('Unable to clear court manager invite-only auth flag during pending approval:', metaError.message);
+    }
+  }
+
+  return updated;
+};
+
+const setProfileAccountStatus = async (userId, accountStatus) => {
+  const { error } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      account_status: accountStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  if (error) {
+    console.warn('Unable to update profile account status:', error.message);
+  }
+};
+
+const setCourtManagerInviteOnlyFlag = async (managerUserId, enabled) => {
+  const { data: userRecord, error: userError } = await supabaseAdmin.auth.admin.getUserById(managerUserId);
+  if (userError || !userRecord?.user) throw userError || new Error('Auth user not found');
+
+  const nextMeta = {
+    ...(userRecord.user.app_metadata || {}),
+  };
+
+  if (enabled) {
+    nextMeta.court_manager_invite_only = true;
+  } else {
+    delete nextMeta.court_manager_invite_only;
+  }
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(managerUserId, {
+    app_metadata: nextMeta,
+  });
+
+  if (updateError) throw updateError;
+};
+
+const getActiveCourtManagerAssignment = async (managerUserId) => {
+  const { data, error } = await supabaseAdmin
+    .from('court_manager_assignments')
+    .select('id, court_id, owner_id, manager_user_id, status')
+    .eq('manager_user_id', managerUserId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
+const updateManagerRoleState = async (managerUserId, activate) => {
+  const profile = await getProfileById(managerUserId);
+  if (!profile) throw new Error('Manager profile not found');
+
+  const nextRoles = activate
+    ? appendRole(profile.roles, 'COURT_MANAGER')
+    : removeRole(profile.roles, 'COURT_MANAGER');
+  const nextActiveRole = activate
+    ? (profile.active_role || 'PLAYER')
+    : (profile.active_role === 'COURT_MANAGER' ? 'PLAYER' : profile.active_role || 'PLAYER');
+
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .update({
+      roles: nextRoles,
+      active_role: nextActiveRole,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', managerUserId);
+
+  if (profileError) throw profileError;
+
+  const { data: userRecord, error: userError } = await supabaseAdmin.auth.admin.getUserById(managerUserId);
+  if (userError || !userRecord?.user) throw userError || new Error('Auth user not found');
+
+  const existingMeta = userRecord.user.app_metadata || {};
+  const nextMetaRoles = activate
+    ? appendRole(existingMeta.roles, 'COURT_MANAGER')
+    : removeRole(existingMeta.roles, 'COURT_MANAGER');
+  const nextMetaActiveRole = activate
+    ? (existingMeta.active_role || profile.active_role || 'PLAYER')
+    : (existingMeta.active_role === 'COURT_MANAGER' ? 'PLAYER' : existingMeta.active_role || profile.active_role || 'PLAYER');
+
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(managerUserId, {
+    app_metadata: {
+      ...existingMeta,
+      roles: nextMetaRoles,
+      active_role: nextMetaActiveRole,
+    },
+  });
+
+  if (updateError) throw updateError;
+};
+
+app.post('/api/court-managers/invite', managerInviteLimiter, async (req, res) => {
+  try {
+    const ownerUser = await requireAuthenticatedUser(req, res);
+    if (!ownerUser) return;
+
+    const { courtId, fullName, email, contactNumber } = req.body || {};
+    const managerEmail = normalizeEmail(email);
+
+    if (!courtId || !fullName || !managerEmail || !contactNumber) {
+      return res.status(400).json({ error: 'courtId, fullName, email, and contactNumber are required.' });
+    }
+
+    if (!hasEmailTransport()) {
+      return res.status(503).json({ error: 'Email service is currently unavailable.' });
+    }
+
+    const ownerProfile = await getProfileById(ownerUser.id);
+    if (!ownerProfile) {
+      return res.status(403).json({ error: 'Owner profile not found.' });
+    }
+
+    const { data: court, error: courtError } = await supabaseAdmin
+      .from('courts')
+      .select('id, name, owner_id')
+      .eq('id', courtId)
+      .eq('owner_id', ownerUser.id)
+      .maybeSingle();
+
+    if (courtError) throw courtError;
+    if (!court) return res.status(404).json({ error: 'Court not found or not owned by this user.' });
+
+    const { data: existingByEmail, error: emailAssignmentError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('id, court_id')
+      .ilike('manager_email', managerEmail)
+      .in('status', ['pending_invite', 'pending_approval', 'active']);
+
+    if (emailAssignmentError) throw emailAssignmentError;
+    const conflictingEmailAssignment = (existingByEmail || []).find((item) => item.court_id !== courtId);
+    if (conflictingEmailAssignment) {
+      return res.status(409).json({ error: 'This manager email is already assigned to another court.' });
+    }
+
+    const { data: currentAssignment, error: assignmentLookupError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('*')
+      .eq('court_id', courtId)
+      .maybeSingle();
+
+    if (assignmentLookupError) throw assignmentLookupError;
+
+    if (currentAssignment?.status === 'pending_approval') {
+      return res.status(409).json({ error: 'This manager has already registered and is waiting for approval.' });
+    }
+
+    if (currentAssignment?.status === 'active') {
+      return res.status(409).json({ error: 'This court already has an active manager. Remove them before assigning a new one.' });
+    }
+
+    const assignmentPayload = {
+      court_id: courtId,
+      owner_id: ownerUser.id,
+      manager_user_id: null,
+      manager_name: fullName.trim(),
+      manager_email: managerEmail,
+      manager_contact_number: contactNumber.trim(),
+      status: 'pending_invite',
+      invite_sent_at: new Date().toISOString(),
+      invite_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      invite_accepted_at: null,
+      approved_at: null,
+      approved_by: null,
+      removed_at: null,
+      removed_by: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: assignment, error: assignmentError } = currentAssignment
+      ? await supabaseAdmin
+          .from('court_manager_assignments')
+          .update(assignmentPayload)
+          .eq('id', currentAssignment.id)
+          .select()
+          .single()
+      : await supabaseAdmin
+          .from('court_manager_assignments')
+          .insert(assignmentPayload)
+          .select()
+          .single();
+
+    if (assignmentError) throw assignmentError;
+    const { inviteLink, expiresAt, inviteSentAt } = await createCourtManagerInviteLinkRecord({
+      assignmentId: assignment.id,
+      courtId,
+      ownerId: ownerUser.id,
+      inviteeEmail: managerEmail,
+      ttlHours: 48,
+    });
+
+    const { data: refreshedAssignment, error: refreshedAssignmentError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .update({
+        invite_sent_at: inviteSentAt,
+        invite_expires_at: expiresAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', assignment.id)
+      .select()
+      .single();
+
+    if (refreshedAssignmentError) throw refreshedAssignmentError;
+
+    const emailResult = await sendAppEmail({
+      fromAddress: SMTP_FROM_ADDRESS || process.env.RESEND_FROM_EMAIL || 'noreply@pickleplays.com',
+      fromName: SMTP_FROM_NAME || 'PicklePlay',
+      to: managerEmail,
+      subject: `PicklePlay court manager invite for ${court.name}`,
+      html: buildManagerInviteHtml({
+        ownerName: ownerProfile.full_name || ownerProfile.email || 'A court owner',
+        managerName: fullName.trim(),
+        courtName: court.name,
+        inviteLink,
+        expiresInHours: 48,
+      }),
+    });
+
+    if (emailResult?.error) {
+      throw new Error(emailResult.error.message || 'Failed to send invite email');
+    }
+
+    res.json({ success: true, assignment: refreshedAssignment, inviteLink, expiresAt });
+  } catch (error) {
+    console.error('Court manager invite error:', error);
+    res.status(500).json({ error: error.message || 'Failed to send court manager invite.' });
+  }
+});
+
+app.post('/api/court-managers/:assignmentId/copy-link', managerInviteLimiter, async (req, res) => {
+  try {
+    const ownerUser = await requireAuthenticatedUser(req, res);
+    if (!ownerUser) return;
+
+    const { data: assignment, error: assignmentError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('id, court_id, owner_id, manager_email, status')
+      .eq('id', req.params.assignmentId)
+      .eq('owner_id', ownerUser.id)
+      .maybeSingle();
+
+    if (assignmentError) throw assignmentError;
+    if (!assignment) return res.status(404).json({ error: 'Manager assignment not found.' });
+    if (assignment.status !== 'pending_invite') {
+      return res.status(409).json({ error: 'Invite links can only be copied while the invitation is still waiting to be accepted.' });
+    }
+
+    const { inviteLink, expiresAt, inviteSentAt } = await createCourtManagerInviteLinkRecord({
+      assignmentId: assignment.id,
+      courtId: assignment.court_id,
+      ownerId: assignment.owner_id,
+      inviteeEmail: assignment.manager_email,
+      ttlHours: 48,
+    });
+
+    const { data: updatedAssignment, error: updateError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .update({
+        invite_sent_at: inviteSentAt,
+        invite_expires_at: expiresAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', assignment.id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({ success: true, assignment: updatedAssignment, inviteLink, expiresAt });
+  } catch (error) {
+    console.error('Court manager copy invite link error:', error);
+    res.status(500).json({ error: error.message || 'Failed to copy invite link.' });
+  }
+});
+
+app.get('/api/court-managers/invite/:token', async (req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const inviteRecord = await getCourtManagerInviteRecord(req.params.token);
+    if (!inviteRecord?.invite || !inviteRecord?.assignment) {
+      throw createHttpError(404, 'Invite not found.');
+    }
+
+    if (inviteRecord.assignment.status === 'pending_invite') {
+      validateCourtManagerInvite(inviteRecord);
+    } else if (inviteRecord.assignment.status === 'removed') {
+      throw createHttpError(410, 'Invite link is no longer valid.');
+    }
+
+    const { invite, assignment, court } = inviteRecord;
+    const existingInviteProfile = assignment.manager_user_id
+      ? await getProfileById(assignment.manager_user_id)
+      : await getProfileByEmail(invite.invitee_email);
+
+    res.json({
+      assignmentId: assignment.id,
+      courtId: assignment.court_id,
+      courtName: court.name,
+      managerEmail: invite.invitee_email,
+      managerName: assignment.manager_name,
+      expiresAt: invite.expires_at,
+      status: assignment.status,
+      existingAccount: Boolean(existingInviteProfile || assignment.manager_user_id),
+    });
+  } catch (error) {
+    console.error('Court manager invite lookup error:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to load invite.' });
+  }
+});
+
+app.post('/api/court-managers/register', accountCreationLimiter, async (req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const { token, fullName, email, contactNumber, password } = req.body || {};
+    const managerEmail = normalizeEmail(email);
+
+    if (!token || !fullName || !managerEmail || !contactNumber || !password) {
+      return res.status(400).json({ error: 'token, fullName, email, contactNumber, and password are required.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    const inviteRecord = await getCourtManagerInviteRecord(token);
+    validateCourtManagerInvite(inviteRecord);
+
+    const { invite, assignment, court } = inviteRecord;
+
+    if (normalizeEmail(assignment.manager_email) !== managerEmail) {
+      return res.status(400).json({ error: 'Registration email must match the invited email address.' });
+    }
+
+    const accountState = await resolveCourtManagerInviteAccountState({
+      email: managerEmail,
+      assignment,
+    });
+    if (accountState.isExistingAccount) {
+      return res.status(409).json({ error: 'This email already has a PicklePlay account. Sign in to accept your Court Manager invitation.' });
+    }
+
+    const usernameBase = (fullName || managerEmail.split('@')[0])
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 24) || 'manager';
+    const username = `${usernameBase}_${Math.random().toString(36).slice(2, 7)}`;
+
+    let managerUserId = accountState.authUser?.id || null;
+    let existingProfile = accountState.profile;
+
+    if (accountState.isIncompleteInviteAccount && managerUserId) {
+      const { error: reuseUserError } = await supabaseAdmin.auth.admin.updateUserById(managerUserId, {
+        password,
+        email_confirm: true,
+        ban_duration: 'none',
+        user_metadata: {
+          ...(accountState.authUser?.user_metadata || {}),
+          full_name: fullName.trim(),
+          contact_number: contactNumber.trim(),
+        },
+        app_metadata: {
+          ...(accountState.authUser?.app_metadata || {}),
+          roles: Array.isArray(accountState.authUser?.app_metadata?.roles) && accountState.authUser.app_metadata.roles.length > 0
+            ? accountState.authUser.app_metadata.roles
+            : ['PLAYER'],
+          active_role: accountState.authUser?.app_metadata?.active_role || 'PLAYER',
+          court_manager_invite_only: true,
+        },
+      });
+
+      if (reuseUserError) throw reuseUserError;
+      existingProfile = await waitForProfileById(managerUserId);
+    } else {
+      const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+        email: managerEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName.trim(),
+          contact_number: contactNumber.trim(),
+        },
+        app_metadata: {
+          roles: ['PLAYER'],
+          active_role: 'PLAYER',
+          court_manager_invite_only: true,
+        },
+      });
+
+      if (createUserError || !createdUser?.user) {
+        const errorMessage = createUserError?.message || '';
+        if (errorMessage.includes('already been registered') || createUserError?.status === 422) {
+          return res.status(409).json({ error: 'This email already has a PicklePlay account. Sign in to accept your Court Manager invitation.' });
+        }
+        throw createUserError || new Error('Failed to create manager account.');
+      }
+
+      managerUserId = createdUser.user.id;
+      existingProfile = await waitForProfileById(managerUserId);
+    }
+
+    if (!managerUserId) {
+      throw new Error('Failed to resolve manager account.');
+    }
+
+    const profilePayload = {
+      email: managerEmail,
+      full_name: fullName.trim(),
+      username: existingProfile?.username || username,
+      active_role: existingProfile?.active_role || 'PLAYER',
+      roles: existingProfile?.roles || ['PLAYER'],
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingProfile) {
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .update(profilePayload)
+        .eq('id', managerUserId);
+
+      if (profileUpdateError) {
+        if ((profileUpdateError.message || '').toLowerCase().includes('permission denied for table users')) {
+          console.warn('Court manager profile update skipped due to existing DB trigger permissions:', profileUpdateError.message);
+        } else {
+          throw profileUpdateError;
+        }
+      }
+    } else {
+      const { error: profileInsertError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          id: managerUserId,
+          ...profilePayload,
+        });
+
+      if (profileInsertError) {
+        const profileAfterInsertError = await waitForProfileById(managerUserId, 2, 100);
+        if (!profileAfterInsertError) {
+          throw profileInsertError;
+        }
+      }
+    }
+
+    await setProfileAccountStatus(managerUserId, 'Pending Court Manager Approval');
+
+    const updatedAssignment = await moveInviteToPendingApproval({
+      inviteId: invite.id,
+      assignment,
+      court,
+      managerUserId,
+      managerName: fullName.trim(),
+      managerEmail,
+      managerContactNumber: contactNumber.trim(),
+      notificationMessage: `${fullName.trim()} completed sign-in for ${court?.name || 'the assigned court'} and is now waiting for your approval.`,
+    });
+
+    await insertNotification({
+      user_id: managerUserId,
+      type: 'SYSTEM',
+      title: 'Court manager invitation pending approval',
+      message: `Your Court Manager invitation for ${court?.name || 'the assigned court'} has been accepted and is now waiting for Court Owner approval. You can keep using your normal PicklePlay account while you wait.`,
+      action_url: '/dashboard',
+      metadata: {
+        kind: 'court_manager_waiting_approval',
+        assignmentId: updatedAssignment.id,
+        courtId: assignment.court_id,
+        courtName: court?.name || null,
+      },
+    });
+
+    res.json({ success: true, assignment: updatedAssignment });
+  } catch (error) {
+    console.error('Court manager registration error:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to register court manager.' });
+  }
+});
+
+app.post('/api/court-managers/invite/accept', managerInviteLimiter, async (req, res) => {
+  try {
+    const managerUser = await requireAuthenticatedUser(req, res);
+    if (!managerUser) return;
+
+    const { token } = req.body || {};
+    if (!token) {
+      return res.status(400).json({ error: 'token is required.' });
+    }
+
+    const managerEmail = normalizeEmail(managerUser.email);
+    if (!managerEmail) {
+      return res.status(400).json({ error: 'Your account must have a verified email address to accept this invite.' });
+    }
+
+    const inviteRecord = await getCourtManagerInviteRecord(token);
+    validateCourtManagerInvite(inviteRecord, { allowPendingApprovalForUserId: managerUser.id });
+
+    const { invite, assignment, court } = inviteRecord;
+    if (invite.used_at && invite.consumed_by === managerUser.id && assignment.status === 'pending_approval') {
+      return res.json({ success: true, assignment, alreadyAccepted: true });
+    }
+
+    if (normalizeEmail(invite.invitee_email) !== managerEmail) {
+      return res.status(403).json({ error: 'Sign in with the invited email address to accept this court manager invitation.' });
+    }
+
+    const existingProfile = await waitForProfileById(managerUser.id, 3, 100);
+    const resolvedManagerName =
+      existingProfile?.full_name ||
+      managerUser.user_metadata?.full_name ||
+      managerUser.user_metadata?.name ||
+      assignment.manager_name ||
+      managerEmail.split('@')[0];
+
+    const updatedAssignment = await moveInviteToPendingApproval({
+      inviteId: invite.id,
+      assignment,
+      court,
+      managerUserId: managerUser.id,
+      managerName: resolvedManagerName,
+      managerEmail,
+      managerContactNumber: assignment.manager_contact_number || null,
+      notificationMessage: `${resolvedManagerName} accepted the invite for ${court?.name || 'the assigned court'} and is now waiting for your approval.`,
+    });
+
+    await insertNotification({
+      user_id: managerUser.id,
+      type: 'SYSTEM',
+      title: 'Court manager invite pending approval',
+      message: `Your Court Manager invitation for ${court?.name || 'the assigned court'} has been accepted and is now waiting for Court Owner approval. Your normal PicklePlay account stays active while manager access is pending.`,
+      action_url: '/dashboard',
+      metadata: {
+        kind: 'court_manager_waiting_approval',
+        assignmentId: updatedAssignment.id,
+        courtId: assignment.court_id,
+        courtName: court?.name || null,
+      },
+    });
+
+    res.json({ success: true, assignment: updatedAssignment });
+  } catch (error) {
+    console.error('Court manager invite acceptance error:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to accept court manager invite.' });
+  }
+});
+
+app.get('/api/court-managers/login-state', authLimiter, async (req, res) => {
+  try {
+    const guard = requireSupabaseAdmin();
+    if (!guard.ok) return res.status(500).json({ error: guard.message });
+
+    const email = normalizeEmail(req.query.email);
+    if (!email) {
+      return res.status(400).json({ error: 'email is required.' });
+    }
+
+    const { data: assignments, error: assignmentError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('id, status, manager_user_id, manager_email')
+      .ilike('manager_email', email)
+      .in('status', ['pending_invite', 'pending_approval', 'active'])
+      .order('updated_at', { ascending: false });
+
+    if (assignmentError) throw assignmentError;
+
+    const assignment = (assignments || [])[0] || null;
+    const accountState = await resolveCourtManagerInviteAccountState({ email, assignment });
+
+    if (accountState.isIncompleteInviteAccount) {
+      return res.json({ state: 'pending_invite_registration' });
+    }
+
+    if (assignment?.status === 'pending_approval') {
+      let restoredLoginAccess = false;
+
+      if (
+        assignment.manager_user_id &&
+        accountState.authUser &&
+        accountState.authUser.id === assignment.manager_user_id &&
+        (isFutureTimestamp(accountState.authUser.banned_until) || accountState.authUser.app_metadata?.court_manager_invite_only)
+      ) {
+        try {
+          restoredLoginAccess = await releasePendingCourtManagerAuthState(assignment.manager_user_id);
+        } catch (repairError) {
+          console.warn('Unable to auto-repair pending court manager login state:', repairError.message);
+        }
+      }
+
+      return res.json({ state: 'pending_owner_approval', restoredLoginAccess });
+    }
+
+    return res.json({ state: 'none' });
+  } catch (error) {
+    console.error('Court manager login state error:', error);
+    res.status(500).json({ error: error.message || 'Failed to resolve court manager login state.' });
+  }
+});
+
+app.post('/api/court-managers/:assignmentId/approve', managerInviteLimiter, async (req, res) => {
+  try {
+    const ownerUser = await requireAuthenticatedUser(req, res);
+    if (!ownerUser) return;
+
+    const { data: assignment, error } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('*')
+      .eq('id', req.params.assignmentId)
+      .eq('owner_id', ownerUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!assignment) return res.status(404).json({ error: 'Manager assignment not found.' });
+    if (!assignment.manager_user_id) return res.status(400).json({ error: 'Manager has not registered yet.' });
+    if (assignment.status !== 'pending_approval') {
+      return res.status(409).json({ error: 'Only managers waiting for approval can be activated.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data: updatedAssignment, error: updateError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .update({
+        status: 'active',
+        approved_at: nowIso,
+        approved_by: ownerUser.id,
+        updated_at: nowIso,
+      })
+      .eq('id', assignment.id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    await updateManagerRoleState(assignment.manager_user_id, true);
+    const { error: unbanError } = await supabaseAdmin.auth.admin.updateUserById(assignment.manager_user_id, {
+      ban_duration: 'none',
+    });
+    if (unbanError) throw unbanError;
+    try {
+      await setCourtManagerInviteOnlyFlag(assignment.manager_user_id, false);
+    } catch (metaError) {
+      console.warn('Unable to clear court manager invite-only auth flag during approval:', metaError.message);
+    }
+    await setProfileAccountStatus(assignment.manager_user_id, 'Active');
+
+    await insertNotification({
+      user_id: assignment.manager_user_id,
+      type: 'SYSTEM',
+      title: 'Court manager access approved',
+      message: 'Your Court Manager access is now active. Switch to Court Manager mode from your dashboard to manage your assigned court.',
+      action_url: '/dashboard',
+      metadata: {
+        kind: 'court_manager_access_approved',
+        assignmentId: updatedAssignment.id,
+        courtId: assignment.court_id,
+      },
+    });
+
+    res.json({ success: true, assignment: updatedAssignment });
+  } catch (error) {
+    console.error('Court manager approval error:', error);
+    res.status(500).json({ error: error.message || 'Failed to approve court manager.' });
+  }
+});
+
+app.post('/api/court-managers/:assignmentId/remove', managerInviteLimiter, async (req, res) => {
+  try {
+    const ownerUser = await requireAuthenticatedUser(req, res);
+    if (!ownerUser) return;
+
+    const { data: assignment, error } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .select('*')
+      .eq('id', req.params.assignmentId)
+      .eq('owner_id', ownerUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!assignment) return res.status(404).json({ error: 'Manager assignment not found.' });
+    if (assignment.status === 'removed') {
+      return res.status(409).json({ error: 'Manager assignment has already been removed.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const previousStatus = assignment.status;
+    const managerUserId = assignment.manager_user_id;
+    const { data: updatedAssignment, error: updateError } = await supabaseAdmin
+      .from('court_manager_assignments')
+      .update({
+        status: 'removed',
+        removed_at: nowIso,
+        removed_by: ownerUser.id,
+        invite_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq('id', assignment.id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    await supabaseAdmin
+      .from('court_manager_invites')
+      .update({ revoked_at: nowIso })
+      .eq('assignment_id', assignment.id)
+      .is('used_at', null)
+      .is('revoked_at', null);
+
+    if (managerUserId) {
+      const { data: activeAssignments, error: activeAssignmentsError } = await supabaseAdmin
+        .from('court_manager_assignments')
+        .select('id')
+        .eq('manager_user_id', managerUserId)
+        .in('status', ['pending_approval', 'active']);
+
+      if (activeAssignmentsError) throw activeAssignmentsError;
+      if (!activeAssignments || activeAssignments.length === 0) {
+        await updateManagerRoleState(managerUserId, false);
+      }
+
+      const { error: unbanError } = await supabaseAdmin.auth.admin.updateUserById(managerUserId, {
+        ban_duration: 'none',
+      });
+      if (unbanError) {
+        console.warn('Unable to reset court manager auth state during removal:', unbanError.message);
+      }
+      try {
+        await setCourtManagerInviteOnlyFlag(managerUserId, false);
+      } catch (metaError) {
+        console.warn('Unable to clear court manager invite-only auth flag during removal:', metaError.message);
+      }
+
+      await setProfileAccountStatus(managerUserId, 'Active');
+
+      await insertNotification({
+        user_id: managerUserId,
+        type: 'SYSTEM',
+        title: 'Court manager access removed',
+        message: previousStatus === 'pending_approval'
+          ? 'Your court manager invitation was removed by the court owner before approval.'
+          : 'Your court manager assignment has been removed by the court owner.',
+        action_url: '/profile',
+        metadata: {
+          kind: 'court_manager_access_removed',
+          assignmentId: updatedAssignment.id,
+          courtId: assignment.court_id,
+        },
+      });
+    }
+
+    res.json({ success: true, assignment: updatedAssignment });
+  } catch (error) {
+    console.error('Court manager removal error:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove court manager.' });
+  }
+});
+
+app.post('/api/court-managers/bookings/:bookingId/action', managerInviteLimiter, async (req, res) => {
+  try {
+    const managerUser = await requireAuthenticatedUser(req, res);
+    if (!managerUser) return;
+
+    const assignment = await getActiveCourtManagerAssignment(managerUser.id);
+    if (!assignment) {
+      return res.status(403).json({ error: 'You do not have active court manager access.' });
+    }
+
+    const { action } = req.body || {};
+    const allowedActions = new Set(['confirm', 'cancel', 'check_in', 'check_out', 'no_show']);
+    if (!allowedActions.has(action)) {
+      return res.status(400).json({ error: 'Unsupported booking action.' });
+    }
+
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from('bookings')
+      .select('id, court_id, status, payment_status, is_checked_in, checked_out_at, is_no_show')
+      .eq('id', req.params.bookingId)
+      .maybeSingle();
+
+    if (bookingError) throw bookingError;
+    if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+    if (booking.court_id !== assignment.court_id) {
+      return res.status(403).json({ error: 'This booking is outside your assigned court.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    let updates = null;
+
+    switch (action) {
+      case 'confirm':
+        if (booking.status !== 'pending') {
+          return res.status(409).json({ error: 'Only pending bookings can be confirmed.' });
+        }
+        updates = { status: 'confirmed', updated_at: nowIso };
+        break;
+      case 'cancel':
+        if (booking.status === 'cancelled' || booking.status === 'completed') {
+          return res.status(409).json({ error: 'This booking can no longer be cancelled.' });
+        }
+        if (booking.payment_status === 'paid') {
+          return res.status(403).json({ error: 'Court managers cannot cancel paid bookings or process refunds.' });
+        }
+        updates = { status: 'cancelled', updated_at: nowIso };
+        break;
+      case 'check_in':
+        if (booking.payment_status !== 'paid') {
+          return res.status(403).json({ error: 'Only paid bookings can be checked in by a court manager.' });
+        }
+        if (booking.status === 'cancelled' || booking.status === 'completed' || booking.is_checked_in) {
+          return res.status(409).json({ error: 'This booking cannot be checked in.' });
+        }
+        updates = {
+          status: 'confirmed',
+          is_checked_in: true,
+          checked_in_at: nowIso,
+          updated_at: nowIso,
+        };
+        break;
+      case 'check_out':
+        if (!booking.is_checked_in || booking.checked_out_at || booking.status === 'completed') {
+          return res.status(409).json({ error: 'This booking cannot be checked out.' });
+        }
+        updates = {
+          status: 'completed',
+          checked_out_at: nowIso,
+          updated_at: nowIso,
+        };
+        break;
+      case 'no_show':
+        if (booking.is_checked_in || booking.status === 'completed') {
+          return res.status(409).json({ error: 'Checked-in or completed bookings cannot be marked as no-show.' });
+        }
+        updates = {
+          is_no_show: true,
+          status: 'cancelled',
+          updated_at: nowIso,
+        };
+        break;
+      default:
+        return res.status(400).json({ error: 'Unsupported booking action.' });
+    }
+
+    const { data: updatedBooking, error: updateError } = await supabaseAdmin
+      .from('bookings')
+      .update(updates)
+      .eq('id', booking.id)
+      .select('id, court_id, status, payment_status, is_checked_in, checked_in_at, checked_out_at, is_no_show, updated_at')
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({ success: true, booking: updatedBooking });
+  } catch (error) {
+    console.error('Court manager booking action error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update booking.' });
+  }
+});
+
 // Start server
-app.listen(PORT, () => {
+if (isDirectExecution) {
+  app.listen(PORT, () => {
   console.log(`📧 Email server running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
-});
+  });
+}
+
+export default app;
 
 const requireSupabaseAdmin = () => {
   if (!supabaseAdmin || !WEB_AUTH_REDIRECT_URL) {
@@ -933,6 +3037,32 @@ const requireSupabaseAdmin = () => {
 
   return { ok: true };
 };
+
+const securityReauthToolkit = createSecurityReauthToolkit({
+  supabaseAdmin,
+  supabaseUrl: SUPABASE_URL,
+  supabaseAnonKey: SUPABASE_ANON_KEY,
+  appBaseUrl: WEB_AUTH_REDIRECT_URL || process.env.VITE_APP_URL || 'https://www.pickleplay.ph',
+  requireSupabaseAdmin,
+  requireAuthenticatedSession,
+  authLimiter,
+  emailLimiter,
+  trustSecret: SECURITY_REAUTH_TRUST_SECRET,
+  codeExpirySeconds: SECURITY_REAUTH_CODE_EXPIRY_SECONDS,
+});
+
+app.use('/api/auth/security', securityReauthToolkit.router);
+
+app.use('/api/auth/2fa', createTwoFactorRouter({
+  supabaseAdmin,
+  requireSupabaseAdmin,
+  requireAuthenticatedSession,
+  authLimiter,
+  emailLimiter,
+  sendTwoFactorEmail,
+  secret: TWO_FACTOR_SECRET,
+  consumeSecurityTrust: securityReauthToolkit.consumeTrustToken,
+}));
 
 // ─── QR Login Endpoints ───────────────────────────────────────
 app.post('/api/auth/qr/start', authLimiter, async (_req, res) => {

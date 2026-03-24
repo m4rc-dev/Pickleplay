@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, ArrowUpRight } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, ArrowUpRight, Facebook, Copy } from 'lucide-react';
+import useSEO from '../hooks/useSEO';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface ApiArticle {
-  id: number;
+  id: number | string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -63,6 +64,26 @@ const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1593113598332-cd288d649433?auto=format&fit=crop&q=80&w=800',
 ];
 
+const getNewsArticleSlug = (article: Pick<NormalizedArticle, 'slug' | 'title'>) => {
+  const safeSlug = (article.slug || article.title || 'article')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return safeSlug || 'article';
+};
+
+const stripHtml = (value: string) => value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+const buildExcerpt = (raw: ApiArticle) => {
+  const explicitExcerpt = stripHtml(raw.excerpt || '');
+  if (explicitExcerpt) return explicitExcerpt;
+
+  const plainBody = stripHtml(raw.body || raw.content || '');
+  if (!plainBody) return 'No preview available.';
+  return plainBody.length > 180 ? `${plainBody.substring(0, 180)}...` : plainBody;
+};
+
 function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
   const date = raw.published_at || raw.created_at || raw.date || '';
@@ -71,7 +92,7 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   return {
     id: String(raw.id),
     title: raw.title || 'Untitled Article',
-    excerpt: raw.excerpt || (raw.body || raw.content || '').substring(0, 180) + '...',
+    excerpt: buildExcerpt(raw),
     body: raw.body || raw.content || '',
     category: raw.category || raw.category_name || 'General',
     date: date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
@@ -84,6 +105,18 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
     sourceUrl: raw.url || raw.external_url || '',
   };
 }
+
+const buildNewsArticlePath = (article: NormalizedArticle) => {
+  return `/news/${getNewsArticleSlug(article)}`;
+};
+
+const buildAbsoluteNewsArticleUrl = (article: NormalizedArticle) => {
+  const articlePath = buildNewsArticlePath(article);
+  if (typeof window === 'undefined') {
+    return `https://www.pickleplay.ph${articlePath}`;
+  }
+  return new URL(articlePath, window.location.origin).toString();
+};
 
 function formatDateLong(dateStr: string) {
   if (!dateStr) return '';
@@ -171,6 +204,42 @@ function formatArticleBody(body: string): string {
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
   const formattedBody = formatArticleBody(article.body);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const handleFacebookShare = () => {
+    const shareUrl = buildAbsoluteNewsArticleUrl(article);
+    const shareWindowUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    window.open(shareWindowUrl, '_blank', 'noopener,noreferrer,width=640,height=720');
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      const shareUrl = buildAbsoluteNewsArticleUrl(article);
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy article link:', error);
+    }
+  };
+
+  const handleShareMore = async () => {
+    const shareUrl = buildAbsoluteNewsArticleUrl(article);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: article.title,
+          text: article.excerpt,
+          url: shareUrl,
+        });
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    await handleCopyLink();
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700 pb-12">
@@ -221,12 +290,27 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
               <p className="text-sm font-black text-slate-900">{article.readTime}</p>
             </div>
 
-            <div className="ml-auto flex gap-2">
-              <button className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
-                <Share2 size={16} />
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
+              <button
+                onClick={handleFacebookShare}
+                className="h-10 px-4 flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#166FE5] rounded-xl text-white transition-all border border-[#1877F2]"
+              >
+                <Facebook size={16} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Facebook</span>
               </button>
-              <button className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
-                <Bookmark size={16} />
+              <button
+                onClick={() => void handleCopyLink()}
+                className="h-10 px-4 flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-600 hover:text-blue-600 transition-all border border-slate-100"
+              >
+                <Copy size={16} />
+                <span className="text-[10px] font-black uppercase tracking-widest">{copiedLink ? 'Copied' : 'Copy Link'}</span>
+              </button>
+              <button
+                onClick={() => void handleShareMore()}
+                className="h-10 px-4 flex items-center justify-center gap-2 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-blue-600 transition-all border border-slate-200"
+              >
+                <Share2 size={16} />
+                <span className="text-[10px] font-black uppercase tracking-widest">More</span>
               </button>
             </div>
           </div>
@@ -371,11 +455,36 @@ const NewsSkeleton: React.FC = () => (
   </div>
 );
 
+const NewsLoadingCard: React.FC<{ title?: string; subtitle?: string }> = ({
+  title = 'Loading News',
+  subtitle = 'Fetching the latest stories for you.',
+}) => (
+  <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+    <div>
+      <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
+      <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
+    </div>
+    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-5 mx-auto">
+        <div className="flex gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+      <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">{title}</h3>
+      <p className="text-slate-500 text-sm font-medium">{subtitle}</p>
+    </div>
+  </div>
+);
+
 // ─── Main News Component ────────────────────────────────────────
 const News: React.FC = () => {
   const navigate = useNavigate();
+  const { legacyArticleId, slug } = useParams<{ legacyArticleId?: string; slug?: string }>();
+  const isArticleRoute = Boolean(slug || legacyArticleId);
   const [articles, setArticles] = useState<NormalizedArticle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isArticleRoute);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -413,8 +522,54 @@ const News: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (isArticleRoute) return;
     fetchArticles(page);
-  }, [page, fetchArticles]);
+  }, [isArticleRoute, page, fetchArticles]);
+
+  const fetchArticleDetail = useCallback(async (options: { legacyId?: string; articleSlug?: string }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      let rawArticle: ApiArticle | null = null;
+
+      if (options.articleSlug) {
+        const slugResponse = await fetch(`/api/v1/news/articles/slug/${encodeURIComponent(options.articleSlug)}`);
+        if (slugResponse.ok) {
+          const slugResult = await slugResponse.json();
+          rawArticle = slugResult?.data || slugResult?.article || slugResult || null;
+        }
+      }
+
+      if (!rawArticle && options.legacyId) {
+        const response = await fetch(`/api/v1/news/articles/${options.legacyId}`);
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        const result = await response.json();
+        rawArticle = result?.data || result?.article || result || null;
+      }
+
+      if (!rawArticle) throw new Error('Article not found');
+      setSelectedArticle(normalizeArticle(rawArticle, 0));
+    } catch (err: any) {
+      setSelectedArticle(null);
+      setError(err.message || 'Failed to load article');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isArticleRoute) {
+      setSelectedArticle(null);
+      setLoading(false);
+      return;
+    }
+    fetchArticleDetail({ legacyId: legacyArticleId, articleSlug: slug });
+  }, [fetchArticleDetail, isArticleRoute, legacyArticleId, slug]);
+
+  useEffect(() => {
+    if (!legacyArticleId || !selectedArticle) return;
+    navigate(buildNewsArticlePath(selectedArticle), { replace: true });
+  }, [legacyArticleId, navigate, selectedArticle]);
 
   const handleImageError = (articleId: string) => {
     setImageErrors(prev => new Set(prev).add(articleId));
@@ -425,9 +580,56 @@ const News: React.FC = () => {
     return imageErrors.has(article.id) ? FALLBACK_IMAGE : article.image;
   };
 
+  useSEO(
+    isArticleRoute && selectedArticle
+      ? {
+          title: `${selectedArticle.title} | Pickleball News Philippines`,
+          description: selectedArticle.excerpt,
+          canonical: `https://www.pickleplay.ph${buildNewsArticlePath(selectedArticle)}`,
+          ogType: 'article',
+          image: selectedArticle.image,
+          structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'NewsArticle',
+            headline: selectedArticle.title,
+            description: selectedArticle.excerpt,
+            image: [selectedArticle.image],
+            author: {
+              '@type': 'Person',
+              name: selectedArticle.author,
+            },
+            datePublished: selectedArticle.rawDate || undefined,
+            dateModified: selectedArticle.rawDate || undefined,
+            mainEntityOfPage: `https://www.pickleplay.ph${buildNewsArticlePath(selectedArticle)}`,
+            publisher: {
+              '@type': 'Organization',
+              name: 'PicklePlay Philippines',
+              logo: {
+                '@type': 'ImageObject',
+                url: 'https://www.pickleplay.ph/images/PicklePlayLogo.jpg',
+              },
+            },
+          },
+        }
+      : {
+          title: 'Pickleball News Philippines | PicklePlay',
+          description:
+            'Stay updated with pickleball news in the Philippines, including tournaments, player highlights, community stories, and local updates.',
+          canonical: 'https://www.pickleplay.ph/news',
+          structuredData: {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: 'Pickleball News Philippines',
+            url: 'https://www.pickleplay.ph/news',
+            description:
+              'Latest pickleball news, stories, and community updates from the Philippines.',
+          },
+        }
+  );
+
   // ── Article Detail ──
-  if (selectedArticle) {
-    return <ArticleDetail article={selectedArticle} onBack={() => setSelectedArticle(null)} />;
+  if (isArticleRoute && selectedArticle) {
+    return <ArticleDetail article={selectedArticle} onBack={() => navigate('/news')} />;
   }
 
   // Get unique categories
@@ -461,7 +663,7 @@ const News: React.FC = () => {
           <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">Unable to Load News</h3>
           <p className="text-slate-500 text-sm mb-6 font-medium">{error}</p>
           <button
-            onClick={() => fetchArticles(page)}
+            onClick={() => (isArticleRoute ? fetchArticleDetail({ legacyId: legacyArticleId, articleSlug: slug }) : fetchArticles(page))}
             className="inline-flex items-center gap-2 px-6 py-3.5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg active:scale-95"
           >
             <RefreshCw size={16} /> Try Again
@@ -473,32 +675,18 @@ const News: React.FC = () => {
 
   // ── Loading ──
   if (loading) {
-    return <NewsSkeleton />;
+    return isArticleRoute
+      ? <NewsLoadingCard title="Loading Article" subtitle="Opening this story for you." />
+      : <NewsSkeleton />;
+  }
+
+  if (isArticleRoute) {
+    return <NewsLoadingCard title="Loading Article" subtitle="Opening this story for you." />;
   }
 
   // ── Empty State ──
   if (articles.length === 0) {
-    return (
-      <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
-        </div>
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-5 mx-auto">
-            <Newspaper size={28} className="text-blue-600" />
-          </div>
-          <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">No Articles Found</h3>
-          <p className="text-slate-500 text-sm mb-6 font-medium">Check back later for the latest updates.</p>
-          <button
-            onClick={() => fetchArticles(page)}
-            className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95"
-          >
-            <RefreshCw size={16} /> Refresh Feed
-          </button>
-        </div>
-      </div>
-    );
+    return <NewsLoadingCard title="Loading News" subtitle="Fetching the latest stories for you." />;
   }
 
   return (
@@ -511,7 +699,7 @@ const News: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => fetchArticles(page)}
+            onClick={() => (isArticleRoute ? fetchArticleDetail({ legacyId: legacyArticleId, articleSlug: slug }) : fetchArticles(page))}
             className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
           >
             <RefreshCw size={16} /> Refresh
@@ -552,13 +740,13 @@ const News: React.FC = () => {
       {featuredArticle && (
         <div
           className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden cursor-pointer group"
-          onClick={() => setSelectedArticle(featuredArticle)}
+          onClick={() => navigate(buildNewsArticlePath(featuredArticle))}
         >
           <div className="flex flex-col lg:flex-row">
             <div className="lg:w-3/5 relative aspect-[16/10] lg:aspect-auto overflow-hidden">
               <img
                 src={getArticleImage(featuredArticle)}
-                alt=""
+                alt={featuredArticle.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 min-h-[280px] lg:min-h-[360px]"
                 onError={() => handleImageError(featuredArticle.id)}
               />
@@ -630,13 +818,13 @@ const News: React.FC = () => {
                 <div
                   key={article.id}
                   className="group cursor-pointer rounded-[20px] sm:rounded-[24px] border border-slate-100 hover:border-blue-200 bg-white hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col"
-                  onClick={() => setSelectedArticle(article)}
+                  onClick={() => navigate(buildNewsArticlePath(article))}
                 >
                   {/* Image */}
                   <div className="aspect-[16/10] overflow-hidden relative">
                     <img
                       src={getArticleImage(article)}
-                      alt=""
+                      alt={article.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={() => handleImageError(article.id)}
                     />
@@ -815,3 +1003,4 @@ const News: React.FC = () => {
 };
 
 export default News;
+
