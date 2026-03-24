@@ -170,6 +170,11 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   const [isSavingDateOverride, setIsSavingDateOverride] = useState(false);
   const [opHoursMonth, setOpHoursMonth] = useState(getNowPH()); // month calendar for date overrides
 
+  // Setup review + celebration
+  const [showSetupReview, setShowSetupReview] = useState(false);
+  const [showReadyCelebration, setShowReadyCelebration] = useState(false);
+  const [isConfirmingSetup, setIsConfirmingSetup] = useState(false);
+
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; visible: boolean }>({ message: '', type: 'info', visible: false });
 
@@ -394,13 +399,25 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   };
 
   /** Manual override: let owner mark court as ready even with base_price = 0 (free court) */
-  const handleManualSetupComplete = async () => {
+  const handleManualSetupComplete = () => {
     if (!selectedCourtId || !selectedCourt) return;
     if (daysWithCustomHours === 0) {
       showToast('Please set operation hours first before marking as ready.', 'error');
       return;
     }
-    await markCourtSetupComplete(selectedCourtId);
+    setShowSetupReview(true);
+  };
+
+  const confirmSetupReady = async () => {
+    if (!selectedCourtId || !selectedCourt) return;
+    setIsConfirmingSetup(true);
+    try {
+      await markCourtSetupComplete(selectedCourtId);
+      setShowSetupReview(false);
+      setShowReadyCelebration(true);
+    } finally {
+      setIsConfirmingSetup(false);
+    }
   };
 
   // ──────── Calendar Helpers ────────
@@ -435,6 +452,15 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   const dateHasSpecificRules = (day: number) => {
     const dateStr = `${calendarYear}-${(calendarMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     return rules.some(r => r.specific_date === dateStr);
+  };
+
+  const readableWeeklyHours = () => {
+    const openDays = opHoursSchedule.filter(d => !d.isClosed).length;
+    const firstOpen = opHoursSchedule.find(d => !d.isClosed);
+    return {
+      openDays,
+      sampleLabel: firstOpen ? `${DAY_SHORT[firstOpen.dayOfWeek]} ${formatTime12(firstOpen.openTime)} – ${formatTime12(firstOpen.closeTime)}` : 'No open days yet'
+    };
   };
 
   const { sundays: first3Sundays, rangeEnd: thirdSundayDay } = getFirstThreeSundaysInfo(calendarYear, calendarMonth);
@@ -931,7 +957,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                     onClick={handleManualSetupComplete}
                     className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200/50 flex items-center gap-2"
                   >
-                    <CheckCircle2 size={16} /> Activate Court — Make Visible to Players
+                    <CheckCircle2 size={16} /> Review & Activate Court
                   </button>
                 </div>
               )}
@@ -945,7 +971,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                     onClick={handleManualSetupComplete}
                     className="px-4 py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-sm flex items-center gap-1.5"
                   >
-                    <CheckCircle2 size={12} /> Activate as Free Court
+                    <CheckCircle2 size={12} /> Review & Activate as Free Court
                   </button>
                 </div>
               )}
@@ -2172,6 +2198,105 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               <button onClick={() => { openEditForm(viewingRule); setViewingRule(null); }} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"><Pencil size={14} /> Edit</button>
               <button onClick={() => { deleteRule(viewingRule.id); setViewingRule(null); }} className="px-5 py-3 bg-rose-50 text-rose-600 font-bold rounded-xl text-sm hover:bg-rose-100 transition-all border border-rose-100"><Trash2 size={14} /></button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ═══ SETUP REVIEW MODAL ═══ */}
+      {showSetupReview && selectedCourt && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={() => setShowSetupReview(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-[28px] shadow-2xl p-7 space-y-5 overflow-hidden">
+            <div className="absolute inset-x-0 -top-14 h-28 bg-gradient-to-r from-emerald-500 via-blue-500 to-lime-400 opacity-20 blur-3xl pointer-events-none" />
+            <div className="relative">
+              <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em] mb-1">Final Review</p>
+              <h3 className="text-xl font-black text-slate-900 leading-tight">Confirm your court setup</h3>
+              <p className="text-sm text-slate-500 font-medium">Review base price and operation hours before activating.</p>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-3 relative">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black">₱</div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Price</p>
+                  <p className="text-lg font-black text-slate-900">₱{selectedCourt.base_price}/hr</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                  <Clock size={16} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Operation Hours</p>
+                  <p className="text-sm font-bold text-slate-800">{readableWeeklyHours().openDays}/7 days open</p>
+                  <p className="text-[11px] text-slate-500">Sample: {readableWeeklyHours().sampleLabel}</p>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium">Location: <span className="font-bold text-slate-800">{selectedCourt.location_name || 'Unnamed venue'}</span></div>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white border border-emerald-100 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Ready to go live</p>
+                <p className="text-sm font-bold text-emerald-800">Players will see this court after activation.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowSetupReview(false)} className="px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-all">Go Back</button>
+              <button
+                onClick={confirmSetupReady}
+                disabled={isConfirmingSetup}
+                className="flex-1 py-3 bg-emerald-600 text-white font-black rounded-xl text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200/50 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isConfirmingSetup ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Confirm & Activate — Let's dink in!
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ═══ CELEBRATION MODAL ═══ */}
+      {showReadyCelebration && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={() => setShowReadyCelebration(false)} />
+          <style>{`
+            @keyframes confetti-fall { 0% { transform: translateY(-20vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(70vh) rotate(360deg); opacity: 0; } }
+          `}</style>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {Array.from({ length: 22 }).map((_, i) => {
+              const left = Math.random() * 100;
+              const delay = Math.random() * 1.5;
+              const duration = 2.8 + Math.random();
+              const colors = ['#22c55e', '#2563eb', '#a855f7', '#f59e0b', '#ec4899'];
+              const color = colors[i % colors.length];
+              return (
+                <span
+                  key={i}
+                  className="absolute block w-2 h-3 rounded-sm"
+                  style={{ left: `${left}%`, top: '-10vh', backgroundColor: color, animation: `confetti-fall ${duration}s linear ${delay}s forwards` }}
+                />
+              );
+            })}
+          </div>
+          <div className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl p-8 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center">
+              <CheckCircle2 size={36} />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight">Court is live — let's dink in! 🏓</h3>
+            <p className="text-sm text-slate-500 font-medium">Your base price and operation hours are set. Players can now see and book this court.</p>
+            <button
+              onClick={() => setShowReadyCelebration(false)}
+              className="w-full py-3 bg-emerald-600 text-white font-black rounded-xl text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200/50"
+            >
+              Awesome, take me back
+            </button>
           </div>
         </div>,
         document.body

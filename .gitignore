@@ -7,3 +7,4 @@ backup_database
 .env.*
 !.env.example
 /docs
+web/.env

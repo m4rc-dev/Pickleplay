@@ -419,7 +419,7 @@ const AdminVerificationPanel: React.FC<AdminVerificationPanelProps> = ({ current
   const v = selectedVerification;
   const cfg = STATUS_CONFIG[v.status] || STATUS_CONFIG.PENDING;
   const fields = getVerificationFields(v);
-  const isActionable = v.status === 'PENDING' || v.status === 'UNDER_REVIEW' || v.status === 'RESUBMISSION_REQUESTED';
+  const isActionable = ['PENDING', 'UNDER_REVIEW', 'RESUBMISSION_REQUESTED', 'PENDING_REVIEW', 'READY_FOR_REVIEW'].includes(v.status);
   const isProcessingThis = processing === v.id;
 
   return (
@@ -625,17 +625,15 @@ const AdminVerificationPanel: React.FC<AdminVerificationPanelProps> = ({ current
               {/* Per-field Comment Input (when flagged) */}
               {isFlagged && isActionable && (
                 <div className="px-5 pb-5 pt-2">
-                  <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
-                    <label className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2 block flex items-center gap-1">
-                      <MessageSquare size={10} /> Comment for Applicant
-                    </label>
-                    <textarea
-                      value={comment}
-                      onChange={(e) => updateFieldComment(field.key, e.target.value)}
-                      placeholder={`Explain what's wrong with this ${field.label.toLowerCase()}...`}
-                      className="w-full px-4 py-3 rounded-xl border border-orange-200 bg-white font-medium text-sm focus:outline-none focus:border-orange-400 min-h-[80px] resize-none transition-all"
-                    />
-                  </div>
+                  <label className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2 block flex items-center gap-1">
+                    <MessageSquare size={10} /> Comment for Applicant
+                  </label>
+                  <textarea
+                    value={comment}
+                    onChange={(e) => updateFieldComment(field.key, e.target.value)}
+                    placeholder={`Explain what's wrong with this ${field.label.toLowerCase()}...`}
+                    className="w-full px-4 py-3 rounded-xl border border-orange-200 bg-white font-medium text-sm focus:outline-none focus:border-orange-400 min-h-[50px] resize-none transition-all"
+                  />
                 </div>
               )}
 
@@ -665,7 +663,7 @@ const AdminVerificationPanel: React.FC<AdminVerificationPanelProps> = ({ current
           {flaggedFields.size > 0 && (
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
               <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider mb-2">
-                🚩 {flaggedFields.size} Field{flaggedFields.size > 1 ? 's' : ''} Flagged for Resubmission:
+                ▶ {flaggedFields.size} FIELD{flaggedFields.size > 1 ? 'S' : ''} FLAGGED FOR RESUBMISSION:
               </p>
               <div className="flex flex-wrap gap-2">
                 {[...flaggedFields].map(f => (
@@ -720,7 +718,7 @@ const AdminVerificationPanel: React.FC<AdminVerificationPanelProps> = ({ current
               onClick={() => setShowRejectModal(true)}
               className="px-8 py-4 bg-red-500 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-red-600 disabled:opacity-50 transition-all flex items-center gap-2"
             >
-              <ThumbsDown size={14} /> Reject
+              <XCircle size={14} /> Reject
             </button>
           </div>
         </div>

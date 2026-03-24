@@ -13,8 +13,18 @@ interface ReceiptProps {
         date: string;
         startTime: string;
         endTime: string;
-        pricePerHour: number;
-        totalPrice: number;
+        pricePerHour?: number;
+        totalPrice?: number;
+        totalAmount?: number;
+        paymentId?: string;
+        bookingGroups?: Array<{
+            bookingId?: string;
+            label?: string;
+            startTime: string;
+            endTime: string;
+            totalPrice?: number;
+            hours?: number;
+        }>;
         playerName?: string;
         ownerName?: string;
         status?: string;
@@ -126,7 +136,11 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
     const normalizedPaymentStatus = bookingData.paymentStatus === 'paid'
         ? 'paid'
-        : 'proof_submitted'; // Treat unpaid/undefined as under review
+        : bookingData.paymentStatus === 'unpaid'
+            ? 'unpaid'
+            : 'proof_submitted'; // Treat unpaid/undefined as under review
+    const bookingGroups = bookingData.bookingGroups || [];
+    const totalPaid = (bookingData.totalAmount ?? bookingData.totalPrice ?? 0);
     const isConfirmed = bookingData.status === 'confirmed';
     const isPaid = normalizedPaymentStatus === 'paid';
     const isCompleted = isConfirmed && isPaid;
@@ -228,12 +242,45 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                             <span className="text-xs md:text-sm font-black text-slate-900 uppercase">{formatDate(bookingData.date)}</span>
                                         </div>
 
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Time Slot</span>
-                                            <span className="text-xs md:text-sm font-black text-blue-600 bg-blue-50 px-2 md:px-3 py-0.5 md:py-1 rounded-lg uppercase">
-                                                {formatTime(bookingData.startTime)} - {formatTime(bookingData.endTime)}
-                                            </span>
-                                        </div>
+                                        {bookingData.paymentId && (
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Payment ID</span>
+                                                <span className="text-xs md:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2 md:px-3 py-0.5 md:py-1 rounded-lg border border-blue-100">{bookingData.paymentId}</span>
+                                            </div>
+                                        )}
+
+                                        {bookingGroups.length === 0 && (
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Time Slot</span>
+                                                <span className="text-xs md:text-sm font-black text-blue-600 bg-blue-50 px-2 md:px-3 py-0.5 md:py-1 rounded-lg uppercase">
+                                                    {formatTime(bookingData.startTime)} - {formatTime(bookingData.endTime)}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {bookingGroups.length > 0 && (
+                                            <div className="space-y-2">
+                                                <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Booking Groups</span>
+                                                <div className="space-y-1.5">
+                                                    {bookingGroups.map((g, idx) => (
+                                                        <div key={g.bookingId || idx} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">{g.label || `Booking ${idx + 1}`}</span>
+                                                                <span className="text-[11px] md:text-xs font-bold text-slate-900">{formatTime(g.startTime)} - {formatTime(g.endTime)}</span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-[11px] md:text-xs font-black text-blue-700">
+                                                                    {g.hours ? `${g.hours} hr${g.hours > 1 ? 's' : ''}` : ''}
+                                                                </span>
+                                                                {g.totalPrice !== undefined && (
+                                                                    <div className="text-[11px] text-slate-600 font-semibold">₱{g.totalPrice.toFixed(2)}</div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="pt-4 md:pt-6 space-y-3 md:space-y-4 border-t border-slate-100">
@@ -246,7 +293,13 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
 
                                         <div className="flex justify-between items-center">
                                             <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-wide">Rate / HR</span>
-                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">{bookingData.pricePerHour > 0 ? `₱${bookingData.pricePerHour.toFixed(2)}` : 'FREE'}</span>
+                                            <span className="text-xs md:text-sm font-black text-slate-900 uppercase">
+                                                {bookingGroups.length > 0
+                                                    ? 'See booking groups'
+                                                    : bookingData.pricePerHour && bookingData.pricePerHour > 0
+                                                        ? `₱${bookingData.pricePerHour.toFixed(2)}`
+                                                        : 'FREE'}
+                                            </span>
                                         </div>
 
                                         <div className="flex justify-between items-center">
@@ -269,7 +322,7 @@ const Receipt: React.FC<ReceiptProps> = ({ bookingData, onClose }) => {
                                                     </span>
                                                 </div>
                                             </div>
-                                            <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">{bookingData.totalPrice > 0 ? `₱${bookingData.totalPrice.toFixed(2)}` : 'FREE'}</span>
+                                            <span className="text-2xl md:text-3xl font-black text-slate-950 tracking-tighter">{totalPaid > 0 ? `₱${totalPaid.toFixed(2)}` : 'FREE'}</span>
                                         </div>
 
                                         {normalizedPaymentStatus === 'paid' && bookingData.paymentMethod?.toLowerCase() === 'cash' && bookingData.amountTendered !== undefined && (

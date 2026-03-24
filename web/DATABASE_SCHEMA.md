@@ -111,7 +111,7 @@
 | location_id | uuid | FK → locations |
 | image_url | text | |
 | court_type | text | Indoor/Outdoor/Both |
-| status | text | Available/Fully Booked/Coming Soon/Maintenance |
+| status | text | Setup Required (default) / Available / Fully Booked / Coming Soon / Maintenance |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 

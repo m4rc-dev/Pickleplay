@@ -66,7 +66,7 @@ import { SquadsList, SquadDetail } from './components/squads';
 import Academy from './components/Academy';
 import MyBookings from './components/MyBookings';
 import Profile from './components/Profile';
-import GuestBooking from './components/GuestBooking';
+import GuestBooking from './components/GuestBooking.tsx';
 import UsernameSetupModal from './components/UsernameSetupModal';
 import Login from './components/Login';
 import Signup from './components/Signup';
@@ -559,6 +559,29 @@ const NavigationHandler: React.FC<{
       .then(({ count }) => { if (count !== null) setPendingVerificationCount(count); });
   }, [role]);
 
+  // Pending transactions count for sidebar badge
+  const [pendingTransactionsCount, setPendingTransactionsCount] = useState(0);
+
+  useEffect(() => {
+    if (role !== 'COURT_OWNER' || !currentUserId) return;
+    const fetchPendingTx = async () => {
+      const { data: courts } = await supabase.from('courts').select('id').eq('owner_id', currentUserId);
+      if (!courts || !courts.length) return;
+      const courtIds = courts.map(c => c.id);
+
+      const { count } = await supabase.from('bookings').select('id', { count: 'exact', head: true })
+        .in('court_id', courtIds)
+        .eq('payment_proof_status', 'proof_submitted');
+      
+      if (count !== null) setPendingTransactionsCount(count);
+    };
+
+    fetchPendingTx();
+    
+    const interval = setInterval(fetchPendingTx, 30000); // 30 seconds interval
+    return () => clearInterval(interval);
+  }, [role, currentUserId]);
+
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
@@ -912,7 +935,7 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
                 <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
                 <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
-                <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
+                <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} badge={pendingTransactionsCount || undefined} />
                 <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} />
               </>
             )}
@@ -1218,7 +1241,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to="/court-calendar" icon={<CalendarIcon size={22} />} label="Court Events" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/tournaments-admin" icon={<Trophy size={22} />} label="Manage Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                   <NavItem to="/revenue" icon={<BarChart3 size={22} />} label="Revenue Analytics" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to="/transactions" icon={<CreditCard size={22} />} label="Transactions" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} badge={pendingTransactionsCount || undefined} />
                   <NavItem to="/court-pricing" icon={<PhilippinePeso size={22} />} label="Court Pricing" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}

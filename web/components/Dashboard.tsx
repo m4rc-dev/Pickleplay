@@ -1917,26 +1917,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       <CheckCircle2 className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
                     </div>
                   </div>
-                ) : applicationType !== 'court_owner' ? (
-                <div className="space-y-2">
-                  <label className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">
-                    Access Code (Promotional)
-                    <span className="text-[9px] font-bold text-blue-500 normal-case italic">
-                      {accessCodeValue.trim() ? "Applied" : "Optional"}
-                    </span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      name="accessCode"
-                      type="text"
-                      placeholder="e.g. PRO-JOIN-2024"
-                      value={accessCodeValue}
-                      onChange={(e) => setAccessCodeValue(e.target.value)}
-                      className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-mono font-black text-sm text-blue-600 focus:outline-none focus:border-blue-500 uppercase transition-all"
-                    />
-                    <Key className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                ) : applicationType === 'coach' ? (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100/60 rounded-2xl p-8 text-center animate-in fade-in duration-300">
+                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto mb-3 border border-blue-100">
+                        <Award size={24} className="text-blue-600" />
+                      </div>
+                      <h4 className="text-[12px] font-black text-slate-900 uppercase tracking-widest mb-1.5">Coach Directory Coming Soon</h4>
+                      <p className="text-[10px] font-bold text-slate-500 max-w-[200px] mx-auto leading-relaxed">
+                        We are finalizing the coaching platform. Stay tuned for exciting updates!
+                      </p>
+                    </div>
                   </div>
-                </div>
                 ) : null}
 
                 {/* Court Owner Verification Info — shown when court_owner is selected */}
@@ -1954,37 +1946,27 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                       </div>
 
                       <div className="space-y-2.5">
-                        <p className="text-[9px] font-black text-indigo-600 uppercase tracking-wider px-1">Choose 1 of 2 Verification Methods:</p>
-                        {[
-                          { num: 'A', label: 'Government ID', desc: 'Philippine ID (front, back, selfie)' },
-                          { num: 'B', label: 'Court Ownership Docs', desc: 'Title, lease, permit, or tax declaration' },
-                        ].map((step) => (
-                          <div key={step.num} className="flex items-center gap-3 bg-white/70 rounded-xl px-4 py-2.5">
-                            <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
-                              <span className="text-[9px] font-black text-white">{step.num}</span>
+                        <p className="text-[9px] font-black text-indigo-600 uppercase tracking-wider px-1">Complete these 6 steps:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {[
+                            { num: '1', label: 'Location', desc: 'Map pin & address' },
+                            { num: '2', label: 'Government ID', desc: 'Front, back, selfie' },
+                            { num: '3', label: 'Ownership', desc: 'Title, lease, or permit' },
+                            { num: '4', label: 'Business', desc: 'DTI/SEC (optional)' },
+                            { num: '5', label: 'Court Photos', desc: 'Facility & entrance' },
+                            { num: '6', label: 'Review & Submit', desc: 'Finalize application' },
+                          ].map((step) => (
+                            <div key={step.num} className="flex items-start gap-2.5 bg-white/80 border border-indigo-50/50 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200">
+                                <span className="text-[10px] font-black text-white">{step.num}</span>
+                              </div>
+                              <div className="min-w-0 flex-1 pt-0.5">
+                                <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider leading-tight mb-0.5">{step.label}</p>
+                                <p className="text-[8px] font-bold text-slate-500 leading-tight truncate">{step.desc}</p>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">{step.label}</p>
-                              <p className="text-[9px] font-bold text-slate-400">{step.desc}</p>
-                            </div>
-                          </div>
-                        ))}
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-1 pt-1">Then complete:</p>
-                        {[
-                          { num: '2', label: 'Business Documents', desc: 'DTI, SEC, or Barangay permit (optional)' },
-                          { num: '3', label: 'Court Photos', desc: 'Min 3 court photos + entrance photo' },
-                          { num: '4', label: 'Google Maps Location', desc: 'Pin your facility on the map' },
-                        ].map((step) => (
-                          <div key={step.num} className="flex items-center gap-3 bg-white/70 rounded-xl px-4 py-2.5">
-                            <div className="w-6 h-6 bg-slate-500 rounded-lg flex items-center justify-center shrink-0">
-                              <span className="text-[9px] font-black text-white">{step.num}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">{step.label}</p>
-                              <p className="text-[9px] font-bold text-slate-400">{step.desc}</p>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     </div>
 
@@ -1998,7 +1980,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                 )}
 
                 {/* File Upload Zone — hidden for court owner referrals AND court_owner type */}
-                {!isCourtOwnerReferral && applicationType !== 'court_owner' && (
+                {false && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1 relative">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
@@ -2102,10 +2084,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmittingReview || (!applicationType)}
+                    disabled={isSubmittingReview || (!applicationType) || (applicationType === 'coach')}
                     className={`flex-1 py-4 ${isCourtOwnerReferral || applicationType === 'court_owner' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl disabled:opacity-50`}
                   >
-                    {isSubmittingReview ? 'Submitting...' : isCourtOwnerReferral ? 'Confirm & Upgrade' : applicationType === 'court_owner' ? 'Start Verification →' : 'Apply Now'}
+                    {isSubmittingReview ? 'Submitting...' : isCourtOwnerReferral ? 'Confirm & Upgrade' : applicationType === 'court_owner' ? 'Start Verification →' : applicationType === 'coach' ? 'Coming Soon' : 'Apply Now'}
                   </button>
                 </div>
               </div>

@@ -13,7 +13,7 @@ declare global {
     }
 }
 
-type CourtStatus = 'Available' | 'Fully Booked' | 'Coming Soon' | 'Maintenance';
+type CourtStatus = 'Available' | 'Fully Booked' | 'Coming Soon' | 'Maintenance' | 'Setup Required';
 
 interface CourtItem {
     id: string;
@@ -53,7 +53,7 @@ const LocationDetailPage: React.FC = () => {
     const [courtCleaningTime, setCourtCleaningTime] = useState(0);
     const [courtAmenities, setCourtAmenities] = useState('');
     const [courtType, setCourtType] = useState<'Indoor' | 'Outdoor'>('Indoor');
-    const [courtStatus, setCourtStatus] = useState<CourtStatus>('Available');
+    const [courtStatus, setCourtStatus] = useState<CourtStatus>('Setup Required');
     const [isSurfaceDropdownOpen, setIsSurfaceDropdownOpen] = useState(false);
     const [surfaceSearch, setSurfaceSearch] = useState('');
     const surfaceDropdownRef = React.useRef<HTMLDivElement>(null);
@@ -260,7 +260,7 @@ const LocationDetailPage: React.FC = () => {
         setCourtAmenitySearch('');
         setIsCourtAmenityDropdownOpen(false);
         setCourtType('Indoor');
-        setCourtStatus('Available');
+        setCourtStatus('Setup Required');
         // Reset closures
         setCourtClosures([]);
         setCourtClosureCalendarMonth(new Date());
@@ -285,6 +285,9 @@ const LocationDetailPage: React.FC = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
+            const initialStatus = 'Setup Required';
+            const initialActive = false;
+
             const { data: courtData, error } = await supabase
                 .from('courts')
                 .insert({
@@ -298,8 +301,9 @@ const LocationDetailPage: React.FC = () => {
                     amenities: selectedCourtAmenities,
                     latitude: location?.latitude,
                     longitude: location?.longitude,
-                    is_active: courtStatus === 'Available',
-                    status: courtStatus
+                    is_active: initialActive,
+                    status: initialStatus,
+                    setup_complete: false
                 })
                 .select()
                 .single();
@@ -403,7 +407,7 @@ const LocationDetailPage: React.FC = () => {
         setCourtAmenitySearch('');
         setIsCourtAmenityDropdownOpen(false);
         setCourtType((court.court_type as 'Indoor' | 'Outdoor') || 'Indoor');
-        setCourtStatus((court.status as CourtStatus) || 'Available');
+        setCourtStatus((court.status as CourtStatus) || 'Setup Required');
         setIsEditCourtOpen(true);
         // Fetch existing closures for this court
         fetchCourtClosures(court.id);
@@ -514,38 +518,42 @@ const LocationDetailPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Court Status Selector */}
-            <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Status</label>
-                <div className="grid grid-cols-2 gap-2">
-                    {([
-                        { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
-                        { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
-                        { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'blue', icon: '🔜' },
-                        { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'blue', icon: '🔧' },
-                    ]).map((opt) => {
-                        const isSelected = courtStatus === opt.value;
-                        const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
-                            emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-                            blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-                        };
-                        const c = colorMap[opt.color];
-                        return (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setCourtStatus(opt.value)}
-                                className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
-                                    ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                                    }`}
-                            >
-                                <span>{opt.icon}</span> {opt.label}
-                            </button>
-                        );
-                    })}
+            {/* Court Status Selector (edit only) */}
+            {isEdit && (
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Court Status</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {([
+                            { value: 'Setup Required' as CourtStatus, label: 'Setup Required', color: 'amber', icon: '🛠' },
+                            { value: 'Available' as CourtStatus, label: 'Available', color: 'emerald', icon: '✓' },
+                            { value: 'Fully Booked' as CourtStatus, label: 'Fully Booked', color: 'blue', icon: '⏳' },
+                            { value: 'Coming Soon' as CourtStatus, label: 'Coming Soon', color: 'blue', icon: '🔜' },
+                            { value: 'Maintenance' as CourtStatus, label: 'Maintenance', color: 'blue', icon: '🔧' },
+                        ]).map((opt) => {
+                            const isSelected = courtStatus === opt.value;
+                            const colorMap: Record<string, { bg: string; border: string; text: string; ring: string }> = {
+                                emerald: { bg: 'bg-emerald-50', border: 'border-emerald-400', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
+                                blue: { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-700', ring: 'ring-blue-500/20' },
+                                amber: { bg: 'bg-amber-50', border: 'border-amber-400', text: 'text-amber-700', ring: 'ring-amber-500/20' },
+                            };
+                            const c = colorMap[opt.color];
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setCourtStatus(opt.value)}
+                                    className={`py-3 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all border-2 flex items-center justify-center gap-1.5 ${isSelected
+                                        ? `${c.bg} ${c.border} ${c.text} ring-4 ${c.ring} shadow-sm`
+                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <span>{opt.icon}</span> {opt.label}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2" ref={surfaceDropdownRef}>
@@ -1362,6 +1370,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
         'Available': { bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-600', label: 'Available' },
         'Fully Booked': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Fully Booked' },
         'Coming Soon': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Coming Soon' },
+        'Setup Required': { bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-600', label: 'Setup Required' },
         'Maintenance': { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', label: 'Maintenance' },
     };
     const sc = statusConfig[courtStatus] || statusConfig['Available'];
@@ -1370,7 +1379,7 @@ const CourtCard: React.FC<{ court: any; onEdit: () => void; navigate: any }> = (
         <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 group overflow-hidden">
             <div className="p-8 pb-4">
                 <div className="flex items-center justify-between mb-5">
-                    <div className={`p-3 rounded-2xl ${courtStatus === 'Available' ? 'bg-emerald-50 text-emerald-600' : courtStatus === 'Fully Booked' ? 'bg-blue-50 text-blue-600' : courtStatus === 'Coming Soon' ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-blue-600'}`}>
+                    <div className={`p-3 rounded-2xl ${courtStatus === 'Available' ? 'bg-emerald-50 text-emerald-600' : courtStatus === 'Fully Booked' ? 'bg-blue-50 text-blue-600' : courtStatus === 'Coming Soon' ? 'bg-blue-50 text-blue-600' : courtStatus === 'Setup Required' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
                         <Activity size={22} />
                     </div>
                     <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${sc.bg} ${sc.border} ${sc.text}`}>

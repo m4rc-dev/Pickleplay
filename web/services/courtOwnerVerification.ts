@@ -10,7 +10,17 @@ export interface CourtOwnerVerification {
   profile_id: string;
   application_id?: string;
   verification_path?: 'government_id' | 'court_ownership' | null;
-  status: 'PENDING' | 'UNDER_REVIEW' | 'RESUBMISSION_REQUESTED' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'UNDER_REVIEW' | 'RESUBMISSION_REQUESTED' | 'APPROVED' | 'REJECTED' | 'INCOMPLETE' | 'READY_FOR_REVIEW' | 'PENDING_REVIEW' | 'VERIFIED';
+
+  // Basic location/contact
+  court_location_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  address_street?: string | null;
+  address_barangay?: string | null;
+  address_city?: string | null;
+  address_province?: string | null;
+  address_zip_code?: string | null;
 
   // Government ID
   government_id_type: string | null;
@@ -23,6 +33,7 @@ export interface CourtOwnerVerification {
   ownership_doc_url: string | null;
 
   // Business
+  business_type?: 'personal' | 'commercial' | null;
   business_doc_type: string | null;
   business_doc_url: string | null;
 
@@ -131,12 +142,22 @@ export async function submitVerification(data: {
   profile_id: string;
   application_id?: string;
   verification_path?: 'government_id' | 'court_ownership';
+  status?: CourtOwnerVerification['status'];
+  court_location_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  address_street?: string;
+  address_barangay?: string;
+  address_city?: string;
+  address_province?: string;
+  address_zip_code?: string;
   government_id_type?: string;
   government_id_front_url?: string;
   government_id_back_url?: string;
   selfie_with_id_url?: string;
   ownership_doc_type?: string;
   ownership_doc_url?: string;
+  business_type?: 'personal' | 'commercial';
   business_doc_type?: string;
   business_doc_url?: string;
   court_photo_urls?: string[];
@@ -151,7 +172,7 @@ export async function submitVerification(data: {
     .from('court_owner_verifications')
     .insert({
       ...data,
-      status: 'PENDING',
+      status: data.status || 'PENDING_REVIEW',
       submitted_at: new Date().toISOString(),
     })
     .select()
@@ -308,4 +329,92 @@ export async function adminRequestResubmission(
       actor_id: adminId,
     });
   }
+}
+
+// ─── Admin unified status update (approve, reject, resubmit, mark states) ───
+export async function adminUpdateVerificationStatus(params: {
+  verificationId: string;
+  adminId: string;
+  status: CourtOwnerVerification['status'];
+  note?: string; // Optional admin note (stored in admin_notes or resubmission_note)
+  resubmissionFields?: string[]; // Required when status is RESUBMISSION_REQUESTED (unless resubmitAll)
+  resubmitAll?: boolean; // If true, request updates for all fields
+  fieldComments?: Record<string, string>; // Per-field comments for resubmission
+}): Promise<void> {
+  const {
+    verificationId,
+    adminId,
+    status,
+    note,
+    resubmissionFields = [],
+    resubmitAll = false,
+    fieldComments = {},
+  } = params;
+
+  const now = new Date().toISOString();
+
+  if (status === 'RESUBMISSION_REQUESTED') {
+    const fields = resubmitAll ? Object.keys(VERIFICATION_FIELD_LABELS) : resubmissionFields;
+    if (!fields.length) throw new Error('Resubmission requires at least one field to be specified.');
+
+    const { data: existing, error: fetchErr } = await supabase
+      .from('court_owner_verifications')
+      .select('resubmission_count, profile_id')
+      .eq('id', verificationId)
+      .single();
+
+    if (fetchErr) throw new Error(`Fetch failed: ${fetchErr.message}`);
+
+    const { error } = await supabase
+      .from('court_owner_verifications')
+      .update({
+        status,
+        resubmission_fields: fields,
+        resubmission_note: note || null,
+        resubmission_count: (existing?.resubmission_count || 0) + 1,
+        reviewed_by: adminId,
+        reviewed_at: now,
+        field_comments: fieldComments,
+        admin_notes: null,
+        updated_at: now,
+      })
+      .eq('id', verificationId);
+
+    if (error) throw new Error(`Resubmission update failed: ${error.message}`);
+
+    if (existing?.profile_id) {
+      await supabase.from('notifications').insert({
+        user_id: existing.profile_id,
+        type: 'SYSTEM',
+        message: `Your court owner verification requires resubmission: ${note || 'Please update the requested fields.'}`,
+        actor_id: adminId,
+      });
+    }
+    return;
+  }
+
+  // Approve / Reject / other status transitions
+  const updatePayload: Partial<CourtOwnerVerification> = {
+    status,
+    reviewed_by: adminId,
+    reviewed_at: now,
+    admin_notes: note || null,
+    updated_at: now,
+  };
+
+  // Clear resubmission metadata when finalizing decision
+  if (status === 'APPROVED' || status === 'REJECTED' || status === 'VERIFIED' || status === 'READY_FOR_REVIEW') {
+    Object.assign(updatePayload, {
+      resubmission_fields: [],
+      resubmission_note: null,
+      field_comments: {},
+    });
+  }
+
+  const { error } = await supabase
+    .from('court_owner_verifications')
+    .update(updatePayload)
+    .eq('id', verificationId);
+
+  if (error) throw new Error(`Status update failed: ${error.message}`);
 }

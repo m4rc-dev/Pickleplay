@@ -47,6 +47,36 @@ const STATUS_CONFIG = {
     text: 'text-amber-700',
     iconBg: 'bg-amber-100',
   },
+  PENDING_REVIEW: {
+    color: 'amber',
+    icon: Clock,
+    label: 'Queued for Review',
+    message: 'We received your submission and placed it in the review queue. You will be notified once an admin starts the review.',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-700',
+    iconBg: 'bg-amber-100',
+  },
+  READY_FOR_REVIEW: {
+    color: 'blue',
+    icon: Shield,
+    label: 'Ready for Review',
+    message: 'Your documents look good and are ready for an admin to review. Please wait for the final check.',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-700',
+    iconBg: 'bg-blue-100',
+  },
+  INCOMPLETE: {
+    color: 'orange',
+    icon: AlertTriangle,
+    label: 'Incomplete',
+    message: 'Some required fields or documents are missing. Please update your submission to continue.',
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+    text: 'text-orange-700',
+    iconBg: 'bg-orange-100',
+  },
   UNDER_REVIEW: {
     color: 'blue',
     icon: Shield,
@@ -72,6 +102,16 @@ const STATUS_CONFIG = {
     icon: CheckCircle2,
     label: 'Approved',
     message: 'Congratulations! Your court owner verification has been approved. You now have full access to court management features.',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    text: 'text-emerald-700',
+    iconBg: 'bg-emerald-100',
+  },
+  VERIFIED: {
+    color: 'emerald',
+    icon: CheckCircle2,
+    label: 'Verified',
+    message: 'Your court owner verification is fully verified. Enjoy full access to court management features.',
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
     text: 'text-emerald-700',
@@ -219,10 +259,29 @@ const ApplicationStatus: React.FC = () => {
     );
   }
 
-  const config = STATUS_CONFIG[verification.status];
+  const config = STATUS_CONFIG[verification.status] || STATUS_CONFIG.PENDING;
   const StatusIcon = config.icon;
   const needsResub = verification.status === 'RESUBMISSION_REQUESTED';
   const resubFields = verification.resubmission_fields || [];
+
+  const contactAndLocation = [
+    { label: 'Court / Location Name', value: verification.court_location_name },
+    { label: 'Phone', value: verification.contact_phone },
+    { label: 'Email', value: verification.contact_email },
+  ];
+
+  const addressItems = [
+    { label: 'Street', value: verification.address_street },
+    { label: 'Barangay', value: verification.address_barangay },
+    { label: 'City', value: verification.address_city },
+    { label: 'Province', value: verification.address_province },
+    { label: 'ZIP Code', value: verification.address_zip_code },
+  ];
+
+  const businessItems = [
+    { label: 'Business Type', value: verification.business_type ? verification.business_type === 'commercial' ? 'Commercial' : 'Personal' : null },
+    { label: 'Business Document', value: verification.business_doc_type ? BUSINESS_DOC_OPTIONS.find(o => o.value === verification.business_doc_type)?.label : null },
+  ];
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-8 pt-20 md:pt-28 space-y-8">
@@ -258,6 +317,33 @@ const ApplicationStatus: React.FC = () => {
             Resubmission count: {verification.resubmission_count}
           </p>
         )}
+      </div>
+
+      {/* Contact + Location Details */}
+      <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-3">
+          <MapPin size={18} className="text-red-600" />
+          <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Court & Contact Details</h3>
+        </div>
+        <div className="p-8 space-y-6">
+          <InfoGroup title="Contact" items={contactAndLocation} />
+          <InfoGroup title="Address" items={addressItems} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InfoTile
+              label="Google Maps"
+              value={verification.google_maps_link ? (
+                <a href={verification.google_maps_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold text-xs hover:text-blue-800 inline-flex items-center gap-2">
+                  <ExternalLink size={12} /> View on Maps
+                </a>
+              ) : 'Not provided'}
+            />
+            <InfoTile
+              label="Coordinates"
+              value={(verification.latitude && verification.longitude) ? `${verification.latitude}, ${verification.longitude}` : 'Not provided'}
+            />
+          </div>
+          <InfoGroup title="Business" items={businessItems} />
+        </div>
       </div>
 
       {/* Admin Note (if resubmission) */}
@@ -570,6 +656,24 @@ const DocumentRow: React.FC<{
         ) : null
       )}
     </div>
+  </div>
+);
+
+const InfoGroup: React.FC<{ title: string; items: { label: string; value: React.ReactNode }[] }> = ({ title, items }) => (
+  <div className="space-y-2">
+    <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em]">{title}</p>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {items.map(({ label, value }) => (
+        <InfoTile key={label} label={label} value={value || 'Not provided'} />
+      ))}
+    </div>
+  </div>
+);
+
+const InfoTile: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em]">{label}</p>
+    <div className="mt-1 text-sm font-semibold text-slate-800 break-words">{value}</div>
   </div>
 );
 

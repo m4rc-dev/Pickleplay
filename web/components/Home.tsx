@@ -244,7 +244,16 @@ const Home: React.FC = () => {
         const { data, error } = await supabase
           .from('courts')
           .select(`
-            id, name, base_price, latitude, longitude, location_id, image_url,
+            id,
+            name,
+            base_price,
+            latitude,
+            longitude,
+            location_id,
+            image_url,
+            status,
+            setup_complete,
+            has_pricing,
             locations (
               id,
               name,
@@ -291,10 +300,19 @@ const Home: React.FC = () => {
             location_court_type: loc?.court_type || '',
             location_amenities: Array.isArray(loc?.amenities) ? loc.amenities : [],
             location_address: loc?.address || '',
-            location_image: loc?.image_url || ''
+            location_image: loc?.image_url || '',
+            status: c.status,
+            setup_complete: c.setup_complete,
+            has_pricing: c.has_pricing
           };
         });
-        setCourts(courtData);
+        const readyCourts = courtData.filter(c =>
+          c.status !== 'Coming Soon' &&
+          c.status !== 'Setup Required' &&
+          c.setup_complete !== false &&
+          c.has_pricing === true
+        );
+        setCourts(readyCourts);
       } catch (err) {
         console.error('Error fetching courts for search:', err);
       }
@@ -307,7 +325,13 @@ const Home: React.FC = () => {
           .select(`
             *,
             courts (
-              id, base_price, court_type, amenities,
+              id,
+              base_price,
+              court_type,
+              amenities,
+              status,
+              setup_complete,
+              has_pricing,
               court_reviews (
                 rating
               )
@@ -334,7 +358,14 @@ const Home: React.FC = () => {
             locAmenities.forEach((a: string) => allAmenities.add(a));
           }
 
-          courts.forEach((court: any) => {
+          const readyCourts = courts.filter((court: any) =>
+            court.status !== 'Coming Soon' &&
+            court.status !== 'Setup Required' &&
+            court.setup_complete !== false &&
+            court.has_pricing === true
+          );
+
+          readyCourts.forEach((court: any) => {
             courtCount++;
             courtPrices.push(court.base_price || 0);
 
@@ -388,7 +419,9 @@ const Home: React.FC = () => {
             status: (loc as any).status,
             is_active: (loc as any).is_active,
             court_type: derivedCourtType,
-            amenities: Array.from(allAmenities)
+            amenities: Array.from(allAmenities),
+            ready_courts_count: readyCourts.length,
+            has_ready_pricing: readyCourts.some((c: any) => c.has_pricing === true)
           };
         });
         setLocations(locationData);
@@ -594,9 +627,18 @@ const Home: React.FC = () => {
     setSearchQuery(value);
   };
 
+  const isCourtReadyForSearch = (court: any) =>
+    court?.status !== 'Coming Soon' &&
+    court?.status !== 'Setup Required' &&
+    court?.setup_complete !== false &&
+    court?.has_pricing === true;
+
   // Get filtered courts based on search query and user's region
   const getFilteredCourts = () => {
     let courtsToFilter = nearbyCourts.length > 0 ? nearbyCourts : courts;
+
+    // Only show courts that are ready (not Coming Soon, setup complete, and priced)
+    courtsToFilter = courtsToFilter.filter(isCourtReadyForSearch);
 
     // Filter by user's region (Luzon, Visayas, Mindanao)
     if (userRegion && !searchQuery.trim()) {
@@ -619,6 +661,13 @@ const Home: React.FC = () => {
   // Get filtered locations (grouping courts by their location) for search suggestions
   const getFilteredLocations = () => {
     let locationsToFilter = nearbyLocations.length > 0 ? nearbyLocations : locations;
+
+    // Only show locations that have at least one ready, priced court
+    locationsToFilter = locationsToFilter.filter(loc => (
+      (loc as any)?.status !== 'Coming Soon' &&
+      Number((loc as any)?.ready_courts_count ?? 0) > 0 &&
+      (loc as any)?.has_ready_pricing === true
+    ));
 
     // Filter by user's region (Luzon, Visayas, Mindanao)
     if (userRegion && !searchQuery.trim()) {
@@ -699,13 +748,39 @@ const Home: React.FC = () => {
     let title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
     let featuredList = [];
 
+    // Only feature locations that have courts and a set price (or intentionally free)
+    const isFeatureReady = (loc: any) => {
+      const courtCount = Number(loc?.court_count ?? 0);
+      const hasCourtsFlag = (loc as any)?.has_courts === true;
+      const hasCourts = courtCount > 0 || hasCourtsFlag;
+      const minPrice = loc?.min_price ?? 0;
+      const maxPrice = loc?.max_price ?? 0;
+      const hasFree = loc?.has_free === true;
+      const hasPriceSet = hasFree || minPrice > 0 || maxPrice > 0;
+      const readyCourts = Number((loc as any)?.ready_courts_count ?? 0);
+      const hasReadyPricing = (loc as any)?.has_ready_pricing === true;
+      const setupFlagsOk =
+        loc?.setup_complete !== false &&
+        (loc as any)?.setupComplete !== false &&
+        (loc?.has_setup_complete !== false) &&
+        (loc as any)?.ready_courts_count !== 0 &&
+        (loc as any)?.ready_court_count !== 0;
+
+      if (!setupFlagsOk) return false;
+      if (courtCount === 1 && (loc?.setup_complete === false || (loc as any)?.setupComplete === false)) return false;
+      if (readyCourts <= 0) return false;
+      if (!hasReadyPricing) return false;
+      return hasCourts && hasPriceSet;
+    };
+
     // Prioritize locations over courts
     if (locations.length > 0) {
       // Only show Active locations in featured section
-      const activeLocations = locations.filter(loc =>
-        (loc as any).status === 'Active' || (loc as any).is_active === true
-      );
-      const locationsPool = activeLocations.length > 0 ? activeLocations : locations;
+      const activeLocations = locations
+        .filter(loc => (loc as any).status === 'Active' || (loc as any).is_active === true)
+        .filter(isFeatureReady);
+      const featureReadyLocations = locations.filter(isFeatureReady);
+      const locationsPool = activeLocations.length > 0 ? activeLocations : featureReadyLocations;
       // All locations sorted by rating (5 to 1) for neutral/fallback use
       const allLocationsSorted = [...locationsPool].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
 
@@ -726,12 +801,13 @@ const Home: React.FC = () => {
 
         // Logic for selecting locations based on GPS — show nearby/province-wide
         if (nearbyLocations.length > 0) {
+          const nearbyReady = nearbyLocations.filter(isFeatureReady);
           // Use distance-sorted nearby locations (within ~80km radius for province coverage)
           const MAX_DISTANCE_KM = 80;
-          const withinProvince = nearbyLocations.filter(loc => (loc.distance || 999) <= MAX_DISTANCE_KM);
+          const withinProvince = nearbyReady.filter(loc => (loc.distance || 999) <= MAX_DISTANCE_KM);
           featuredList = withinProvince.length > 0
             ? [...withinProvince].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
-            : [...nearbyLocations].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+            : [...nearbyReady].sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
         } else if (userCity && userCity !== 'Your Location') {
           // Fallback: filter by city/province name match
           const cityName = userCity.split(",")[0].trim().toLowerCase();
@@ -757,6 +833,10 @@ const Home: React.FC = () => {
       // Fallback: group courts by location_id to build location-like entries
       const locationMap = new Map<string, any>();
       courts.forEach((court: any) => {
+        const isSetup = court?.setup_complete !== false && (court as any)?.setupComplete !== false;
+        const hasPrice = court?.has_pricing === true;
+        const isAvailableStatus = court?.status !== 'Coming Soon' && court?.status !== 'Setup Required';
+        if (!isSetup || !hasPrice || !isAvailableStatus) return;
         const locId = court.location_id || court.id;
         if (!locationMap.has(locId)) {
           // Derive court_type from location-level data
@@ -805,8 +885,9 @@ const Home: React.FC = () => {
         loc.total_reviews = loc._totalReviews;
       });
       const grouped = Array.from(locationMap.values()).sort((a: any, b: any) => (b.avg_rating || 0) - (a.avg_rating || 0));
+      const featureReadyGrouped = grouped.filter(isFeatureReady);
       title = <span>Featured Courts in the <span className="text-lime-400">Philippines.</span></span>;
-      featuredList = grouped;
+      featuredList = featureReadyGrouped;
     }
 
     return { title, featuredList };
@@ -858,10 +939,10 @@ const Home: React.FC = () => {
         </div>
 
         <div className="relative z-50 w-full max-w-[1800px] mx-auto px-6 md:px-24 flex flex-col items-center text-center">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8 animate-fade-in-up opacity-0">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 backdrop-blur-sm text-lime-400 px-10 md:px-14 py-2 rounded-full font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-8 animate-fade-in-up">
             The National Network for Philippines
           </div>
-          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase animate-fade-in-up opacity-0 delay-100">
+          <h1 className="font-black text-white leading-[0.9] md:leading-[0.8] tracking-tighter mb-4 md:mb-8 uppercase animate-fade-in-up delay-100">
             <span className="text-5xl sm:text-6xl md:text-7xl lg:text-[10rem]">PICKLEPLAY</span> <br />
             <span className="text-lime-400 text-4xl sm:text-7xl md:text-8xl lg:text-[9rem]">PHILIPPINES</span>
           </h1>
@@ -884,10 +965,10 @@ const Home: React.FC = () => {
               {totalUsers.toLocaleString()}+ Active
             </span>
           </div>
-          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed mb-8 md:mb-12 animate-fade-in-up opacity-0 delay-200">
+          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed mb-8 md:mb-12 animate-fade-in-up delay-200">
             The professional digital home for the fastest-growing sport in the Philippines. Join the elite ladder from Manila to Davao.
           </p>
-          <div className="flex flex-wrap justify-center gap-6 animate-fade-in-up opacity-0 delay-300 w-full px-4">
+          <div className="flex flex-wrap justify-center gap-6 animate-fade-in-up delay-300 w-full px-4">
             <form onSubmit={handleSearch} className="relative group w-full max-w-4xl">
               <div className="relative flex items-center bg-white border border-slate-200 rounded-full p-1.5 md:p-2.5 h-14 md:h-16 shadow-3xl">
                 <Search className="ml-3 md:ml-6 text-slate-400" size={18} />
@@ -1036,10 +1117,10 @@ const Home: React.FC = () => {
       </section>
 
       {/* Featured Courts Near You Section */}
-      <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0">
+      <section className="py-16 md:py-24 bg-slate-50 px-6 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in">
         <div className="max-w-[1800px] mx-auto">
           {/* Section Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6 animate-fade-in-up opacity-0">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6 animate-fade-in-up">
             <div>
               <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-4">DISCOVER / NEARBY</p>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-slate-950 tracking-tighter uppercase">
@@ -1248,14 +1329,14 @@ const Home: React.FC = () => {
       </section>
 
       {/* Beginner Welcome Section - Interactive Guide */}
-      <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in opacity-0 delay-200">
+      <section className="py-12 md:py-24 bg-slate-950 px-4 md:px-24 lg:px-32 relative overflow-hidden animate-fade-in delay-200">
         {/* Background decorations */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-lime-500/5 rounded-full blur-[150px] -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px] translate-y-1/2"></div>
 
         <div className="max-w-[1800px] mx-auto relative">
           {/* Section Header */}
-          <div className="mb-8 md:mb-16 animate-fade-in-up opacity-0">
+          <div className="mb-8 md:mb-16 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-4">
               <GraduationCap className="text-lime-400" size={24} />
               <span className="text-lime-400 font-black text-sm uppercase tracking-widest">Learning Hub</span>
@@ -1442,13 +1523,13 @@ const Home: React.FC = () => {
       </section >
 
       {/* Tournaments Section - Real data from Supabase */}
-      <section className="py-12 md:py-32 bg-slate-50 relative overflow-hidden animate-fade-in opacity-0 delay-300">
+      <section className="py-12 md:py-32 bg-slate-50 relative overflow-hidden animate-fade-in delay-300">
         {/* Abstract Background Accents */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/5 blur-[150px] -z-10"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-lime-400/5 blur-[150px] -z-10"></div>
 
         <div className="max-w-[1800px] mx-auto px-4 md:px-24 lg:px-32">
-          <div className="mb-8 md:mb-16 animate-fade-in-up opacity-0">
+          <div className="mb-8 md:mb-16 animate-fade-in-up">
             <div className="max-w-2xl">
               <p className="text-[9px] md:text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] md:tracking-[0.4em] mb-2 md:mb-4">COMPETITIVE CIRCUIT / 2026</p>
               <h2 className="text-3xl md:text-6xl lg:text-7xl font-black text-slate-950 tracking-tighter leading-[0.9] uppercase">
@@ -1587,7 +1668,7 @@ const Home: React.FC = () => {
       </section >
 
       {/* Final CTA / Download Section */}
-      <section className="py-20 md:py-32 relative overflow-hidden animate-fade-in opacity-0 delay-500" style={{ backgroundColor: '#03091F', boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25)' }}>
+      <section className="py-20 md:py-32 relative overflow-hidden animate-fade-in delay-500" style={{ backgroundColor: '#03091F', boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25), 0px 4px 4px rgba(0, 0, 0, 0.25)' }}>
         {/* Lime green gradient – full section, behind image */}
         <div
           className="absolute inset-0 z-[1] pointer-events-none"
@@ -1608,7 +1689,7 @@ const Home: React.FC = () => {
           }}
         />
         <div className="max-w-[1800px] mx-auto px-6 md:px-24 lg:px-32 text-center lg:text-left relative z-10">
-          <div className="relative z-10 space-y-6 md:space-y-8 animate-fade-in-up opacity-0 lg:max-w-[50%]">
+          <div className="relative z-10 space-y-6 md:space-y-8 animate-fade-in-up lg:max-w-[50%]">
             <h2 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">READY TO <br /><span className="text-lime-400 italic">DOMINATE PH?</span></h2>
             <div className="flex flex-col items-center lg:items-start gap-6 md:gap-8">
               <button className="bg-lime-400 hover:bg-lime-300 text-slate-950 h-14 md:h-20 px-8 md:px-14 rounded-2xl md:rounded-[28px] font-black text-base md:text-lg uppercase tracking-widest transition-all active:scale-95 shadow-2xl shadow-lime-400/20 group flex items-center gap-4">
@@ -1649,11 +1730,11 @@ const Home: React.FC = () => {
       </section >
 
       {/* FAQ Section */}
-      <section id="faq" className="bg-[#F8FAFC] relative overflow-hidden animate-fade-in opacity-0 delay-400">
+      <section id="faq" className="bg-[#F8FAFC] relative overflow-hidden animate-fade-in delay-400">
         {/* ── MOBILE / TABLET LAYOUT ── */}
         <div className="lg:hidden py-12 px-4">
           <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-8 animate-fade-in-up opacity-0">
+            <div className="text-center mb-8 animate-fade-in-up">
               <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase mb-3">
                 Frequently Asked Questions
               </h2>
@@ -1826,9 +1907,9 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      <footer className="py-8 md:py-14 px-6 md:px-24 lg:px-32 border-t border-blue-800 animate-fade-in opacity-0 delay-700" style={{ backgroundColor: '#0A57A7' }}>
+      <footer className="py-8 md:py-14 px-6 md:px-24 lg:px-32 border-t border-blue-800 animate-fade-in delay-700" style={{ backgroundColor: '#0A57A7' }}>
         <div className="max-w-[1800px] mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 mb-8 md:mb-12 animate-fade-in-up opacity-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 mb-8 md:mb-12 animate-fade-in-up">
             {/* Brand Section */}
             <div className="space-y-3 md:space-y-4">
               <div className="flex items-center gap-2 md:gap-3 text-white font-black text-xl md:text-2xl tracking-tighter uppercase">

@@ -42,6 +42,20 @@ const isTimeslotConsumed = (date: string, endTime: string): boolean => {
     return now > bookingEnd;
 };
 
+const computeHoursBetween = (start?: string, end?: string) => {
+    if (!start || !end) return undefined;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    const minutes = (eh * 60 + em) - (sh * 60 + sm);
+    if (Number.isNaN(minutes) || minutes <= 0) return undefined;
+    return Math.round((minutes / 60) * 10) / 10;
+};
+
+function getLatestPaymentForBooking(booking: any) {
+    if (!booking?.booking_payments?.length) return null;
+    return [...booking.booking_payments].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+}
+
 const isQrPaymentMethod = (method?: string | null): boolean => {
     const normalized = (method || '').toLowerCase();
     return normalized === 'gcash' || normalized === 'maya';
@@ -70,9 +84,26 @@ const isPaymentReviewForPlayer = (booking: any): boolean => {
     return false;
 };
 
-const getPlayerDisplayStatus = (booking: any): 'paid' | 'payment_review' | 'confirmed' | 'pending' | 'cancelled' => {
+const isResubmitRequestedForPlayer = (booking: any): boolean => {
+    if (!booking || booking.status === 'cancelled') return false;
+    return booking.payment_proof_status === 'resubmit_requested';
+};
+
+const normalizeReferenceNumber = (value: string) => value.replace(/\s+/g, '').trim();
+const getFilenameFromUrl = (url?: string | null) => {
+    if (!url) return '';
+    try {
+        const parts = url.split('/');
+        return parts[parts.length - 1] || '';
+    } catch {
+        return '';
+    }
+};
+
+const getPlayerDisplayStatus = (booking: any): 'paid' | 'payment_review' | 'resubmit' | 'confirmed' | 'pending' | 'cancelled' => {
     if (!booking) return 'pending';
     if (booking.status === 'cancelled') return 'cancelled';
+    if (isResubmitRequestedForPlayer(booking)) return 'resubmit';
     if (isPaymentVerifiedForPlayer(booking)) return 'paid';
     if (isPaymentReviewForPlayer(booking)) return 'payment_review';
     if (booking.status === 'confirmed') return 'confirmed';
@@ -126,6 +157,15 @@ const MyBookings: React.FC = () => {
     const [shareEmail, setShareEmail] = useState('');
     const [isSharing, setIsSharing] = useState(false);
     const [shareError, setShareError] = useState('');
+
+    // Resubmit Payment State
+    const [resubmitModalBooking, setResubmitModalBooking] = useState<any | null>(null);
+    const [resubmitReference, setResubmitReference] = useState('');
+    const [resubmitProofFile, setResubmitProofFile] = useState<File | null>(null);
+    const [resubmitProofPreview, setResubmitProofPreview] = useState('');
+    const [resubmitLoading, setResubmitLoading] = useState(false);
+    const [resubmitError, setResubmitError] = useState('');
+    const [resubmitPaymentMethod, setResubmitPaymentMethod] = useState<any | null>(null);
 
     // Actions dropdown (per-row)
     const [openActionsMenuId, setOpenActionsMenuId] = useState<string | null>(null);
@@ -269,6 +309,8 @@ const MyBookings: React.FC = () => {
                     *,
                     court:courts(
                         id,
+                        owner_id,
+                        location_id,
                         name,
                         base_price,
                         court_type,
@@ -278,8 +320,11 @@ const MyBookings: React.FC = () => {
                         image_url,
                         status,
                         cleaning_time_minutes,
-                        location:locations(name, city, address, latitude, longitude)
+                        location:locations(id, name, city, address, latitude, longitude)
                     ),
+                    payment_id,
+                    payment:payments!bookings_payment_id_fkey(id, total_amount, status, payment_status, payment_method, payment_date),
+                    booking_payments(id, payment_type, account_name, reference_number, proof_image_url, status, rejection_reason, created_at),
                     review:court_reviews(rating)
                 `)
                 .eq('player_id', session.user.id)
@@ -306,6 +351,70 @@ const MyBookings: React.FC = () => {
             console.error('Error fetching bookings:', err);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleResubmitFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setResubmitProofFile(file);
+        setResubmitProofPreview(URL.createObjectURL(file));
+    };
+
+    const closeResubmitModal = () => {
+        setResubmitModalBooking(null);
+        setResubmitReference('');
+        setResubmitProofFile(null);
+        setResubmitProofPreview('');
+        setResubmitError('');
+        setResubmitPaymentMethod(null);
+    };
+
+    const handleSubmitResubmit = async () => {
+        if (!resubmitModalBooking) return;
+        const cleanRef = normalizeReferenceNumber(resubmitReference).toUpperCase();
+        if (!cleanRef) { setResubmitError('Please enter the reference number.'); return; }
+        if (!resubmitProofFile) { setResubmitError('Please upload your proof of payment.'); return; }
+        if (!currentUserId) { setResubmitError('Please sign in again.'); return; }
+
+        setResubmitLoading(true);
+        setResubmitError('');
+        try {
+            const fileExt = resubmitProofFile.name.split('.').pop() || 'png';
+            const proofPath = `${currentUserId}/${resubmitModalBooking.id}_resubmit_${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('payment-proofs')
+                .upload(proofPath, resubmitProofFile, { upsert: true });
+            if (uploadError) throw uploadError;
+
+            const { data: urlData } = supabase.storage.from('payment-proofs').getPublicUrl(proofPath);
+            const proofUrl = urlData.publicUrl;
+
+            await supabase.from('booking_payments').insert({
+                booking_id: resubmitModalBooking.id,
+                player_id: currentUserId,
+                payment_type: resubmitModalBooking.payment_method,
+                account_name: resubmitPaymentMethod?.account_name || '',
+                reference_number: cleanRef,
+                proof_image_url: proofUrl,
+                amount: resubmitModalBooking.total_price,
+                status: 'pending',
+            });
+
+            await supabase
+                .from('bookings')
+                .update({ payment_proof_status: 'proof_submitted', payment_status: 'unpaid' })
+                .eq('id', resubmitModalBooking.id);
+
+            closeResubmitModal();
+            fetchMyBookings();
+            alert('Thanks! Your payment has been resubmitted for review.');
+        } catch (err: any) {
+            console.error('Resubmit error:', err);
+            setResubmitError(err.message || 'Failed to resubmit payment.');
+        } finally {
+            setResubmitLoading(false);
         }
     };
 
@@ -357,60 +466,190 @@ const MyBookings: React.FC = () => {
         }
     };
 
-    // ── Location list from bookings ──
+    // ── Helpers for grouped display ──
+    const getGroupDisplayStatus = (group: any): 'paid' | 'payment_review' | 'resubmit' | 'confirmed' | 'pending' | 'cancelled' => {
+        const paymentStatus = group?.payment?.payment_status || group?.primary?.payment_status;
+        const paymentMethod = group?.payment?.payment_method || group?.primary?.payment_method;
+        const lead = group?.bookings?.[0] || group?.primary;
+
+        if (paymentStatus === 'paid') {
+            if (isQrPaymentMethod(paymentMethod)) {
+                return (lead?.payment_proof_status === 'payment_verified' || lead?.payment_verified) ? 'paid' : 'payment_review';
+            }
+            return 'paid';
+        }
+
+        if (paymentStatus === 'proof_submitted') return 'payment_review';
+        return lead ? getPlayerDisplayStatus(lead) : 'pending';
+    };
+
+    const getGroupTimeLabel = (group: any) => {
+        if (!group?.bookings?.length) return '';
+        const sorted = [...group.bookings].sort((a, b) => new Date(`${a.date}T${a.start_time || '00:00:00'}`).getTime() - new Date(`${b.date}T${b.start_time || '00:00:00'}`).getTime());
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        return `${formatTimeTo12h(first.start_time)} - ${formatTimeTo12h(last.end_time)}`;
+    };
+
+    // ── Group bookings by payment_id (or fallback to booking id) ──
+    const groupedBookings = useMemo(() => {
+        const map = new Map<string, { paymentId?: string | null; payment?: any; bookings: any[] }>();
+
+        myBookings.forEach(b => {
+            const latestPayment = getLatestPaymentForBooking(b);
+            const refKey = latestPayment?.reference_number ? `${latestPayment.reference_number}:${latestPayment.payment_type || ''}` : null;
+            const key = b.payment_id || b.payment?.id || refKey || b.id;
+
+            const existing = map.get(key) || { paymentId: b.payment_id || b.payment?.id || null, payment: b.payment, bookings: [] };
+            if (!existing.payment && b.payment) existing.payment = b.payment;
+            existing.bookings.push({ ...b, latestPayment });
+            map.set(key, existing);
+        });
+
+        return Array.from(map.values()).map(group => {
+            const bookingsSorted = [...group.bookings].sort((a, b) => new Date(`${a.date}T${a.start_time || '00:00:00'}`).getTime() - new Date(`${b.date}T${b.start_time || '00:00:00'}`).getTime());
+            const primary = bookingsSorted[0];
+            const totalAmount = group.payment?.total_amount ?? bookingsSorted.reduce((sum, b) => sum + (b.total_price || 0), 0);
+            return { ...group, bookings: bookingsSorted, primary, totalAmount };
+        }).sort((a, b) => {
+            const aDate = a.primary?.date ? new Date(`${a.primary.date}T${a.primary.start_time || '00:00:00'}`).getTime() : 0;
+            const bDate = b.primary?.date ? new Date(`${b.primary.date}T${b.primary.start_time || '00:00:00'}`).getTime() : 0;
+            return bDate - aDate;
+        });
+    }, [myBookings]);
+
+    // ── Location list from grouped bookings ──
     const locationOptions = useMemo(() => {
         const locMap = new Map<string, string>();
-        myBookings.forEach(b => {
-            const locName = b.court?.location?.name;
+        groupedBookings.forEach(g => {
+            const locName = g.primary?.court?.location?.name;
             if (locName) locMap.set(locName, locName);
         });
         return ['All', ...Array.from(locMap.keys())];
-    }, [myBookings]);
+    }, [groupedBookings]);
 
-    // ── Filtering & Search ──
-    const filteredBookings = useMemo(() => {
-        let results = myBookings;
+    const findGroupForBooking = useCallback((bookingId: string) => {
+        return groupedBookings.find(g => g.bookings.some((b: any) => b.id === bookingId)) || null;
+    }, [groupedBookings]);
+
+    const handleOpenReceipt = (source: any) => {
+        if (!source) return;
+
+        const group = source.bookings
+            ? source
+            : (source.id ? findGroupForBooking(source.id) : null) || {
+                bookings: [source],
+                primary: source,
+                payment: source.payment,
+                paymentId: source.payment_id,
+                totalAmount: source.total_price
+            };
+
+        const bookings = group.bookings?.length ? group.bookings : [source];
+        const primary = group.primary || bookings[0];
+        if (!primary) return;
+
+        const paymentMethod = group.payment?.payment_method || primary.payment_method;
+        const paymentStatus = group.payment?.payment_status || primary.payment_status;
+        const proofStatus = primary.payment_proof_status;
+        const normalizedPaymentStatus = (() => {
+            if (paymentStatus === 'paid') {
+                if (isQrPaymentMethod(paymentMethod)) {
+                    return (proofStatus === 'payment_verified' || primary.payment_verified) ? 'paid' : 'proof_submitted';
+                }
+                return 'paid';
+            }
+            return 'proof_submitted';
+        })();
+
+        const bookingGroups = bookings.map((bk: any, idx: number) => ({
+            bookingId: bk.id,
+            label: bookings.length > 1 ? `Timeslot ${idx + 1}` : 'Timeslot',
+            startTime: bk.start_time,
+            endTime: bk.end_time,
+            totalPrice: bk.total_price,
+            hours: computeHoursBetween(bk.start_time, bk.end_time),
+        }));
+
+        const totalAmount = Number(group.totalAmount ?? group.payment?.total_amount ?? bookings.reduce((sum: number, bk: any) => sum + (bk.total_price || 0), 0));
+        const courtLocation = primary.court?.location
+            ? [primary.court.location.address, primary.court.location.city].filter(Boolean).join(', ')
+            : 'PicklePlay Facility';
+
+        setSelectedBookingForReceipt({
+            id: group.paymentId || primary.id,
+            paymentId: group.paymentId || primary.payment_id,
+            courtName: primary.court?.name || 'Pickleball Court',
+            courtLocation,
+            locationName: primary.court?.location?.name || '',
+            date: primary.date,
+            startTime: primary.start_time,
+            endTime: primary.end_time,
+            pricePerHour: primary.total_price,
+            totalPrice: totalAmount,
+            totalAmount,
+            bookingGroups,
+            playerName: userFullName,
+            status: primary.status,
+            confirmedAt: primary.status === 'confirmed' ? primary.updated_at : undefined,
+            paymentMethod,
+            paymentStatus: normalizedPaymentStatus,
+            amountTendered: primary.amount_tendered,
+            changeAmount: primary.change_amount
+        });
+        setShowReceiptModal(true);
+    };
+
+    // ── Filtering & Search on groups ──
+    const filteredGroups = useMemo(() => {
+        let results = groupedBookings;
         if (activeFilter !== 'All') {
-            results = results.filter(b => {
-                if (activeFilter === 'Paid') return getPlayerDisplayStatus(b) === 'paid';
-                return b.status === activeFilter.toLowerCase();
+            results = results.filter(g => {
+                if (activeFilter === 'Paid') return getGroupDisplayStatus(g) === 'paid';
+                return g.primary?.status === activeFilter.toLowerCase();
             });
         }
         if (selectedLocation !== 'All') {
-            results = results.filter(b => b.court?.location?.name === selectedLocation);
+            results = results.filter(g => g.primary?.court?.location?.name === selectedLocation);
         }
         if (selectedCalendarDate) {
-            results = results.filter(b => b.date === selectedCalendarDate);
+            results = results.filter(g => g.bookings.some((b: any) => b.date === selectedCalendarDate));
         }
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            results = results.filter(b =>
-                (b.court?.name || '').toLowerCase().includes(q) ||
-                (b.court?.location?.city || '').toLowerCase().includes(q) ||
-                (b.court?.location?.name || '').toLowerCase().includes(q) ||
-                b.id.toLowerCase().includes(q) ||
-                b.date.includes(q)
-            );
+            results = results.filter(g => {
+                const lead = g.primary;
+                return (
+                    (lead?.court?.name || '').toLowerCase().includes(q) ||
+                    (lead?.court?.location?.city || '').toLowerCase().includes(q) ||
+                    (lead?.court?.location?.name || '').toLowerCase().includes(q) ||
+                    (g.paymentId || lead?.id || '').toLowerCase().includes(q) ||
+                    g.bookings.some((b: any) => (b.id || '').toLowerCase().includes(q) || (b.date || '').includes(q))
+                );
+            });
         }
         return results;
-    }, [myBookings, activeFilter, selectedLocation, searchQuery, selectedCalendarDate]);
+    }, [groupedBookings, activeFilter, selectedLocation, searchQuery, selectedCalendarDate]);
 
     // ── Pagination ──
-    const totalPages = Math.max(1, Math.ceil(filteredBookings.length / ITEMS_PER_PAGE));
-    const paginatedBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const totalPages = Math.max(1, Math.ceil(filteredGroups.length / ITEMS_PER_PAGE));
+    const paginatedGroups = filteredGroups.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     useEffect(() => { setCurrentPage(1); }, [activeFilter, selectedLocation, searchQuery, selectedCalendarDate]);
 
     // ── Calendar helpers ──
     const bookingDatesMap = useMemo(() => {
         const map: Record<string, { count: number; statuses: string[] }> = {};
-        myBookings.forEach(b => {
-            if (!map[b.date]) map[b.date] = { count: 0, statuses: [] };
-            map[b.date].count++;
-            map[b.date].statuses.push(getPlayerDisplayStatus(b));
+        groupedBookings.forEach(g => {
+            const status = getGroupDisplayStatus(g);
+            g.bookings.forEach((b: any) => {
+                if (!map[b.date]) map[b.date] = { count: 0, statuses: [] };
+                map[b.date].count++;
+                map[b.date].statuses.push(status);
+            });
         });
         return map;
-    }, [myBookings]);
+    }, [groupedBookings]);
 
     const calendarDays = useMemo(() => {
         const year = calendarMonth.getFullYear();
@@ -467,30 +706,6 @@ const MyBookings: React.FC = () => {
         }
     };
 
-    const handleOpenReceipt = (booking: any) => {
-        setSelectedBookingForReceipt({
-            id: booking.id,
-            courtName: booking.court?.name || 'Pickleball Court',
-            courtLocation: booking.court?.location
-                ? `${booking.court.location.address || ''}, ${booking.court.location.city || ''}`
-                : 'PicklePlay Facility',
-            locationName: booking.court?.location?.name || '',
-            date: booking.date,
-            startTime: booking.start_time,
-            endTime: booking.end_time,
-            pricePerHour: booking.total_price,
-            totalPrice: booking.total_price,
-            playerName: userFullName,
-            status: booking.status,
-            confirmedAt: booking.status === 'confirmed' ? booking.updated_at : undefined,
-            paymentMethod: booking.payment_method,
-            paymentStatus: isPaymentVerifiedForPlayer(booking) ? 'paid' : 'proof_submitted',
-            amountTendered: booking.amount_tendered,
-            changeAmount: booking.change_amount
-        });
-        setShowReceiptModal(true);
-    };
-
     const handleShareCourt = async () => {
         if (!selectedBookingForShare || !shareEmail.trim()) return;
         setIsSharing(true);
@@ -544,6 +759,39 @@ const MyBookings: React.FC = () => {
         } catch (err) {
             console.error('Remove share error:', err);
         }
+    };
+
+    const fetchPaymentMethodForBooking = async (booking: any) => {
+        if (!booking?.court?.owner_id) return null;
+        const { data, error } = await supabase
+            .from('court_owner_payment_methods')
+            .select('*')
+            .eq('owner_id', booking.court.owner_id)
+            .eq('is_active', true)
+            .eq('payment_type', booking.payment_method || '')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.warn('fetchPaymentMethodForBooking error:', error.message);
+            return null;
+        }
+
+        if (!data || data.length === 0) return null;
+
+        // Prefer a method scoped to the court's location if available.
+        const match = data.find(m => m.location_id && booking.court?.location_id && m.location_id === booking.court.location_id);
+        return match || data[0];
+    };
+
+    const handleOpenResubmit = async (booking: any) => {
+        setResubmitError('');
+        setResubmitReference('');
+        setResubmitProofFile(null);
+        setResubmitProofPreview('');
+        setOpenActionsMenuId(null);
+        setResubmitModalBooking(booking);
+        const method = await fetchPaymentMethodForBooking(booking);
+        setResubmitPaymentMethod(method);
     };
 
     // ── Invitation handlers ──
@@ -647,19 +895,22 @@ const MyBookings: React.FC = () => {
         setCancellingId(null);
     };
 
-    const getStatusBadge = (b: any) => {
-        const displayStatus = getPlayerDisplayStatus(b);
+    const getStatusBadge = (b: any, statusOverride?: 'paid' | 'payment_review' | 'resubmit' | 'confirmed' | 'pending' | 'cancelled') => {
+        const displayStatus = statusOverride || getPlayerDisplayStatus(b);
         const label = displayStatus === 'paid'
             ? 'Paid'
             : displayStatus === 'payment_review'
                 ? 'Payment Review'
-                : displayStatus;
+                : displayStatus === 'resubmit'
+                    ? 'Resubmit Payment'
+                    : displayStatus;
         const colors = displayStatus === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' :
             displayStatus === 'payment_review' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                displayStatus === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                    displayStatus === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
-                        displayStatus === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
-                            'bg-slate-100 border-slate-200 text-slate-500';
+                displayStatus === 'resubmit' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                    displayStatus === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                        displayStatus === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-600' :
+                            displayStatus === 'cancelled' ? 'bg-red-50 border-red-200 text-red-500' :
+                                'bg-slate-100 border-slate-200 text-slate-500';
         return <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide whitespace-nowrap border ${colors}`}>{label}</span>;
     };
 
@@ -751,8 +1002,9 @@ const MyBookings: React.FC = () => {
                                                 {hasBooking && !isSelected && (
                                                     <span className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${info.statuses.includes('paid') ? 'bg-emerald-500' :
                                                         info.statuses.includes('payment_review') ? 'bg-amber-500' :
-                                                            info.statuses.includes('confirmed') ? 'bg-blue-500' :
-                                                                info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
+                                                            info.statuses.includes('resubmit') ? 'bg-blue-500' :
+                                                                info.statuses.includes('confirmed') ? 'bg-blue-500' :
+                                                                    info.statuses.includes('pending') ? 'bg-blue-500' : 'bg-slate-400'
                                                         }`} />
                                                 )}
                                             </button>
@@ -770,15 +1022,15 @@ const MyBookings: React.FC = () => {
                                 <div className="mt-6 pt-5 border-t border-slate-100 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</span>
-                                        <span className="text-sm font-black text-slate-900">{myBookings.length}</span>
+                                        <span className="text-sm font-black text-slate-900">{groupedBookings.length}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Confirmed</span>
-                                        <span className="text-sm font-black text-slate-900">{myBookings.filter(b => b.status === 'confirmed').length}</span>
+                                        <span className="text-sm font-black text-slate-900">{groupedBookings.filter(g => getGroupDisplayStatus(g) === 'paid' || getGroupDisplayStatus(g) === 'confirmed').length}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Pending</span>
-                                        <span className="text-sm font-black text-slate-900">{myBookings.filter(b => b.status === 'pending').length}</span>
+                                        <span className="text-sm font-black text-slate-900">{groupedBookings.filter(g => getGroupDisplayStatus(g) === 'pending' || getGroupDisplayStatus(g) === 'payment_review').length}</span>
                                     </div>
                                 </div>
                             </div>
@@ -838,7 +1090,7 @@ const MyBookings: React.FC = () => {
                                 </div>
                                 {(searchQuery || activeFilter !== 'All' || selectedLocation !== 'All' || selectedCalendarDate) && (
                                     <div className="mt-3 flex items-center gap-2 flex-wrap">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredBookings.length} result{filteredBookings.length !== 1 ? 's' : ''}</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredGroups.length} result{filteredGroups.length !== 1 ? 's' : ''}</span>
                                         {selectedCalendarDate && (
                                             <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-1 rounded-lg">
                                                 {new Date(selectedCalendarDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -860,7 +1112,7 @@ const MyBookings: React.FC = () => {
                                         <Loader2 className="animate-spin text-blue-600" size={48} />
                                         <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Retrieving your court history...</p>
                                     </div>
-                                ) : paginatedBookings.length > 0 ? (
+                                ) : paginatedGroups.length > 0 ? (
                                     <>
                                         <div className="hidden md:grid grid-cols-12 gap-4 px-8 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-[30px]">
                                             <div className="col-span-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">Ref</div>
@@ -872,13 +1124,18 @@ const MyBookings: React.FC = () => {
                                             <div className="col-span-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</div>
                                         </div>
 
-                                        {paginatedBookings.map((b, idx) => {
-                                            const displayStatus = getPlayerDisplayStatus(b);
+                                        {paginatedGroups.map((group, idx) => {
+                                            const b = group.primary;
+                                            const displayStatus = getGroupDisplayStatus(group);
                                             const isPaidStatus = displayStatus === 'paid';
+                                            const isResubmitStatus = displayStatus === 'resubmit';
+                                            const refLabel = group.paymentId || b.id;
+                                            const timeLabel = getGroupTimeLabel(group) || `${formatTimeTo12h(b.start_time)} - ${formatTimeTo12h(b.end_time)}`;
+                                            const actionsKey = group.paymentId || b.id || '';
                                             return (
-                                            <div key={b.id} className={`grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-6 md:px-8 py-5 items-center border-b border-slate-50 hover:bg-blue-50/30 transition-all duration-200 group ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
+                                            <div key={group.paymentId || b.id} className={`grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-6 md:px-8 py-5 items-center border-b border-slate-50 hover:bg-blue-50/30 transition-all duration-200 group ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
                                                 <div className="col-span-1">
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide">#{b.id.slice(0, 7)}</p>
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-wide">#{(refLabel || '').slice(0, 7)}</p>
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
@@ -886,7 +1143,7 @@ const MyBookings: React.FC = () => {
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-black text-slate-900 uppercase tracking-tight truncate">{b.court?.name || 'Court'}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400 truncate">{b.court?.location?.name || b.court?.location?.city || 'PicklePlay'}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 truncate">{b.court?.location?.name || b.court?.location?.city || 'PicklePlay'}{group.bookings.length > 1 ? ` • ${group.bookings.length} bookings` : ''}</p>
                                                     </div>
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
@@ -895,22 +1152,22 @@ const MyBookings: React.FC = () => {
                                                 </div>
                                                 <div className="col-span-2 flex items-center gap-2">
                                                     <Clock size={14} className="text-slate-300 shrink-0" />
-                                                    <p className="text-xs font-black text-slate-700">{formatTimeTo12h(b.start_time)} - {formatTimeTo12h(b.end_time)}</p>
+                                                    <p className="text-xs font-black text-slate-700">{timeLabel}</p>
                                                 </div>
                                                 <div className="col-span-1">
-                                                    {b.total_price > 0 ? <p className="text-sm font-black text-slate-900">₱{b.total_price}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
+                                                    {group.totalAmount > 0 ? <p className="text-sm font-black text-slate-900">₱{Number(group.totalAmount).toFixed(2)}</p> : <p className="text-sm font-black text-emerald-500">FREE</p>}
                                                 </div>
-                                                <div className="col-span-2">{getStatusBadge(b)}</div>
+                                                <div className="col-span-2">{getStatusBadge(b, displayStatus)}</div>
                                                 <div className="col-span-2 flex items-center justify-end">
                                                     <div className="relative">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); setOpenActionsMenuId(openActionsMenuId === b.id ? null : b.id); }}
+                                                            onClick={(e) => { e.stopPropagation(); setOpenActionsMenuId(openActionsMenuId === actionsKey ? null : actionsKey); }}
                                                             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-all text-[10px] font-black uppercase tracking-widest"
                                                             title="Actions"
                                                         >
-                                                            Actions <ChevronDown size={11} className={`transition-transform ${openActionsMenuId === b.id ? 'rotate-180' : ''}`} />
+                                                            Actions <ChevronDown size={11} className={`transition-transform ${openActionsMenuId === actionsKey ? 'rotate-180' : ''}`} />
                                                         </button>
-                                                        {openActionsMenuId === b.id && (
+                                                        {openActionsMenuId === actionsKey && (
                                                             <div
                                                                 className="absolute top-full mt-2 right-0 z-50 bg-white rounded-2xl border-2 border-slate-100 shadow-2xl shadow-slate-200/60 overflow-hidden min-w-[180px] animate-in zoom-in-95 fade-in duration-150"
                                                                 onClick={e => e.stopPropagation()}
@@ -919,6 +1176,12 @@ const MyBookings: React.FC = () => {
                                                                     <button onClick={() => { handleOpenReview(b); setOpenActionsMenuId(null); }}
                                                                         className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-yellow-50 hover:text-yellow-600 transition-all border-b border-slate-50">
                                                                         <Star size={14} className="shrink-0" /> Leave a Review
+                                                                    </button>
+                                                                )}
+                                                                {isResubmitStatus && (
+                                                                    <button onClick={() => { handleOpenResubmit(b); setOpenActionsMenuId(null); }}
+                                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all border-b border-slate-50">
+                                                                        <Send size={14} className="shrink-0" /> Resubmit Payment
                                                                     </button>
                                                                 )}
                                                                 {isPaidStatus && (
@@ -940,7 +1203,7 @@ const MyBookings: React.FC = () => {
                                                                     </button>
                                                                 )}
                                                                 {isPaidStatus && (
-                                                                    <button onClick={() => { handleOpenReceipt(b); setOpenActionsMenuId(null); }}
+                                                                    <button onClick={() => { handleOpenReceipt(group); setOpenActionsMenuId(null); }}
                                                                         className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-all border-b border-slate-50">
                                                                         <FileText size={14} className="shrink-0" /> View Receipt
                                                                     </button>
@@ -960,7 +1223,7 @@ const MyBookings: React.FC = () => {
                                         {totalPages > 1 && (
                                             <div className="flex items-center justify-between px-8 py-5 border-t border-slate-100 bg-slate-50/30">
                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                    Page {currentPage} of {totalPages} • {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''}
+                                                    Page {currentPage} of {totalPages} • {filteredGroups.length} booking{filteredGroups.length !== 1 ? 's' : ''}
                                                 </p>
                                                 <div className="flex items-center gap-2">
                                                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
@@ -1321,6 +1584,124 @@ const MyBookings: React.FC = () => {
                 <Receipt bookingData={selectedBookingForReceipt} onClose={() => setShowReceiptModal(false)} />
             )}
 
+            {/* ═══ RESUBMIT PAYMENT MODAL ═══ */}
+            {resubmitModalBooking && ReactDOM.createPortal(
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[120] flex items-center justify-center p-6" onClick={(e) => { if (e.target === e.currentTarget) closeResubmitModal(); }}>
+                    <div className="relative w-full max-w-2xl bg-white rounded-[36px] shadow-3xl p-8 space-y-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.35em] text-blue-500 mb-1">Payment</p>
+                                <h3 className="text-2xl font-black text-slate-950 uppercase leading-none">Resubmit Payment</h3>
+                                <p className="text-sm text-slate-500 font-medium mt-2">Please re-upload your proof and reference so the court owner can verify.</p>
+                            </div>
+                            <button onClick={closeResubmitModal} className="p-2 text-slate-400 hover:text-slate-900 rounded-xl hover:bg-slate-50 transition-colors"><X size={20} /></button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/60 space-y-3">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Court Payment</p>
+                                <p className="text-sm font-black text-slate-900 capitalize">{resubmitModalBooking.payment_method || 'Payment Method'}</p>
+                                {resubmitPaymentMethod ? (
+                                    <div className="rounded-xl border border-slate-200 bg-white p-4 flex items-center gap-4">
+                                        <div className="w-28 h-28 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center">
+                                            {resubmitPaymentMethod.qr_code_url ? <img src={resubmitPaymentMethod.qr_code_url} alt="QR" className="w-full h-full object-contain" /> : <span className="text-xs font-black text-slate-400">QR</span>}
+                                        </div>
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                            <p className="text-sm font-black text-slate-900 truncate">{resubmitPaymentMethod.account_name || 'Account Name'}</p>
+                                            <p className="text-[11px] text-slate-500 font-medium truncate">{resubmitPaymentMethod.payment_type}</p>
+                                            {resubmitPaymentMethod.qr_code_url && (
+                                                <div className="flex flex-wrap gap-2 pt-1">
+                                                    <a href={resubmitPaymentMethod.qr_code_url} download className="px-3 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:border-blue-300 transition-colors">Download QR</a>
+                                                    <button onClick={() => window.open(resubmitPaymentMethod.qr_code_url, '_blank')} className="px-3 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:border-blue-300 transition-colors">View Full</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-[11px] text-slate-500 font-bold">QR for this payment method is not available, but you can still resubmit your proof.</div>
+                                )}
+                            </div>
+
+                            <div className="p-4 rounded-2xl border border-blue-100 bg-blue-50/50 space-y-3">
+                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Owner Request</p>
+                                <p className="text-sm font-black text-slate-900">Please resubmit your payment details.</p>
+                                {getLatestPaymentForBooking(resubmitModalBooking)?.rejection_reason && (
+                                    <p className="text-[12px] text-slate-700 bg-white rounded-xl border border-blue-100 p-3">{getLatestPaymentForBooking(resubmitModalBooking)?.rejection_reason}</p>
+                                )}
+                                <p className="text-[11px] text-slate-500 font-medium">Your previous proof stays on file for comparison.</p>
+                            </div>
+                        </div>
+
+                        {(() => {
+                            const latestPayment = getLatestPaymentForBooking(resubmitModalBooking);
+                            const previousProofUrl = latestPayment?.proof_image_url;
+                            const previousReference = latestPayment?.reference_number;
+                            if (!previousProofUrl && !previousReference) return null;
+                            return (
+                                <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Previous submission</p>
+                                        {previousReference && <span className="text-[11px] font-bold text-slate-500">Ref: {previousReference.toUpperCase()}</span>}
+                                    </div>
+                                    {previousProofUrl && (
+                                        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 max-w-xl">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[11px] font-bold text-slate-700 truncate">{getFilenameFromUrl(previousProofUrl) || 'previous-proof.png'}</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Stored for comparison</p>
+                                            </div>
+                                            <button onClick={() => window.open(previousProofUrl, '_blank')} className="px-3 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:border-blue-300 transition-colors">View Image</button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reference Number</label>
+                                <input
+                                    type="text"
+                                    value={resubmitReference}
+                                    onChange={e => setResubmitReference(e.target.value.toUpperCase())}
+                                    placeholder="Enter the payment reference"
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none uppercase"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Upload Proof</label>
+                                <label className="block w-full rounded-2xl border-2 border-dashed border-slate-200 bg-white px-4 py-4 text-center text-[12px] font-bold text-slate-500 cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all">
+                                    <input type="file" accept="image/*" className="hidden" onChange={handleResubmitFileChange} />
+                                    {resubmitProofFile ? 'Change File' : 'Upload Payment Screenshot'}
+                                </label>
+                                {resubmitProofFile && (
+                                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[11px] font-bold text-slate-700 truncate">{resubmitProofFile.name}</p>
+                                            <p className="text-[10px] text-slate-400 font-medium">Image ready to submit</p>
+                                        </div>
+                                        <button onClick={() => resubmitProofPreview && window.open(resubmitProofPreview, '_blank')} className="px-3 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:border-blue-300 transition-colors">View Image</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {resubmitError && <p className="text-sm font-bold text-red-600 bg-red-50 border border-red-100 px-4 py-2 rounded-xl">{resubmitError}</p>}
+
+                        <div className="flex gap-3">
+                            <button onClick={closeResubmitModal} className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button
+                                onClick={handleSubmitResubmit}
+                                disabled={resubmitLoading}
+                                className="flex-1 py-3 rounded-2xl bg-blue-600 text-white font-black text-[11px] uppercase tracking-widest hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {resubmitLoading ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                                Submit for Review
+                            </button>
+                        </div>
+                    </div>
+                </div>, document.body
+            )}
+
             {/* ═══ SHARE COURT MODAL ═══ */}
             {showShareModal && selectedBookingForShare && ReactDOM.createPortal(
                 <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300"
@@ -1390,9 +1771,12 @@ const MyBookings: React.FC = () => {
                                                     ? 'Paid'
                                                     : displayStatus === 'payment_review'
                                                         ? 'Payment Review'
+                                                        : displayStatus === 'resubmit'
+                                                            ? 'Resubmit Payment'
                                                         : displayStatus;
                                                 const colors = displayStatus === 'paid' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300' :
                                                     displayStatus === 'payment_review' ? 'bg-amber-500/20 border-amber-300/30 text-amber-200' :
+                                                        displayStatus === 'resubmit' ? 'bg-blue-500/20 border-blue-300/30 text-blue-200' :
                                                         displayStatus === 'confirmed' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
                                                             displayStatus === 'pending' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' :
                                                                 displayStatus === 'cancelled' ? 'bg-red-500/20 border-red-400/30 text-red-300' :
@@ -1419,6 +1803,23 @@ const MyBookings: React.FC = () => {
 
                             {/* RIGHT COLUMN — Details */}
                             <div className="flex-1 flex flex-col px-7 py-8 sm:px-10 lg:px-10 lg:border-l border-slate-200 overflow-y-auto max-h-[85vh]">
+                                {(() => {
+                                    const detailGroup = findGroupForBooking(selectedBookingForDetail.id);
+                                    const slots = detailGroup?.bookings || [selectedBookingForDetail];
+                                    return slots.length > 1 ? (
+                                        <div className="mb-5 bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">This payment covers {slots.length} timeslots</p>
+                                            <div className="space-y-1.5">
+                                                {slots.map((s: any) => (
+                                                    <div key={s.id} className="flex items-center justify-between bg-white rounded-xl border border-slate-100 px-3 py-2 text-[11px] font-bold text-slate-800">
+                                                        <span>{new Date(s.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {formatTimeTo12h(s.start_time)}–{formatTimeTo12h(s.end_time)}</span>
+                                                        <span className="text-blue-700">₱{Number(s.total_price || 0).toFixed(2)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : null;
+                                })()}
                                 <div className="lg:hidden mb-5">
                                     <div className="relative h-40 -mx-7 -mt-8 sm:-mx-10 mb-6 overflow-hidden">
                                         <img src={selectedBookingForDetail.court?.image_url || '/images/home-images/pb3.jpg'} alt="Court" className="w-full h-full object-cover" />
@@ -1471,11 +1872,15 @@ const MyBookings: React.FC = () => {
                                                         ? 'Paid'
                                                         : displayStatus === 'payment_review'
                                                             ? 'Payment Review'
+                                                                : displayStatus === 'resubmit'
+                                                                    ? 'Resubmit Payment'
                                                             : displayStatus;
                                                     const color = displayStatus === 'paid'
                                                         ? 'text-emerald-600'
                                                         : displayStatus === 'payment_review'
                                                             ? 'text-amber-700'
+                                                                : displayStatus === 'resubmit'
+                                                                    ? 'text-blue-700'
                                                             : displayStatus === 'confirmed'
                                                                 ? 'text-blue-600'
                                                                 : displayStatus === 'pending'
