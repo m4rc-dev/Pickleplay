@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
+import { toPng } from 'html-to-image';
 import {
   Trophy,
   Zap,
@@ -754,27 +755,61 @@ const CertificateViewer: React.FC<CertificateViewerProps> = ({ certificate, onCl
   const handleDownload = async () => {
     if (!certRef.current) return;
     try {
-      // @ts-ignore - html2canvas is an optional runtime dependency
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(certRef.current, {
-        scale: 2,
-        backgroundColor: null,
-        useCORS: true,
+      // Use html-to-image for better quality and reliable rendering
+      const dataUrl = await toPng(certRef.current, {
+        quality: 1.0,
+        pixelRatio: 2,
+        cacheBust: true,
+        style: {
+          transform: 'scale(1)',
+          transformOrigin: 'top left'
+        }
       });
+      
       const link = document.createElement('a');
       link.download = `PicklePlay-Certificate-${certificate.certificate_number}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = dataUrl;
       link.click();
-    } catch {
+    } catch (err) {
+      console.error('Failed to generate image:', err);
+      // Fallback to print if image generation fails
       const printWindow = window.open('', '_blank');
       if (printWindow && certRef.current) {
+        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+          .map(style => style.outerHTML)
+          .join('\n');
+          
         printWindow.document.write(`
           <html><head><title>Certificate - ${certificate.certificate_number}</title>
-          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8f8f8;font-family:system-ui,-apple-system,sans-serif;}</style>
+          ${styles}
+          <style>
+            @page { size: landscape; margin: 0; }
+            body { 
+              margin: 0; 
+              display: flex; 
+              justify-content: center; 
+              align-items: center; 
+              min-height: 100vh; 
+              background: #0f172a; 
+              font-family: system-ui, -apple-system, sans-serif; 
+              -webkit-print-color-adjust: exact; 
+              print-color-adjust: exact; 
+            }
+            /* Ensure the certificate container prints correctly */
+            body > div {
+              width: 100%;
+              max-width: 800px;
+              transform: scale(0.9);
+            }
+          </style>
           </head><body>${certRef.current.outerHTML}</body></html>
         `);
         printWindow.document.close();
-        printWindow.print();
+        
+        // Wait for styles to load before printing
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
       }
     }
   };

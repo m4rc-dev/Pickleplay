@@ -613,10 +613,9 @@ const NavigationHandler: React.FC<{
 
   const headerActive = isScrolled || !isHomePage;
 
-  const onLogoutClick = async () => {
+  const onLogoutClick = () => {
     setIsMobileMenuOpen(false);
-    await handleLogout();
-    window.location.href = '/login';
+    handleLogout();
   };
 
   const toggleNotifications = () => {
@@ -2423,13 +2422,20 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = async () => {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const performLogout = async () => {
+    setShowLogoutConfirm(false);
     localStorage.removeItem('two_factor_pending');
     localStorage.removeItem('auth_redirect');
     localStorage.removeItem('active_role');
     localStorage.setItem('came_from_logout', 'true');
-    // Removed immediate state update to avoid reactive flicker before page reload
     await supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   const handleFollow = async (userId: string, userName: string) => {
@@ -2706,6 +2712,40 @@ const App: React.FC = () => {
         />
         {isSwitchingRole && <RoleSwitchOverlay targetRole={roleSwitchTarget} />}
       </>
+      {/* Logout Confirmation Dialog */}
+      {showLogoutConfirm && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-8 text-center bg-slate-50">
+              <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 bg-slate-100 text-slate-600">
+                <LogOut size={40} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2">
+                Ready to go?
+              </h3>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed">
+                You're about to sign out of PicklePlay. Are you sure you want to end your session?
+              </p>
+            </div>
+            <div className="p-6 bg-white flex flex-row gap-3">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={performLogout}
+                className="flex-1 py-4 rounded-2xl bg-rose-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-rose-100 hover:bg-rose-700 hover:shadow-rose-200 transition-all flex items-center justify-center gap-2"
+              >
+                LOGOUT
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Custom Status Modal (Success/Error) */}
       {showStatusModal.show && ReactDOM.createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
