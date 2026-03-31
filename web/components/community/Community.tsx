@@ -250,7 +250,7 @@ const Community: React.FC<CommunityProps> = ({ followedUsers, onFollow, posts, s
           const normalized: NewsArticle[] = rawArticles.slice(0, 5).map((raw: any) => ({
             id: String(raw.id),
             title: raw.title || 'Untitled',
-            excerpt: raw.excerpt || (raw.body || raw.content || '').substring(0, 150) + '...',
+            excerpt: raw.excerpt || raw.summary || (raw.body || raw.content || '').substring(0, 150) || 'No preview available.',
             category: (raw.category || raw.category_name || 'Community') as any,
             date: new Date(raw.published_at || raw.created_at || new Date()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             image: raw.image || raw.image_url || raw.featured_image || 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?auto=format&fit=crop&q=80&w=800',

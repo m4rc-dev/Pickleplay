@@ -5,13 +5,34 @@ import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, New
 import useSEO from '../hooks/useSEO';
 
 // ─── Types ──────────────────────────────────────────────────────
+interface ContentBlockSettings {
+  textAlign?: string;
+  fontSize?: string;
+  color?: string;
+  fontWeight?: string;
+  isItalic?: boolean;
+  isUnderline?: boolean;
+  listType?: 'bullet' | 'number';
+}
+
+interface ContentBlock {
+  id?: string | number;
+  type: string;
+  content?: any;
+  settings?: ContentBlockSettings;
+  image?: string;
+  caption?: string;
+}
+
 interface ApiArticle {
   id: number | string;
   title: string;
   slug: string;
+  summary: string | null;
   excerpt: string | null;
   body: string | null;
   content: string | null;
+  content_blocks: ContentBlock[] | string | null;
   image: string | null;
   image_url: string | null;
   featured_image: string | null;
@@ -26,9 +47,14 @@ interface ApiArticle {
   read_time: string | null;
   reading_time: string | null;
   tags: string[] | null;
+  topics: string[] | null;
+  keywords: string[] | null;
   source: string | null;
   url: string | null;
   external_url: string | null;
+  views_count: number | null;
+  province_name: string | null;
+  city_name: string | null;
 }
 
 interface NormalizedArticle {
@@ -36,9 +62,11 @@ interface NormalizedArticle {
   title: string;
   excerpt: string;
   body: string;
+  contentBlocks: ContentBlock[];
   category: string;
   date: string;
   rawDate: string;
+  publishedAt: string | null;
   image: string;
   readTime: string;
   author: string;
@@ -75,9 +103,35 @@ const getNewsArticleSlug = (article: Pick<NormalizedArticle, 'slug' | 'title'>) 
 
 const stripHtml = (value: string) => value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
+function parseContentBlocks(raw: ApiArticle): ContentBlock[] {
+  let blocks = raw.content_blocks;
+  if (!blocks) return [];
+  if (typeof blocks === 'string') {
+    try { blocks = JSON.parse(blocks); } catch { return []; }
+  }
+  return Array.isArray(blocks) ? blocks : [];
+}
+
+function getTextFromBlocks(blocks: ContentBlock[]): string {
+  return blocks
+    .filter(b => b.type === 'text' && b.content?.text)
+    .map(b => stripHtml(b.content.text))
+    .join(' ')
+    .trim();
+}
+
 const buildExcerpt = (raw: ApiArticle) => {
   const explicitExcerpt = stripHtml(raw.excerpt || '');
   if (explicitExcerpt) return explicitExcerpt;
+
+  const summary = stripHtml(raw.summary || '');
+  if (summary) return summary.length > 220 ? `${summary.substring(0, 220)}...` : summary;
+
+  const blocks = parseContentBlocks(raw);
+  if (blocks.length > 0) {
+    const blockText = getTextFromBlocks(blocks);
+    if (blockText) return blockText.length > 220 ? `${blockText.substring(0, 220)}...` : blockText;
+  }
 
   const plainBody = stripHtml(raw.body || raw.content || '');
   if (!plainBody) return 'No preview available.';
@@ -86,22 +140,30 @@ const buildExcerpt = (raw: ApiArticle) => {
 
 function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
   const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
-  const date = raw.published_at || raw.created_at || raw.date || '';
-  const readTime = raw.read_time || raw.reading_time || `${Math.max(2, Math.ceil((raw.body || raw.content || '').length / 1000))} min read`;
+  const publishedAt = raw.published_at || null;
+  const date = publishedAt || raw.created_at || raw.date || '';
+  const contentBlocks = parseContentBlocks(raw);
+
+  const bodyText = raw.body || raw.content || '';
+  const blockText = getTextFromBlocks(contentBlocks);
+  const textForReadTime = bodyText || blockText || raw.summary || '';
+  const readTime = raw.read_time || raw.reading_time || `${Math.max(2, Math.ceil(textForReadTime.length / 1000))} min read`;
 
   return {
     id: String(raw.id),
     title: raw.title || 'Untitled Article',
     excerpt: buildExcerpt(raw),
-    body: raw.body || raw.content || '',
+    body: bodyText,
+    contentBlocks,
     category: raw.category || raw.category_name || 'General',
     date: date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
     rawDate: date,
+    publishedAt,
     image,
     readTime,
     author: raw.author || raw.author_name || 'Staff',
     slug: raw.slug || '',
-    tags: raw.tags || [],
+    tags: raw.tags || raw.topics || raw.keywords || [],
     sourceUrl: raw.url || raw.external_url || '',
   };
 }
@@ -127,74 +189,189 @@ function formatDateLong(dateStr: string) {
   }
 }
 
-/** Format body text into well-structured paragraphs with highlighted keywords */
+function buildBlockStyle(settings?: ContentBlockSettings): React.CSSProperties {
+  if (!settings) return {};
+  const style: React.CSSProperties = {};
+  if (settings.textAlign) style.textAlign = settings.textAlign as any;
+  if (settings.fontSize) style.fontSize = settings.fontSize;
+  if (settings.color) style.color = settings.color;
+  if (settings.fontWeight) style.fontWeight = settings.fontWeight;
+  if (settings.isItalic) style.fontStyle = 'italic';
+  if (settings.isUnderline) style.textDecoration = 'underline';
+  return style;
+}
+
+function isValidImageUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
+const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: string }> = ({ blocks, heroImage }) => {
+  if (!blocks || blocks.length === 0) return null;
+
+  return (
+    <div className="space-y-8">
+      {blocks.map((block, idx) => {
+        const style = buildBlockStyle(block.settings);
+        const key = block.id ?? idx;
+
+        switch (block.type) {
+          case 'text': {
+            const text = block.content?.text;
+            if (!text) return null;
+            const isHtml = /<[a-z][\s\S]*>/i.test(text);
+
+            if (block.settings?.listType === 'bullet') {
+              return <ul key={key} className="list-disc pl-6 space-y-2 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+            }
+            if (block.settings?.listType === 'number') {
+              return <ol key={key} className="list-decimal pl-6 space-y-2 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+            }
+
+            // Strip HTML to get plain text, then split into 5-sentence paragraphs
+            const plainText = isHtml ? stripHtml(text) : text;
+            const groups = splitIntoSentenceGroups(plainText, 5);
+            if (groups.length === 0) return null;
+            return (
+              <div key={key} className="space-y-8" style={style}>
+                {groups.map((chunk, gi) => (
+                  <p
+                    key={gi}
+                    className={
+                      idx === 0 && gi === 0
+                        ? 'text-base md:text-lg leading-[1.9] text-slate-700 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none'
+                        : 'text-base md:text-lg leading-[1.9] text-slate-700'
+                    }
+                  >
+                    {chunk}
+                  </p>
+                ))}
+              </div>
+            );
+          }
+
+          case 'image':
+          case 'centered-image': {
+            const src = block.content?.src || block.image;
+            const caption = block.content?.caption || block.caption;
+            if (!isValidImageUrl(src)) return null;
+            if (heroImage && src === heroImage) return null;
+            return (
+              <figure key={key} className="my-8">
+                <img src={src} alt={caption || ''} className="w-full rounded-2xl shadow-md" loading="lazy" />
+                {caption && <figcaption className="text-sm text-slate-400 mt-3 text-center italic">{caption}</figcaption>}
+              </figure>
+            );
+          }
+
+          case 'left-image':
+          case 'right-image': {
+            const imgSrc = block.content?.image || block.content?.src;
+            const text = block.content?.text || '';
+            const caption = block.content?.caption;
+            const isLeft = block.type === 'left-image';
+            return (
+              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-8 items-start`}>
+                {isValidImageUrl(imgSrc) && (
+                  <figure className="md:w-2/5 shrink-0">
+                    <img src={imgSrc} alt={caption || ''} className="w-full rounded-2xl shadow-md" loading="lazy" />
+                    {caption && <figcaption className="text-sm text-slate-400 mt-2 text-center italic">{caption}</figcaption>}
+                  </figure>
+                )}
+                <div className="flex-1 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+              </div>
+            );
+          }
+
+          case 'split-left':
+          case 'split-right': {
+            const imgSrc = block.content?.image || block.content?.src;
+            const text = block.content?.text || '';
+            const isLeft = block.type === 'split-left';
+            return (
+              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-8 items-center`}>
+                {isValidImageUrl(imgSrc) && (
+                  <div className="md:w-1/2 shrink-0">
+                    <img src={imgSrc} alt="" className="w-full rounded-2xl shadow-md" loading="lazy" />
+                  </div>
+                )}
+                <div className="flex-1 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+              </div>
+            );
+          }
+
+          case 'grid': {
+            const images: string[] = block.content?.images || [];
+            const validImages = images.filter(isValidImageUrl);
+            if (validImages.length === 0) return null;
+            const cols = validImages.length <= 2 ? 'grid-cols-2' : validImages.length === 3 ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-3';
+            return (
+              <div key={key} className={`grid ${cols} gap-3 my-8`}>
+                {validImages.map((src, i) => (
+                  <img key={i} src={src} alt="" className="w-full rounded-xl shadow-sm object-cover aspect-square" loading="lazy" />
+                ))}
+              </div>
+            );
+          }
+
+          case 'dynamic-images': {
+            const images: string[] = block.content?.images || [];
+            const validImages = images.filter(isValidImageUrl);
+            if (validImages.length === 0) return null;
+            return (
+              <div key={key} className="flex flex-wrap gap-3 my-8">
+                {validImages.map((src, i) => (
+                  <img key={i} src={src} alt="" className="rounded-xl shadow-sm max-h-72 object-cover" loading="lazy" />
+                ))}
+              </div>
+            );
+          }
+
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+};
+
+function splitIntoSentenceGroups(text: string, perGroup: number): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+["']?/g) || [text];
+  const groups: string[] = [];
+  for (let i = 0; i < sentences.length; i += perGroup) {
+    const chunk = sentences.slice(i, i + perGroup).join('').trim();
+    if (chunk) groups.push(chunk);
+  }
+  return groups;
+}
+
+/** Format plain body text into paragraphs — 5 sentences per paragraph */
 function formatArticleBody(body: string): string {
   if (!body) return '';
 
-  // Keywords to highlight
-  const keywords = [
-    'Philippines', 'Filipino', 'Filipinos', 'Filipinas', 'Philippine',
-    'OFW', 'OFWs', 'Manila', 'Cebu', 'Davao',
-    'pickleball', 'Pickleball', 'PicklePlay',
-    'Olympic', 'Olympics', 'championship', 'Championship',
-    'victory', 'Victory', 'tournament', 'Tournament',
-    'world', 'World', 'international', 'International',
-    'national', 'National', 'global', 'Global',
-    'sports', 'Sports', 'athlete', 'athletes',
-    'women', 'Women', 'community', 'Community',
-  ];
-
-  // Check if body already has HTML tags
   const hasHtml = /<[a-z][\s\S]*>/i.test(body);
 
   if (hasHtml) {
-    // Body already has HTML — just add highlight styling
-    let html = body;
-    keywords.forEach(kw => {
-      // Only match text outside of HTML tags
-      const regex = new RegExp(`(?<=>|^)([^<]*?)\\b(${kw})\\b`, 'g');
-      html = html.replace(regex, (match, before, word) => {
-        return `${before}<strong class="text-slate-900 font-semibold">${word}</strong>`;
-      });
-    });
-    return html;
+    return body;
   }
 
-  // Split into paragraphs
-  let paragraphs = body.split(/\n\n|\n/).filter(p => p.trim().length > 0);
+  // Try natural line-break paragraphs first
+  let paragraphs = body.split(/\n\n+/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean);
 
-  // If no natural paragraphs, split long text into ~3-4 sentence chunks
+  // If the whole body came as one big block, split by sentences into groups of 5
   if (paragraphs.length <= 1 && body.length > 300) {
-    const sentences = body.match(/[^.!?]+[.!?]+/g) || [body];
-    paragraphs = [];
-    let current = '';
-    sentences.forEach((s, i) => {
-      current += s;
-      if ((i + 1) % 3 === 0 || i === sentences.length - 1) {
-        paragraphs.push(current.trim());
-        current = '';
-      }
-    });
+    paragraphs = splitIntoSentenceGroups(body, 5);
   }
 
-  // Build HTML with highlighted keywords
   const formatted = paragraphs.map((p, idx) => {
     let html = p.trim();
-    // Escape HTML
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    // Bold highlight important keywords
-    keywords.forEach(kw => {
-      const regex = new RegExp(`\\b(${kw})\\b`, 'g');
-      html = html.replace(regex, '<strong class="text-slate-900 font-semibold">$1</strong>');
-    });
-
-    // First paragraph gets a drop-cap style
     if (idx === 0) {
-      return `<p class="text-base md:text-lg leading-[1.9] text-slate-600 mb-7 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none">${html}</p>`;
+      return `<p class="text-base md:text-lg leading-[1.9] text-slate-700 mb-8 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none">${html}</p>`;
     }
 
-    return `<p class="text-base md:text-lg leading-[1.9] text-slate-600 mb-6">${html}</p>`;
+    return `<p class="text-base md:text-lg leading-[1.9] text-slate-700 mb-8">${html}</p>`;
   }).join('');
 
   return formatted;
@@ -203,7 +380,8 @@ function formatArticleBody(body: string): string {
 
 // ─── Article Detail View ────────────────────────────────────────
 const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }> = ({ article, onBack }) => {
-  const formattedBody = formatArticleBody(article.body);
+  const hasContentBlocks = article.contentBlocks && article.contentBlocks.length > 0;
+  const formattedBody = !hasContentBlocks ? formatArticleBody(article.body) : '';
   const [copiedLink, setCopiedLink] = useState(false);
   const handleFacebookShare = () => {
     const shareUrl = buildAbsoluteNewsArticleUrl(article);
@@ -260,10 +438,17 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
             <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-600/20">
               {article.category}
             </span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Calendar size={12} className="text-slate-300" />
-              {formatDateLong(article.rawDate || article.date)}
-            </span>
+            {article.publishedAt ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <Calendar size={12} className="text-slate-300" />
+                Published&nbsp;{formatDateLong(article.publishedAt)}
+              </span>
+            ) : article.rawDate ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <Calendar size={12} className="text-slate-300" />
+                {formatDateLong(article.rawDate)}
+              </span>
+            ) : null}
           </div>
 
           {/* Title */}
@@ -284,6 +469,16 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
             </div>
 
             <div className="h-8 w-px bg-slate-100 hidden sm:block" />
+
+            {article.publishedAt && (
+              <>
+                <div>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Published</p>
+                  <p className="text-sm font-black text-slate-900">{formatDateLong(article.publishedAt)}</p>
+                </div>
+                <div className="h-8 w-px bg-slate-100 hidden sm:block" />
+              </>
+            )}
 
             <div>
               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Reading Time</p>
@@ -358,7 +553,9 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         {/* Article Body */}
         <div className="px-6 sm:px-8 md:px-12 pb-10">
           <div className="max-w-3xl mx-auto">
-            {article.body ? (
+            {hasContentBlocks ? (
+              <ContentBlocksRenderer blocks={article.contentBlocks} heroImage={article.image} />
+            ) : article.body ? (
               <div className="article-body-content" dangerouslySetInnerHTML={{ __html: formattedBody }} />
             ) : (
               <div className="space-y-6">

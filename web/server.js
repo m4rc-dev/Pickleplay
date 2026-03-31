@@ -757,13 +757,17 @@ const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 
 const getNewsApiHeaders = () => ({
-  'X-Site-Api-Key': NEWS_API_KEY,
+  'X-Site-Key': NEWS_API_KEY,
   'Accept': 'application/json',
 });
 
-async function fetchNewsArticlesPage(page = 1, category = '') {
-  const params = new URLSearchParams({ page: String(page) });
-  if (category) params.set('category', String(category));
+async function fetchNewsArticlesPage(query = {}) {
+  const params = new URLSearchParams();
+  const allowedParams = ['page', 'category', 'search', 'q', 'country', 'province', 'city', 'topic', 'per_page', 'limit'];
+  for (const key of allowedParams) {
+    if (query[key]) params.set(key, String(query[key]));
+  }
+  if (!params.has('page')) params.set('page', '1');
 
   const response = await fetch(`${NEWS_API_URL}/api/external/articles?${params.toString()}`, {
     headers: getNewsApiHeaders(),
@@ -780,55 +784,20 @@ async function fetchNewsArticlesPage(page = 1, category = '') {
   return response.json();
 }
 
-function isMatchingNewsArticle(article, articleId) {
-  if (!article) return false;
-  return String(article.id || '') === String(articleId) || String(article.article_id || '') === String(articleId);
-}
+async function fetchNewsArticleByIdentifier(identifier) {
+  const response = await fetch(`${NEWS_API_URL}/api/external/articles/${encodeURIComponent(identifier)}`, {
+    headers: getNewsApiHeaders(),
+  });
 
-function normalizeNewsArticleSlug(value) {
-  return String(value || 'article')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'article';
-}
-
-function isMatchingNewsArticleSlug(article, articleSlug) {
-  if (!article) return false;
-  return normalizeNewsArticleSlug(article.slug || article.title) === normalizeNewsArticleSlug(articleSlug);
-}
-
-async function findNewsArticleById(articleId) {
-  const firstPage = await fetchNewsArticlesPage(1);
-  const firstPageArticles = firstPage?.data?.data || [];
-  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticle(article, articleId));
-  if (firstMatch) return firstMatch;
-
-  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
-  for (let page = 2; page <= lastPage; page += 1) {
-    const pageData = await fetchNewsArticlesPage(page);
-    const articles = pageData?.data?.data || [];
-    const match = articles.find(article => isMatchingNewsArticle(article, articleId));
-    if (match) return match;
+  if (!response.ok) {
+    const errorText = await response.text();
+    const error = new Error(`News API returned ${response.status}`);
+    error.status = response.status;
+    error.details = errorText;
+    throw error;
   }
 
-  return null;
-}
-
-async function findNewsArticleBySlug(articleSlug) {
-  const firstPage = await fetchNewsArticlesPage(1);
-  const firstPageArticles = firstPage?.data?.data || [];
-  const firstMatch = firstPageArticles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
-  if (firstMatch) return firstMatch;
-
-  const lastPage = Math.max(1, Number(firstPage?.data?.last_page) || 1);
-  for (let page = 2; page <= lastPage; page += 1) {
-    const pageData = await fetchNewsArticlesPage(page);
-    const articles = pageData?.data?.data || [];
-    const match = articles.find(article => isMatchingNewsArticleSlug(article, articleSlug));
-    if (match) return match;
-  }
-
-  return null;
+  return response.json();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -949,10 +918,9 @@ app.get('/api/v1/news/articles', async (req, res) => {
       return res.status(500).json({ error: 'News API not configured. Set HOMESPH_NEWS_API_URL and HOMESPH_NEWS_API_KEY in .env.local' });
     }
 
+    const data = await fetchNewsArticlesPage(req.query);
     const page = req.query.page || 1;
-    const category = req.query.category || ''; // Optional category filter
-
-    const data = await fetchNewsArticlesPage(page, category);
+    const category = req.query.category || '';
     console.log(`📰 News API: fetched page ${page}${category ? ` (category: ${category})` : ' (all categories)'} - ${data?.data?.total || 0} total articles`);
     res.json(data);
   } catch (error) {
@@ -964,20 +932,23 @@ app.get('/api/v1/news/articles', async (req, res) => {
   }
 });
 
-// Proxy for single article detail
 app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
   try {
     if (!NEWS_API_URL || !NEWS_API_KEY) {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 
-    const article = await findNewsArticleBySlug(req.params.slug);
+    const result = await fetchNewsArticleByIdentifier(req.params.slug);
+    const article = result?.article || result?.data || null;
     if (!article) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
     res.json({ data: article });
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
     if (error.details) {
       console.error('❌ News article slug lookup upstream error:', error.status, error.details);
     }
@@ -986,20 +957,23 @@ app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
   }
 });
 
-// Proxy for single article detail
 app.get('/api/v1/news/articles/:id', async (req, res) => {
   try {
     if (!NEWS_API_URL || !NEWS_API_KEY) {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 
-    const article = await findNewsArticleById(req.params.id);
+    const result = await fetchNewsArticleByIdentifier(req.params.id);
+    const article = result?.article || result?.data || null;
     if (!article) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
     res.json({ data: article });
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
     if (error.details) {
       console.error('❌ News article detail upstream error:', error.status, error.details);
     }
