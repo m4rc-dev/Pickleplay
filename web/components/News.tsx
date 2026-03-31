@@ -222,10 +222,10 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             const isHtml = /<[a-z][\s\S]*>/i.test(text);
 
             if (block.settings?.listType === 'bullet') {
-              return <ul key={key} className="list-disc pl-6 space-y-2 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ul key={key} className="list-disc pl-6 space-y-2 text-base md:text-lg leading-[1.8] font-medium text-slate-800" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
             if (block.settings?.listType === 'number') {
-              return <ol key={key} className="list-decimal pl-6 space-y-2 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ol key={key} className="list-decimal pl-6 space-y-2 text-base md:text-lg leading-[1.8] font-medium text-slate-800" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
 
             // Strip HTML to get plain text, then split into 5-sentence paragraphs
@@ -239,8 +239,8 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
                     key={gi}
                     className={
                       idx === 0 && gi === 0
-                        ? 'text-base md:text-lg leading-[1.9] text-slate-700 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none'
-                        : 'text-base md:text-lg leading-[1.9] text-slate-700'
+                        ? 'text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight first-letter:text-6xl first-letter:font-black first-letter:text-blue-600 first-letter:mr-2 first-letter:float-left first-letter:leading-[0.8]'
+                        : 'text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight'
                     }
                   >
                     {chunk}
@@ -278,7 +278,7 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
                     {caption && <figcaption className="text-sm text-slate-400 mt-2 text-center italic">{caption}</figcaption>}
                   </figure>
                 )}
-                <div className="flex-1 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+                <div className="flex-1 text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight" style={style} dangerouslySetInnerHTML={{ __html: text }} />
               </div>
             );
           }
@@ -295,7 +295,7 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
                     <img src={imgSrc} alt="" className="w-full rounded-2xl shadow-md" loading="lazy" />
                   </div>
                 )}
-                <div className="flex-1 text-base md:text-lg leading-[1.9] text-slate-700" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+                <div className="flex-1 text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight" style={style} dangerouslySetInnerHTML={{ __html: text }} />
               </div>
             );
           }
@@ -368,10 +368,10 @@ function formatArticleBody(body: string): string {
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     if (idx === 0) {
-      return `<p class="text-base md:text-lg leading-[1.9] text-slate-700 mb-8 first-letter:text-4xl first-letter:font-black first-letter:text-slate-900 first-letter:mr-1 first-letter:float-left first-letter:leading-none">${html}</p>`;
+      return `<p class="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight mb-8 first-letter:text-6xl first-letter:font-black first-letter:text-blue-600 first-letter:mr-2 first-letter:float-left first-letter:leading-[0.8]">${html}</p>`;
     }
 
-    return `<p class="text-base md:text-lg leading-[1.9] text-slate-700 mb-8">${html}</p>`;
+    return `<p class="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight mb-8">${html}</p>`;
   }).join('');
 
   return formatted;
@@ -559,7 +559,7 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
               <div className="article-body-content" dangerouslySetInnerHTML={{ __html: formattedBody }} />
             ) : (
               <div className="space-y-6">
-                <p className="text-base md:text-lg leading-[1.9] text-slate-600">{article.excerpt}</p>
+                <p className="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight">{article.excerpt}</p>
                 {article.sourceUrl && (
                   <a
                     href={article.sourceUrl}
