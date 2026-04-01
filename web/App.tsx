@@ -2714,32 +2714,71 @@ const App: React.FC = () => {
       </>
       {/* Logout Confirmation Dialog */}
       {showLogoutConfirm && ReactDOM.createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="p-8 text-center bg-slate-50">
-              <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-6 bg-slate-100 text-slate-600">
-                <LogOut size={40} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2">
-                Ready to go?
-              </h3>
-              <p className="text-slate-500 font-medium text-sm leading-relaxed">
-                You're about to sign out of PicklePlay. Are you sure you want to end your session?
-              </p>
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xl animate-in fade-in duration-300"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            className="relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/15 bg-gradient-to-br from-slate-900/90 via-slate-800/85 to-slate-900/90 shadow-2xl shadow-slate-950/60 animate-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -top-8 -left-4 h-36 w-36 rounded-full bg-amber-400/10 blur-[60px]" />
+              <div className="absolute -bottom-10 -right-4 h-32 w-32 rounded-full bg-lime-400/10 blur-[56px]" />
             </div>
-            <div className="p-6 bg-white flex flex-row gap-3">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 transition-all"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={performLogout}
-                className="flex-1 py-4 rounded-2xl bg-rose-600 text-white font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-rose-100 hover:bg-rose-700 hover:shadow-rose-200 transition-all flex items-center justify-center gap-2"
-              >
-                LOGOUT
-              </button>
+
+            <div className="relative px-6 py-10 text-center flex flex-col items-center">
+              <div className="mb-8">
+                <svg
+                  viewBox="0 0 64 64"
+                  className="h-24 w-24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M18 16v32l18 8V24l-18-8z"
+                    fill="#a3e635"
+                    fillOpacity="0.9"
+                  />
+                  <path
+                    d="M20 12h26a4 4 0 0 1 4 4v30a4 4 0 0 1-4 4H20a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z"
+                    fill="none"
+                    stroke="#f8fafc"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M45 32h15m0 0-6-6m6 6-6 6"
+                    fill="none"
+                    stroke="#f8fafc"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <h3 className="mb-3 text-2xl font-black uppercase tracking-tight leading-tight text-white">
+                Oh no! You're leaving...<br />
+                Are you sure?
+              </h3>
+              <p className="mb-8 text-xs font-bold uppercase tracking-[0.16em] text-slate-300/90">
+                Confirm if you want to end your PicklePlay session.
+              </p>
+              
+              <div className="flex w-full flex-col gap-4">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="w-full py-4 rounded-full bg-lime-400 text-slate-950 font-black text-sm uppercase tracking-[0.14em] hover:bg-lime-500 transition-all shadow-lg shadow-lime-900/20 active:scale-95"
+                >
+                  Stay Signed In
+                </button>
+                <button
+                  onClick={performLogout}
+                  className="w-full py-4 rounded-full border border-slate-400/45 bg-transparent text-slate-200 font-black text-sm uppercase tracking-[0.14em] hover:bg-white/10 hover:text-white transition-all"
+                >
+                  Yes, Log Me Out
+                </button>
+              </div>
             </div>
           </div>
         </div>,

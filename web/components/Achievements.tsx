@@ -828,7 +828,7 @@ const CertificateCardFace: React.FC<CertificateCardFaceProps> = ({
     <div
       className={`relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden shrink-0 ${
         isLandscape
-          ? 'w-full min-h-[260px] md:min-h-0 md:h-full md:flex-1 md:max-w-[42%] flex flex-col'
+          ? 'w-full min-h-[260px] md:min-h-0 md:h-full md:flex-1 md:max-w-[45%] flex flex-col'
           : 'h-52'
       }`}
     >
@@ -840,12 +840,12 @@ const CertificateCardFace: React.FC<CertificateCardFaceProps> = ({
       <div className={`pointer-events-none absolute border-2 border-dashed border-white/10 rounded-2xl ${isLandscape ? 'inset-5 md:inset-6' : 'inset-4'}`} />
 
       {isLandscape ? (
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pb-6 pt-7 md:px-6 md:pb-7 md:pt-8">
-          <div className="flex shrink-0 items-start justify-between gap-3">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-6 pt-7 md:px-7 md:pb-7 md:pt-8">
+          <div className="flex shrink-0 items-start justify-between gap-3 pl-1 md:pl-2">
             <span className="bg-amber-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
               <Award size={12} /> CERTIFICATE
             </span>
-            <div className="max-w-[45%] pr-1 text-right">
+            <div className="max-w-[42%] pr-2 text-right">
               <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Certificate No.</p>
               <p className="text-[10px] font-black text-amber-400 tracking-wider mt-0.5 break-all">
                 {certificate.certificate_number}
@@ -1016,7 +1016,10 @@ const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onView }
             >
               <CertificateCardFace
                 certificate={certificate}
-                onView={onView}
+                onView={() => {
+                  setDetailOpen(false);
+                  onView();
+                }}
                 mode="expanded"
                 headingId={headingId}
                 onCloseExpanded={() => setDetailOpen(false)}
