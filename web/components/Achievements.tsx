@@ -10,8 +10,6 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
-  TrendingUp,
-  Calendar,
   Award,
   Download,
   ArrowRight,
@@ -58,12 +56,6 @@ interface AchievementsProps {
   userRole?: UserRole;
   isSidebarCollapsed?: boolean;
 }
-
-const ACHIEVEMENT_ICONS: Record<string, React.ReactNode> = {
-  welcome_player: <Sparkles size={28} className="text-sky-400" />,
-  court_conqueror: <Calendar size={28} className="text-lime-400" />,
-  default: <Trophy size={28} className="text-blue-400" />,
-};
 
 const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSidebarCollapsed = false }) => {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -427,13 +419,13 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
       {activeTab === 'all' ? (
         /* Achievement Cards Grid */
         loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
             {[1, 2, 3].map((i) => (
               <div key={i} className="bg-white rounded-3xl border border-slate-100 h-[480px] animate-pulse"></div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
             {displayAchievements.length > 0 ? (
               displayAchievements.map((achievement) => (
                 <AchievementCard
@@ -461,7 +453,7 @@ const Achievements: React.FC<AchievementsProps> = ({ userRole = 'PLAYER', isSide
         )
       ) : (
         /* Certificates Tab */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {filteredCertificates.length > 0 ? (
             filteredCertificates.map((cert) => (
               <CertificateCard
@@ -518,21 +510,212 @@ interface AchievementCardProps {
   isClaiming: boolean;
 }
 
-const AchievementCard: React.FC<AchievementCardProps> = ({
-  achievement, progress, certificate, themeColor, onClaimCertificate, isClaiming,
+interface AchievementCardFaceProps extends AchievementCardProps {
+  mode: 'compact' | 'expanded';
+  onOpenDetails?: () => void;
+  onCloseExpanded?: () => void;
+  headingId?: string;
+}
+
+const AchievementCardFace: React.FC<AchievementCardFaceProps> = ({
+  achievement,
+  progress,
+  certificate,
+  onClaimCertificate,
+  isClaiming,
+  mode,
+  onOpenDetails,
+  onCloseExpanded,
+  headingId,
 }) => {
   const currentCount = progress?.current_count || 0;
   const targetCount = achievement.target_count;
   const isCompleted = progress?.is_completed || false;
   const hasCertificate = !!certificate;
   const percentage = Math.min((currentCount / targetCount) * 100, 100);
-  const icon = ACHIEVEMENT_ICONS[achievement.key] || ACHIEVEMENT_ICONS.default;
+  const isCompact = mode === 'compact';
+
+  const detailPanel = (
+    <>
+      <div className="mb-5 shrink-0">
+        <h3
+          id={headingId}
+          className={`text-xl md:text-2xl font-black text-slate-950 tracking-tight leading-tight uppercase mb-3 ${
+            isCompact ? 'line-clamp-2 min-h-[2.5rem]' : ''
+          }`}
+        >
+          {achievement.name}
+        </h3>
+        <div className={isCompact ? 'min-h-[2.75rem]' : ''}>
+          <p
+            className={`text-slate-600 text-sm md:text-[15px] font-medium ${
+              isCompact ? 'leading-snug line-clamp-2' : 'leading-relaxed whitespace-pre-wrap'
+            }`}
+          >
+            {achievement.description}
+          </p>
+        </div>
+        {isCompact && onOpenDetails && (
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            className="mt-2 text-[11px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            View details
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3 mb-5 shrink-0">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</span>
+          <span className="text-sm font-black text-slate-950">
+            {currentCount} / {targetCount}
+          </span>
+        </div>
+        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-gradient-to-r from-lime-400 to-lime-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
+              }`}
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <p className="text-[10px] font-bold text-slate-400 text-right">
+          {percentage.toFixed(0)}% complete
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-5 shrink-0">
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[4.25rem] flex flex-col justify-center">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</p>
+          <div className="flex items-center gap-2 min-h-[1.25rem]">
+            <Target size={12} className="text-blue-500 shrink-0" />
+            <span className={`font-black text-slate-950 text-xs tracking-tight capitalize ${isCompact ? 'line-clamp-1' : ''}`}>
+              {achievement.category}
+            </span>
+          </div>
+        </div>
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[4.25rem] flex flex-col justify-center">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Reward</p>
+          <div className="flex items-center gap-2 min-h-[1.25rem]">
+            <Zap size={12} className="text-amber-500 fill-amber-500 shrink-0" />
+            <span className="font-black text-slate-950 text-xs tracking-tight">{achievement.reward_points} pts</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-auto">
+        {isCompleted && progress ? (
+          hasCertificate ? (
+            <div className="w-full h-14 rounded-2xl bg-slate-950 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2">
+              <Award size={16} className="text-amber-400" />
+              CERTIFICATE CLAIMED
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onClaimCertificate(achievement, progress)}
+              disabled={isClaiming}
+              className="w-full h-14 rounded-2xl bg-lime-400 text-slate-950 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-lime-500 transition-all shadow-lg shadow-lime-200 active:scale-95 disabled:opacity-60"
+            >
+              {isClaiming ? (
+                <>CLAIMING... <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" /></>
+              ) : (
+                <><Award size={16} /> CLAIM CERTIFICATE <ArrowRight size={14} /></>
+              )}
+            </button>
+          )
+        ) : (
+          <div className="w-full h-14 rounded-2xl bg-slate-100 text-slate-400 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2">
+            <Lock size={16} />
+            {targetCount - currentCount} MORE TO GO
+          </div>
+        )}
+      </div>
+
+      {!isCompact && onCloseExpanded && (
+        <button
+          type="button"
+          onClick={onCloseExpanded}
+          className="w-full h-14 mt-3 rounded-2xl bg-slate-100 text-slate-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-colors"
+        >
+          Close
+        </button>
+      )}
+    </>
+  );
+
+  const heroPanel = (
+    <div
+      className={`relative w-full md:h-auto md:min-h-0 min-h-[240px] overflow-hidden md:flex-1 md:max-w-[42%] shrink-0 ${isCompleted
+        ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
+        : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
+        }`}
+    >
+      {isCompleted && (
+        <div className="absolute inset-0">
+          <div className="absolute top-4 left-8 w-32 h-32 bg-lime-400/10 blur-[50px] rounded-full" />
+          <div className="absolute bottom-2 right-8 w-24 h-24 bg-blue-400/10 blur-[40px] rounded-full" />
+        </div>
+      )}
+
+      <div className="absolute top-5 left-5 md:top-6 md:left-6 flex flex-wrap gap-2 max-w-[85%]">
+        {hasCertificate ? (
+          <span className="bg-amber-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
+            <Award size={12} /> CERTIFIED
+          </span>
+        ) : isCompleted ? (
+          <span className="bg-lime-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
+            <CheckCircle2 size={12} /> COMPLETED
+          </span>
+        ) : (
+          <span className="bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
+            <Lock size={10} /> IN PROGRESS
+          </span>
+        )}
+      </div>
+
+      <div className="absolute top-5 right-5 md:top-6 md:right-6 flex items-center gap-1.5 px-3 py-1.5 bg-amber-400/20 rounded-xl border border-amber-400/30 backdrop-blur-sm">
+        <Sparkles size={12} className={isCompleted ? 'text-amber-300' : 'text-amber-500'} fill="currentColor" />
+        <span className={`text-[10px] font-black ${isCompleted ? 'text-amber-300' : 'text-amber-600'}`}>
+          +{achievement.reward_points} PTS
+        </span>
+      </div>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center pt-14 pb-6 pointer-events-none">
+        <img
+          src="/images/PicklePlayLogo.jpg"
+          alt="PicklePlay Philippines"
+          className={`w-[7rem] h-[7rem] md:w-36 md:h-36 lg:w-40 lg:h-40 rounded-full object-contain object-center shrink-0 ${
+            isCompleted ? 'drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)]' : 'drop-shadow-md'
+          }`}
+        />
+        <p
+          className={`mt-3 text-[9px] font-black uppercase tracking-[0.35em] text-center px-2 ${
+            isCompleted ? 'text-white/45' : 'text-slate-400'
+          }`}
+        >
+          PicklePlay Philippines
+        </p>
+      </div>
+    </div>
+  );
+
+  if (!isCompact) {
+    return (
+      <div className="group flex flex-col md:flex-row w-full rounded-3xl border border-slate-100 shadow-2xl overflow-hidden bg-white max-h-[88vh] min-h-[min(360px,88vh)]">
+        {heroPanel}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 p-6 md:p-8 pt-8 md:pt-8 overflow-y-auto border-t md:border-t-0 md:border-l border-slate-200 bg-white">
+          {detailPanel}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="group bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden flex flex-col">
-      {/* Top banner */}
+    <div className="group bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-500">
       <div
-        className={`relative h-44 overflow-hidden ${isCompleted
+        className={`relative h-28 overflow-hidden ${isCompleted
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
           : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'
           }`}
@@ -560,106 +743,58 @@ const AchievementCard: React.FC<AchievementCardProps> = ({
           )}
         </div>
 
-        {/* Reward badge */}
         <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1.5 bg-amber-400/20 rounded-xl border border-amber-400/30 backdrop-blur-sm">
           <Sparkles size={12} className={isCompleted ? 'text-amber-300' : 'text-amber-500'} fill="currentColor" />
           <span className={`text-[10px] font-black ${isCompleted ? 'text-amber-300' : 'text-amber-600'}`}>
             +{achievement.reward_points} PTS
           </span>
         </div>
-
-        {/* Achievement icon */}
-        <div className="absolute bottom-6 left-6">
-          <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 ${isCompleted ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-400 border-2 border-slate-200'
-              }`}
-          >
-            {icon}
-          </div>
-        </div>
       </div>
 
-      {/* Content */}
-      <div className="p-6 flex-1 flex flex-col">
-        <div className="mb-6">
-          <h3 className="text-xl font-black text-slate-950 tracking-tight leading-tight uppercase mb-2">
-            {achievement.name}
-          </h3>
-          <p className="text-slate-500 text-sm font-medium leading-relaxed">
-            {achievement.description}
-          </p>
-        </div>
-
-        {/* Progress section */}
-        <div className="space-y-3 mb-6">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</span>
-            <span className="text-sm font-black text-slate-950">
-              {currentCount} / {targetCount}
-            </span>
-          </div>
-          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-gradient-to-r from-lime-400 to-lime-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'
-                }`}
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
-          <p className="text-[10px] font-bold text-slate-400 text-right">
-            {percentage.toFixed(0)}% complete
-          </p>
-        </div>
-
-        {/* Stats row */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Category</p>
-            <div className="flex items-center gap-2">
-              <Target size={12} className="text-blue-500" />
-              <span className="font-black text-slate-950 text-xs tracking-tight capitalize">{achievement.category}</span>
-            </div>
-          </div>
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Reward</p>
-            <div className="flex items-center gap-2">
-              <Zap size={12} className="text-amber-500 fill-amber-500" />
-              <span className="font-black text-slate-950 text-xs tracking-tight">{achievement.reward_points} pts</span>
-              <Zap size={14} className="text-blue-500 fill-blue-500" />
-              <span className="font-black text-slate-950 text-sm tracking-tight">{achievement.reward_points} pts</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom CTA */}
-        <div className="mt-auto">
-          {isCompleted && progress ? (
-            hasCertificate ? (
-              <div className="w-full h-14 rounded-2xl bg-slate-950 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2">
-                <Award size={16} className="text-amber-400" />
-                CERTIFICATE CLAIMED
-              </div>
-            ) : (
-              <button
-                onClick={() => onClaimCertificate(achievement, progress)}
-                disabled={isClaiming}
-                className="w-full h-14 rounded-2xl bg-lime-400 text-slate-950 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-lime-500 transition-all shadow-lg shadow-lime-200 active:scale-95 disabled:opacity-60"
-              >
-                {isClaiming ? (
-                  <>CLAIMING... <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" /></>
-                ) : (
-                  <><Award size={16} /> CLAIM CERTIFICATE <ArrowRight size={14} /></>
-                )}
-              </button>
-            )
-          ) : (
-            <div className="w-full h-14 rounded-2xl bg-slate-100 text-slate-400 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2">
-              <Lock size={16} />
-              {targetCount - currentCount} MORE TO GO
-            </div>
-          )}
-        </div>
+      <div className="p-6 flex-1 flex flex-col min-h-0">
+        {detailPanel}
       </div>
     </div>
+  );
+};
+
+const AchievementCard: React.FC<AchievementCardProps> = (props) => {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const headingId = `achievement-card-heading-${props.achievement.id}`;
+
+  return (
+    <>
+      <div className="h-full">
+        <AchievementCardFace
+          {...props}
+          mode="compact"
+          onOpenDetails={() => setDetailOpen(true)}
+        />
+      </div>
+      {detailOpen &&
+        ReactDOM.createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={headingId}
+            onClick={() => setDetailOpen(false)}
+          >
+            <div
+              className="max-h-[92vh] overflow-y-auto w-full max-w-4xl animate-in zoom-in-95 fade-in duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AchievementCardFace
+                {...props}
+                mode="expanded"
+                headingId={headingId}
+                onCloseExpanded={() => setDetailOpen(false)}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };
 
@@ -670,74 +805,227 @@ interface CertificateCardProps {
   onView: () => void;
 }
 
-const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onView }) => {
-  return (
-    <div className="group bg-white rounded-3xl border border-amber-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 flex flex-col">
-      {/* Certificate header */}
-      <div className="relative h-52 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-4 left-8 w-40 h-40 bg-amber-400/10 blur-[60px] rounded-full" />
-          <div className="absolute bottom-2 right-8 w-32 h-32 bg-lime-400/8 blur-[50px] rounded-full" />
-        </div>
+interface CertificateCardFaceProps {
+  certificate: Certificate;
+  onView: () => void;
+  mode: 'compact' | 'expanded';
+  onOpenDetails?: () => void;
+  onCloseExpanded?: () => void;
+  headingId?: string;
+}
 
-        {/* Decorative border pattern */}
-        <div className="absolute inset-4 border-2 border-dashed border-white/10 rounded-2xl" />
+const CertificateCardFace: React.FC<CertificateCardFaceProps> = ({
+  certificate,
+  onView,
+  mode,
+  onOpenDetails,
+  onCloseExpanded,
+  headingId,
+}) => {
+  const isCompact = mode === 'compact';
 
-        <div className="absolute top-6 left-6">
-          <span className="bg-amber-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
-            <Award size={12} /> CERTIFICATE
-          </span>
-        </div>
-
-        <div className="absolute top-6 right-6 text-right">
-          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Certificate No.</p>
-          <p className="text-[10px] font-black text-amber-400 tracking-wider mt-0.5">{certificate.certificate_number}</p>
-        </div>
-
-        <div className="absolute bottom-6 left-6 right-6">
-          <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-1">Awarded To</p>
-          <p className="text-xl font-black text-white tracking-tight truncate">{certificate.player_name}</p>
-        </div>
+  const certificateHero = (isLandscape: boolean) => (
+    <div
+      className={`relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden shrink-0 ${
+        isLandscape
+          ? 'w-full min-h-[260px] md:min-h-0 md:h-full md:flex-1 md:max-w-[42%] flex flex-col'
+          : 'h-52'
+      }`}
+    >
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-4 left-8 w-40 h-40 bg-amber-400/10 blur-[60px] rounded-full" />
+        <div className="absolute bottom-2 right-8 w-32 h-32 bg-lime-400/8 blur-[50px] rounded-full" />
       </div>
 
-      {/* Certificate body */}
-      <div className="p-6 flex-1 flex flex-col">
-        <div className="mb-6">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Achievement</p>
-          <h3 className="text-xl font-black text-slate-950 tracking-tight leading-tight uppercase mb-2">
-            {certificate.achievement_name}
-          </h3>
-          <p className="text-slate-500 text-sm font-medium leading-relaxed">
-            {certificate.achievement_description}
-          </p>
-        </div>
+      <div className={`pointer-events-none absolute border-2 border-dashed border-white/10 rounded-2xl ${isLandscape ? 'inset-5 md:inset-6' : 'inset-4'}`} />
 
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Issued</p>
-            <p className="font-black text-slate-950 text-xs tracking-tight">
-              {new Date(certificate.claimed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
+      {isLandscape ? (
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pb-6 pt-7 md:px-6 md:pb-7 md:pt-8">
+          <div className="flex shrink-0 items-start justify-between gap-3">
+            <span className="bg-amber-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
+              <Award size={12} /> CERTIFICATE
+            </span>
+            <div className="max-w-[45%] pr-1 text-right">
+              <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Certificate No.</p>
+              <p className="text-[10px] font-black text-amber-400 tracking-wider mt-0.5 break-all">
+                {certificate.certificate_number}
+              </p>
+            </div>
           </div>
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={12} className="text-lime-500" />
-              <span className="font-black text-slate-950 text-xs tracking-tight">Verified</span>
+
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 py-4 text-center md:gap-7 md:py-5">
+            <div className="flex flex-col items-center gap-3">
+              <img
+                src="/images/PicklePlayLogo.jpg"
+                alt="PicklePlay Philippines"
+                className="h-[7rem] w-[7rem] shrink-0 rounded-full object-contain object-center drop-shadow-[0_8px_28px_rgba(0,0,0,0.5)] md:h-36 md:w-36 lg:h-40 lg:w-40"
+              />
+              <p className="text-[9px] font-black uppercase tracking-[0.35em] text-white/45 px-2">PicklePlay Philippines</p>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-white/50">Awarded To</p>
+              <p className="break-words text-lg font-black tracking-tight text-white md:text-xl">{certificate.player_name}</p>
             </div>
           </div>
         </div>
+      ) : (
+        <>
+          <div className="absolute left-6 top-6">
+            <span className="bg-amber-400 text-slate-950 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
+              <Award size={12} /> CERTIFICATE
+            </span>
+          </div>
 
-        <button
-          onClick={onView}
-          className="w-full h-14 rounded-2xl bg-slate-950 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 active:scale-95 mt-auto"
+          <div className="absolute right-6 top-6 max-w-[45%] text-right">
+            <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Certificate No.</p>
+            <p className="text-[10px] font-black text-amber-400 tracking-wider mt-0.5 break-all">
+              {certificate.certificate_number}
+            </p>
+          </div>
+
+          <div className="absolute bottom-6 left-6 right-6">
+            <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-1">Awarded To</p>
+            <p
+              className={`font-black text-white tracking-tight text-xl ${isCompact ? 'truncate' : 'break-words'}`}
+            >
+              {certificate.player_name}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const detailBody = (
+    <>
+      <div className="mb-5 shrink-0">
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Achievement</p>
+        <h3
+          id={headingId}
+          className={`text-xl md:text-2xl font-black text-slate-950 tracking-tight leading-tight uppercase mb-2 ${
+            isCompact ? 'line-clamp-2 min-h-[2.5rem]' : ''
+          }`}
         >
-          <Award size={16} className="text-amber-400" />
-          VIEW CERTIFICATE
-          <ArrowRight size={14} />
+          {certificate.achievement_name}
+        </h3>
+        <div className={isCompact ? 'min-h-[2.75rem]' : ''}>
+          <p
+            className={`text-slate-600 text-sm md:text-[15px] font-medium ${
+              isCompact ? 'leading-snug line-clamp-2' : 'leading-relaxed whitespace-pre-wrap'
+            }`}
+          >
+            {certificate.achievement_description}
+          </p>
+        </div>
+        {isCompact && onOpenDetails && (
+          <button
+            type="button"
+            onClick={onOpenDetails}
+            className="mt-2 text-[11px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            View details
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-5 shrink-0">
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[4.25rem] flex flex-col justify-center">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Issued</p>
+          <p className="font-black text-slate-950 text-xs tracking-tight">
+            {new Date(certificate.claimed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[4.25rem] flex flex-col justify-center">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+          <div className="flex items-center gap-2 min-h-[1.25rem]">
+            <CheckCircle2 size={12} className="text-lime-500 shrink-0" />
+            <span className="font-black text-slate-950 text-xs tracking-tight">Verified</span>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onView}
+        className="w-full h-14 rounded-2xl bg-slate-950 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 active:scale-95 mt-auto"
+      >
+        <Award size={16} className="text-amber-400" />
+        VIEW CERTIFICATE
+        <ArrowRight size={14} />
+      </button>
+
+      {!isCompact && onCloseExpanded && (
+        <button
+          type="button"
+          onClick={onCloseExpanded}
+          className="w-full h-14 mt-3 rounded-2xl bg-slate-100 text-slate-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-colors"
+        >
+          Close
         </button>
+      )}
+    </>
+  );
+
+  if (!isCompact) {
+    return (
+      <div className="group flex flex-col md:flex-row w-full rounded-3xl border border-amber-200 shadow-2xl overflow-hidden bg-white max-h-[88vh] min-h-[min(360px,88vh)]">
+        {certificateHero(true)}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 p-6 md:p-8 overflow-y-auto border-t md:border-t-0 md:border-l border-amber-100/80 bg-white">
+          {detailBody}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group bg-white rounded-3xl border border-amber-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 flex flex-col h-full">
+      {certificateHero(false)}
+      <div className="p-6 flex-1 flex flex-col min-h-0">
+        {detailBody}
       </div>
     </div>
+  );
+};
+
+const CertificateCard: React.FC<CertificateCardProps> = ({ certificate, onView }) => {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const headingId = `certificate-card-heading-${certificate.id}`;
+
+  return (
+    <>
+      <div className="h-full">
+        <CertificateCardFace
+          certificate={certificate}
+          onView={onView}
+          mode="compact"
+          onOpenDetails={() => setDetailOpen(true)}
+        />
+      </div>
+      {detailOpen &&
+        ReactDOM.createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={headingId}
+            onClick={() => setDetailOpen(false)}
+          >
+            <div
+              className="max-h-[92vh] overflow-y-auto w-full max-w-4xl animate-in zoom-in-95 fade-in duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CertificateCardFace
+                certificate={certificate}
+                onView={onView}
+                mode="expanded"
+                headingId={headingId}
+                onCloseExpanded={() => setDetailOpen(false)}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };
 
