@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../services/supabase';
 import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import {
   Trophy,
   Zap,
@@ -13,7 +14,6 @@ import {
   Calendar,
   Award,
   Download,
-  X,
   ArrowRight,
   Search
 } from 'lucide-react';
@@ -755,7 +755,7 @@ const CertificateViewer: React.FC<CertificateViewerProps> = ({ certificate, onCl
   const handleDownload = async () => {
     if (!certRef.current) return;
     try {
-      // Use html-to-image for better quality and reliable rendering
+      // Capture the certificate as a high-quality PNG first
       const dataUrl = await toPng(certRef.current, {
         quality: 1.0,
         pixelRatio: 2,
@@ -766,10 +766,32 @@ const CertificateViewer: React.FC<CertificateViewerProps> = ({ certificate, onCl
         }
       });
       
-      const link = document.createElement('a');
-      link.download = `PicklePlay-Certificate-${certificate.certificate_number}.png`;
-      link.href = dataUrl;
-      link.click();
+      // Initialize jsPDF in landscape mode, A4 paper size
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // A4 landscape dimensions: 297mm x 210mm
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      // Get original image dimensions to maintain aspect ratio
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+
+      const imgWidth = img.width;
+      const imgHeight = img.height;
+      const ratio = imgWidth / imgHeight;
+
+      // Add the image to the PDF to fully cover the A4 page without margins
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`PicklePlay-Certificate-${certificate.certificate_number}.pdf`);
+      
     } catch (err) {
       console.error('Failed to generate image:', err);
       // Fallback to print if image generation fails
@@ -816,96 +838,100 @@ const CertificateViewer: React.FC<CertificateViewerProps> = ({ certificate, onCl
 
   return (
     <div className={`fixed top-0 left-0 right-0 bottom-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300 ${isSidebarCollapsed ? 'md:pl-20' : 'md:pl-72'}`}>
-      <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl relative overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full transition-all text-slate-500 z-10"
-        >
-          <X size={18} />
-        </button>
-
+      <div className="bg-slate-950 w-full max-w-4xl rounded-[40px] shadow-2xl relative overflow-hidden animate-in slide-in-from-bottom-8 duration-500 border border-white/10">
         {/* Certificate Preview */}
-        <div className="p-8">
+        <div className="w-full bg-slate-950 p-2 md:p-8 overflow-hidden flex items-center justify-center">
           <div
             ref={certRef}
-            className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[32px] p-10 overflow-hidden"
+            className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden w-full max-w-[900px] shadow-2xl"
+            style={{ 
+              aspectRatio: '1.414 / 1', // A4 Landscape ratio
+              borderRadius: '0px' // Sharp corners for authentic A4 look
+            }}
           >
             {/* Decorative elements */}
             <div className="absolute inset-0">
-              <div className="absolute top-0 left-0 w-64 h-64 bg-amber-400/5 blur-[80px] rounded-full" />
-              <div className="absolute bottom-0 right-0 w-48 h-48 bg-lime-400/5 blur-[60px] rounded-full" />
+              <div className="absolute top-0 left-0 w-[40%] h-[40%] bg-amber-400/5 blur-[80px] rounded-full" />
+              <div className="absolute bottom-0 right-0 w-[30%] h-[30%] bg-lime-400/5 blur-[60px] rounded-full" />
             </div>
-            <div className="absolute inset-6 border-2 border-dashed border-white/10 rounded-[24px]" />
+            <div className="absolute inset-6 md:inset-8 border-2 border-dashed border-white/10 rounded-[16px]" />
 
-            <div className="relative text-center space-y-6 py-6">
-              {/* Logo area */}
-              <div className="flex items-center justify-center gap-3">
-                <div className="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center shadow-xl">
-                  <Trophy size={24} className="text-slate-900" />
+            <div className="absolute inset-6 md:inset-8 flex flex-col justify-between text-center px-4 md:px-8 py-4 md:py-6">
+              <div className="flex flex-col items-center justify-center flex-1 pb-4 md:pb-8">
+                {/* Logo area */}
+                <div className="flex items-center justify-center mb-3">
+                  <img 
+                    src="/images/PicklePlayLogo.jpg" 
+                    alt="PicklePlay" 
+                    className="w-12 h-12 md:w-16 md:h-16 rounded-2xl md:rounded-3xl object-contain shadow-2xl shrink-0 border border-white/5" 
+                  />
                 </div>
-              </div>
 
-              <div>
-                <p className="text-[11px] font-black text-amber-400 uppercase tracking-[0.5em]">PicklePlay Philippines</p>
-                <h2 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase mt-2">
-                  Certificate of Achievement
-                </h2>
-              </div>
+                <div className="mb-3">
+                  <p className="text-[8px] md:text-[10px] font-black text-amber-400 uppercase tracking-[0.5em] leading-tight">PicklePlay Philippines</p>
+                  <h2 className="text-xl md:text-3xl font-black text-white tracking-tighter uppercase mt-1 md:mt-2 leading-tight">
+                    Certificate of Achievement
+                  </h2>
+                </div>
 
-              <div className="w-24 h-0.5 bg-amber-400/40 mx-auto rounded-full" />
+                <div className="w-16 md:w-24 h-0.5 bg-amber-400/40 rounded-full mb-3 shrink-0" />
 
-              <div>
-                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">This Certifies That</p>
-                <p className="text-2xl md:text-3xl font-black text-white mt-2 tracking-tight">
-                  {certificate.player_name}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Has Successfully Completed</p>
-                <p className="text-xl font-black text-lime-400 mt-2 uppercase tracking-wider">
-                  {certificate.achievement_name}
-                </p>
-                <p className="text-sm text-white/60 font-medium mt-1 max-w-md mx-auto">
-                  {certificate.achievement_description}
-                </p>
-              </div>
-
-              <div className="w-24 h-0.5 bg-amber-400/40 mx-auto rounded-full" />
-
-              <div className="flex items-center justify-between px-8">
-                <div className="text-left">
-                  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Date Issued</p>
-                  <p className="text-sm font-black text-white/80 mt-1">
-                    {new Date(certificate.claimed_at).toLocaleDateString('en-US', {
-                      month: 'long', day: 'numeric', year: 'numeric',
-                    })}
+                <div className="mb-3">
+                  <p className="text-[7px] md:text-[8px] font-black text-white/40 uppercase tracking-[0.3em] leading-tight">This Certifies That</p>
+                  <p className="text-xl md:text-3xl font-black text-white mt-1 md:mt-2 tracking-tight leading-tight">
+                    {certificate.player_name}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Certificate No.</p>
-                  <p className="text-sm font-black text-amber-400 mt-1">{certificate.certificate_number}</p>
+
+                <div className="mb-3 max-w-2xl w-full">
+                  <p className="text-[7px] md:text-[8px] font-black text-white/40 uppercase tracking-[0.3em] leading-tight">Has Successfully Completed</p>
+                  <p className="text-base md:text-xl font-black text-lime-400 mt-1 md:mt-2 uppercase tracking-wider leading-tight">
+                    {certificate.achievement_name}
+                  </p>
+                  <p className="text-[10px] md:text-xs text-white/60 font-medium mt-1 md:mt-2 max-w-xl mx-auto px-4 leading-snug line-clamp-3">
+                    {certificate.achievement_description}
+                  </p>
                 </div>
+
+                <div className="w-16 md:w-24 h-0.5 bg-amber-400/40 rounded-full shrink-0" />
               </div>
 
-              <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest pt-4">
-                pickleplay.ph &bull; Verified Digital Certificate
-              </p>
+              {/* Bottom details section */}
+              <div className="w-full flex flex-col justify-end shrink-0">
+                <div className="w-full flex items-center justify-between">
+                  <div className="text-left">
+                    <p className="text-[7px] md:text-[8px] font-black text-white/30 uppercase tracking-[0.2em] leading-tight">Date Issued</p>
+                    <p className="text-[10px] md:text-xs font-black text-white/80 mt-1 leading-tight">
+                      {new Date(certificate.claimed_at).toLocaleDateString('en-US', {
+                        month: 'long', day: 'numeric', year: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[7px] md:text-[8px] font-black text-white/30 uppercase tracking-[0.2em] leading-tight mb-1">
+                      PICKLEPLAY.PH
+                    </p>
+                    <p className="text-[7px] md:text-[8px] font-black text-white/30 uppercase tracking-[0.2em] leading-tight">
+                      VERIFIED CERTIFICATE
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="px-8 pb-8 flex gap-4">
+        <div className="px-4 md:px-8 pb-8 flex gap-4">
           <button
             onClick={handleDownload}
-            className="flex-1 h-16 rounded-2xl bg-lime-400 text-slate-950 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-lime-500 transition-all shadow-xl shadow-lime-100 active:scale-95"
+            className="flex-1 h-16 rounded-2xl bg-lime-400 text-slate-950 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-lime-500 transition-all shadow-lg shadow-lime-900/20 active:scale-95"
           >
-            <Download size={18} /> DOWNLOAD PNG
+            <Download size={18} /> DOWNLOAD PDF
           </button>
           <button
             onClick={onClose}
-            className="px-8 h-16 rounded-2xl bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+            className="px-8 h-16 rounded-2xl bg-white/10 text-white font-black text-xs uppercase tracking-widest hover:bg-white/20 transition-all"
           >
             CLOSE
           </button>
