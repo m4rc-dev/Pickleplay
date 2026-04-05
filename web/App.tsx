@@ -739,9 +739,8 @@ const NavigationHandler: React.FC<{
   // Helper: check if a feature is accessible for the current user.
   const feat = (feature: string): boolean => {
     if (isAdminForFeatures) return true;
-    if (!featuresLoaded) return true;
+    if (!featuresLoaded) return false;
     const allowed = isFeatureEnabled(enabledFeatures, feature, role);
-    // console.log(`[feat] ${feature} → ${allowed ? 'ALLOW' : 'DENY'} (role=${role}, enabledFeatures=[${[...enabledFeatures].join(',')}])`);
     return allowed;
   };
 
@@ -1572,15 +1571,19 @@ const App: React.FC = () => {
     };
     const pollInterval = setInterval(pollMaintenance, 15000);
 
+    let syncInProgress = false;
+
     const pollFeatures = async () => {
+      if (syncInProgress) return;
       const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
       if (r !== 'guest') {
-        await ensureDefaultFeatures(r); // seed any missing feature rows (e.g. achievements)
+        await ensureDefaultFeatures(r);
         const features = await getEnabledFeaturesForRole(r as UserRole);
-        // console.log('[Features] pollFeatures loaded', r, [...features]);
-        setEnabledFeatures(features);
-        setFeaturesLoaded(true);
-      } else {
+        if (!syncInProgress) {
+          setEnabledFeatures(features);
+          setFeaturesLoaded(true);
+        }
+      } else if (!syncInProgress) {
         setEnabledFeatures(new Set(['*']));
         setFeaturesLoaded(true);
       }
@@ -1643,6 +1646,7 @@ const App: React.FC = () => {
 
     // 1. Robust Session Sync Logic
     const syncUserSession = async (session: any) => {
+      syncInProgress = true;
       if (!session?.user) {
         setRole('guest');
         setAuthorizedProRoles([]);
@@ -1650,9 +1654,14 @@ const App: React.FC = () => {
         setUserAvatar(null);
         setCurrentUserId(null);
         setTwoFactorPending(false);
+        setFeaturesLoaded(false);
+        setEnabledFeatures(new Set());
         localStorage.removeItem('active_role');
+        syncInProgress = false;
         return;
       }
+
+      setFeaturesLoaded(false);
 
       if (shouldBlockUnverifiedEmailSession(session.user)) {
         await supabase.auth.signOut();
@@ -1935,13 +1944,14 @@ const App: React.FC = () => {
         const features = await getEnabledFeaturesForRole(dbActiveRole);
         setEnabledFeatures(features);
         setFeaturesLoaded(true);
+        syncInProgress = false;
 
       } catch (err) {
         console.error('Error syncing user data:', err);
         setTwoFactorPending(Boolean(session?.user));
-        // Fallback to allow app to load even if sync fails
         setMaintenanceChecked(true);
         setFeaturesLoaded(true);
+        syncInProgress = false;
       }
     };
 
