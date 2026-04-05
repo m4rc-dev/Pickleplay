@@ -1519,6 +1519,8 @@ const App: React.FC = () => {
   const [twoFactorPending, setTwoFactorPending] = useState(false);
   const twoFactorStatusRequestRef = useRef<Promise<{ pending: boolean }> | null>(null);
   const twoFactorStatusKeyRef = useRef<string | null>(null);
+  /** Avoid clearing feature gate on every auth re-sync (tab focus, token refresh) — only on sign-out or different account */
+  const lastFeatureSyncedUserIdRef = useRef<string | null>(null);
 
   const hasAdminRole = (roles: (string | UserRole)[] | null | undefined) =>
     Array.isArray(roles) && roles.some(r => (r || '').toString().toUpperCase() === 'ADMIN');
@@ -1535,24 +1537,11 @@ const App: React.FC = () => {
       });
     });
 
-    // Refetch maintenance + features on tab focus, and proactively refresh the Supabase session
+    // Refetch maintenance + features on tab focus.
+    // Token refresh on visibility is already handled by Supabase GoTrueClient (_recoverAndRefresh); avoid a second
+    // refreshSession() here — it races with the client and can make the UI feel like it "reloads".
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Proactively refresh the access token so inactivity doesn't cause a SIGNED_OUT flash
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            // Session still alive — silently refresh the token
-            supabase.auth.refreshSession().then(({ data: { session: refreshed } }) => {
-              const activeSession = refreshed || session;
-              if (activeSession) {
-                refreshTwoFactorGate(activeSession).catch(() => setTwoFactorPending(true));
-              }
-            });
-          } else {
-            setTwoFactorPending(false);
-          }
-          // If session is null here the user genuinely logged out elsewhere — let onAuthStateChange handle it
-        });
         getMaintenanceStatus().then(m => {
           if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); setIsSoftLaunchMode(m.soft_launch_enabled ?? false); }
         });
@@ -1648,6 +1637,7 @@ const App: React.FC = () => {
     const syncUserSession = async (session: any) => {
       syncInProgress = true;
       if (!session?.user) {
+        lastFeatureSyncedUserIdRef.current = null;
         setRole('guest');
         setAuthorizedProRoles([]);
         setUserName(null);
@@ -1661,9 +1651,8 @@ const App: React.FC = () => {
         return;
       }
 
-      setFeaturesLoaded(false);
-
       if (shouldBlockUnverifiedEmailSession(session.user)) {
+        lastFeatureSyncedUserIdRef.current = null;
         await supabase.auth.signOut();
         setRole('guest');
         setAuthorizedProRoles([]);
@@ -1673,11 +1662,19 @@ const App: React.FC = () => {
         setTwoFactorPending(false);
         localStorage.removeItem('active_role');
         localStorage.removeItem('auth_redirect');
+        syncInProgress = false;
 
         if (!window.location.search.includes('error=verify_email_required') || window.location.pathname !== '/login') {
           window.location.replace('/login?error=verify_email_required');
         }
         return;
+      }
+
+      const sessionUserId = session.user.id;
+      const accountChanged = lastFeatureSyncedUserIdRef.current !== sessionUserId;
+      if (accountChanged) {
+        setFeaturesLoaded(false);
+        lastFeatureSyncedUserIdRef.current = sessionUserId;
       }
 
       setCurrentUserId(session.user.id);
@@ -1960,7 +1957,7 @@ const App: React.FC = () => {
       syncUserSession(session).finally(() => setAuthLoading(false));
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         // Genuine sign-out — clear everything
         syncUserSession(null);
@@ -2160,6 +2157,7 @@ const App: React.FC = () => {
       clearInterval(pollInterval);
       clearInterval(featurePollInterval);
       supabase.removeChannel(featureChannel);
+      authSubscription.unsubscribe();
     };
   }, [currentUserId]);
 
@@ -2491,6 +2489,31 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
+
+  useEffect(() => {
+    if (!showLogoutConfirm) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowLogoutConfirm(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showLogoutConfirm]);
+
+  const wasLogoutDialogOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasLogoutDialogOpenRef.current && !showLogoutConfirm) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.activeElement;
+          if (el instanceof HTMLElement) el.blur();
+        });
+      });
+    }
+    wasLogoutDialogOpenRef.current = showLogoutConfirm;
+  }, [showLogoutConfirm]);
 
   const handleFollow = async (userId: string, userName: string) => {
     if (!currentUserId) return;
