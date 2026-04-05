@@ -27,6 +27,7 @@ const FEATURE_LABELS: Record<string, string> = {
   'tournaments-admin': 'Tournaments Admin',
   revenue: 'Revenue',
   'court-policies': 'Court Policies',
+  others: 'More',
 };
 
 interface FeatureUnavailableProps {

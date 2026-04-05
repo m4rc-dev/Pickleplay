@@ -2,38 +2,52 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Users, GraduationCap, Globe, UsersRound } from 'lucide-react';
 
-const tiles = [
-  {
-    to: '/partners',
-    title: 'Find Partners',
-    desc: 'Search players and send match requests',
-    icon: <Users className="w-6 h-6" />,
-    bg: 'bg-blue-50',
-  },
-  {
-    to: '/coaches',
-    title: 'Find a Coach',
-    desc: 'Browse certified coaches and lessons',
-    icon: <GraduationCap className="w-6 h-6" />,
-    bg: 'bg-emerald-50',
-  },
-  {
-    to: '/community',
-    title: 'Community Hub',
-    desc: 'Posts, news, and the community feed',
-    icon: <Globe className="w-6 h-6" />,
-    bg: 'bg-violet-50',
-  },
-  {
-    to: '/groups',
-    title: 'Find Groups',
-    desc: 'Join or create local pickleball squads',
-    icon: <UsersRound className="w-6 h-6" />,
-    bg: 'bg-indigo-50',
-  },
-];
+type OthersProps = {
+  partnersEnabled?: boolean;
+  coachesEnabled?: boolean;
+  communityEnabled?: boolean;
+};
 
-const Others: React.FC = () => {
+const Others: React.FC<OthersProps> = ({
+  partnersEnabled = true,
+  coachesEnabled = true,
+  communityEnabled = true,
+}) => {
+  const tiles = [
+    {
+      to: '/partners',
+      title: 'Find Partners',
+      desc: 'Search players and send match requests',
+      icon: <Users className="w-6 h-6" />,
+      bg: 'bg-blue-50',
+      enabled: partnersEnabled,
+    },
+    {
+      to: '/coaches',
+      title: 'Find a Coach',
+      desc: 'Browse certified coaches and lessons',
+      icon: <GraduationCap className="w-6 h-6" />,
+      bg: 'bg-emerald-50',
+      enabled: coachesEnabled,
+    },
+    {
+      to: '/community',
+      title: 'Community Hub',
+      desc: 'Posts, news, and the community feed',
+      icon: <Globe className="w-6 h-6" />,
+      bg: 'bg-violet-50',
+      enabled: communityEnabled,
+    },
+    {
+      to: '/groups',
+      title: 'Find Groups',
+      desc: 'Join or create local pickleball squads',
+      icon: <UsersRound className="w-6 h-6" />,
+      bg: 'bg-indigo-50',
+      enabled: communityEnabled,
+    },
+  ].filter((t) => t.enabled);
+
   return (
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-6xl mx-auto">
@@ -42,25 +56,29 @@ const Others: React.FC = () => {
           <p className="text-gray-600">Coaching and community features</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tiles.map((t) => (
-            <Link
-              key={t.to}
-              to={t.to}
-              className={`block rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition overflow-hidden ${t.bg}`}
-            >
-              <div className="p-5 flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-gray-700 shadow-sm">
-                  {t.icon}
+        {tiles.length === 0 ? (
+          <p className="text-center text-gray-500 text-sm py-12">No items are available right now.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {tiles.map((t) => (
+              <Link
+                key={t.to}
+                to={t.to}
+                className={`block rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition overflow-hidden ${t.bg}`}
+              >
+                <div className="p-5 flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-gray-700 shadow-sm">
+                    {t.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{t.title}</h3>
+                    <p className="text-sm text-gray-600">{t.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{t.title}</h3>
-                  <p className="text-sm text-gray-600">{t.desc}</p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

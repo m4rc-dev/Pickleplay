@@ -745,6 +745,14 @@ const NavigationHandler: React.FC<{
     return allowed;
   };
 
+  const hasPlayerOthersNav =
+    role === 'PLAYER' && (feat('community') || feat('partners') || feat('coaches'));
+  const hasPlayerCompeteNav =
+    role === 'PLAYER' &&
+    (feat('tournaments') || feat('teams') || feat('achievements') || feat('guides'));
+  const hasOthersHubAccess =
+    isAdminForFeatures || feat('community') || feat('partners') || feat('coaches');
+
   // ── Feature Access Enforcement ──
   useEffect(() => {
     if (isAdminForFeatures || role === 'guest') return;
@@ -839,7 +847,6 @@ const NavigationHandler: React.FC<{
                 <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={pendingVerificationCount || undefined} />
                 <NavItem to="/teams" icon={<UsersRound size={22} />} label="Manage Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
                 <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-                <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
               </div>
             )}
             {role === 'PLAYER' && (
@@ -874,50 +881,56 @@ const NavigationHandler: React.FC<{
                 {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={unreadMessagesCount || undefined} />}
                 {feat('dashboard') && <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />}
 
-                {/* Others group (collapsible) */}
-                <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-                  <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
-                    <button
-                      onClick={() => setIsOthersOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
-                      aria-expanded={isOthersOpen}
-                      aria-controls="others-group"
-                    >
-                      <span>Others</span>
-                      <ChevronDown size={14} className={`transition-transform duration-300 ${isOthersOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isOthersOpen && (
-                      <div id="others-group" className="mt-2 space-y-2 pl-2">
-                        {feat('community') && <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('partners') && <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('coaches') && <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('community') && <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                      </div>
-                    )}
+                {/* Others group (collapsible) — hidden when every item is feature-disabled */}
+                {hasPlayerOthersNav && (
+                  <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+                    <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isOthersOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => setIsOthersOpen(v => !v)}
+                        className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[11px] font-black uppercase tracking-widest ${isOthersOpen ? 'text-white/95' : 'text-white/80 hover:text-white'}`}
+                        aria-expanded={isOthersOpen}
+                        aria-controls="others-group"
+                      >
+                        <span>Others</span>
+                        <ChevronDown size={14} className={`transition-transform duration-300 ${isOthersOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {(isOthersOpen || isSidebarCollapsed) && (
+                        <div id="others-group" className="mt-2 space-y-2 pl-2">
+                          {feat('community') && <NavItem to="/community" icon={<Globe size={22} />} label="Community Hub" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('partners') && <NavItem to="/partners" icon={<Users size={22} />} label="Find Partners" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('coaches') && <NavItem to="/coaches" icon={<GraduationCap size={22} />} label="Find a Coach" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('community') && <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {/* ── COMPETE section (collapsible) ── */}
-                <div className={`pt-2 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-                  <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isCompeteOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
-                    <button
-                      onClick={() => setIsCompeteOpen(v => !v)}
-                      className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[12px] font-black uppercase tracking-[0.22em] ${isCompeteOpen ? 'text-white/80' : 'text-white/40 hover:text-white/80'}`}
-                      aria-expanded={isCompeteOpen}
-                      aria-controls="compete-group"
-                    >
-                      <span>Compete</span>
-                      <ChevronDown size={14} className={`transition-transform duration-300 ${isCompeteOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {(isCompeteOpen || isSidebarCollapsed) && (
-                      <div id="compete-group" className={`${!isSidebarCollapsed ? 'mt-1 space-y-1 pl-2' : 'space-y-1'}`}>
-                        {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('teams') && <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('achievements') && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                        {feat('guides') && <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-                      </div>
-                    )}
+                )}
+                {/* ── COMPETE section (collapsible) — hidden when every item is feature-disabled */}
+                {hasPlayerCompeteNav && (
+                  <div className={`pt-2 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+                    <div className={`${isSidebarCollapsed ? '' : 'rounded-2xl transition-colors'} ${isCompeteOpen && !isSidebarCollapsed ? 'bg-white/5' : ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => setIsCompeteOpen(v => !v)}
+                        className={`w-full flex items-center justify-between ${isSidebarCollapsed ? 'hidden' : 'px-4'} py-2 text-[12px] font-black uppercase tracking-[0.22em] ${isCompeteOpen ? 'text-white/80' : 'text-white/40 hover:text-white/80'}`}
+                        aria-expanded={isCompeteOpen}
+                        aria-controls="compete-group"
+                      >
+                        <span>Compete</span>
+                        <ChevronDown size={14} className={`transition-transform duration-300 ${isCompeteOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {(isCompeteOpen || isSidebarCollapsed) && (
+                        <div id="compete-group" className={`${!isSidebarCollapsed ? 'mt-1 space-y-1 pl-2' : 'space-y-1'}`}>
+                          {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('teams') && <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('achievements') && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                          {feat('guides') && <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
             {role === 'COACH' && (
@@ -1212,18 +1225,32 @@ const NavigationHandler: React.FC<{
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'ADMIN' && <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} badge={pendingVerificationCount || undefined} />}
               {role === 'ADMIN' && <NavItem to="/achievements-admin" icon={<Medal size={22} />} label="Manage Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
-              {role === 'ADMIN' && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'PLAYER' && (
                 <>
                   {feat('booking') && <NavItem to="/booking" icon={<Calendar size={22} />} label="Book Courts" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
                   {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
-                  {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
-                  <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to="/groups" icon={<UsersRound size={22} />} label="Find Groups" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  {feat('dashboard') && (
+                    <NavItem
+                      to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'}
+                      icon={<LayoutDashboard size={22} />}
+                      label="Overview"
+                      isCollapsed={false}
+                      themeColor={themeColor}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      isMobile={true}
+                    />
+                  )}
+                  {hasPlayerOthersNav && (
+                    <NavItem to="/others" icon={<MoreHorizontal size={22} />} label="Others" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  )}
+                  {hasPlayerCompeteNav && (
+                    <>
+                      {feat('tournaments') && <NavItem to="/tournaments" icon={<Trophy size={22} />} label="Tournaments" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+                      {feat('teams') && <NavItem to="/teams" icon={<UsersRound size={22} />} label="Squads" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+                      {feat('achievements') && <NavItem to="/achievements" icon={<Trophy size={22} />} label="Achievements" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+                      {feat('guides') && <NavItem to="/guides" icon={<BookOpen size={22} />} label="Guides & Quizzes" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+                    </>
+                  )}
                 </>
               )}
               {role === 'COACH' && (
@@ -1358,7 +1385,24 @@ const NavigationHandler: React.FC<{
               <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
               <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
               <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages onConversationRead={() => getTotalUnreadCount().then(setUnreadMessagesCount)} /> : <Navigate to="/" />} />
-              <Route path="/others" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Others /> : <Navigate to="/" />} />
+              <Route
+                path="/others"
+                element={
+                  isTwoFactorPending ? (
+                    <Navigate to="/verify-2fa" replace />
+                  ) : role === 'guest' ? (
+                    <Navigate to="/" />
+                  ) : !hasOthersHubAccess ? (
+                    <FeatureUnavailable featureName="others" />
+                  ) : (
+                    <Others
+                      partnersEnabled={feat('partners')}
+                      coachesEnabled={feat('coaches')}
+                      communityEnabled={feat('community')}
+                    />
+                  )
+                }
+              />
               <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to={`/login?redirect=${encodeURIComponent('/teams')}`} replace />} />
               <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />} />
               <Route path="/teams/:squadId/invite/:inviteCode" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />} />
