@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, Users, CheckCircle, XCircle } from 'lucide-react';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 import { type MatchRequest } from '../../services/matchRequests';
 
 interface MatchRequestCardProps {
@@ -29,11 +30,11 @@ export const MatchRequestCard: React.FC<MatchRequestCardProps> = ({
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
       <div className="flex items-start gap-4">
-        <img
-          src={user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.full_name || 'User')}`}
-          alt={user?.full_name}
-          className="w-12 h-12 rounded-full object-cover"
-        />
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt={user?.full_name} className="h-12 w-12 rounded-full object-cover" />
+        ) : (
+          <PlaceholderAvatar className="h-12 w-12" iconSize={24} />
+        )}
         <div className="flex-1">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-gray-900">{user?.full_name}</h3>

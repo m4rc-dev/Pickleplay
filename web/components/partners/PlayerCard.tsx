@@ -12,6 +12,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import type { SmartPlayerCardData } from './findPartners.types';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 
 interface PlayerCardProps {
   player: SmartPlayerCardData;
@@ -67,10 +68,6 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     };
   }, [menuOpen]);
 
-  const avatarSrc =
-    player.avatar_url ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(player.full_name)}&background=1e40af&color=fff&size=96`;
-
   const metadataItems = [
     { label: 'Skill', value: player.skillLabel },
     { label: 'Style', value: player.playStyleLabel },
@@ -86,11 +83,15 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             onClick={onViewProfile}
             className="relative shrink-0 overflow-hidden rounded-xl ring-1 ring-slate-200 transition-all hover:ring-blue-300"
           >
-            <img
-              src={avatarSrc}
-              alt={player.full_name}
-              className="h-14 w-14 object-cover"
-            />
+            {player.avatar_url ? (
+              <img src={player.avatar_url} alt={player.full_name} className="h-14 w-14 object-cover" />
+            ) : (
+              <PlaceholderAvatar
+                roundedClassName="rounded-xl"
+                className="h-14 w-14"
+                iconSize={28}
+              />
+            )}
             {player.isVerified && (
               <span className="absolute bottom-1 right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
                 <BadgeCheck size={12} className="text-blue-600" />

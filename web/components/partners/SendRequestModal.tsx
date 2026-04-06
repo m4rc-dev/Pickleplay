@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { X, Send, Calendar, Clock, Users, Swords } from 'lucide-react';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 
 interface Player {
   id: string;
@@ -61,14 +62,19 @@ export const SendRequestModal: React.FC<SendRequestModalProps> = ({
 
         {/* ── Player strip ── */}
         <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
-          <img
-            src={
-              player.avatar_url ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(player.full_name)}&background=dbeafe&color=1d4ed8&size=96`
-            }
-            alt={player.full_name}
-            className="w-8 h-8 rounded-xl object-cover shrink-0"
-          />
+          {player.avatar_url ? (
+            <img
+              src={player.avatar_url}
+              alt={player.full_name}
+              className="h-8 w-8 shrink-0 rounded-xl object-cover"
+            />
+          ) : (
+            <PlaceholderAvatar
+              roundedClassName="rounded-xl"
+              className="h-8 w-8 shrink-0"
+              iconSize={16}
+            />
+          )}
           <div>
             <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">
               {player.full_name}

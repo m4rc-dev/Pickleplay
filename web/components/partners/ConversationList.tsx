@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, MessageCircle, X, UserCheck, Bell } from 'lucide-react';
 import { type ConversationWithDetails } from '../../services/directMessages';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 
 interface Friend {
   id: string;
@@ -20,6 +21,8 @@ interface ConversationListProps {
   friends?: Friend[];
   onlineUserIds?: Set<string>;
   onFriendClick?: (friendId: string) => void;
+  /** Warm cache before click — same idea as squad preloading */
+  onConversationHover?: (conversationId: string) => void;
 }
 
 const formatTime = (timestamp: string) => {
@@ -45,6 +48,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   friends = [],
   onlineUserIds = new Set(),
   onFriendClick,
+  onConversationHover,
 }) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'requests'>('chats');
 
@@ -103,7 +107,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           <div className="mt-4">
             <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Friends</p>
             <div
-              className="flex flex-row flex-nowrap gap-3 overflow-x-auto"
+              className="-mx-1 flex flex-row flex-nowrap gap-4 overflow-x-auto px-2 py-2"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {friends.map(friend => {
@@ -115,19 +119,30 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                     className="flex flex-col items-center gap-1 shrink-0 group"
                     title={friend.full_name}
                   >
-                    <div className="relative">
-                      <div className="w-11 h-11 rounded-full overflow-hidden ring-2 ring-white shadow-md group-hover:ring-lime-400 transition-all duration-200">
-                        {friend.avatar_url ? (
-                          <img src={friend.avatar_url} alt={friend.full_name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-600 font-black text-base">
-                            {(friend.full_name || '?')[0].toUpperCase()}
-                          </div>
-                        )}
+                    <div className="relative isolate">
+                      {/*
+                        Border (not ring): ring uses box-shadow and gets clipped by overflow-x-auto.
+                        Border sits inside the box so the circle stays perfect inside the scrollport.
+                      */}
+                      <div className="h-11 w-11 rounded-full border-2 border-white bg-slate-100 shadow-md transition-colors duration-200 group-hover:border-lime-400 group-hover:shadow-lg">
+                        <div className="h-full w-full overflow-hidden rounded-full">
+                          {friend.avatar_url ? (
+                            <img
+                              src={friend.avatar_url}
+                              alt={friend.full_name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <PlaceholderAvatar className="h-full w-full" iconSize={22} />
+                          )}
+                        </div>
                       </div>
-                      <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white transition-colors ${
-                        isOnline ? 'bg-emerald-400' : 'bg-slate-300'
-                      }`} />
+                      <span
+                        className={`absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-2 border-white shadow-sm transition-colors ${
+                          isOnline ? 'bg-emerald-400' : 'bg-slate-300'
+                        }`}
+                        aria-hidden
+                      />
                     </div>
                     <span className="text-[9px] font-semibold text-slate-500 w-11 truncate text-center group-hover:text-slate-800 transition-colors">
                       {(friend.full_name || '').split(' ')[0]}
@@ -182,7 +197,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           <div className="flex md:flex-col gap-3 md:gap-0 px-3 md:px-3 pb-3 md:pb-0 md:pt-1 md:space-y-1 flex-row">
             {Array(4).fill(0).map((_, i) => (
               <div key={i} className="flex md:flex-row flex-col items-center md:items-center gap-2 md:gap-3 p-3 rounded-2xl shrink-0 md:shrink md:w-auto w-20">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 animate-pulse shrink-0" />
+                <div className="w-12 h-12 rounded-full bg-slate-100 animate-pulse shrink-0" />
                 <div className="hidden md:flex flex-1 flex-col space-y-2 w-full">
                   <div className="h-3 bg-slate-100 rounded-full animate-pulse w-2/3" />
                   <div className="h-2.5 bg-slate-100 rounded-full animate-pulse w-4/5" />
@@ -222,6 +237,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                 <button
                   key={conv.id}
                   onClick={() => onSelect(conv)}
+                  onMouseEnter={() => onConversationHover?.(conv.id)}
                   className={`shrink-0 md:shrink md:w-full transition-all text-left ${
                     isActive
                       ? 'md:bg-blue-50 md:border-blue-200'
@@ -231,16 +247,20 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   {/* Mobile: avatar-only pill */}
                   <div className="flex md:hidden flex-col items-center gap-1 pt-1">
                     <div className="relative">
-                      <img
-                        src={
-                          conv.other_user?.avatar_url ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.other_user?.full_name || 'User')}&background=2563eb&color=fff&size=80`
-                        }
-                        alt={conv.other_user?.full_name || 'User'}
-                        className={`w-12 h-12 rounded-2xl object-cover border-2 ${
-                          isActive ? 'border-blue-500' : 'border-slate-100'
-                        }`}
-                      />
+                      {conv.other_user?.avatar_url ? (
+                        <img
+                          src={conv.other_user.avatar_url}
+                          alt={conv.other_user?.full_name || 'User'}
+                          className={`w-12 h-12 rounded-full object-cover border-2 ${
+                            isActive ? 'border-blue-500' : 'border-slate-100'
+                          }`}
+                        />
+                      ) : (
+                        <PlaceholderAvatar
+                          className={`h-12 w-12 border-2 ${isActive ? 'border-blue-500' : 'border-slate-100'}`}
+                          iconSize={24}
+                        />
+                      )}
                       {isRequest ? (
                         <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
                       ) : hasUnread ? (
@@ -257,14 +277,15 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   {/* Desktop: full row */}
                   <div className="hidden md:flex items-center gap-3 w-full">
                     <div className="relative shrink-0">
-                      <img
-                        src={
-                          conv.other_user?.avatar_url ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.other_user?.full_name || 'User')}&background=2563eb&color=fff&size=96`
-                        }
-                        alt={conv.other_user?.full_name || 'User'}
-                        className="w-11 h-11 rounded-xl object-cover"
-                      />
+                      {conv.other_user?.avatar_url ? (
+                        <img
+                          src={conv.other_user.avatar_url}
+                          alt={conv.other_user?.full_name || 'User'}
+                          className="h-11 w-11 rounded-full object-cover"
+                        />
+                      ) : (
+                        <PlaceholderAvatar className="h-11 w-11" iconSize={22} />
+                      )}
                       {isRequest ? (
                         <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
                       ) : hasUnread ? (

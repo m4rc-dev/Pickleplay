@@ -1,7 +1,7 @@
 
 
 // This file contains the main application logic, routing, and navigation components.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import {
   Trophy,
@@ -83,6 +83,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
+import { PlaceholderAvatar } from './components/partners/PlaceholderAvatar';
 import { getTotalUnreadCount } from './services/directMessages';
 import Others from './components/Others';
 
@@ -131,13 +132,86 @@ import FeatureUnavailable from './components/FeatureUnavailable';
 import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
 import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 
+/** Marks a single notification read when its row is visible in the Activity list (updates bell count). */
+const NotificationRowSeenObserver: React.FC<{
+  notification: Notification;
+  scrollRoot: HTMLElement | null;
+  onSeen: (id: string) => void;
+  children: React.ReactNode;
+}> = ({ notification, scrollRoot, onSeen, children }) => {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (notification.isRead) {
+      firedRef.current = true;
+      return;
+    }
+    if (firedRef.current || !scrollRoot) return;
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && !firedRef.current) {
+          firedRef.current = true;
+          onSeen(notification.id);
+          obs.disconnect();
+        }
+      },
+      { root: scrollRoot, threshold: 0.12, rootMargin: '0px' }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [notification.id, notification.isRead, scrollRoot, onSeen]);
+
+  return <div ref={wrapRef}>{children}</div>;
+};
+
+/** DM rows that only exist as a generic placeholder — hide from bell list and unread count */
+function isGenericDmNotification(n: Notification): boolean {
+  if (n.type !== 'new_message') return false;
+  const m = (n.message || '').trim();
+  return /^you have a new message\.?$/i.test(m);
+}
+
+function notificationActorId(row: { actor_id?: string | null; related_user_id?: string | null }) {
+  return row.actor_id || row.related_user_id || null;
+}
+
+/** Real uploaded / OAuth photo — not DiceBear, ui-avatars, etc. */
+function isCustomUserAvatarUrl(url: string | undefined | null): boolean {
+  if (url == null) return false;
+  const u = url.trim().toLowerCase();
+  if (!u) return false;
+  if (u.includes('dicebear.com')) return false;
+  if (u.includes('ui-avatars.com')) return false;
+  if (u.includes('gravatar.com/avatar')) return false;
+  return true;
+}
+
+function notificationActorDisplayName(
+  profileFullName: string | undefined | null,
+  notifType: string,
+  title: string | null | undefined
+): string {
+  if (profileFullName?.trim()) return profileFullName.trim();
+  const typeNorm = String(notifType || '').toLowerCase().replace(/\s+/g, '_');
+  if (typeNorm === 'new_message') return 'Someone';
+  const ti = (title || '').trim();
+  if (ti && !/^new message$/i.test(ti)) return ti;
+  return 'System';
+}
+
 const NotificationPanel: React.FC<{
   notifications: Notification[],
   onClose: () => void,
+  onClearAll: () => void,
   onNotificationClick: (notification: Notification) => void,
   onNotificationAction: (notification: Notification, action: 'approve' | 'view' | 'dismiss') => void,
+  onNotificationSeen: (id: string) => void,
   activeActionKey?: string | null
-}> = ({ notifications, onClose, onNotificationClick, onNotificationAction, activeActionKey = null }) => {
+}> = ({ notifications, onClose, onClearAll, onNotificationClick, onNotificationAction, onNotificationSeen, activeActionKey = null }) => {
   const isCourtManagerPendingApprovalNotification = (notification: Notification) =>
     notification.metadata?.kind === 'court_manager_pending_approval' && Boolean(notification.metadata?.assignmentId);
 
@@ -158,7 +232,89 @@ const NotificationPanel: React.FC<{
   };
   const isSystemNotif = (type: string) =>
     ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined', 'SYSTEM', 'system',
+      'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message', 'new_message'].includes(type);
+
+  /** Types that use the purple circle + Lucide/emoji icon (not sender photo) */
+  const usesBuiltInNotificationIcon = (n: Notification) => {
+    if (isCourtManagerPendingApprovalNotification(n)) return true;
+    const type = n.type as string;
+    if (type === 'new_message') return false;
+    return ['ACHIEVEMENT', 'player_invitation', 'invitation_accepted', 'invitation_declined', 'SYSTEM', 'system',
       'squad_join_request', 'squad_member_joined', 'squad_member_left', 'squad_event_created', 'squad_message'].includes(type);
+  };
+
+  const [listScrollRoot, setListScrollRoot] = useState<HTMLDivElement | null>(null);
+  const visibleNotifications = notifications.filter((n) => !isGenericDmNotification(n));
+
+  const renderNotificationRow = (n: Notification) => (
+    <div
+      className="flex items-start gap-3 p-2 rounded-2xl hover:bg-slate-50 cursor-pointer transition-colors group"
+      onClick={() => onNotificationClick(n)}
+    >
+      {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
+      {usesBuiltInNotificationIcon(n) ? (
+        <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+          {getNotifIcon(n)}
+        </div>
+      ) : isCustomUserAvatarUrl(n.actor.avatar) ? (
+        <img src={n.actor.avatar} className="h-8 w-8 shrink-0 rounded-full object-cover" alt="" />
+      ) : (
+        <PlaceholderAvatar className="h-8 w-8 shrink-0" iconSize={16} />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
+          {isSystemNotif(n.type) ? (
+            <>
+              <span className="font-bold">{n.actor.name}</span>
+              {' '}
+              <span>{n.message}</span>
+            </>
+          ) : (
+            <><span className="font-bold">{n.actor.name}</span> {n.message}</>
+          )}
+        </p>
+        <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+        {(n.type === 'player_invitation') && (
+          <span className="inline-block mt-1.5 px-2 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Tap to respond</span>
+        )}
+        {isCourtManagerPendingApprovalNotification(n) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onNotificationAction(n, 'approve');
+              }}
+              disabled={activeActionKey === `${n.id}:approve`}
+              className="rounded-xl bg-blue-600 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700 disabled:opacity-60"
+            >
+              {activeActionKey === `${n.id}:approve` ? 'Approving...' : 'Approve'}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onNotificationAction(n, 'view');
+              }}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-50"
+            >
+              View Manager
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onNotificationAction(n, 'dismiss');
+              }}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="absolute left-full ml-6 bottom-0 w-80 bg-white rounded-[32px] shadow-2xl border border-slate-100 p-6 animate-in slide-in-from-left-4 fade-in duration-300 z-[100]">
@@ -166,78 +322,33 @@ const NotificationPanel: React.FC<{
         <h3 className="font-black text-slate-900 tracking-tight uppercase">Activity</h3>
         <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-900"><X size={16} /></button>
       </div>
-      <div className="space-y-4 max-h-80 overflow-y-auto scrollbar-hide">
-        {notifications.length > 0 ? notifications.map(n => (
-          <div
-            key={n.id}
-            className="flex items-start gap-3 p-2 rounded-2xl hover:bg-slate-50 cursor-pointer transition-colors group"
-            onClick={() => onNotificationClick(n)}
-          >
-            {!n.isRead && <div className="w-2 h-2 rounded-full bg-rose-500 mt-2 shrink-0 animate-pulse"></div>}
-            {isSystemNotif(n.type) ? (
-              <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
-                {getNotifIcon(n)}
-              </div>
-            ) : (
-              <img src={n.actor.avatar} className="w-8 h-8 rounded-full" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
-                {isSystemNotif(n.type) ? (
-                  <>
-                    <span className="font-bold">{n.actor.name}</span>
-                    {' '}
-                    <span>{n.message}</span>
-                  </>
-                ) : (
-                  <><span className="font-bold">{n.actor.name}</span> {n.message}</>
-                )}
-              </p>
-              <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-              {(n.type === 'player_invitation') && (
-                <span className="inline-block mt-1.5 px-2 py-0.5 bg-violet-100 text-violet-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Tap to respond</span>
-              )}
-              {isCourtManagerPendingApprovalNotification(n) && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNotificationAction(n, 'approve');
-                    }}
-                    disabled={activeActionKey === `${n.id}:approve`}
-                    className="rounded-xl bg-blue-600 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700 disabled:opacity-60"
-                  >
-                    {activeActionKey === `${n.id}:approve` ? 'Approving...' : 'Approve'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNotificationAction(n, 'view');
-                    }}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-50"
-                  >
-                    View Manager
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNotificationAction(n, 'dismiss');
-                    }}
-                    className="rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+      <div ref={setListScrollRoot} className="space-y-4 max-h-80 overflow-y-auto scrollbar-hide">
+        {visibleNotifications.length > 0 ? visibleNotifications.map(n => (
+          n.isRead ? (
+            <div key={n.id}>{renderNotificationRow(n)}</div>
+          ) : (
+            <NotificationRowSeenObserver
+              key={n.id}
+              notification={n}
+              scrollRoot={listScrollRoot}
+              onSeen={onNotificationSeen}
+            >
+              {renderNotificationRow(n)}
+            </NotificationRowSeenObserver>
+          )
         )) : (
           <p className="text-sm text-slate-400 text-center py-8">No new notifications.</p>
         )}
       </div>
+      {visibleNotifications.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onClearAll()}
+          className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+        >
+          Clear all
+        </button>
+      )}
     </div>
   );
 };
@@ -437,6 +548,7 @@ const NavigationHandler: React.FC<{
   notifications: Notification[];
   setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   handleMarkNotificationsRead: () => void;
+  handleClearAllNotifications: () => void;
   posts: SocialPost[];
   setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
   cartItems: CartItem[];
@@ -468,7 +580,7 @@ const NavigationHandler: React.FC<{
     role: rawRole, setRole, isLoginModalOpen, setIsLoginModalOpen, handleLogout,
     applications, onApprove, onReject, onSubmitApplication,
     authorizedProRoles, setAuthorizedProRoles, followedUsers, handleFollow,
-    notifications, setNotifications, handleMarkNotificationsRead, posts, setPosts,
+    notifications, setNotifications, handleMarkNotificationsRead, handleClearAllNotifications, posts, setPosts,
     cartItems, onAddToCart, onUpdateCartQuantity, onRemoveFromCart,
     userName, userAvatar, userPoints, currentUserId,
     isSwitchingRole, roleSwitchTarget, handleRoleSwitch,
@@ -550,8 +662,25 @@ const NavigationHandler: React.FC<{
     }, 2000);
     return () => clearInterval(fast);
   }, [messagesPathActive, currentUserId]);
+
+  const handleDmConversationRead = useCallback(
+    (conversationId: string) => {
+      void getTotalUnreadCount().then(setUnreadMessagesCount);
+      setNotifications((prev) =>
+        prev.map((n) => {
+          if (n.isRead || n.type !== 'new_message' || !n.action_url) return n;
+          if (!n.action_url.includes(`conversation=${conversationId}`)) return n;
+          return { ...n, isRead: true };
+        })
+      );
+    },
+    [setNotifications]
+  );
+
   const pendingCount = applications.filter(a => a.status === 'PENDING').length;
-  const unreadNotificationsCount = notifications.filter(n => !n.isRead).length;
+  const unreadNotificationsCount = notifications.filter(
+    (n) => !n.isRead && !isGenericDmNotification(n)
+  ).length;
   const hasUnreadNotifications = unreadNotificationsCount > 0;
 
   // Pending court owner verification count for sidebar badge
@@ -632,6 +761,25 @@ const NavigationHandler: React.FC<{
     setIsNotificationsOpen(prev => !prev);
   };
 
+  const notificationPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+    const closeOnOutside = (e: MouseEvent | TouchEvent) => {
+      const root = notificationPopoverRef.current;
+      if (!root) return;
+      if (root.contains(e.target as Node)) return;
+      setIsNotificationsOpen(false);
+      handleMarkNotificationsRead();
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+    document.addEventListener('touchstart', closeOnOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside);
+      document.removeEventListener('touchstart', closeOnOutside);
+    };
+  }, [isNotificationsOpen, handleMarkNotificationsRead]);
+
   const markNotificationRead = async (notificationId: string) => {
     setNotifications(prev => prev.map(notification => (
       notification.id === notificationId
@@ -648,6 +796,13 @@ const NavigationHandler: React.FC<{
       console.error('Error marking notification as read:', err);
     }
   };
+
+  const markNotificationReadRef = useRef(markNotificationRead);
+  markNotificationReadRef.current = markNotificationRead;
+
+  const handleNotificationSeen = useCallback((id: string) => {
+    void markNotificationReadRef.current(id);
+  }, []);
 
   const handleNotificationClick = (notification: Notification) => {
     const invitationTypes = ['player_invitation', 'invitation_accepted', 'invitation_declined'];
@@ -1162,52 +1317,64 @@ const NavigationHandler: React.FC<{
               </div>
             )}
 
-            <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
-              <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? `${role === 'COURT_MANAGER' ? 'justify-center rounded-2xl bg-white/10 hover:bg-white/20' : 'justify-center'}` : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
-                <div className={`relative shrink-0 rounded-full p-0.5`}>
-                  <img
-                    src={userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName || role}`}
-                    alt="User"
-                    className="w-10 h-10 rounded-full bg-white border-2 border-white"
-                  />
-                </div>
-                {!isSidebarCollapsed && (
-                  <div className="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300 flex-1">
-                    <div className="flex items-center gap-2 justify-between">
-                      <p className="text-sm font-black truncate leading-none capitalize text-white">{userName || role.replace('_', ' ').toLowerCase()}</p>
-                      {role === 'PLAYER' && (
-                        <div className="flex items-center gap-1.5 bg-lime-500/30 px-3 py-1 rounded-full shrink-0 border border-lime-400/30">
-                          <Sparkles size={14} className="text-lime-300" fill="currentColor" />
-                          <span className="text-xs font-black text-lime-100">{userPoints}</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-white/60 uppercase font-black tracking-widest mt-1 leading-none">{role}</p>
+            <div className="relative" ref={notificationPopoverRef}>
+              <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
+                <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? `${role === 'COURT_MANAGER' ? 'justify-center rounded-2xl bg-white/10 hover:bg-white/20' : 'justify-center'}` : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
+                  <div className={`relative shrink-0 rounded-full p-0.5`}>
+                    {userAvatar ? (
+                      <img
+                        src={userAvatar}
+                        alt="User"
+                        className="h-10 w-10 rounded-full border-2 border-white bg-white object-cover"
+                      />
+                    ) : (
+                      <PlaceholderAvatar
+                        className="h-10 w-10 border-2 border-white"
+                        iconSize={20}
+                        bgClassName="bg-white/25"
+                        iconClassName="text-white"
+                      />
+                    )}
                   </div>
-                )}
-              </Link>
-              {(!isSidebarCollapsed || role === 'COURT_MANAGER') && (
-                <button
-                  onClick={toggleNotifications}
-                  title={isSidebarCollapsed ? 'Notifications' : ''}
-                  className={`relative transition-all duration-300 ${isSidebarCollapsed
-                    ? `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl' : 'bg-white/10 text-white/85 hover:bg-white/20 hover:text-white'} w-full rounded-2xl p-3 flex items-center justify-center`
-                    : `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl scale-110' : 'text-white/80 hover:bg-white/10 hover:text-white'} p-3 rounded-full`
-                    }`}
-                >
-                  <Bell size={20} />
-                  {hasUnreadNotifications && (
-                    <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-lg">
-                      {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                  {!isSidebarCollapsed && (
+                    <div className="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300 flex-1">
+                      <div className="flex items-center gap-2 justify-between">
+                        <p className="text-sm font-black truncate leading-none capitalize text-white">{userName || role.replace('_', ' ').toLowerCase()}</p>
+                        {role === 'PLAYER' && (
+                          <div className="flex items-center gap-1.5 bg-lime-500/30 px-3 py-1 rounded-full shrink-0 border border-lime-400/30">
+                            <Sparkles size={14} className="text-lime-300" fill="currentColor" />
+                            <span className="text-xs font-black text-lime-100">{userPoints}</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-white/60 uppercase font-black tracking-widest mt-1 leading-none">{role}</p>
                     </div>
                   )}
-                </button>
-              )}
+                </Link>
+                {(!isSidebarCollapsed || role === 'COURT_MANAGER') && (
+                  <button
+                    type="button"
+                    onClick={toggleNotifications}
+                    title={isSidebarCollapsed ? 'Notifications' : ''}
+                    className={`relative transition-all duration-300 ${isSidebarCollapsed
+                      ? `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl' : 'bg-white/10 text-white/85 hover:bg-white/20 hover:text-white'} w-full rounded-2xl p-3 flex items-center justify-center`
+                      : `${isNotificationsOpen ? 'bg-white text-blue-600 shadow-xl scale-110' : 'text-white/80 hover:bg-white/10 hover:text-white'} p-3 rounded-full`
+                      }`}
+                  >
+                    <Bell size={20} />
+                    {hasUnreadNotifications && (
+                      <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-lg">
+                        {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                      </div>
+                    )}
+                  </button>
+                )}
+              </div>
+              {isNotificationsOpen && <NotificationPanel notifications={notifications} onClose={() => {
+                setIsNotificationsOpen(false);
+                handleMarkNotificationsRead();
+              }} onClearAll={handleClearAllNotifications} onNotificationClick={handleNotificationClick} onNotificationAction={handleNotificationAction} onNotificationSeen={handleNotificationSeen} activeActionKey={notificationActionKey} />}
             </div>
-            {isNotificationsOpen && <NotificationPanel notifications={notifications} onClose={() => {
-              setIsNotificationsOpen(false);
-              handleMarkNotificationsRead();
-            }} onNotificationClick={handleNotificationClick} onNotificationAction={handleNotificationAction} activeActionKey={notificationActionKey} />}
 
             <button onClick={onLogoutClick} className={`w-full min-h-[48px] flex items-center gap-3 py-3.5 rounded-2xl transition-all text-sm font-black uppercase tracking-widest ${isSidebarCollapsed ? 'justify-center' : 'px-6'} text-white/70 hover:text-white hover:bg-white/10`} title={isSidebarCollapsed ? "Logout" : ""}>
               <LogOut size={20} className="shrink-0" />
@@ -1445,7 +1612,7 @@ const NavigationHandler: React.FC<{
               <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
               <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
               <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
-              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages onConversationRead={() => getTotalUnreadCount().then(setUnreadMessagesCount)} /> : <Navigate to="/" />} />
+              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages onConversationRead={handleDmConversationRead} /> : <Navigate to="/" />} />
               <Route
                 path="/others"
                 element={
@@ -2161,9 +2328,9 @@ const App: React.FC = () => {
         }
 
         if (!notifError && notifs) {
-          // Fetch actor profiles separately
-          const actorIds = [...new Set(notifs.map(n => n.actor_id).filter(Boolean))];
-          let profilesMap: Record<string, { full_name: string; avatar_url: string }> = {};
+          // Fetch actor profiles separately (DM rows may only set related_user_id)
+          const actorIds = [...new Set(notifs.map((n) => notificationActorId(n)).filter(Boolean))] as string[];
+          let profilesMap: Record<string, { full_name: string; avatar_url: string | null }> = {};
           if (actorIds.length > 0) {
             const { data: profiles } = await supabase
               .from('profiles')
@@ -2175,15 +2342,17 @@ const App: React.FC = () => {
           }
 
           const mappedNotifs: Notification[] = notifs.map(n => {
-            const actorProfile = profilesMap[n.actor_id];
+            const aid = notificationActorId(n);
+            const actorProfile = aid ? profilesMap[aid] : undefined;
+            const rawAvatar = actorProfile?.avatar_url;
             return {
               id: n.id,
               type: n.type as any,
               message: n.message,
               actor: {
-                name: actorProfile?.full_name || n.title || 'System',
-                avatar: actorProfile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${n.actor_id}`,
-                id: n.actor_id
+                name: notificationActorDisplayName(actorProfile?.full_name, n.type, n.title),
+                avatar: isCustomUserAvatarUrl(rawAvatar) ? rawAvatar!.trim() : '',
+                id: aid || undefined
               },
               timestamp: n.created_at,
               isRead: n.is_read,
@@ -2377,24 +2546,26 @@ const App: React.FC = () => {
         filter: `user_id=eq.${currentUserId}`
       }, async (payload) => {
         const newNotif = payload.new as any;
+        const aid = notificationActorId(newNotif);
         let profile = null;
-        if (newNotif.actor_id) {
+        if (aid) {
           const { data } = await supabase
             .from('profiles')
             .select('full_name, avatar_url')
-            .eq('id', newNotif.actor_id)
+            .eq('id', aid)
             .single();
           profile = data;
         }
 
+        const rawAv = profile?.avatar_url;
         const mappedNewNotif: Notification = {
           id: newNotif.id,
           type: newNotif.type as any,
           message: newNotif.message,
           actor: {
-            name: profile?.full_name || newNotif.title || 'System',
-            avatar: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newNotif.actor_id || newNotif.id}`,
-            id: newNotif.actor_id
+            name: notificationActorDisplayName(profile?.full_name, newNotif.type, newNotif.title),
+            avatar: isCustomUserAvatarUrl(rawAv) ? rawAv!.trim() : '',
+            id: aid || undefined
           },
           timestamp: newNotif.created_at,
           isRead: newNotif.is_read,
@@ -2405,6 +2576,52 @@ const App: React.FC = () => {
 
         setNotifications(prev => [mappedNewNotif, ...prev]);
       })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
+  /** Keep Activity avatars/names in sync when any notification actor updates their profile */
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`notification-actor-profiles-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const row = payload.new as {
+            id?: string;
+            full_name?: string | null;
+            avatar_url?: string | null;
+          };
+          const pid = row?.id;
+          if (!pid) return;
+
+          setNotifications((prev) => {
+            if (!prev.some((n) => n.actor.id === pid)) return prev;
+
+            const raw = row.avatar_url;
+            const nextAvatar = isCustomUserAvatarUrl(raw) ? (raw ?? '').trim() : '';
+            const trimmedName = row.full_name != null ? String(row.full_name).trim() : '';
+
+            return prev.map((n) => {
+              if (n.actor.id !== pid) return n;
+              return {
+                ...n,
+                actor: {
+                  ...n.actor,
+                  name: trimmedName || n.actor.name,
+                  avatar: nextAvatar,
+                },
+              };
+            });
+          });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -2629,6 +2846,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleClearAllNotifications = async () => {
+    if (!currentUserId) return;
+    const previous = notifications;
+    setNotifications([]);
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', currentUserId);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error clearing notifications:', err);
+      setNotifications(previous);
+    }
+  };
+
   const handleApprove = async (id: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -2823,6 +3056,7 @@ const App: React.FC = () => {
           followedUsers={followedUsers} handleFollow={handleFollow}
           notifications={notifications} setNotifications={setNotifications}
           handleMarkNotificationsRead={handleMarkNotificationsRead}
+          handleClearAllNotifications={handleClearAllNotifications}
           posts={posts} setPosts={setPosts}
           cartItems={cartItems}
           onAddToCart={handleAddToCart}

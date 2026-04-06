@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   MessageCircle,
@@ -18,10 +18,13 @@ import {
   sendMessage,
   markConversationAsRead,
   subscribeToConversation,
-  subscribeToAllConversations,
+  subscribeToConversationListUpdates,
   type ConversationWithDetails,
   type DirectMessage
 } from '../services/directMessages';
+import { PlaceholderAvatar } from './partners/PlaceholderAvatar';
+
+const MESSAGE_POLL_FALLBACK_MS = 22000;
 
 const DirectMessages: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,16 +45,29 @@ const DirectMessages: React.FC = () => {
   useEffect(() => {
     loadCurrentUser();
     loadConversations();
-
-    // Subscribe to conversation updates
-    const unsubscribe = subscribeToAllConversations(() => {
-      loadConversations();
-    });
-
-    return () => {
-      unsubscribe();
-    };
   }, []);
+
+  const refreshConversationsQuiet = useCallback(async () => {
+    try {
+      const convs = await getUserConversations();
+      setConversations(convs);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    }
+  }, []);
+
+  const conversationIdsKey = useMemo(
+    () => [...conversations].map((c) => c.id).sort().join(','),
+    [conversations]
+  );
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    const ids = conversationIdsKey ? conversationIdsKey.split(',').filter(Boolean) : [];
+    return subscribeToConversationListUpdates(currentUserId, ids, () => {
+      void refreshConversationsQuiet();
+    });
+  }, [currentUserId, conversationIdsKey, refreshConversationsQuiet]);
 
   useEffect(() => {
     if (conversationIdFromUrl && conversations.length > 0) {
@@ -67,18 +83,30 @@ const DirectMessages: React.FC = () => {
       loadMessages();
       markConversationAsRead(selectedConversation.id);
 
-      // Subscribe to new messages
       const unsubscribe = subscribeToConversation(
         selectedConversation.id,
         (message) => {
-          setMessages((prev) => [...prev, message]);
+          setMessages((prev) =>
+            prev.some((m) => m.id === message.id) ? prev : [...prev, message]
+          );
           scrollToBottom();
           markConversationAsRead(selectedConversation.id);
         }
       );
 
+      const pollTimer = setInterval(async () => {
+        if (document.visibilityState !== 'visible') return;
+        try {
+          const fresh = await getConversationMessages(selectedConversation.id);
+          setMessages(fresh);
+        } catch {
+          /* ignore */
+        }
+      }, MESSAGE_POLL_FALLBACK_MS);
+
       return () => {
         unsubscribe();
+        clearInterval(pollTimer);
       };
     }
   }, [selectedConversation]);
@@ -127,12 +155,13 @@ const DirectMessages: React.FC = () => {
     setIsSending(true);
     try {
       const message = await sendMessage(selectedConversation.id, newMessage.trim());
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) =>
+        prev.some((m) => m.id === message.id) ? prev : [...prev, message]
+      );
       setNewMessage('');
       scrollToBottom();
-      
-      // Refresh conversations to update last message
-      loadConversations();
+
+      void refreshConversationsQuiet();
     } catch (error) {
       console.error('Error sending message:', error);
       alert('Failed to send message');
@@ -204,11 +233,15 @@ const DirectMessages: React.FC = () => {
                   selectedConversation?.id === conv.id ? 'bg-blue-50' : ''
                 }`}
               >
-                <img
-                  src={conv.other_user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.other_user?.full_name || 'User')}`}
-                  alt={conv.other_user?.full_name}
-                  className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                />
+                {conv.other_user?.avatar_url ? (
+                  <img
+                    src={conv.other_user.avatar_url}
+                    alt={conv.other_user?.full_name}
+                    className="h-12 w-12 flex-shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <PlaceholderAvatar className="h-12 w-12 flex-shrink-0" iconSize={24} />
+                )}
                 <div className="flex-1 text-left overflow-hidden">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-semibold text-gray-900 truncate">
@@ -253,11 +286,15 @@ const DirectMessages: React.FC = () => {
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <img
-                src={selectedConversation.other_user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedConversation.other_user?.full_name || 'User')}`}
-                alt={selectedConversation.other_user?.full_name}
-                className="w-10 h-10 rounded-full object-cover"
-              />
+              {selectedConversation.other_user?.avatar_url ? (
+                <img
+                  src={selectedConversation.other_user.avatar_url}
+                  alt={selectedConversation.other_user?.full_name}
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+              ) : (
+                <PlaceholderAvatar className="h-10 w-10" iconSize={20} />
+              )}
               <div>
                 <h2 className="font-semibold text-gray-900">
                   {selectedConversation.other_user?.full_name}
@@ -293,11 +330,15 @@ const DirectMessages: React.FC = () => {
                     <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
                       {!isOwn && (
                         <div className="flex items-center gap-2 mb-1">
-                          <img
-                            src={message.sender?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.sender?.full_name || 'User')}`}
-                            alt={message.sender?.full_name}
-                            className="w-6 h-6 rounded-full object-cover"
-                          />
+                          {message.sender?.avatar_url ? (
+                            <img
+                              src={message.sender.avatar_url}
+                              alt={message.sender?.full_name}
+                              className="h-6 w-6 rounded-full object-cover"
+                            />
+                          ) : (
+                            <PlaceholderAvatar className="h-6 w-6" iconSize={12} />
+                          )}
                           <span className="text-xs text-gray-600">
                             {message.sender?.full_name}
                           </span>

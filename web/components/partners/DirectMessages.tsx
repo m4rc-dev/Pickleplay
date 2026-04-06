@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { supabase } from '../../services/supabase';
@@ -9,7 +9,7 @@ import {
   sendMessage,
   markConversationAsRead,
   subscribeToConversation,
-  subscribeToAllConversations,
+  subscribeToConversationListUpdates,
   checkMutualFollow,
   followUser,
   type ConversationWithDetails,
@@ -18,10 +18,13 @@ import {
 import { ConversationList } from './ConversationList';
 import { ChatArea, type MessageGateState } from './ChatArea';
 
-const POLL_INTERVAL_MS = 3000; // poll every 3 seconds as realtime fallback
+/** Fallback when Realtime is off or RLS blocks events (see migration 013_enable_dm_realtime_publication.sql) */
+const MESSAGE_POLL_FALLBACK_MS = 6000;
+const CONVERSATION_POLL_FALLBACK_MS = 55000;
 
 interface DirectMessagesProps {
-  onConversationRead?: () => void;
+  /** Fired after we attempt to mark the thread read — use to refresh nav / bell badges */
+  onConversationRead?: (conversationId: string) => void;
 }
 
 const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) => {
@@ -45,9 +48,37 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   const [friends, setFriends] = useState<Array<{ id: string; full_name: string; avatar_url?: string }>>([]);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
+  const messageCacheRef = useRef<Map<string, DirectMessage[]>>(new Map());
+  const loadGenRef = useRef(0);
+  const selectedConversationRef = useRef<ConversationWithDetails | null>(null);
+
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  const prefetchConversationMessages = useCallback((conversationId: string) => {
+    if (messageCacheRef.current.has(conversationId)) return;
+    void getConversationMessages(conversationId).then((msgs) => {
+      messageCacheRef.current.set(conversationId, msgs);
+    }).catch(() => {});
+  }, []);
+
+  // Deep link: warm cache as soon as the list is available (squad-style preload)
+  useEffect(() => {
+    if (!conversationIdFromUrl || conversations.length === 0) return;
+    prefetchConversationMessages(conversationIdFromUrl);
+  }, [conversationIdFromUrl, conversations.length, prefetchConversationMessages]);
+
   // Deduplicate helper — prevents double-render from optimistic + realtime
   const addMessageDeduped = (msg: DirectMessage) => {
-    setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+    setMessages((prev) => {
+      const next = prev.some((m) => m.id === msg.id) ? prev : [...prev, msg];
+      const sel = selectedConversationRef.current;
+      if (sel?.id === msg.conversation_id) {
+        messageCacheRef.current.set(msg.conversation_id, next);
+      }
+      return next;
+    });
   };
 
   // Update a conversation's last_message preview in-place (no full reload)
@@ -70,24 +101,28 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     loadFriends();
   }, []);
 
-  // Global realtime: catch messages in any conversation to update previews + load new convs
-  useEffect(() => {
-    const unsubscribe = subscribeToAllConversations(() => {
-      // Silently refresh conversation list (no spinner) for new conversations only
-      getUserConversations()
-        .then(fresh => {
-          setConversations(prev => {
-            // Add any brand-new conversations that didn't exist before
-            const existingIds = new Set(prev.map(c => c.id));
-            const newOnes = fresh.filter(c => !existingIds.has(c.id));
-            if (newOnes.length > 0) return [...newOnes, ...prev];
-            return prev; // preview updates come from per-conversation subscription
-          });
-        })
-        .catch(() => {});
-    });
-    return () => { unsubscribe(); };
+  const refreshConversationsQuiet = useCallback(async () => {
+    try {
+      const fresh = await getUserConversations();
+      setConversations(fresh);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  const conversationIdsKey = useMemo(
+    () => [...conversations].map((c) => c.id).sort().join(','),
+    [conversations]
+  );
+
+  // Realtime: only this user's threads + new participant rows (new conversations)
+  useEffect(() => {
+    if (!currentUserId) return;
+    const ids = conversationIdsKey ? conversationIdsKey.split(',').filter(Boolean) : [];
+    return subscribeToConversationListUpdates(currentUserId, ids, () => {
+      void refreshConversationsQuiet();
+    });
+  }, [currentUserId, conversationIdsKey, refreshConversationsQuiet]);
 
   useEffect(() => {
     if (conversationIdFromUrl && conversations.length > 0) {
@@ -108,50 +143,102 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     checkMutualFollow(selectedConversation.other_user.id).then(setCanMessage);
   }, [selectedConversation?.id]);
 
+  useLayoutEffect(() => {
+    if (!selectedConversation) return;
+    const id = selectedConversation.id;
+    const cached = messageCacheRef.current.get(id);
+    if (cached) {
+      setMessages(cached);
+      setIsMessagesLoading(false);
+    } else {
+      setMessages([]);
+      setIsMessagesLoading(true);
+    }
+  }, [selectedConversation?.id]);
+
   useEffect(() => {
     if (!selectedConversation) return;
-    loadMessages();
-    markConversationAsRead(selectedConversation.id).then(() => {
-      onConversationRead?.();
-    }).catch(() => {});
+    const id = selectedConversation.id;
+    const gen = ++loadGenRef.current;
 
-    // Try Supabase Realtime (will work if table is in supabase_realtime publication)
-    const unsubscribe = subscribeToConversation(
-      selectedConversation.id,
-      (message) => {
-        addMessageDeduped(message);
-        updateConversationPreview(message);
-        markConversationAsRead(selectedConversation.id).then(() => {
-          onConversationRead?.();
-        }).catch(() => {});
-      }
-    );
-
-    // Polling fallback: re-fetch messages every few seconds to guarantee freshness
-    const pollTimer = setInterval(async () => {
+    void (async () => {
       try {
-        const fresh = await getConversationMessages(selectedConversation.id);
+        const fresh = await getConversationMessages(id);
+        if (loadGenRef.current !== gen) return;
+        messageCacheRef.current.set(id, fresh);
         setMessages(fresh);
-      } catch (_) {}
-    }, POLL_INTERVAL_MS);
+      } catch (error) {
+        console.error('Error loading messages:', error);
+        if (loadGenRef.current === gen) setMessages([]);
+      } finally {
+        if (loadGenRef.current === gen) setIsMessagesLoading(false);
+      }
+    })();
+
+    void markConversationAsRead(id)
+      .catch(() => {})
+      .finally(() => {
+        onConversationRead?.(id);
+        void refreshConversationsQuiet();
+      });
+
+    const unsubscribe = subscribeToConversation(id, (message) => {
+      addMessageDeduped(message);
+      updateConversationPreview(message);
+      void markConversationAsRead(id)
+        .catch(() => {})
+        .finally(() => {
+          onConversationRead?.(id);
+          void refreshConversationsQuiet();
+        });
+    });
+
+    const pollTimer = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const fresh = await getConversationMessages(id);
+        if (loadGenRef.current !== gen || selectedConversationRef.current?.id !== id) return;
+        messageCacheRef.current.set(id, fresh);
+        setMessages(fresh);
+      } catch {
+        /* ignore */
+      }
+    }, MESSAGE_POLL_FALLBACK_MS);
+
+    const refetchOpenThread = () => {
+      if (document.visibilityState !== 'visible') return;
+      void (async () => {
+        try {
+          const fresh = await getConversationMessages(id);
+          if (loadGenRef.current !== gen || selectedConversationRef.current?.id !== id) return;
+          messageCacheRef.current.set(id, fresh);
+          setMessages(fresh);
+        } catch {
+          /* ignore */
+        }
+      })();
+    };
+    const onVisibility = () => refetchOpenThread();
+    const onFocus = () => refetchOpenThread();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
       unsubscribe();
       clearInterval(pollTimer);
     };
-  }, [selectedConversation?.id]);
+  }, [selectedConversation?.id, refreshConversationsQuiet, onConversationRead]);
 
-  // Poll conversations list for sidebar freshness (new convos, updated previews)
   useEffect(() => {
     const pollConvos = setInterval(async () => {
-      try {
-        const fresh = await getUserConversations();
-        setConversations(fresh);
-      } catch (_) {}
-    }, POLL_INTERVAL_MS * 2); // slightly slower cadence for the list
+      if (document.visibilityState !== 'visible') return;
+      await refreshConversationsQuiet();
+    }, CONVERSATION_POLL_FALLBACK_MS);
 
     return () => clearInterval(pollConvos);
-  }, []);
+  }, [refreshConversationsQuiet]);
 
   const loadCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -250,50 +337,46 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     }
   };
 
-  const loadMessages = async () => {
-    if (!selectedConversation) return;
-    setIsMessagesLoading(true);
-    try {
-      setMessages(await getConversationMessages(selectedConversation.id));
-    } catch (error) {
-      console.error('Error loading messages:', error);
-      setMessages([]);
-    } finally {
-      setIsMessagesLoading(false);
-    }
-  };
-
   const selectConversation = (conversation: ConversationWithDetails) => {
-    setMessages([]);
     setCanMessage(null);
     setSelectedConversation(conversation);
     setSearchParams({ conversation: conversation.id });
-    // Mark as read immediately and clear the nav badge
-    markConversationAsRead(conversation.id).then(() => {
-      onConversationRead?.();
-    }).catch(() => {});
+    prefetchConversationMessages(conversation.id);
   };
 
-  const messageGateState: MessageGateState = (() => {
-    if (!selectedConversation || canMessage === null || isMessagesLoading) return 'loading';
-    if (canMessage) return 'chat';
+  /**
+   * Composer UI without a "checking access" pause: infer from messages while mutual-follow loads.
+   * Empty thread defaults to normal chat composer; flips to new_request if not mutual.
+   */
+  const composerGateState: MessageGateState = (() => {
+    if (!selectedConversation) return 'chat';
+
+    if (canMessage === true) return 'chat';
 
     const hasOwnMessages = currentUserId
-      ? messages.some(message => message.sender_id === currentUserId)
+      ? messages.some((message) => message.sender_id === currentUserId)
       : false;
     const hasIncomingMessages = currentUserId
-      ? messages.some(message => message.sender_id !== currentUserId)
+      ? messages.some((message) => message.sender_id !== currentUserId)
       : messages.length > 0;
 
+    if (canMessage === false) {
+      if (hasIncomingMessages) return 'incoming_request';
+      if (hasOwnMessages) return 'outgoing_request';
+      return 'new_request';
+    }
+
+    // canMessage === null — access check still in flight
+    if (hasIncomingMessages && hasOwnMessages) return 'chat';
     if (hasIncomingMessages) return 'incoming_request';
     if (hasOwnMessages) return 'outgoing_request';
-    return 'new_request';
+    return 'chat';
   })();
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation || isSending) return;
-    if (messageGateState !== 'chat' && messageGateState !== 'new_request') return;
+    if (composerGateState !== 'chat' && composerGateState !== 'new_request') return;
     setIsSending(true);
     const text = newMessage.trim();
     setNewMessage('');
@@ -359,6 +442,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           friends={friends}
           onlineUserIds={onlineUserIds}
           onFriendClick={handleFriendClick}
+          onConversationHover={prefetchConversationMessages}
         />
       </div>
 
@@ -369,7 +453,8 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           currentUserId={currentUserId}
           newMessage={newMessage}
           isSending={isSending}
-          messageGateState={messageGateState}
+          messageGateState={composerGateState}
+          isThreadLoading={isMessagesLoading && messages.length === 0}
           onAcceptRequest={handleAcceptRequest}
           onNewMessageChange={setNewMessage}
           onSendMessage={handleSendMessage}

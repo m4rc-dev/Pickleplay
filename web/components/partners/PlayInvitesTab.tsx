@@ -7,6 +7,7 @@ import {
   type PlayerInvitation,
 } from '../../services/invitations';
 import { getOrCreateConversation } from '../../services/directMessages';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -102,14 +103,19 @@ const PlayInvitesTab: React.FC<PlayInvitesTabProps> = ({ onCountChange }) => {
           <div key={invite.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-4 flex items-center gap-4">
               {/* Avatar */}
-              <img
-                src={
-                  inviter?.avatar_url ||
-                  `https://ui-avatars.com/api/?name=${encodeURIComponent(inviter?.full_name || 'Player')}&background=1e40af&color=fff&size=80`
-                }
-                alt={inviter?.full_name || 'Player'}
-                className="w-12 h-12 rounded-xl object-cover shrink-0 border-2 border-slate-100"
-              />
+              {inviter?.avatar_url ? (
+                <img
+                  src={inviter.avatar_url}
+                  alt={inviter?.full_name || 'Player'}
+                  className="h-12 w-12 shrink-0 rounded-xl border-2 border-slate-100 object-cover"
+                />
+              ) : (
+                <PlaceholderAvatar
+                  roundedClassName="rounded-xl"
+                  className="h-12 w-12 shrink-0 border-2 border-slate-100"
+                  iconSize={24}
+                />
+              )}
 
               {/* Info */}
               <div className="flex-1 min-w-0">

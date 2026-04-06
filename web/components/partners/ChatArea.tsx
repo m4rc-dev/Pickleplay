@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Lock, MessageCircle, Send, UserPlus } from 'lucide-react';
 import { type ConversationWithDetails, type DirectMessage } from '../../services/directMessages';
+import { PlaceholderAvatar } from './PlaceholderAvatar';
 
 export type MessageGateState =
-  | 'loading'
   | 'chat'
   | 'new_request'
   | 'incoming_request'
@@ -17,6 +17,8 @@ interface ChatAreaProps {
   newMessage: string;
   isSending: boolean;
   messageGateState: MessageGateState;
+  /** Show thread skeleton (composer still uses messageGateState) — like squad chat */
+  isThreadLoading?: boolean;
   onAcceptRequest?: () => Promise<void>;
   onNewMessageChange: (value: string) => void;
   onSendMessage: (e: React.FormEvent) => void;
@@ -44,6 +46,20 @@ const formatDateSeparator = (timestamp: string) => {
   return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 };
 
+function ThreadSkeleton() {
+  return (
+    <div className="space-y-4 py-2 animate-pulse" aria-hidden>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+          <div
+            className={`h-10 rounded-2xl bg-slate-200/80 ${i % 2 === 0 ? 'w-[55%] rounded-bl-sm' : 'w-[48%] rounded-br-sm'}`}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   conversation,
   messages,
@@ -51,6 +67,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   newMessage,
   isSending,
   messageGateState,
+  isThreadLoading = false,
   onAcceptRequest,
   onNewMessageChange,
   onSendMessage,
@@ -59,10 +76,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const otherName = conversation.other_user?.full_name?.split(' ')[0] || 'them';
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevMessageCountRef = useRef(0);
   const [isAcceptingRequest, setIsAcceptingRequest] = useState(false);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    prevMessageCountRef.current = 0;
+  }, [conversation.id]);
+
+  // Squad-style: instant scroll on first paint; smooth only when new messages arrive
+  useEffect(() => {
+    const n = messages.length;
+    const prev = prevMessageCountRef.current;
+    prevMessageCountRef.current = n;
+    if (n === 0) return;
+    if (prev === 0 && n > 0) {
+      requestAnimationFrame(() =>
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+      );
+      return;
+    }
+    if (n > prev) {
+      const t = window.setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 50);
+      return () => clearTimeout(t);
+    }
   }, [messages]);
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -83,9 +121,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   });
 
   const otherUser = conversation.other_user;
-  const avatarSrc =
-    otherUser?.avatar_url ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.full_name || 'User')}&background=1e40af&color=fff&size=96`;
 
   const renderComposer = (helperText: string, banner?: React.ReactNode) => (
     <div className="bg-white border-t border-slate-100 px-4 py-3 shrink-0">
@@ -139,11 +174,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           to={otherUser?.id ? `/profile/${otherUser.id}` : '#'}
           className="flex items-center gap-3 min-w-0 group flex-1"
         >
-          <img
-            src={avatarSrc}
-            alt={otherUser?.full_name || 'User'}
-            className="w-10 h-10 rounded-xl object-cover shrink-0 ring-2 ring-transparent group-hover:ring-blue-400 transition-all"
-          />
+          {otherUser?.avatar_url ? (
+            <img
+              src={otherUser.avatar_url}
+              alt={otherUser?.full_name || 'User'}
+              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-transparent transition-all group-hover:ring-blue-400"
+            />
+          ) : (
+            <PlaceholderAvatar
+              className="h-10 w-10 shrink-0 ring-2 ring-transparent transition-all group-hover:ring-blue-400"
+              iconSize={20}
+            />
+          )}
           <div className="min-w-0">
             <h2 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none truncate group-hover:text-blue-600 transition-colors">
               {otherUser?.full_name || 'Unknown'}
@@ -161,8 +203,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </Link>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-        {messages.length === 0 ? (
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1 min-h-0">
+        {isThreadLoading ? (
+          <ThreadSkeleton />
+        ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
             <MessageCircle className="text-slate-300 mb-4" size={56} />
             <p className="font-black text-slate-400 text-sm uppercase tracking-wider">
@@ -197,11 +241,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       {!isOwn && (
                         <div className="w-7 shrink-0 mb-1">
                           {showAvatar ? (
-                            <img
-                              src={avatarSrc}
-                              alt={otherUser?.full_name || 'User'}
-                              className="w-7 h-7 rounded-xl object-cover"
-                            />
+                            otherUser?.avatar_url ? (
+                              <img
+                                src={otherUser.avatar_url}
+                                alt={otherUser?.full_name || 'User'}
+                                className="h-7 w-7 rounded-full object-cover"
+                              />
+                            ) : (
+                              <PlaceholderAvatar className="h-7 w-7" iconSize={14} />
+                            )
                           ) : null}
                         </div>
                       )}
@@ -233,21 +281,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {messageGateState === 'loading' ? (
-        <div className="bg-white border-t border-slate-100 px-4 py-4 shrink-0">
-          <div className="flex items-center gap-3 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
-            <span className="inline-block w-4 h-4 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin" />
-            <div>
-              <p className="text-xs font-black text-slate-700 uppercase tracking-wide">
-                Checking chat access
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Loading this conversation...
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : messageGateState === 'incoming_request' ? (
+      {messageGateState === 'incoming_request' ? (
         <div className="bg-white border-t border-slate-100 px-4 py-4 shrink-0">
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">

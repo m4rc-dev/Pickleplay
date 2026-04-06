@@ -27,6 +27,7 @@ import {
   cancelMatchRequest,
   type MatchRequest
 } from '../services/matchRequests';
+import { PlaceholderAvatar } from './partners/PlaceholderAvatar';
 import { getPlayerStats, getUserReviews, getUserEndorsements } from '../services/playerStats';
 import { getOrCreateConversation } from '../services/directMessages';
 
@@ -272,11 +273,11 @@ const FindPartners: React.FC = () => {
                 {filteredPlayers.map((player) => (
                   <div key={player.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
                     <div className="flex items-start gap-4 mb-4">
-                      <img
-                        src={player.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(player.full_name)}`}
-                        alt={player.full_name}
-                        className="w-16 h-16 rounded-full object-cover"
-                      />
+                      {player.avatar_url ? (
+                        <img src={player.avatar_url} alt={player.full_name} className="h-16 w-16 rounded-full object-cover" />
+                      ) : (
+                        <PlaceholderAvatar className="h-16 w-16" iconSize={32} />
+                      )}
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg text-gray-900">{player.full_name}</h3>
                         {player.skill_level && (
@@ -339,11 +340,15 @@ const FindPartners: React.FC = () => {
               receivedRequests.map((request) => (
                 <div key={request.id} className="bg-white rounded-lg shadow-sm p-6">
                   <div className="flex items-start gap-4">
-                    <img
-                      src={request.sender?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.sender?.full_name || 'User')}`}
-                      alt={request.sender?.full_name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
+                    {request.sender?.avatar_url ? (
+                      <img
+                        src={request.sender.avatar_url}
+                        alt={request.sender?.full_name}
+                        className="h-12 w-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <PlaceholderAvatar className="h-12 w-12" iconSize={24} />
+                    )}
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-semibold text-gray-900">{request.sender?.full_name}</h3>
@@ -412,11 +417,15 @@ const FindPartners: React.FC = () => {
               sentRequests.map((request) => (
                 <div key={request.id} className="bg-white rounded-lg shadow-sm p-6">
                   <div className="flex items-start gap-4">
-                    <img
-                      src={request.receiver?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.receiver?.full_name || 'User')}`}
-                      alt={request.receiver?.full_name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
+                    {request.receiver?.avatar_url ? (
+                      <img
+                        src={request.receiver.avatar_url}
+                        alt={request.receiver?.full_name}
+                        className="h-12 w-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <PlaceholderAvatar className="h-12 w-12" iconSize={24} />
+                    )}
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-semibold text-gray-900">{request.receiver?.full_name}</h3>
@@ -484,11 +493,19 @@ const FindPartners: React.FC = () => {
 
             {/* Player strip */}
             <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-50 border-b border-slate-100">
-              <img
-                src={selectedPlayer.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedPlayer.full_name)}&background=dbeafe&color=1d4ed8&size=96`}
-                alt={selectedPlayer.full_name}
-                className="w-8 h-8 rounded-xl object-cover shrink-0"
-              />
+              {selectedPlayer.avatar_url ? (
+                <img
+                  src={selectedPlayer.avatar_url}
+                  alt={selectedPlayer.full_name}
+                  className="h-8 w-8 shrink-0 rounded-xl object-cover"
+                />
+              ) : (
+                <PlaceholderAvatar
+                  roundedClassName="rounded-xl"
+                  className="h-8 w-8 shrink-0"
+                  iconSize={16}
+                />
+              )}
               <div>
                 <p className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight">{selectedPlayer.full_name}</p>
                 {selectedPlayer.dupr_rating != null && (

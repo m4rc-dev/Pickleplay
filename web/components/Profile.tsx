@@ -66,6 +66,7 @@ import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
 import { PostCard } from './community';
 import SecurityReauthModal from './SecurityReauthModal';
+import { PlaceholderAvatar } from './partners/PlaceholderAvatar';
 
 interface ProfileProps {
   userRole: UserRole;
@@ -143,19 +144,29 @@ const PlayerIDCard: React.FC<{
               <div className="flex items-center gap-[4%] mt-[3%] flex-1">
                 {/* Avatar */}
                 <div className="relative group/avatar flex-shrink-0">
-                  <div className="w-[27%] min-w-[72px] aspect-square rounded-[18px] overflow-hidden border-2 border-lime-400/50 shadow-2xl bg-slate-900 ring-2 ring-white/5"
+                  <div className="w-[27%] min-w-[72px] aspect-square rounded-full overflow-hidden border-2 border-lime-400/50 shadow-2xl bg-slate-900 ring-2 ring-white/5"
                     style={{ width: 'clamp(72px, 22vw, 110px)' }}
                   >
-                    <img
-                      src={avatarUrl || profileData?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profileData?.full_name}`}
-                      className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500"
-                      alt="Player Photo"
-                    />
+                    {avatarUrl || profileData?.avatar_url ? (
+                      <img
+                        src={avatarUrl || profileData?.avatar_url}
+                        className="h-full w-full rounded-full object-cover transition-transform duration-500 group-hover/avatar:scale-110"
+                        alt="Player Photo"
+                      />
+                    ) : (
+                      <PlaceholderAvatar
+                        roundedClassName="rounded-full"
+                        className="h-full w-full transition-transform duration-500 group-hover/avatar:scale-110"
+                        iconSize={40}
+                        bgClassName="bg-slate-800"
+                        iconClassName="text-slate-500"
+                      />
+                    )}
                   </div>
                   {isCurrentUser && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onUploadClick(); }}
-                      className="absolute -bottom-1.5 -right-1.5 w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-2xl hover:bg-blue-500 transition-all border-2 border-slate-950 z-10 hover:scale-110 active:scale-95"
+                      className="absolute -bottom-1.5 -right-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-blue-600 text-white shadow-2xl transition-all hover:scale-110 hover:bg-blue-500 active:scale-95"
                       title="Change Photo"
                     >
                       <Camera size={15} />
@@ -2401,13 +2412,21 @@ Never share them with anyone.`;
             {/* Avatar with Gradient Ring */}
             <div className="shrink-0">
               <div className={`w-24 h-24 rounded-full p-[3px] bg-gradient-to-tr from-${themeColor}-400 to-lime-300 shadow-xl`}>
-                <div className="w-full h-full rounded-full bg-white p-1 relative group">
-                  <img
-                    src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-                    alt="Profile"
-                    className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer overflow-hidden"
+                <div className="relative group h-full w-full rounded-full bg-white p-1">
+                  <div
+                    className="h-full w-full cursor-pointer overflow-hidden rounded-full bg-slate-50"
                     onClick={() => setShowAvatarDropdown(!showAvatarDropdown)}
-                  />
+                  >
+                    {avatarUrl || profileData.avatar_url ? (
+                      <img
+                        src={avatarUrl || profileData.avatar_url}
+                        alt="Profile"
+                        className="h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <PlaceholderAvatar className="h-full w-full" iconSize={40} />
+                    )}
+                  </div>
                   {isCurrentUser && (
                     <>
                       <input
@@ -2701,12 +2720,20 @@ Never share them with anyone.`;
           <div className="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-sm text-center">
             <div className="relative inline-block mb-6">
               <div className={`w-40 h-40 rounded-full p-1 border-4 border-${themeColor}-200 shadow-2xl group relative`}>
-                <img
-                  src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-                  alt="Profile"
-                  className="w-full h-full rounded-full bg-slate-50 object-cover cursor-pointer"
+                <div
+                  className="h-full w-full cursor-pointer overflow-hidden rounded-full bg-slate-50"
                   onClick={() => setShowAvatarDropdown(!showAvatarDropdown)}
-                />
+                >
+                  {avatarUrl || profileData.avatar_url ? (
+                    <img
+                      src={avatarUrl || profileData.avatar_url}
+                      alt="Profile"
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <PlaceholderAvatar className="h-full w-full" iconSize={56} />
+                  )}
+                </div>
                 {isCurrentUser && (
                   <>
                     <input
@@ -4041,14 +4068,21 @@ Never share them with anyone.`;
                       </p>
                       {receivedRatings.map((r: any) => {
                         const raterName = r.rater?.full_name || r.rater?.username || 'Anonymous Player';
-                        const raterAvatar = r.rater?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${raterName}`;
                         const overallAvg = ((r.skill_level + r.sportsmanship + r.reliability + r.fair_play) / 4).toFixed(1);
                         const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
                         return (
                           <div key={r.id} className="bg-slate-50 rounded-3xl p-6 space-y-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <img src={raterAvatar} alt={raterName} className="w-10 h-10 rounded-full object-cover bg-slate-200" />
+                                {r.rater?.avatar_url ? (
+                                  <img
+                                    src={r.rater.avatar_url}
+                                    alt={raterName}
+                                    className="h-10 w-10 rounded-full bg-slate-200 object-cover"
+                                  />
+                                ) : (
+                                  <PlaceholderAvatar className="h-10 w-10" iconSize={20} />
+                                )}
                                 <div>
                                   <p className="font-black text-slate-900 text-sm uppercase tracking-tight">{raterName}</p>
                                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{date}</p>
@@ -4248,12 +4282,16 @@ Never share them with anyone.`;
                 <div className="relative">
                   <div className={`absolute -inset-3 rounded-full bg-gradient-to-tr from-${themeColor}-400/30 to-lime-300/30 blur-xl animate-pulse`} />
                   <div className={`relative w-[70vw] h-[70vw] max-w-[420px] max-h-[420px] rounded-full p-1 bg-gradient-to-tr from-${themeColor}-400 to-lime-300 shadow-2xl`}>
-                    <div className="w-full h-full rounded-full overflow-hidden bg-white p-1">
-                      <img
-                        src={avatarUrl || profileData.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
-                        alt="Profile"
-                        className="w-full h-full rounded-full object-cover"
-                      />
+                    <div className="h-full w-full overflow-hidden rounded-full bg-white p-1">
+                      {avatarUrl || profileData.avatar_url ? (
+                        <img
+                          src={avatarUrl || profileData.avatar_url}
+                          alt="Profile"
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <PlaceholderAvatar className="h-full w-full" iconSize={96} bgClassName="bg-slate-200" />
+                      )}
                     </div>
                   </div>
                 </div>
