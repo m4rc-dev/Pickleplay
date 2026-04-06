@@ -257,9 +257,7 @@ const CourtDetail: React.FC = () => {
                             city,
                             latitude,
                             longitude,
-                            amenities,
-                            opening_time,
-                            closing_time
+                            amenities
                         )
                     `)
                     .eq('id', courtId)

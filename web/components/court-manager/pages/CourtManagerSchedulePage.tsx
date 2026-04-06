@@ -98,6 +98,7 @@ export interface CourtManagerScheduleWorkspaceProps {
   lockedViewMode?: ViewMode;
   showViewToggle?: boolean;
   contextLabel?: string;
+  compact?: boolean;
 }
 
 const DEFAULT_OPEN = '08:00';
@@ -128,11 +129,14 @@ const minutesToTime = (minutes: number) => {
   return `${hours}:${mins}`;
 };
 
-const formatTimeLabel = (time: string) =>
-  new Date(`2000-01-01T${time}:00`).toLocaleTimeString([], {
+const formatTimeLabel = (time: string) => {
+  const [h, m] = (time || '00:00').split(':');
+  const cleanTime = `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+  return new Date(`2000-01-01T${cleanTime}:00`).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
   });
+};
 
 const formatHourLabel = (hour: number) => {
   const suffix = hour >= 12 ? 'PM' : 'AM';
@@ -186,11 +190,11 @@ const getBookingUser = (booking: ScheduleBooking) => {
 };
 
 const getBookingStatusMeta = (booking: ScheduleBooking) => {
-  if (booking.is_no_show) return { label: 'No-Show', chip: 'border-rose-200 bg-rose-50 text-rose-700', block: 'border-rose-200 bg-rose-50/95 text-rose-900', accent: 'bg-rose-500' };
-  if (booking.checked_out_at || booking.status === 'completed') return { label: 'Checked Out', chip: 'border-slate-200 bg-slate-100 text-slate-700', block: 'border-slate-200 bg-slate-100/95 text-slate-900', accent: 'bg-slate-500' };
-  if (booking.is_checked_in) return { label: 'Checked In', chip: 'border-emerald-200 bg-emerald-50 text-emerald-700', block: 'border-emerald-200 bg-emerald-50/95 text-emerald-900', accent: 'bg-emerald-500' };
-  if (booking.status === 'pending') return { label: 'Pending', chip: 'border-amber-200 bg-amber-50 text-amber-700', block: 'border-amber-200 bg-amber-50/95 text-amber-900', accent: 'bg-amber-500' };
-  return { label: booking.payment_status === 'paid' ? 'Booked' : 'Reserved', chip: 'border-blue-200 bg-blue-50 text-blue-700', block: 'border-blue-200 bg-blue-50/95 text-blue-900', accent: 'bg-blue-500' };
+  if (booking.is_no_show) return { label: 'No-Show', chip: 'border-rose-200 bg-rose-50 text-rose-700', block: 'border-rose-200 bg-rose-50/95 text-rose-950', accent: 'bg-rose-600' };
+  if (booking.checked_out_at || booking.status === 'completed') return { label: 'Checked Out', chip: 'border-slate-300 bg-slate-100 text-slate-700', block: 'border-slate-200 bg-slate-100/95 text-slate-900', accent: 'bg-slate-600' };
+  if (booking.is_checked_in) return { label: 'Checked In', chip: 'border-emerald-200 bg-emerald-50 text-emerald-700', block: 'border-emerald-200 bg-emerald-50/95 text-emerald-950', accent: 'bg-emerald-600' };
+  if (booking.status === 'pending') return { label: 'Pending', chip: 'border-amber-300 bg-amber-50 text-amber-700', block: 'border-amber-200 bg-amber-50/95 text-amber-950', accent: 'bg-amber-500' };
+  return { label: booking.payment_status === 'paid' ? 'Booked' : 'Reserved', chip: 'border-blue-200 bg-blue-50 text-blue-700', block: 'border-blue-200 bg-blue-50/95 text-blue-950', accent: 'bg-blue-600' };
 };
 
 const getBookingActionState = (booking: ScheduleBooking) => {
@@ -225,11 +229,11 @@ const getBookingActionState = (booking: ScheduleBooking) => {
 };
 
 const getEventMeta = (event: CourtEvent) => {
-  if (event.event_type === 'maintenance') return { label: 'Maintenance', block: 'border-rose-200 bg-rose-50/95 text-rose-900', chip: 'border-rose-200 bg-rose-50 text-rose-700', accent: 'bg-rose-500', Icon: Wrench };
-  if (event.event_type === 'cleaning') return { label: 'Cleaning', block: 'border-sky-200 bg-sky-50/95 text-sky-900', chip: 'border-sky-200 bg-sky-50 text-sky-700', accent: 'bg-sky-500', Icon: Sparkles };
-  if (event.event_type === 'private_event') return { label: 'Private Use', block: 'border-violet-200 bg-violet-50/95 text-violet-900', chip: 'border-violet-200 bg-violet-50 text-violet-700', accent: 'bg-violet-500', Icon: Users };
-  if (event.event_type === 'closure') return { label: 'Closure', block: 'border-slate-200 bg-slate-100/95 text-slate-900', chip: 'border-slate-200 bg-slate-100 text-slate-700', accent: 'bg-slate-500', Icon: AlertCircle };
-  return { label: event.blocks_bookings ? 'Blocked Slot' : 'Court Note', block: 'border-amber-200 bg-amber-50/95 text-amber-900', chip: 'border-amber-200 bg-amber-50 text-amber-700', accent: 'bg-amber-500', Icon: Ban };
+  if (event.event_type === 'maintenance') return { label: 'Maintenance', block: 'border-rose-200 bg-rose-50/95 text-rose-950', chip: 'border-rose-200 bg-rose-50 text-rose-700', accent: 'bg-rose-600', Icon: Wrench };
+  if (event.event_type === 'cleaning') return { label: 'Cleaning', block: 'border-sky-300 bg-sky-50/95 text-sky-950', chip: 'border-sky-300 bg-sky-50 text-sky-700', accent: 'bg-sky-600', Icon: Sparkles };
+  if (event.event_type === 'private_event') return { label: 'Private Use', block: 'border-violet-300 bg-violet-50/95 text-violet-950', chip: 'border-violet-300 bg-violet-50 text-violet-700', accent: 'bg-violet-600', Icon: Users };
+  if (event.event_type === 'closure') return { label: 'Closure', block: 'border-slate-300 bg-slate-100/95 text-slate-950', chip: 'border-slate-300 bg-slate-100 text-slate-700', accent: 'bg-slate-700', Icon: AlertCircle };
+  return { label: event.blocks_bookings ? 'Blocked Slot' : 'Court Note', block: 'border-amber-200 bg-amber-50/95 text-amber-950', chip: 'border-amber-200 bg-amber-50 text-amber-800', accent: 'bg-amber-500', Icon: Ban };
 };
 
 const getTimeRangeState = (dateKey: string, startMinutes: number, endMinutes: number) => {
@@ -247,10 +251,10 @@ const getTimeRangeState = (dateKey: string, startMinutes: number, endMinutes: nu
     isUpcoming,
     label: isLive ? 'Live Now' : isPast ? 'Past' : 'Upcoming',
     chip: isLive
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
       : isPast
-          ? 'border-slate-200 bg-slate-100 text-slate-600'
-          : 'border-blue-200 bg-blue-50 text-blue-700',
+          ? 'border-slate-300 bg-slate-100 text-slate-700'
+          : 'border-sky-200 bg-sky-50 text-sky-700',
   };
 };
 
@@ -297,7 +301,11 @@ const BlockModal: React.FC<{
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[240] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-xl rounded-[32px] border border-slate-100 bg-white p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div
+        data-owner-surface="secondary"
+        className="w-full max-w-xl rounded-[32px] border border-slate-100 bg-gradient-to-br from-white via-white to-blue-50 p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
@@ -312,11 +320,11 @@ const BlockModal: React.FC<{
 
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
-            { value: 'maintenance' as CourtEventType, label: 'Maintenance', classes: 'border-rose-200 bg-rose-50 text-rose-700' },
-            { value: 'other' as CourtEventType, label: 'Blocked Slot', classes: 'border-amber-200 bg-amber-50 text-amber-700' },
-            { value: 'cleaning' as CourtEventType, label: 'Cleaning', classes: 'border-sky-200 bg-sky-50 text-sky-700' },
-            { value: 'private_event' as CourtEventType, label: 'Private Use', classes: 'border-violet-200 bg-violet-50 text-violet-700' },
-            { value: 'closure' as CourtEventType, label: 'Closure', classes: 'border-slate-200 bg-slate-100 text-slate-700' },
+            { value: 'maintenance' as CourtEventType, label: 'Maintenance', classes: 'border-rose-600 bg-rose-600 text-white' },
+            { value: 'other' as CourtEventType, label: 'Blocked Slot', classes: 'border-amber-500 bg-amber-500 text-white' },
+            { value: 'cleaning' as CourtEventType, label: 'Cleaning', classes: 'border-sky-600 bg-sky-600 text-white' },
+            { value: 'private_event' as CourtEventType, label: 'Private Use', classes: 'border-violet-600 bg-violet-600 text-white' },
+            { value: 'closure' as CourtEventType, label: 'Closure', classes: 'border-slate-700 bg-slate-700 text-white' },
           ].map((option) => (
             <button
               key={option.value}
@@ -458,6 +466,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
   lockedViewMode,
   showViewToggle = true,
   contextLabel = 'Court Manager / Schedule',
+  compact = false,
 }) => {
   const navigate = useNavigate();
   const { context } = useCourtManagerLayoutContext();
@@ -522,7 +531,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
         context.court.location_id
           ? supabase
               .from('locations')
-              .select('id, name, opening_time, closing_time')
+              .select('id, name')
               .eq('id', context.court.location_id)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null } as const),
@@ -831,7 +840,10 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
 
   if (isLoading) {
     return (
-      <div className="rounded-[32px] border border-slate-100 bg-white p-10 text-center shadow-sm">
+      <div
+        data-owner-surface="secondary"
+        className="rounded-[32px] border border-slate-100 bg-gradient-to-br from-white via-white to-blue-50 p-10 text-center shadow-sm"
+      >
         <Loader2 size={28} className="mx-auto animate-spin text-blue-600" />
         <p className="mt-4 text-sm font-medium text-slate-500">
           Loading your assigned-court day view...
@@ -841,8 +853,14 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+    <div className="space-y-6" data-dashboard-role="court-owner">
+      {/* In compact mode (embedded in Bookings page), the big header card above already
+          shows the date, court, time range, stats and legend — skip rendering it again. */}
+      {!compact && (
+      <div
+        data-owner-surface="secondary"
+        className="rounded-[36px] border border-slate-100 bg-gradient-to-br from-white via-white to-blue-50 p-6 shadow-sm"
+      >
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
@@ -856,22 +874,22 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
                 <MapPin size={14} className="text-blue-600" />
                 {locationInfo?.name ? `${locationInfo.name} / ${context.court.name}` : context.court.name}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-800">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500 bg-amber-500 px-3 py-1.5 text-white shadow-sm">
                 <Clock3 size={14} />
                 {selectedDayHours.isClosed ? 'Closed for regular operations' : `${formatTimeLabel(selectedDayHours.open)} - ${formatTimeLabel(selectedDayHours.close)}`}
               </span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700">
+              <span className="inline-flex rounded-full border border-blue-600 bg-blue-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
                 {selectedDayBookings.length} booking{selectedDayBookings.length === 1 ? '' : 's'}
               </span>
-              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+              <span className="inline-flex rounded-full border border-amber-500 bg-amber-500 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
                 {selectedDayBlockingEvents.length} blocked
               </span>
-              <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-rose-700">
+              <span className="inline-flex rounded-full border border-rose-600 bg-rose-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
                 {selectedDayMaintenanceCount} maintenance
               </span>
-              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+              <span className="inline-flex rounded-full border border-lime-500 bg-lime-500 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
                 {activeAvailableSlots.length} open half-hours
               </span>
             </div>
@@ -922,12 +940,14 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {[
-                ['Available', 'border-emerald-200 bg-emerald-50 text-emerald-700'],
+              {[ 
+                ['Available', 'border-lime-200 bg-lime-50 text-lime-700'],
+                ['Upcoming', 'border-sky-200 bg-sky-50 text-sky-700'],
+                ['Live Now', 'border-emerald-300 bg-emerald-50 text-emerald-700'],
                 ['Booked', 'border-blue-200 bg-blue-50 text-blue-700'],
-                ['Blocked', 'border-amber-200 bg-amber-50 text-amber-700'],
+                ['Blocked', 'border-amber-200 bg-amber-50 text-amber-800'],
                 ['Maintenance', 'border-rose-200 bg-rose-50 text-rose-700'],
-                ['Past', 'border-slate-200 bg-slate-100 text-slate-700'],
+                ['Past', 'border-slate-300 bg-slate-100 text-slate-700'],
               ].map(([label, classes]) => (
                 <span key={label} className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${classes}`}>
                   {label}
@@ -937,6 +957,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
           </div>
         </div>
       </div>
+      )}
 
       <div
         className="overflow-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -947,7 +968,10 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
           className={`transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${calendarTransitionClass}`}
         >
       {renderedView === 'month' ? (
-        <div className="rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm md:p-6">
+        <div
+          data-owner-surface="secondary"
+          className="rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm md:p-6"
+        >
           <div className="mb-4 grid grid-cols-7 gap-2">
             {WEEKDAYS.map((day) => (
               <div key={day} className="rounded-2xl bg-slate-50 px-3 py-2 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -980,7 +1004,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
                   className={`min-h-[148px] rounded-[28px] border p-3 text-left transition-all ${cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/70'} ${isSelected ? 'border-blue-400 shadow-[0_12px_32px_-20px_rgba(37,99,235,0.45)]' : 'border-slate-200 hover:border-blue-200 hover:shadow-sm'}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${isSelected ? 'bg-blue-600 text-white' : isToday ? 'bg-lime-100 text-lime-800' : 'text-slate-900'}`}>
+                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-black ${isSelected ? 'bg-blue-600 text-white' : isToday ? 'bg-emerald-100 text-emerald-700' : 'text-slate-900'}`}>
                       {cell.date.getDate()}
                     </span>
                     {!cell.isCurrentMonth && (
@@ -992,27 +1016,27 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
 
                   <div className="mt-4 space-y-2">
                     {dayHours.isClosed && (
-                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                      <span className="inline-flex rounded-full border border-slate-700 bg-slate-700 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                         Closed
                       </span>
                     )}
                     {dayBookings.length > 0 && (
-                      <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                      <span className="inline-flex rounded-full border border-blue-600 bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                         {dayBookings.length} booking{dayBookings.length === 1 ? '' : 's'}
                       </span>
                     )}
                     {blockingEvents.length > 0 && (
-                      <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                      <span className="inline-flex rounded-full border border-amber-500 bg-amber-500 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                         {blockingEvents.length} blocked
                       </span>
                     )}
                     {maintenanceCount > 0 && (
-                      <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-rose-700">
+                      <span className="inline-flex rounded-full border border-rose-600 bg-rose-600 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                         {maintenanceCount} maintenance
                       </span>
                     )}
                     {!dayHours.isClosed && dayBookings.length === 0 && blockingEvents.length === 0 && (
-                      <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700">
+                      <span className="inline-flex rounded-full border border-lime-500 bg-lime-500 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                         Open availability
                       </span>
                     )}
@@ -1024,7 +1048,12 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="rounded-[32px] border border-slate-100 bg-white shadow-sm">
+          <div
+            data-owner-surface="secondary"
+            className="rounded-[32px] border border-slate-100 bg-white shadow-sm"
+          >
+          {/* Day Timeline sub-header — hidden in compact (bookings-embedded) mode */}
+          {!compact && (
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 md:px-6">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -1058,6 +1087,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
                 </p>
               </div>
             </div>
+          )}
 
             {selectedDayHours.isClosed ? (
               <div className="p-8">
@@ -1071,12 +1101,15 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
                 <div className="min-w-[720px]">
                   <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-0">
                     <div />
+                    {/* Assigned Court label — hidden in compact mode (already shown in bookings header) */}
+                    {!compact && (
                     <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                         Assigned Court
                       </p>
                       <p className="mt-1 text-lg font-black text-slate-900">{context.court.name}</p>
                     </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-0">
@@ -1090,7 +1123,7 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
 
                     <div className="relative rounded-[28px] border border-slate-200 bg-white" style={{ height: `${timelineHeight}px` }}>
                       <div className="absolute left-4 right-4 rounded-[24px] bg-emerald-50/70" style={{ top: `${openTop}px`, height: `${Math.max(0, closeTop - openTop)}px` }} />
-                      <div className="pointer-events-none absolute left-8 top-4 z-10 inline-flex rounded-full border border-emerald-200 bg-white/90 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                       <div className="pointer-events-none absolute left-8 top-4 z-10 inline-flex rounded-full border border-lime-200 bg-lime-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-lime-700 shadow-sm">
                         Open court window
                       </div>
                       {pastOverlayHeight > 0 && (
@@ -1224,7 +1257,10 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
             )}
           </div>
 
-          <aside className="rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm xl:sticky xl:top-6 xl:h-fit">
+          <aside
+            data-owner-surface="secondary"
+            className="rounded-[32px] border border-slate-100 bg-white p-5 shadow-sm xl:sticky xl:top-6 xl:h-fit"
+          >
             {selectedItem?.type === 'booking' ? (
               (() => {
                 const booking = selectedItem.booking;
@@ -1236,8 +1272,16 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
 
                 return (
                   <div className="space-y-5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItem(null)}
+                      className="mb-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#16784D] transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                      Back to Operations
+                    </button>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Booking Selected</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#16784D]">Booking Selected</p>
                       <h3 className="mt-2 text-2xl font-black uppercase tracking-tight text-slate-900">{user.name}</h3>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${status.chip}`}>{status.label}</span>
@@ -1316,8 +1360,16 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
 
                 return (
                   <div className="space-y-5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItem(null)}
+                      className="mb-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#16784D] transition-colors"
+                    >
+                      <ChevronLeft size={14} />
+                      Back to Operations
+                    </button>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Court Block Selected</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#16784D]">Court Block Selected</p>
                       <h3 className="mt-2 text-2xl font-black uppercase tracking-tight text-slate-900">{event.title}</h3>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${meta.chip}`}>{meta.label}</span>
@@ -1357,38 +1409,45 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
               })()
             ) : (
               <div className="space-y-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Operations Panel</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#16784D]">Operations Panel</p>
                 <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900">Select a Time Block</h3>
                 <p className="text-sm font-medium text-slate-500">
                   Click a booking block to manage check-ins and no-shows, or click an available slot to block time for maintenance and reopened availability.
                 </p>
+
                 {nextOperationalBooking && (
-                  <div className="rounded-[24px] border border-blue-100 bg-blue-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Next On Court</p>
+                  <div className="rounded-[24px] border border-lime-400 bg-lime-50 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-lime-700">🟢 Next On Court</p>
                     <p className="mt-2 text-base font-black text-slate-900">{getBookingUser(nextOperationalBooking).name}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-600">
-                      {formatTimeLabel(nextOperationalBooking.start_time)} - {formatTimeLabel(nextOperationalBooking.end_time)}
+                    <p className="mt-1 text-sm font-semibold text-lime-700">
+                      {formatTimeLabel(nextOperationalBooking.start_time)} – {formatTimeLabel(nextOperationalBooking.end_time)}
                     </p>
                   </div>
                 )}
+
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-[24px] border border-blue-100 bg-blue-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">Bookings Today</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedDayBookings.length}</p>
+                  {/* Booked = blue-600 */}
+                  <div className="rounded-[24px] border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">🔵 Bookings Today</p>
+                    <p className="mt-2 text-2xl font-black text-blue-700">{selectedDayBookings.length}</p>
                   </div>
-                  <div className="rounded-[24px] border border-amber-100 bg-amber-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Blocked Slots</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedDayBlockingEvents.length}</p>
+                  {/* Blocked = amber-500 */}
+                  <div className="rounded-[24px] border border-amber-300 bg-amber-50 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">🟡 Blocked Slots</p>
+                    <p className="mt-2 text-2xl font-black text-amber-700">{selectedDayBlockingEvents.length}</p>
                   </div>
-                  <div className="rounded-[24px] border border-rose-100 bg-rose-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Maintenance</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedDayMaintenanceCount}</p>
+                  {/* Maintenance = rose-600 */}
+                  <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">🔴 Maintenance</p>
+                    <p className="mt-2 text-2xl font-black text-rose-700">{selectedDayMaintenanceCount}</p>
                   </div>
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Closures</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{selectedDayClosureCount}</p>
+                  {/* Past/Closures = slate-700 */}
+                  <div className="rounded-[24px] border border-slate-300 bg-slate-100 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">⚫ Closures</p>
+                    <p className="mt-2 text-2xl font-black text-slate-700">{selectedDayClosureCount}</p>
                   </div>
                 </div>
+
                 <button
                   type="button"
                   onClick={() =>
@@ -1399,13 +1458,29 @@ export const CourtManagerScheduleWorkspace: React.FC<CourtManagerScheduleWorkspa
                       endTime: minutesToTime(Math.min(closeMinutes, openMinutes + 60)),
                     })
                   }
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-blue-700"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#16784D] px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-[#12623E] shadow-[0_4px_16px_-6px_rgba(22,120,77,0.4)]"
                 >
                   <Plus size={16} />
                   Add Court Block
                 </button>
-                <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-medium text-slate-500">
-                  This timeline stays focused on one assigned court only, so daily court operations stay fast and readable.
+
+                <div className="space-y-4 pt-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Quick Legend</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[ 
+                      ['Available', 'border-lime-200 bg-lime-50 text-lime-700'],
+                      ['Upcoming', 'border-sky-200 bg-sky-50 text-sky-700'],
+                      ['Live Now', 'border-emerald-300 bg-emerald-50 text-emerald-700'],
+                      ['Booked', 'border-blue-200 bg-blue-50 text-blue-700'],
+                      ['Blocked', 'border-amber-200 bg-amber-50 text-amber-800'],
+                      ['Maintenance', 'border-rose-200 bg-rose-50 text-rose-700'],
+                      ['Past', 'border-slate-300 bg-slate-100 text-slate-700'],
+                    ].map(([label, classes]) => (
+                      <span key={label} className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${classes}`}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

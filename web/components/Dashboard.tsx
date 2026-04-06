@@ -1163,23 +1163,30 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
       {/* Hard Lock Banner - Day 41+ */}
       {userRole === 'COURT_OWNER' && !isLoading && subscription && isHardLocked(subscription) && (
-        <div className="bg-gradient-to-r from-rose-500 to-rose-600 p-6 md:p-8 rounded-3xl text-white shadow-2xl shadow-rose-100 relative overflow-hidden animate-fade-in">
+        <div
+          className="p-6 md:p-8 rounded-3xl text-white relative overflow-hidden animate-fade-in border"
+          style={{
+            background: 'linear-gradient(135deg, #16784D 0%, #1E8C5B 100%)',
+            borderColor: 'rgba(220, 231, 200, 0.34)',
+            boxShadow: '0 24px 56px -34px rgba(22, 120, 77, 0.42)',
+          }}
+        >
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="relative z-10">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 text-center md:text-left">
                 <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-                  <AlertCircle size={20} className="text-rose-200" fill="currentColor" />
-                  <span className="text-xs font-black uppercase tracking-widest text-rose-100">Subscription Required</span>
+                  <AlertCircle size={20} className="text-[#ECFCCB]" fill="currentColor" />
+                  <span className="text-xs font-black uppercase tracking-widest text-[#ECFCCB]">Subscription Required</span>
                 </div>
-                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight">🔒 Subscription Needed to Continue</h3>
-                <p className="text-rose-50 text-sm md:text-base leading-relaxed max-w-xl">
+                <h3 className="text-2xl md:text-3xl font-black mb-2 tracking-tight text-white"> Subscription Needed to Continue</h3>
+                <p className="text-[#F4F9E8] text-sm md:text-base leading-relaxed max-w-xl">
                   Your trial and grace period have ended. To continue managing your courts and accessing premium features, please select a subscription plan.
                 </p>
               </div>
               <button
                 onClick={() => navigate('/profile')}
-                className="bg-white text-rose-600 font-black px-8 py-4 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-rose-900/20 hover:scale-105 transition-all"
+                className="bg-white text-[#16784D] font-black px-8 py-4 rounded-2xl text-[10px] uppercase tracking-widest shadow-xl shadow-[#0B5D3B]/20 hover:scale-105 transition-all"
               >
                 Subscribe to Continue
               </button>
@@ -1881,21 +1888,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
                         Court Owner / Facility
                       </div>
                     ) : (
-                    <select
-                      name="applicationType"
-                      required
-                      value={applicationType}
-                      onChange={(e) => setApplicationType(e.target.value)}
-                      className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-black text-slate-900 focus:outline-none focus:border-blue-500 appearance-none transition-all"
-                    >
-                      <option value="">Select type...</option>
-                      {!authorizedProRoles.includes('COACH') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COACH' && a.status === 'PENDING') && (
-                        <option value="coach">Certified Coach</option>
-                      )}
-                      {!authorizedProRoles.includes('COURT_OWNER') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COURT_OWNER' && a.status === 'PENDING') && (
-                        <option value="court_owner">Court Owner / Facility</option>
-                      )}
-                    </select>
+                      <select
+                        name="applicationType"
+                        required
+                        value={applicationType}
+                        onChange={(e) => setApplicationType(e.target.value)}
+                        className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 font-black text-slate-900 focus:outline-none focus:border-blue-500 appearance-none transition-all"
+                      >
+                        <option value="">Select type...</option>
+                        {!authorizedProRoles.includes('COACH') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COACH' && a.status === 'PENDING') && (
+                          <option value="coach">Certified Coach</option>
+                        )}
+                        {!authorizedProRoles.includes('COURT_OWNER') && !applications.some(a => a.playerId === currentUserId && a.requestedRole === 'COURT_OWNER' && a.status === 'PENDING') && (
+                          <option value="court_owner">Court Owner / Facility</option>
+                        )}
+                      </select>
                     )}
                     {!isCourtOwnerReferral && <PlusCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />}
                   </div>
@@ -1981,88 +1988,88 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole, onSubmitApplication, se
 
                 {/* File Upload Zone — hidden for court owner referrals AND court_owner type */}
                 {false && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between px-1 relative">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                      Verification Documents {!accessCodeValue.trim() && <span className="text-red-500">*</span>}
-                    </label>
-                    <button type="button" onMouseEnter={() => setShowHelp(true)} onMouseLeave={() => setShowHelp(false)} className="text-slate-400 outline-none">
-                      <HelpCircle size={16} />
-                    </button>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1 relative">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                        Verification Documents {!accessCodeValue.trim() && <span className="text-red-500">*</span>}
+                      </label>
+                      <button type="button" onMouseEnter={() => setShowHelp(true)} onMouseLeave={() => setShowHelp(false)} className="text-slate-400 outline-none">
+                        <HelpCircle size={16} />
+                      </button>
 
-                    {showHelp && (
-                      <div className="absolute right-0 bottom-full mb-3 w-72 bg-white/95 backdrop-blur-xl p-6 rounded-[32px] shadow-2xl border border-slate-100/50 z-[120] animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-none">
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 text-blue-600">
-                            <Shield size={16} />
-                            <p className="text-[10px] font-black uppercase tracking-widest leading-none">Verification Guide</p>
-                          </div>
-
+                      {showHelp && (
+                        <div className="absolute right-0 bottom-full mb-3 w-72 bg-white/95 backdrop-blur-xl p-6 rounded-[32px] shadow-2xl border border-slate-100/50 z-[120] animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-none">
                           <div className="space-y-4">
-                            <div>
-                              <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Certified Coach Requirements:</p>
-                              <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Coaching Certificate
-                                </li>
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Government ID
-                                </li>
-                                <li className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Professional Experience
-                                </li>
-                              </ul>
+                            <div className="flex items-center gap-2 text-blue-600">
+                              <Shield size={16} />
+                              <p className="text-[10px] font-black uppercase tracking-widest leading-none">Verification Guide</p>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider mb-2">Certified Coach Requirements:</p>
+                                <ul className="text-[10px] text-slate-500 font-bold space-y-1.5 ml-1">
+                                  <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Coaching Certificate
+                                  </li>
+                                  <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Valid Government ID
+                                  </li>
+                                  <li className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-100" /> Professional Experience
+                                  </li>
+                                </ul>
+                              </div>
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Max 10MB per file</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">PDF, DOC, Images</p>
                             </div>
                           </div>
-
-                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Max 10MB per file</p>
-                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">PDF, DOC, Images</p>
-                          </div>
+                          {/* Arrow */}
+                          <div className="absolute right-2 top-full w-4 h-4 bg-white/95 border-r border-b border-slate-100/50 rotate-45 -translate-y-2 z-[-1]" />
                         </div>
-                        {/* Arrow */}
-                        <div className="absolute right-2 top-full w-4 h-4 bg-white/95 border-r border-b border-slate-100/50 rotate-45 -translate-y-2 z-[-1]" />
+                      )}
+                    </div>
+
+                    <div
+                      className="border-2 border-dashed border-slate-100 bg-slate-50/50 rounded-2xl p-6 text-center hover:bg-slate-50 transition-all relative"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files) as File[];
+                        if (files.length > 0) handleFileUpload(files);
+                      }}
+                    >
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => handleFileUpload(Array.from(e.target.files || []) as File[])}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      <BookOpen className="mx-auto text-slate-300 mb-2" size={24} />
+                      <p className="text-[10px] font-black uppercase text-slate-900">Upload Files</p>
+                      <p className="text-[9px] font-bold text-slate-400">PDF, DOC, or Images</p>
+                    </div>
+
+                    {/* File List */}
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2 max-h-32 overflow-y-auto no-scrollbar">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                            <div className="min-w-0 flex-1 flex items-center gap-2">
+                              <BookOpen size={12} className="text-blue-500 shrink-0" />
+                              <p className="text-[10px] font-bold text-slate-900 truncate">{file.name}</p>
+                            </div>
+                            <button type="button" onClick={() => handleRemoveFile(index)} className="text-slate-300 hover:text-rose-600 transition-all p-1">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-
-                  <div
-                    className="border-2 border-dashed border-slate-100 bg-slate-50/50 rounded-2xl p-6 text-center hover:bg-slate-50 transition-all relative"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const files = Array.from(e.dataTransfer.files) as File[];
-                      if (files.length > 0) handleFileUpload(files);
-                    }}
-                  >
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => handleFileUpload(Array.from(e.target.files || []) as File[])}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    />
-                    <BookOpen className="mx-auto text-slate-300 mb-2" size={24} />
-                    <p className="text-[10px] font-black uppercase text-slate-900">Upload Files</p>
-                    <p className="text-[9px] font-bold text-slate-400">PDF, DOC, or Images</p>
-                  </div>
-
-                  {/* File List */}
-                  {selectedFiles.length > 0 && (
-                    <div className="space-y-2 max-h-32 overflow-y-auto no-scrollbar">
-                      {selectedFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
-                          <div className="min-w-0 flex-1 flex items-center gap-2">
-                            <BookOpen size={12} className="text-blue-500 shrink-0" />
-                            <p className="text-[10px] font-bold text-slate-900 truncate">{file.name}</p>
-                          </div>
-                          <button type="button" onClick={() => handleRemoveFile(index)} className="text-slate-300 hover:text-rose-600 transition-all p-1">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
                 )}
 
                 {/* Footer Buttons */}

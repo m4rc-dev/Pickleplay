@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { supabase } from '../../services/supabase';
 import { sendPaymentReceiptEmail } from '../../services/paymentReceiptEmail';
 import {
@@ -32,6 +33,19 @@ interface PaymentMethod {
 
 interface LocationOption { id: string; name: string; }
 
+interface PaymentProof {
+  id: string;
+  booking_id?: string;
+  proof_image_url: string;
+  reference_number?: string | null;
+  payment_type?: string | null;
+  account_name?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  booking_date?: string | null;
+  booking_time_label?: string | null;
+}
+
 interface PaymentGroup {
   id: string; // payment_id or fallback booking id
   payment_id?: string | null;
@@ -40,12 +54,57 @@ interface PaymentGroup {
   payment_method?: string | null;
   reference_number?: string | null;
   proof_image_url?: string | null;
+  proofs: PaymentProof[];
   amount: number;
   player?: any;
   court?: any;
   bookings: any[];
   created_at?: string | null;
 }
+
+interface ProofViewerState {
+  paymentLabel: string;
+  paymentMethod?: string | null;
+  proofs: PaymentProof[];
+}
+
+const sortProofsNewestFirst = (proofs: PaymentProof[]) => (
+  [...proofs].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+);
+
+const mergeProofs = (existingProofs: PaymentProof[], nextProofs: PaymentProof[]) => {
+  const proofMap = new Map<string, PaymentProof>();
+
+  [...existingProofs, ...nextProofs].forEach((proof) => {
+    if (!proof.proof_image_url) return;
+    const key = proof.id || `${proof.booking_id || 'booking'}:${proof.proof_image_url}:${proof.created_at || ''}`;
+    const current = proofMap.get(key);
+    if (!current || new Date(proof.created_at || 0).getTime() > new Date(current.created_at || 0).getTime()) {
+      proofMap.set(key, proof);
+    }
+  });
+
+  return sortProofsNewestFirst(Array.from(proofMap.values()));
+};
+
+const formatProofSubmittedAt = (value?: string | null) => {
+  if (!value) return 'Unknown submission time';
+  const submittedAt = new Date(value);
+  if (Number.isNaN(submittedAt.getTime())) return 'Unknown submission time';
+  return submittedAt.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const getProofLabel = (index: number, total: number) => {
+  if (index === 0) return total > 1 ? 'Current Proof' : 'Submitted Proof';
+  if (index === 1) return 'Previous Proof';
+  return `Older Proof ${index}`;
+};
 
 const formatTimeRangeGroup = (group: PaymentGroup) => {
   if (!group.bookings?.length) return '';
@@ -88,10 +147,27 @@ const Transactions: React.FC = () => {
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'resubmit'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedPayment, setExpandedPayment] = useState<string | null>(null);
-  const [proofViewUrl, setProofViewUrl] = useState<string | null>(null);
+  const [proofViewer, setProofViewer] = useState<ProofViewerState | null>(null);
   const [isVerifying, setIsVerifying] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [resubmitReason, setResubmitReason] = useState('');
+
+  useEffect(() => {
+    if (!proofViewer) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProofViewer(null);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [proofViewer]);
 
   useEffect(() => {
     const init = async () => {
@@ -147,7 +223,23 @@ const Transactions: React.FC = () => {
 
     const map = new Map<string, PaymentGroup>();
     rows.forEach((b: any) => {
-      const latestProof = (b.booking_payments || []).sort((a: any, c: any) => new Date(c.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+      const bookingProofs = sortProofsNewestFirst(
+        (b.booking_payments || [])
+          .filter((proof: any) => proof.proof_image_url)
+          .map((proof: any) => ({
+            id: proof.id,
+            booking_id: b.id,
+            proof_image_url: proof.proof_image_url,
+            reference_number: proof.reference_number || null,
+            payment_type: proof.payment_type || null,
+            account_name: proof.account_name || null,
+            status: proof.status || null,
+            created_at: proof.created_at || null,
+            booking_date: b.date || null,
+            booking_time_label: b.start_time && b.end_time ? `${b.start_time.slice(0, 5)} - ${b.end_time.slice(0, 5)}` : null,
+          }))
+      );
+      const latestProof = bookingProofs[0];
       const referenceKey = latestProof?.reference_number ? `${latestProof.reference_number}:${latestProof.payment_type || ''}` : null;
       const key = b.payment_id || b.payment?.id || referenceKey || b.id;
 
@@ -159,6 +251,7 @@ const Transactions: React.FC = () => {
         payment_method: b.payment?.payment_method || b.payment_method,
         reference_number: latestProof?.reference_number || null,
         proof_image_url: latestProof?.proof_image_url || null,
+        proofs: [],
         amount: 0,
         player: b.player,
         court: b.court,
@@ -166,8 +259,12 @@ const Transactions: React.FC = () => {
         created_at: b.payment?.payment_date || b.created_at,
       };
 
+      existing.proofs = mergeProofs(existing.proofs, bookingProofs);
+      const latestGroupProof = existing.proofs[0];
+
       if (!existing.reference_number && latestProof?.reference_number) existing.reference_number = latestProof.reference_number;
-      if (!existing.proof_image_url && latestProof?.proof_image_url) existing.proof_image_url = latestProof.proof_image_url;
+      if (latestGroupProof?.proof_image_url) existing.proof_image_url = latestGroupProof.proof_image_url;
+      if (latestGroupProof?.reference_number) existing.reference_number = latestGroupProof.reference_number;
       if (!existing.payment_method) existing.payment_method = latestProof?.payment_type || b.payment?.payment_method || b.payment_method;
 
       existing.bookings.push(b);
@@ -205,6 +302,17 @@ const Transactions: React.FC = () => {
     }).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
     setPayments(grouped);
+  };
+
+  const openProofViewer = (payment: PaymentGroup) => {
+    if (!payment.proofs.length) return;
+    const playerName = payment.player?.full_name || payment.player?.username || 'Player';
+    const courtName = payment.court?.name || 'Court';
+    setProofViewer({
+      paymentLabel: `${playerName} • ${courtName}`,
+      paymentMethod: payment.payment_method || null,
+      proofs: payment.proofs,
+    });
   };
 
   const handleQRFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -562,14 +670,16 @@ const Transactions: React.FC = () => {
                         </div>
                       )}
 
-                      {payment.proof_image_url && (
+                      {payment.proofs.length > 0 && (
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Proof of Payment</p>
-                          <button onClick={() => setProofViewUrl(payment.proof_image_url as string)} className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-300">
+                          <button onClick={() => openProofViewer(payment)} className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-300">
                             <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center"><Eye size={18} className="text-blue-500" /></div>
                             <div className="text-left flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700">View Receipt Image</p>
-                              <p className="text-[10px] text-slate-400">Tap to view proof of payment</p>
+                              <p className="text-xs font-bold text-slate-700">{payment.proofs.length > 1 ? 'View Proof History' : 'View Receipt Image'}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {payment.proofs.length > 1 ? `${payment.proofs.length} submissions available` : 'Tap to view proof of payment'}
+                              </p>
                             </div>
                             <ChevronDown size={14} className="text-slate-300 -rotate-90" />
                           </button>
@@ -593,8 +703,8 @@ const Transactions: React.FC = () => {
                             <RefreshCw size={14} /> Request Resubmit
                           </button>
                         )}
-                        {payment.proof_image_url && (
-                          <button onClick={() => setProofViewUrl(payment.proof_image_url!)} className="inline-flex items-center gap-2 px-4 py-2 bg-white text-slate-700 border border-slate-200 hover:border-blue-300 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                        {payment.proofs.length > 0 && (
+                          <button onClick={() => openProofViewer(payment)} className="inline-flex items-center gap-2 px-4 py-2 bg-white text-slate-700 border border-slate-200 hover:border-blue-300 text-[10px] font-black uppercase tracking-widest rounded-xl">
                             <Eye size={14} /> View Proof
                           </button>
                         )}
@@ -614,10 +724,198 @@ const Transactions: React.FC = () => {
         </div>
       )}
 
-      {proofViewUrl && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setProofViewUrl(null)}>
-          <img src={proofViewUrl} alt="Proof" className="max-h-[80vh] max-w-[90vw] rounded-xl border border-white/20" />
-        </div>
+      {proofViewer && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 cursor-pointer animate-in fade-in duration-200"
+          onClick={() => setProofViewer(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Payment proof preview"
+        >
+          <button
+            type="button"
+            onClick={() => setProofViewer(null)}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+            aria-label="Close proof preview"
+          >
+            <X size={20} className="text-white" />
+          </button>
+
+          <div
+            className="w-full max-w-7xl h-[min(88vh,760px)] overflow-hidden rounded-[28px] bg-white shadow-2xl cursor-default"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6 border-b border-slate-100">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment Proof History</p>
+                <h3 className="text-lg font-black text-slate-900">{proofViewer.paymentLabel}</h3>
+                <p className="text-xs text-slate-500 font-medium">{proofViewer.proofs.length} submission{proofViewer.proofs.length === 1 ? '' : 's'} on file</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProofViewer(null)}
+                className="shrink-0 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Close proof preview"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="h-[calc(100%-85px)] p-4 sm:p-5 bg-slate-50">
+              {(() => {
+                const latestProof = proofViewer.proofs[0];
+                const previousProof = proofViewer.proofs[1];
+                const olderProofCount = Math.max(proofViewer.proofs.length - 2, 0);
+
+                if (!latestProof) return null;
+
+                return (
+                  <div className="grid h-full gap-4 lg:grid-cols-[minmax(0,1.55fr)_360px]">
+                    <div className="rounded-[28px] overflow-hidden border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-white to-white shadow-[0_24px_70px_rgba(59,130,246,0.14)] p-4 sm:p-5 flex flex-col min-h-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Current Proof</p>
+                          <h4 className="text-xl font-black text-slate-900">Review This First</h4>
+                          <p className="text-sm font-medium text-slate-600">This is the most recent payment proof submitted by the player.</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+                            Latest Submission
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-blue-700 text-right">
+                            {formatProofSubmittedAt(latestProof.created_at)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-[24px] border border-blue-100 bg-white overflow-hidden shadow-sm flex-1 min-h-0">
+                        <img
+                          src={latestProof.proof_image_url}
+                          alt={getProofLabel(0, proofViewer.proofs.length)}
+                          className="w-full h-full object-contain bg-white"
+                        />
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reference</p>
+                          <p className="mt-1 font-bold text-slate-800 break-all">{latestProof.reference_number || '—'}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Payment Via</p>
+                          <p className="mt-1 font-bold text-slate-800 capitalize">{latestProof.payment_type || proofViewer.paymentMethod || '—'}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Account Name</p>
+                          <p className="mt-1 font-bold text-slate-800">{latestProof.account_name || '—'}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Booking Slot</p>
+                          <p className="mt-1 font-bold text-slate-800">
+                            {latestProof.booking_date ? `${latestProof.booking_date}${latestProof.booking_time_label ? ` • ${latestProof.booking_time_label}` : ''}` : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4 min-h-0">
+                      <div className="rounded-[24px] border border-blue-100 bg-blue-50/70 px-4 py-4 sm:px-5">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Review Hint</p>
+                        <p className="mt-2 text-sm font-medium text-slate-700">Approve or reject using the current proof. Use the previous proof only as comparison.</p>
+                      </div>
+
+                      <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Quick Actions</p>
+                        <div className="mt-4 flex flex-col gap-2">
+                          <a
+                            href={latestProof.proof_image_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-[10px] font-black uppercase tracking-widest text-blue-700 hover:border-blue-300 hover:text-blue-800 transition-colors"
+                          >
+                            <Eye size={14} /> Open Current Full Size
+                          </a>
+                          {previousProof && (
+                            <a
+                              href={previousProof.proof_image_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-blue-300 hover:text-blue-600 transition-colors"
+                            >
+                              <Eye size={14} /> Open Previous Full Size
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-slate-200 bg-white p-4 flex-1 min-h-0 flex flex-col">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Comparison</p>
+                            <h4 className="text-base font-black text-slate-900">{previousProof ? 'Previous Proof' : 'Previous Proof Unavailable'}</h4>
+                          </div>
+                          {previousProof && (
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                              {formatProofSubmittedAt(previousProof.created_at)}
+                            </span>
+                          )}
+                        </div>
+
+                        {previousProof ? (
+                          <>
+                            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 overflow-hidden flex-1 min-h-0">
+                              <img
+                                src={previousProof.proof_image_url}
+                                alt={getProofLabel(1, proofViewer.proofs.length)}
+                                className="w-full h-full object-contain bg-white"
+                              />
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reference</p>
+                                <p className="mt-1 font-bold text-slate-800 break-all">{previousProof.reference_number || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Payment Via</p>
+                                <p className="mt-1 font-bold text-slate-800 capitalize">{previousProof.payment_type || proofViewer.paymentMethod || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Account Name</p>
+                                <p className="mt-1 font-bold text-slate-800">{previousProof.account_name || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Booking Slot</p>
+                                <p className="mt-1 font-bold text-slate-800">
+                                  {previousProof.booking_date ? `${previousProof.booking_date}${previousProof.booking_time_label ? ` • ${previousProof.booking_time_label}` : ''}` : '—'}
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="mt-4 flex-1 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center flex items-center justify-center px-6">
+                            <div>
+                              <p className="text-sm font-black text-slate-700">No earlier proof found.</p>
+                              <p className="mt-2 text-xs font-medium text-slate-500">This payment only has one submitted proof on record.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {olderProofCount > 0 && (
+                          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Extra History</p>
+                            <p className="mt-1 text-xs font-medium text-amber-900">{olderProofCount} older proof{olderProofCount === 1 ? '' : 's'} remain in history, but this modal stays focused on the current and previous submissions.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

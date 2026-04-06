@@ -115,6 +115,8 @@ const Login: React.FC = () => {
             const oauthOptions: any = {
                 redirectTo: getAuthCallbackUrl({ ref: referralCode }),
             };
+            // Keep Google's default OAuth behavior: first-time users may see consent,
+            // while previously authorized accounts can return directly without it.
             // Force Facebook to request email permission
             if (provider === 'facebook') {
                 oauthOptions.scopes = 'email';

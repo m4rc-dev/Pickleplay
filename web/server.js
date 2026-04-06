@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { createTwoFactorRouter } from './server/twoFactorRoutes.js';
 import { createSecurityReauthToolkit } from './server/securityReauthRoutes.js';
+import { buildPaymentConfirmationEmailHtml } from '../shared/paymentConfirmationEmailTemplate.js';
 
 dotenv.config();
 dotenv.config({ path: '.env.local' });
@@ -1090,6 +1091,36 @@ app.post('/api/send-receipt-email', emailLimiter, async (req, res) => {
     if (!hasEmailTransport()) {
       console.error('❌ Receipt email failed: no email transport is configured');
       return res.status(503).json({ error: 'Email service is currently unavailable' });
+    }
+
+    {
+      const appUrl = 'https://www.pickleplay.ph';
+      const htmlContent = buildPaymentConfirmationEmailHtml({
+        playerName,
+        courtName,
+        locationName,
+        date,
+        startTime,
+        endTime,
+        totalPrice,
+        referenceId,
+        paymentMethod,
+        appUrl,
+        bookingsUrl: `${appUrl}/my-bookings`,
+      });
+
+      const result = await sendAppEmail({
+        to: email,
+        subject: 'Payment Verified - Booking Confirmed | PicklePlay',
+        html: htmlContent,
+      });
+
+      if (result.error) {
+        console.error('Resend API Error:', result.error);
+        throw new Error(result.error.message || 'Failed to send receipt email');
+      }
+
+      return res.json({ success: true, id: result.data?.id });
     }
 
     const appUrl = 'https://www.pickleplay.ph';

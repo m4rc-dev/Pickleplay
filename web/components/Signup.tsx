@@ -221,6 +221,8 @@ const Signup: React.FC = () => {
                 type: referralType === 'court-owner' ? 'court-owner' : undefined,
             });
             const oauthOptions: any = { redirectTo: callbackUrl };
+            // Keep Google's default OAuth behavior: first-time users may see consent,
+            // while previously authorized accounts can return directly without it.
             // Force Facebook to request email permission
             if (provider === 'facebook') {
                 oauthOptions.scopes = 'email';

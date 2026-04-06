@@ -2,7 +2,7 @@
 
 // This file contains the main application logic, routing, and navigation components.
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import {
   Trophy,
   Calendar,
@@ -394,12 +394,12 @@ const MobileBottomNav: React.FC<{ role: UserRole, themeColor: string }> = ({ rol
 };
 
 const RoleSwitchOverlay: React.FC<{ targetRole: UserRole }> = ({ targetRole }) => {
-  const isCourtOwnerTarget = targetRole === 'COURT_OWNER';
+  const isCourtOperationsTarget = targetRole === 'COURT_OWNER' || targetRole === 'COURT_MANAGER';
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/20 backdrop-blur-md animate-in fade-in duration-500">
       <div className="bg-white/80 p-12 rounded-[48px] shadow-2xl border border-white flex flex-col items-center gap-6 animate-in zoom-in-95 duration-500">
         <div
-          className={`w-24 h-24 rounded-[32px] flex items-center justify-center text-white shadow-xl animate-pulse ${isCourtOwnerTarget ? 'bg-[#0B5D3B] shadow-[#ECFCCB]' : 'bg-blue-600 shadow-blue-200'}`}
+          className={`w-24 h-24 rounded-[32px] flex items-center justify-center text-white shadow-xl animate-pulse ${isCourtOperationsTarget ? 'bg-[#0B5D3B] shadow-[#ECFCCB]' : 'bg-blue-600 shadow-blue-200'}`}
         >
           {targetRole === 'PLAYER' && <User size={40} />}
           {targetRole === 'COACH' && <GraduationCap size={40} />}
@@ -411,9 +411,9 @@ const RoleSwitchOverlay: React.FC<{ targetRole: UserRole }> = ({ targetRole }) =
           <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Syncing Intelligence...</p>
         </div>
         <div className="flex gap-1.5 pt-4">
-          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s] ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
-          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s] ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
-          <div className={`w-2 h-2 rounded-full animate-bounce ${isCourtOwnerTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
+          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.3s] ${isCourtOperationsTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
+          <div className={`w-2 h-2 rounded-full animate-bounce [animation-delay:-0.15s] ${isCourtOperationsTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
+          <div className={`w-2 h-2 rounded-full animate-bounce ${isCourtOperationsTarget ? 'bg-[#0B5D3B]' : 'bg-blue-600'}`}></div>
         </div>
       </div>
     </div>
@@ -496,6 +496,12 @@ const NavigationHandler: React.FC<{
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const scrollContainerRef = useRef<HTMLElement>(null);
   const location = useLocation();
+  const [bookingViewParams, setBookingViewParams] = useSearchParams();
+  const isOnBookingsPage = location.pathname === COURT_MANAGER_ROUTES.bookings;
+  const currentBookingView = (bookingViewParams.get('view') as 'calendar' | 'day' | 'list') || 'calendar';
+  const setBookingView = (mode: 'calendar' | 'day' | 'list') => {
+    setBookingViewParams(params => { params.set('view', mode); return params; });
+  };
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
   const isPosterPage = location.pathname.startsWith('/p/');
@@ -713,6 +719,8 @@ const NavigationHandler: React.FC<{
   };
   const themeColor = getThemeColor();
   const isCourtOwnerShell = role === 'COURT_OWNER';
+  const isCourtManagerShell = role === 'COURT_MANAGER';
+  const isCourtOperationsShell = isCourtOwnerShell || isCourtManagerShell;
   const isCourtOwnerManagementRoute = isCourtOwnerShell && (
     location.pathname === '/dashboard' ||
     location.pathname === '/locations' ||
@@ -726,10 +734,40 @@ const NavigationHandler: React.FC<{
     location.pathname === '/court-pricing' ||
     location.pathname === '/court-policies'
   );
-  const shellBackgroundColor = isCourtOwnerShell ? '#F4F8EC' : '#EBEBE6';
-  const sidebarBackgroundColor = isCourtOwnerShell ? '#0B5D3B' : '#1E40AF';
-  const roleDropdownBackgroundColor = isCourtOwnerShell ? '#397C61' : '#2563EB';
+  const isCourtManagerManagementRoute = isCourtManagerShell && (
+    location.pathname === COURT_MANAGER_ROUTES.overview ||
+    location.pathname.startsWith(`${COURT_MANAGER_ROUTES.overview}/`) ||
+    location.pathname.startsWith('/court-manager/')
+  );
+  const pageTheme = isCourtOwnerManagementRoute || isCourtManagerManagementRoute
+    ? 'court-owner'
+    : 'default';
+  const roleShellTheme = isCourtOperationsShell
+    ? 'court-owner'
+    : 'default';
+  const shellBackgroundColor = isCourtOperationsShell ? '#F4F8EC' : '#EBEBE6';
+  const sidebarBackgroundColor = isCourtOperationsShell ? '#0B5D3B' : '#1E40AF';
+  const roleDropdownBackgroundColor = isCourtOperationsShell ? '#397C61' : '#2563EB';
   const mainBackgroundColor = isAuthPage ? '#1E40AF' : shellBackgroundColor;
+
+  useEffect(() => {
+    if (pageTheme === 'default') {
+      document.body.removeAttribute('data-page-theme');
+    } else {
+      document.body.setAttribute('data-page-theme', pageTheme);
+    }
+
+    if (roleShellTheme === 'default') {
+      document.body.removeAttribute('data-role-shell');
+    } else {
+      document.body.setAttribute('data-role-shell', roleShellTheme);
+    }
+
+    return () => {
+      document.body.removeAttribute('data-page-theme');
+      document.body.removeAttribute('data-role-shell');
+    };
+  }, [pageTheme, roleShellTheme]);
 
   // Distinguish maintenance bypass (account-level admin) from feature bypass (role-based)
   const isAdminForMaintenance = isActualAdmin || localStorage.getItem('is_actual_admin') === 'true';
@@ -807,7 +845,7 @@ const NavigationHandler: React.FC<{
   return (
     <div
       className="min-h-screen h-full w-full flex flex-col md:flex-row relative text-slate-900 overflow-hidden"
-      data-role-shell={isCourtOwnerShell ? 'court-owner' : 'default'}
+      data-role-shell={roleShellTheme}
       style={{ backgroundColor: shellBackgroundColor }}
     >
       {role !== 'guest' && !isAuthPage && !isPosterPage && (
@@ -837,7 +875,7 @@ const NavigationHandler: React.FC<{
 
           <nav className="flex-1 min-h-0 px-4 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
             {role !== 'PLAYER' && feat('dashboard') && (
-              <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_OWNER'} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />
+              <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_OWNER' || role === 'COURT_MANAGER'} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />
             )}
             {role === 'ADMIN' && (
               <div className="relative space-y-1.5">
@@ -878,7 +916,7 @@ const NavigationHandler: React.FC<{
                   </Link>
                 ))}
                 {feat('messages') && <NavItem to="/messages" icon={<MessageCircle size={22} />} label="Messages" isCollapsed={isSidebarCollapsed} themeColor={themeColor} badge={unreadMessagesCount || undefined} />}
-                {feat('dashboard') && <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />}
+                {feat('dashboard') && <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={role === 'COURT_MANAGER'} showCollapsedActiveAccent={role === 'COURT_MANAGER'} />}
 
                 {/* Others group (collapsible) — hidden when every item is feature-disabled */}
                 {hasPlayerOthersNav && (
@@ -952,9 +990,33 @@ const NavigationHandler: React.FC<{
             )}
             {role === 'COURT_MANAGER' && (
               <>
-                <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
-                <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
-                <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={isSidebarCollapsed} themeColor={themeColor} showCollapsedActiveAccent={true} />
+                <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} showCollapsedActiveAccent={true} />
+                <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} showCollapsedActiveAccent={true} />
+                {/* View toggle — only visible when on the Court Bookings page and sidebar is expanded */}
+                {isOnBookingsPage && !isSidebarCollapsed && (
+                  <div className="ml-4 pl-3 border-l-[1.5px] border-white/10 space-y-1.5 animate-in slide-in-from-top-2 fade-in duration-200">
+                    <p className="text-[9px] font-black uppercase tracking-[0.28em] text-white/30 px-2.5 pt-1.5 pb-0.5">View</p>
+                    {([['calendar', 'Month'], ['day', 'Day'], ['list', 'List']] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setBookingView(key)}
+                        className={`w-full flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all duration-300 ${
+                          currentBookingView === key
+                            ? 'bg-white text-[#16784D] shadow-[0_8px_20px_-8px_rgba(0,0,0,0.3)]'
+                            : 'text-white/50 hover:bg-white/5 hover:text-white/90'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-all duration-300 ${currentBookingView === key ? 'bg-lime-500 shadow-[0_0_8px_rgba(163,230,53,0.6)] animate-pulse' : 'bg-white/20'}`} />
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em]">{label}</span>
+                        {currentBookingView === key && (
+                          <div className="ml-auto w-0.5 h-3 rounded-full bg-lime-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={isSidebarCollapsed} themeColor={themeColor} ownerVariant={true} showCollapsedActiveAccent={true} />
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
@@ -1219,7 +1281,7 @@ const NavigationHandler: React.FC<{
             </div>
             <nav className="flex-1 space-y-2 overflow-y-auto scrollbar-hide py-2">
               {role !== 'PLAYER' && (
-                <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                <NavItem to={role === 'COURT_MANAGER' ? COURT_MANAGER_ROUTES.overview : '/dashboard'} icon={<LayoutDashboard size={22} />} label="Overview" isCollapsed={false} themeColor={themeColor} ownerVariant={role === 'COURT_MANAGER'} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               )}
               {role === 'ADMIN' && <NavItem to="/admin" icon={<ShieldCheck size={22} />} label="Admin Console" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {role === 'ADMIN' && <NavItem to="/admin/verifications" icon={<ClipboardCheck size={22} />} label="Court Owner Apps" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} badge={pendingVerificationCount || undefined} />}
@@ -1272,9 +1334,9 @@ const NavigationHandler: React.FC<{
               )}
               {role === 'COURT_MANAGER' && (
                 <>
-                  <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
-                  <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={COURT_MANAGER_ROUTES.assignedCourt} icon={<MapPin size={22} />} label="Assigned Court" isCollapsed={false} themeColor={themeColor} ownerVariant={true} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={COURT_MANAGER_ROUTES.bookings} icon={<Calendar size={22} />} label="Court Bookings" isCollapsed={false} themeColor={themeColor} ownerVariant={true} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+                  <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={false} themeColor={themeColor} ownerVariant={true} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
               <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
@@ -1308,7 +1370,7 @@ const NavigationHandler: React.FC<{
       <main
         ref={scrollContainerRef}
         className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`}
-        data-page-theme={isCourtOwnerManagementRoute ? 'court-owner' : 'default'}
+        data-page-theme={pageTheme}
         style={{ backgroundColor: mainBackgroundColor }}
       >
         <div className={`${role === 'guest' || isAuthPage

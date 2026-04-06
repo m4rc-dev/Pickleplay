@@ -140,22 +140,31 @@ const BookingsAdmin: React.FC = () => {
     // Close menu and dropdowns on outside click
     useEffect(() => {
         const handleClick = (e: MouseEvent) => {
+            const targetNode = e.target as Node;
+            const targetElement = e.target instanceof Element ? e.target : null;
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setOpenMenuId(null);
             }
-            if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
+            if (locationDropdownRef.current && !locationDropdownRef.current.contains(targetNode)) {
                 setShowLocationDropdown(false);
             }
-            if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+            if (datePickerRef.current && !datePickerRef.current.contains(targetNode)) {
                 setShowDatePicker(false);
             }
-            if (monthPickerRef.current && !monthPickerRef.current.contains(e.target as Node)) {
+            if (monthPickerRef.current && !monthPickerRef.current.contains(targetNode)) {
                 setShowMonthPicker(false);
+            }
+            if (!targetElement?.closest('[data-calendar-day-card]')) {
+                setExpandedDayKey(null);
             }
         };
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
+
+    useEffect(() => {
+        setExpandedDayKey(null);
+    }, [calendarMonth, locationFilter, courtFilter, legendFilter, displayMode]);
 
     // Manual Booking Form State
     const [mbLocationId, setMbLocationId] = useState('');
@@ -1199,58 +1208,117 @@ const BookingsAdmin: React.FC = () => {
                             const isCourtScheduleView = !!(locationFilter && courtFilter);
                             const courtScheduleDetail = isCourtScheduleView ? buildCourtDaySegments(courtFilter, day.key) : null;
                             const isExpanded = expandedDayKey === day.key;
+                            const popoverAlignClass = day.date.getDay() >= 4 ? 'right-0 origin-top-right' : 'left-0 origin-top-left';
+                            const dayPopoverClass = `absolute ${popoverAlignClass} top-[calc(100%-1rem)] z-40 w-[calc(200%+0.75rem)] max-w-[min(42rem,calc(100vw-1rem))] overflow-hidden rounded-[24px] border border-slate-200 bg-white/98 shadow-[0_28px_60px_-30px_rgba(15,23,42,0.34)] ring-1 ring-blue-100/80 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-150`;
+                            const dayNumberClass = `${isCourtScheduleView ? 'text-base' : 'text-sm'} font-black tracking-tight transition-colors duration-200 ${day.isToday && !isPastDay ? 'text-blue-700' : isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700'}`;
+                            const closeOverflow = () => setExpandedDayKey(prev => prev === day.key ? null : prev);
+                            const openOverflow = () => setExpandedDayKey(day.key);
+                            const toggleOverflow = (e: React.MouseEvent<HTMLButtonElement>) => {
+                                e.stopPropagation();
+                                setExpandedDayKey(prev => prev === day.key ? null : day.key);
+                            };
+                            const renderOverflowPanel = (
+                                title: string,
+                                count: number,
+                                children: React.ReactNode,
+                                contentClassName = 'grid max-h-[240px] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2'
+                            ) => {
+                                if (count <= 0) return null;
+
+                                return (
+                                    <div className="pt-1">
+                                        <button
+                                            type="button"
+                                            onMouseEnter={openOverflow}
+                                            onFocus={openOverflow}
+                                            onClick={toggleOverflow}
+                                            aria-expanded={isExpanded}
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black tracking-wide text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-white hover:text-blue-700"
+                                        >
+                                            <span>+{count} more</span>
+                                            <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className={dayPopoverClass} onClick={(e) => e.stopPropagation()}>
+                                                <div className="border-b border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/80 px-4 pb-3 pt-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">{title}</p>
+                                                            <p className="mt-1 text-xs font-semibold text-slate-700">
+                                                                {day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                            </p>
+                                                        </div>
+                                                        <span className="inline-flex min-w-[28px] items-center justify-center rounded-full border border-blue-100 bg-white px-2 py-1 text-[10px] font-black text-blue-700 shadow-sm">
+                                                            {count}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4 pt-3">
+                                                    <div className={contentClassName}>{children}</div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            };
 
                             return (
                                 <div
                                     key={day.key}
+                                    data-calendar-day-card
                                     onClick={() => {
                                         if (isCourtScheduleView && courtFilter) {
+                                            setExpandedDayKey(null);
                                             setScheduleDayModal({ courtId: courtFilter, dateKey: day.key });
-                                            setExpandedDayKey(day.key);
-                                        } else {
-                                            setExpandedDayKey(prev => prev === day.key ? null : day.key);
                                         }
                                     }}
-                                    onMouseEnter={() => setExpandedDayKey(day.key)}
-                                    onMouseLeave={() => setExpandedDayKey(null)}
+                                    onMouseLeave={closeOverflow}
                                     className={`group min-h-[180px] h-[190px] md:h-[200px] rounded-2xl border p-2.5 md:p-3 relative overflow-visible transition-all duration-300 ${isCourtScheduleView ? 'min-h-[210px]' : ''} ${
                                         isPastDay
-                                            ? 'bg-slate-100 border-slate-200 opacity-65'
-                                            : 'bg-white border-slate-200 hover:-translate-y-0.5 hover:shadow-md hover:shadow-blue-100/70 hover:border-blue-300'
-                                    } ${isCourtScheduleView ? 'cursor-pointer' : ''} ${isExpanded ? 'z-30 scale-[1.02] shadow-2xl shadow-blue-100/70 ring-1 ring-blue-100' : ''}`}
+                                            ? 'bg-slate-100/90 border-slate-200'
+                                            : 'bg-white border-slate-200 hover:shadow-md hover:shadow-blue-100/70 hover:border-blue-300'
+                                    } ${isCourtScheduleView ? 'cursor-pointer' : ''} ${isExpanded ? 'z-30 shadow-lg shadow-blue-100/80 ring-1 ring-blue-100 border-blue-300' : ''}`}
                                 >
                                     {!isPastDay && (
                                         <div className="pointer-events-none absolute left-3 right-3 top-0.5 h-[2px] rounded-full bg-blue-500/70 scale-x-0 group-hover:scale-x-100 origin-center transition-transform duration-300" />
                                     )}
-                                    {day.isToday && (
-                                        <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 z-50 text-[8px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-black uppercase tracking-widest shadow-sm">Today</span>
-                                    )}
                                     {isCourtScheduleView ? (
-                                        <>
-                                            <div className="flex items-center mb-2 gap-1.5">
-                                                <span className={`text-base font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        navigate(`/court-pricing?court=${courtFilter}`);
-                                                    }}
-                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/70 bg-blue-600/20 text-[10px] font-black text-blue-900 tracking-wide hover:bg-blue-600/30 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
-                                                    title="Edit operation hours in Court Pricing"
-                                                >
-                                                    <Clock size={12} className="text-blue-700" />
-                                                    <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
-                                                </button>
+                                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className={dayNumberClass}>{day.date.getDate()}</span>
+                                                {day.isToday && (
+                                                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.2em] text-blue-700">
+                                                        Today
+                                                    </span>
+                                                )}
                                             </div>
-                                        </>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/court-pricing?court=${courtFilter}`);
+                                                }}
+                                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/70 bg-blue-600/20 text-[10px] font-black text-blue-900 tracking-wide hover:bg-blue-600/30 transition-all max-w-[150px] sm:max-w-[180px] whitespace-nowrap"
+                                                title="Edit operation hours in Court Pricing"
+                                            >
+                                                <Clock size={12} className="text-blue-700" />
+                                                <span className="truncate">{courtScheduleDetail ? `${formatTime12(courtScheduleDetail.open)} - ${formatTime12(courtScheduleDetail.close)}` : ''}</span>
+                                            </button>
+                                        </div>
                                     ) : (
-                                        <div className="flex items-center mb-2">
-                                            <span className={`text-sm font-black transition-all duration-300 ${isPastDay ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-700 group-hover:scale-105'}`}>{day.date.getDate()}</span>
+                                        <div className="mb-2 flex items-center gap-2">
+                                            <span className={dayNumberClass}>{day.date.getDate()}</span>
+                                            {day.isToday && (
+                                                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.2em] text-blue-700">
+                                                    Today
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
                                     {!locationFilter && (
-                                        <div className="space-y-1.5 pr-1 transition-all duration-200">
+                                        <div className="space-y-1.5 pr-0.5">
                                             {myLocations.length === 0 ? (
                                                 <p className="text-[10px] text-slate-400 font-bold">No locations</p>
                                             ) : (
@@ -1316,22 +1384,18 @@ const BookingsAdmin: React.FC = () => {
                                                         return acc;
                                                     }, [] as React.ReactElement[]);
 
-                                                    const visibleLocations = isExpanded ? renderableLocations : renderableLocations.slice(0, COLLAPSED_TAG_LIMIT);
-                                                    const hiddenCount = Math.max(renderableLocations.length - visibleLocations.length, 0);
+                                                    const visibleLocations = renderableLocations.slice(0, COLLAPSED_TAG_LIMIT);
+                                                    const hiddenLocations = renderableLocations.slice(COLLAPSED_TAG_LIMIT);
+                                                    const hiddenCount = hiddenLocations.length;
+
+                                                    if (renderableLocations.length === 0) {
+                                                        return <p className="text-[10px] text-slate-400 font-bold">No matching locations</p>;
+                                                    }
 
                                                     return (
                                                         <>
                                                             {visibleLocations}
-                                                            {!isExpanded && hiddenCount > 0 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => { e.stopPropagation(); setExpandedDayKey(day.key); }}
-                                                                    className="inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-md px-2 py-1 bg-white/70 border border-slate-200 text-slate-500 shadow-sm hover:border-blue-200 hover:text-blue-700 transition-colors"
-                                                                    title="Show all locations"
-                                                                >
-                                                                    +{hiddenCount} more
-                                                                </button>
-                                                            )}
+                                                            {renderOverflowPanel('More locations', hiddenCount, hiddenLocations)}
                                                         </>
                                                     );
                                                 })()
@@ -1340,7 +1404,7 @@ const BookingsAdmin: React.FC = () => {
                                     )}
 
                                     {locationFilter && !courtFilter && (
-                                        <div className="space-y-1.5 pr-1 transition-all duration-200">
+                                        <div className="space-y-1.5 pr-0.5">
                                             {selectedLocationCourts.length === 0 ? (
                                                 <p className="text-[10px] text-slate-400 font-bold">No courts in location</p>
                                             ) : (
@@ -1391,22 +1455,18 @@ const BookingsAdmin: React.FC = () => {
                                                         return acc;
                                                     }, [] as React.ReactElement[]);
 
-                                                    const visibleCourts = isExpanded ? renderableCourts : renderableCourts.slice(0, COLLAPSED_TAG_LIMIT);
-                                                    const hiddenCount = Math.max(renderableCourts.length - visibleCourts.length, 0);
+                                                    const visibleCourts = renderableCourts.slice(0, COLLAPSED_TAG_LIMIT);
+                                                    const hiddenCourts = renderableCourts.slice(COLLAPSED_TAG_LIMIT);
+                                                    const hiddenCount = hiddenCourts.length;
+
+                                                    if (renderableCourts.length === 0) {
+                                                        return <p className="text-[10px] text-slate-400 font-bold">No matching courts</p>;
+                                                    }
 
                                                     return (
                                                         <>
                                                             {visibleCourts}
-                                                            {!isExpanded && hiddenCount > 0 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => { e.stopPropagation(); setExpandedDayKey(day.key); }}
-                                                                    className="inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-md px-2 py-1 bg-white/70 border border-slate-200 text-slate-500 shadow-sm hover:border-blue-200 hover:text-blue-700 transition-colors"
-                                                                    title="Show all courts"
-                                                                >
-                                                                    +{hiddenCount} more
-                                                                </button>
-                                                            )}
+                                                            {renderOverflowPanel('More courts', hiddenCount, hiddenCourts)}
                                                         </>
                                                     );
                                                 })()
@@ -1415,52 +1475,60 @@ const BookingsAdmin: React.FC = () => {
                                     )}
 
                                     {locationFilter && courtFilter && (
-                                        <div className={`space-y-2 pr-1 transition-all duration-200 ${isExpanded ? '' : 'max-h-[130px] overflow-hidden'}`}>
+                                        <div className="space-y-2 pr-0.5">
                                             {(() => {
                                                 const detail = courtScheduleDetail!;
+                                                const freeSegments = detail.segments.filter((segment) => segment.type === 'free');
+                                                const visibleSegments = freeSegments.slice(0, COLLAPSED_TAG_LIMIT);
+                                                const hiddenSegments = freeSegments.slice(COLLAPSED_TAG_LIMIT);
                                                 return (
                                                     <>
                                                         {detail.isClosed && (
-                                                            <div className="text-[10px] font-black rounded-md px-2 py-1 bg-slate-400 text-white">
+                                                            <div className="inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-lg px-3 py-1 border bg-slate-200 text-slate-800 border-slate-300">
                                                                 Closed
                                                             </div>
                                                         )}
-                                                        <div className="flex flex-wrap items-start content-start gap-1.5">
-                                                            {(() => {
-                                                                if (detail.isClosed) {
-                                                                    return (
-                                                                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-lg px-3 py-1 border bg-slate-200 text-slate-800 border-slate-300" title="Closed">
-                                                                            Closed
-                                                                        </span>
-                                                                    );
-                                                                }
-                                                                const freeSegments = detail.segments.filter((segment) => segment.type === 'free');
-                                                                if (freeSegments.length === 0) {
-                                                                    const isCompleted = isPastDay;
-                                                                    return (
-                                                                        <span
-                                                                            className={`inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-lg px-3 py-1 border whitespace-nowrap ${
-                                                                                isCompleted
-                                                                                    ? 'bg-slate-200 text-slate-700 border-slate-300'
-                                                                                    : 'bg-red-600/14 text-red-800 border-red-500/55'
-                                                                            }`}
-                                                                            title={isCompleted ? 'Completed' : 'Fully Booked'}
+                                                        {!detail.isClosed && freeSegments.length === 0 && (
+                                                            <span
+                                                                className={`inline-flex items-center text-[10px] sm:text-[11px] font-black rounded-lg px-3 py-1 border whitespace-nowrap ${
+                                                                    isPastDay
+                                                                        ? 'bg-slate-200 text-slate-700 border-slate-300'
+                                                                        : 'bg-red-600/14 text-red-800 border-red-500/55'
+                                                                }`}
+                                                                title={isPastDay ? 'Completed' : 'Fully Booked'}
+                                                            >
+                                                                {isPastDay ? 'Completed' : 'Fully Booked'}
+                                                            </span>
+                                                        )}
+                                                        {!detail.isClosed && freeSegments.length > 0 && (
+                                                            <>
+                                                                <div className="flex flex-wrap items-start content-start gap-1.5">
+                                                                    {visibleSegments.map((segment, idx) => (
+                                                                        <div
+                                                                            key={`${day.key}-${segment.start}-${segment.end}-${idx}`}
+                                                                            className="inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 bg-lime-400/24 text-lime-900 border-lime-500/45"
+                                                                            title="Slots Available"
                                                                         >
-                                                                            {isCompleted ? 'Completed' : 'Fully Booked'}
-                                                                        </span>
-                                                                    );
-                                                                }
-                                                                return freeSegments.map((segment, idx) => (
+                                                                            {formatTime12Compact(segment.start)}-{formatTime12Compact(segment.end)}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                {renderOverflowPanel(
+                                                                    'More available slots',
+                                                                    hiddenSegments.length,
+                                                                    hiddenSegments.map((segment, idx) => (
                                                                     <div
-                                                                        key={`${day.key}-${segment.start}-${segment.end}-${idx}`}
+                                                                        key={`${day.key}-overflow-${segment.start}-${segment.end}-${idx}`}
                                                                         className="inline-flex items-center text-[10px] sm:text-[11px] font-medium rounded-lg px-2.5 py-1 border backdrop-blur-sm whitespace-nowrap animate-in fade-in zoom-in-95 duration-200 bg-lime-400/24 text-lime-900 border-lime-500/45"
                                                                         title="Slots Available"
                                                                     >
                                                                         {formatTime12Compact(segment.start)}-{formatTime12Compact(segment.end)}
                                                                     </div>
-                                                                ));
-                                                            })()}
-                                                        </div>
+                                                                    )),
+                                                                    'grid max-h-[240px] grid-cols-2 gap-2 overflow-y-auto pr-1'
+                                                                )}
+                                                            </>
+                                                        )}
                                                     </>
                                                 );
                                             })()}

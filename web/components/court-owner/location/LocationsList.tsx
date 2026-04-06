@@ -2084,20 +2084,48 @@ const LocationsList: React.FC = () => {
     );
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700">
+        <div className="space-y-10 animate-in fade-in duration-700" data-dashboard-role="court-owner">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div>
-                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">{isManagerView ? 'COURT MANAGER / 2026' : 'COURT OWNER / 2026'}</p>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">{isManagerView ? 'Assigned Court' : 'My Courts'}</h1>
-                    <p className="text-slate-500 font-medium tracking-tight">
-                        {isManagerView
-                            ? 'Review your assigned court and jump into day-to-day court operations.'
-                            : 'Manage your venues and courts in one place.'}
-                    </p>
-                </div>
+            {isManagerView ? (
+                <div
+                    data-owner-surface="secondary"
+                    className="rounded-[36px] border border-slate-100 bg-gradient-to-br from-white via-white to-blue-50 p-6 shadow-sm"
+                >
+                    <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURT MANAGER / 2026</p>
+                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Assigned Court</h1>
+                            <p className="text-slate-500 font-medium tracking-tight max-w-3xl">
+                                Review your assigned court, monitor day-to-day readiness, and jump straight into the simplified booking and schedule tools used for court operations.
+                            </p>
+                            <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
+                                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-blue-700 shadow-sm">Single-court scope</span>
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-emerald-700 shadow-sm">Owner styling applied</span>
+                            </div>
+                        </div>
 
-                {isOwnerView ? (
+                        <div className="flex gap-3">
+                            <button onClick={() => navigate(bookingsRoute)}
+                                className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
+                                <Calendar size={16} /> Bookings
+                            </button>
+                            <button onClick={() => navigate(scheduleRoute)}
+                                className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
+                                <Clock size={16} /> Schedule
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                    <div>
+                        <p className="text-xs font-black text-blue-600 uppercase tracking-[0.4em] mb-2">COURT OWNER / 2026</p>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">My Courts</h1>
+                        <p className="text-slate-500 font-medium tracking-tight">
+                            Manage your venues and courts in one place.
+                        </p>
+                    </div>
+
                     <div className="flex gap-3">
                         <button onClick={() => { setIsLocationListModalOpen(true); setLocationModalSearch(''); }}
                             className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
@@ -2112,19 +2140,8 @@ const LocationsList: React.FC = () => {
                             <Shield size={16} /> Court Policies
                         </button>
                     </div>
-                ) : (
-                    <div className="flex gap-3">
-                        <button onClick={() => navigate(bookingsRoute)}
-                            className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2">
-                            <Calendar size={16} /> Bookings
-                        </button>
-                        <button onClick={() => navigate(scheduleRoute)}
-                            className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-950 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
-                            <Clock size={16} /> Schedule
-                        </button>
-                    </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
