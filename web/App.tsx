@@ -1175,10 +1175,12 @@ const NavigationHandler: React.FC<{
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-            <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-              <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
-              <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-            </div>
+            {feat('shop') && (
+              <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+                <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
+                <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+              </div>
+            )}
           </nav>
 
           <div className={`relative border-t border-white/20 space-y-3 ${role === 'COURT_MANAGER' ? 'shrink-0 overflow-visible p-3 md:p-4' : 'p-4'}`} style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -1416,18 +1418,24 @@ const NavigationHandler: React.FC<{
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900 rounded-xl"><X size={22} /></button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1">
-              <Link to="/academy" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                <BookOpen size={20} />
-                Play Guide
-              </Link>
-              <Link to="/shop" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                <ShoppingBag size={20} />
-                Pro Shop
-              </Link>
-              <Link to="/news" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                <Newspaper size={20} />
-                News
-              </Link>
+              {feat('academy') && (
+                <Link to="/academy" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                  <BookOpen size={20} />
+                  Play Guide
+                </Link>
+              )}
+              {feat('shop') && (
+                <Link to="/shop" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                  <ShoppingBag size={20} />
+                  Pro Shop
+                </Link>
+              )}
+              {feat('news') && (
+                <Link to="/news" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                  <Newspaper size={20} />
+                  News
+                </Link>
+              )}
             </nav>
             <div className="p-4 border-t border-slate-100">
               <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center gap-2 w-full px-6 py-3.5 rounded-xl bg-blue-600 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">
@@ -1506,7 +1514,7 @@ const NavigationHandler: React.FC<{
                   <NavItem to={COURT_MANAGER_ROUTES.schedule} icon={<CalendarIcon size={22} />} label="Court Schedule" isCollapsed={false} themeColor={themeColor} ownerVariant={true} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
                 </>
               )}
-              <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
+              {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               <div className="border-t border-slate-100 my-4" />
               {feat('shop') && <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               {feat('profile') && <NavItem to="/profile" icon={<User size={22} />} label="Profile" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
@@ -1526,9 +1534,9 @@ const NavigationHandler: React.FC<{
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-14 h-14 object-contain rounded-xl" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 font-black text-sm uppercase tracking-[0.2em] transition-colors ${headerActive ? 'text-slate-600' : 'text-white/80'}`}>
-            <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>
-            <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>
-            <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>
+            {feat('academy') && <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>}
+            {feat('shop') && <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>}
+            {feat('news') && <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>}
             <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black bg-blue-600 text-white shadow-blue-900/20`}>LET'S PICKLE</Link>
           </nav>
         </header>
@@ -1790,9 +1798,10 @@ const App: React.FC = () => {
     const pollInterval = setInterval(pollMaintenance, 15000);
 
     let syncInProgress = false;
+    let initialSyncDone = false;
 
     const pollFeatures = async () => {
-      if (syncInProgress) return;
+      if (syncInProgress || !initialSyncDone) return;
       const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
       if (r !== 'guest') {
         await ensureDefaultFeatures(r);
@@ -1807,17 +1816,6 @@ const App: React.FC = () => {
       }
     };
     const featurePollInterval = setInterval(pollFeatures, 5000);
-    pollFeatures();
-
-    const featureChannel = supabase
-      .channel('feature-access-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'role_feature_access' }, () => {
-        const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
-        if (r !== 'guest') {
-          getEnabledFeaturesForRole(r as UserRole).then(f => { setEnabledFeatures(f); setFeaturesLoaded(true); });
-        }
-      })
-      .subscribe();
 
     const refreshTwoFactorGate = async (session: any, options?: { force?: boolean }) => {
       if (!session?.user) {
@@ -2183,7 +2181,7 @@ const App: React.FC = () => {
 
     // 2. Auth Initialization
     supabase.auth.getSession().then(({ data: { session } }) => {
-      syncUserSession(session).finally(() => setAuthLoading(false));
+      syncUserSession(session).finally(() => { initialSyncDone = true; setAuthLoading(false); });
     });
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -2387,10 +2385,28 @@ const App: React.FC = () => {
       window.removeEventListener('pickleplay:2fa-status-changed', handleTwoFactorStateChanged);
       clearInterval(pollInterval);
       clearInterval(featurePollInterval);
-      supabase.removeChannel(featureChannel);
       authSubscription.unsubscribe();
     };
   }, [currentUserId]);
+
+  // Dedicated effect: feature access realtime subscription
+  useEffect(() => {
+    const featureChannel = supabase
+      .channel('feature-access-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'role_feature_access' }, () => {
+        const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
+        if (r === 'ADMIN') {
+          setEnabledFeatures(new Set(['*']));
+          setFeaturesLoaded(true);
+          return;
+        }
+        if (r !== 'guest') {
+          getEnabledFeaturesForRole(r as UserRole).then(f => { setEnabledFeatures(f); setFeaturesLoaded(true); });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(featureChannel); };
+  }, []);
 
   // Dedicated effect: maintenance realtime subscription
   useEffect(() => {
