@@ -178,7 +178,12 @@ const FindPartners: React.FC = () => {
   const handleMessage = async (userId: string) => {
     try {
       const conversationId = await getOrCreateConversation(userId);
-      navigate(`/messages?conversation=${conversationId}`);
+      try {
+        sessionStorage.setItem('pickleplay_dm_outbound_conv', conversationId);
+      } catch {
+        /* ignore */
+      }
+      navigate(`/messages?conversation=${conversationId}&tab=chats`);
     } catch (error) {
       console.error('Error creating conversation:', error);
     }

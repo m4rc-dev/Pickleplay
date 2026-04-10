@@ -12,7 +12,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import type { SmartPlayerCardData } from './findPartners.types';
-import { PlaceholderAvatar } from './PlaceholderAvatar';
+import { AvatarImg } from './PlaceholderAvatar';
 
 interface PlayerCardProps {
   player: SmartPlayerCardData;
@@ -81,17 +81,15 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         <div className="flex min-w-0 items-start gap-3">
           <button
             onClick={onViewProfile}
-            className="relative shrink-0 overflow-hidden rounded-xl ring-1 ring-slate-200 transition-all hover:ring-blue-300"
+            className="relative shrink-0 overflow-hidden rounded-full ring-1 ring-slate-200 transition-all hover:ring-blue-300"
           >
-            {player.avatar_url ? (
-              <img src={player.avatar_url} alt={player.full_name} className="h-14 w-14 object-cover" />
-            ) : (
-              <PlaceholderAvatar
-                roundedClassName="rounded-xl"
-                className="h-14 w-14"
-                iconSize={28}
-              />
-            )}
+            <AvatarImg
+              src={player.avatar_url}
+              alt={player.full_name}
+              className="h-14 w-14 rounded-full object-cover"
+              placeholderClassName="h-14 w-14"
+              placeholderIconSize={28}
+            />
             {player.isVerified && (
               <span className="absolute bottom-1 right-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
                 <BadgeCheck size={12} className="text-blue-600" />

@@ -1,5 +1,7 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   GAME_LABELS,
+  PLAYER_PROFILE_SELECT,
   SESSION_LABELS,
   SKILL_LABELS,
   STYLE_LABELS,
@@ -16,6 +18,52 @@ import type {
 } from './findPartners.types';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+/** Escape % and _ so user input is treated literally in Postgres ILIKE patterns. */
+export const escapeForIlikeFragment = (value: string) =>
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
+/** Ensure display name when profile.full_name is missing (DB may return null). */
+export const normalizePlayerRow = (row: Player): Player => {
+  const name = row.full_name?.trim();
+  const un = row.username?.trim();
+  return {
+    ...row,
+    full_name: name || un || 'Player',
+  };
+};
+
+const MAX_SEARCH_RESULTS = 500;
+const MAX_SEARCH_QUERY_LEN = 120;
+
+/**
+ * Search all matching profiles on the server (not limited to the browse-page subset).
+ * Matches name, username, location, or bio (case-insensitive).
+ */
+export const searchPartnerProfiles = async (
+  supabase: SupabaseClient,
+  currentUserId: string,
+  rawQuery: string
+): Promise<Player[]> => {
+  const trimmed = rawQuery
+    .trim()
+    .replace(/,/g, ' ')
+    .trim()
+    .slice(0, MAX_SEARCH_QUERY_LEN);
+  if (!trimmed) return [];
+
+  const pat = `%${escapeForIlikeFragment(trimmed)}%`;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(PLAYER_PROFILE_SELECT)
+    .neq('id', currentUserId)
+    .or(`full_name.ilike.${pat},username.ilike.${pat},location.ilike.${pat},bio.ilike.${pat}`)
+    .limit(MAX_SEARCH_RESULTS);
+
+  if (error) throw error;
+  return (data || []).map((row) => normalizePlayerRow(row as Player));
+};
 
 export const asArray = (value: string[] | null | undefined) => Array.isArray(value) ? value : [];
 
@@ -297,6 +345,8 @@ export const filterSmartPlayers = (
     const haystack = [
       player.full_name,
       player.username,
+      player.bio,
+      player.location,
       player.locationLabel,
       player.skillLabel,
       player.playStyleLabel,

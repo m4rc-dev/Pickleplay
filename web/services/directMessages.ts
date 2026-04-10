@@ -15,8 +15,9 @@ function debounceLead(fn: () => void, ms: number) {
  * Get total count of unread messages across all conversations
  */
 export const getTotalUnreadCount = async (): Promise<number> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 0;
+  const uid = await getMyUserId();
+  if (!uid) return 0;
+  const user = { id: uid };
   try {
     const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_dm_unread_total');
     if (!rpcErr && typeof rpcCount === 'number') return rpcCount;
@@ -71,13 +72,24 @@ export interface ConversationWithDetails extends Conversation {
   other_user?: any;
 }
 
+/** Cached session id — avoids network round-trip on every call. */
+let _cachedUserId: string | null = null;
+const getMyUserId = async (): Promise<string | null> => {
+  if (_cachedUserId) return _cachedUserId;
+  const { data: { session } } = await supabase.auth.getSession();
+  _cachedUserId = session?.user?.id ?? null;
+  return _cachedUserId;
+};
+supabase.auth.onAuthStateChange((_event, session) => {
+  _cachedUserId = session?.user?.id ?? null;
+});
+
 /**
  * Check if two users mutually follow each other (consent gate for messaging)
  */
 export const checkMutualFollow = async (otherUserId: string): Promise<boolean> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return false;
-  const myId = session.user.id;
+  const myId = await getMyUserId();
+  if (!myId) return false;
   const [{ count: iFollow }, { count: theyFollow }] = await Promise.all([
     supabase.from('user_follows').select('*', { count: 'exact', head: true })
       .eq('follower_id', myId).eq('followed_id', otherUserId),
@@ -91,9 +103,8 @@ export const checkMutualFollow = async (otherUserId: string): Promise<boolean> =
  * Follow another user — used when accepting a message request
  */
 export const followUser = async (targetUserId: string): Promise<void> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return;
-  const myId = session.user.id;
+  const myId = await getMyUserId();
+  if (!myId) return;
 
   const { count: existingFollowCount } = await supabase
     .from('user_follows')
@@ -122,12 +133,12 @@ export const followUser = async (targetUserId: string): Promise<void> => {
  * Get or create a conversation with another user
  */
 export const getOrCreateConversation = async (otherUserId: string) => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
   const { data, error } = await supabase
     .rpc('get_or_create_conversation', {
-      user1_id: user.user.id,
+      user1_id: myId,
       user2_id: otherUserId
     });
 
@@ -136,102 +147,108 @@ export const getOrCreateConversation = async (otherUserId: string) => {
 };
 
 async function getUserConversationsLegacy(): Promise<ConversationWithDetails[]> {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
   const { data: myParticipantRows, error: participantError } = await supabase
     .from('conversation_participants')
     .select('conversation_id')
-    .eq('user_id', user.user.id);
+    .eq('user_id', myId);
 
   if (participantError) throw participantError;
 
   const conversationIds = (myParticipantRows || []).map((p: any) => p.conversation_id);
   if (conversationIds.length === 0) return [];
 
-  const { data: conversations, error: conversationError } = await supabase
-    .from('conversations')
-    .select('*')
-    .in('id', conversationIds)
-    .order('last_message_at', { ascending: false, nullsFirst: false });
+  const [convResult, participantsResult, readReceiptsResult] = await Promise.all([
+    supabase
+      .from('conversations')
+      .select('*')
+      .in('id', conversationIds)
+      .order('last_message_at', { ascending: false, nullsFirst: false }),
+    supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id')
+      .in('conversation_id', conversationIds),
+    supabase
+      .from('message_read_receipts')
+      .select('message_id')
+      .eq('user_id', myId),
+  ]);
 
-  if (conversationError) throw conversationError;
+  if (convResult.error) throw convResult.error;
 
-  const { data: allParticipantRows } = await supabase
-    .from('conversation_participants')
-    .select('conversation_id, user_id')
-    .in('conversation_id', conversationIds);
+  const conversations = convResult.data || [];
+  const allParticipantRows = participantsResult.data || [];
+  const readIds = new Set((readReceiptsResult.data || []).map((r: any) => r.message_id));
 
   const otherUserIds = [
     ...new Set(
-      (allParticipantRows || [])
-        .filter((p: any) => p.user_id !== user.user!.id)
+      allParticipantRows
+        .filter((p: any) => p.user_id !== myId)
         .map((p: any) => p.user_id)
     )
   ];
 
-  let profileMap: Record<string, any> = {};
-  if (otherUserIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, avatar_url, dupr_rating')
-      .in('id', otherUserIds);
-    (profiles || []).forEach((p: any) => { profileMap[p.id] = p; });
-  }
+  // Fetch last message per conversation + incoming messages + profiles in parallel
+  const [profilesResult, ...perConvResults] = await Promise.all([
+    otherUserIds.length > 0
+      ? supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, dupr_rating')
+          .in('id', otherUserIds)
+      : Promise.resolve({ data: [] as any[] }),
+    ...conversations.map((conv) =>
+      Promise.all([
+        supabase
+          .from('direct_messages')
+          .select('id, content, created_at, sender_id')
+          .eq('conversation_id', conv.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('direct_messages')
+          .select('id')
+          .eq('conversation_id', conv.id)
+          .neq('sender_id', myId)
+          .is('deleted_at', null),
+      ])
+    ),
+  ]);
 
-  const { data: readReceipts } = await supabase
-    .from('message_read_receipts')
-    .select('message_id')
-    .eq('user_id', user.user.id);
-  const readIds = new Set((readReceipts || []).map((r: any) => r.message_id));
+  const profileMap: Record<string, any> = {};
+  ((profilesResult as any).data || []).forEach((p: any) => { profileMap[p.id] = p; });
 
-  const conversationsWithMessages = await Promise.all(
-    (conversations || []).map(async (conv) => {
-      const { data: lastMessages } = await supabase
-        .from('direct_messages')
-        .select('id, content, created_at, sender_id')
-        .eq('conversation_id', conv.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      const lastMessage = lastMessages?.[0] ?? null;
+  return conversations.map((conv, idx) => {
+    const [lastMsgRes, incomingRes] = perConvResults[idx] as [any, any];
+    const lastMessage = lastMsgRes?.data?.[0] ?? null;
+    const incoming = incomingRes?.data || [];
+    const unreadCount = incoming.filter((m: any) => !readIds.has(m.id)).length;
 
-      const { data: incomingMessages } = await supabase
-        .from('direct_messages')
-        .select('id')
-        .eq('conversation_id', conv.id)
-        .neq('sender_id', user.user!.id)
-        .is('deleted_at', null);
-      const unreadCount = (incomingMessages || []).filter(
-        (m: any) => !readIds.has(m.id)
-      ).length;
+    const otherParticipant = allParticipantRows.find(
+      (p: any) => p.conversation_id === conv.id && p.user_id !== myId
+    );
+    const otherUser = otherParticipant ? profileMap[otherParticipant.user_id] ?? null : null;
 
-      const otherParticipant = (allParticipantRows || []).find(
-        (p: any) => p.conversation_id === conv.id && p.user_id !== user.user!.id
-      );
-      const otherUser = otherParticipant ? profileMap[otherParticipant.user_id] ?? null : null;
-
-      return {
-        ...conv,
-        last_message: lastMessage,
-        unread_count: unreadCount,
-        other_user: otherUser,
-        participants: (allParticipantRows || [])
-          .filter((p: any) => p.conversation_id === conv.id)
-          .map((p: any) => ({ user: profileMap[p.user_id] ?? { id: p.user_id } }))
-      };
-    })
-  );
-
-  return conversationsWithMessages as ConversationWithDetails[];
+    return {
+      ...conv,
+      last_message: lastMessage,
+      unread_count: unreadCount,
+      other_user: otherUser,
+      participants: allParticipantRows
+        .filter((p: any) => p.conversation_id === conv.id)
+        .map((p: any) => ({ user: profileMap[p.user_id] ?? { id: p.user_id } }))
+    };
+  }) as ConversationWithDetails[];
 }
 
 /**
  * Get all conversations for the current user (single RPC when available)
  */
 export const getUserConversations = async () => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
   const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_conversations_enriched');
   if (!rpcError && rpcData != null) {
@@ -302,14 +319,14 @@ export const getConversationMessages = async (
  * Send a message in a conversation
  */
 export const sendMessage = async (conversationId: string, content: string) => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
   const { data, error } = await supabase
     .from('direct_messages')
     .insert({
       conversation_id: conversationId,
-      sender_id: user.user.id,
+      sender_id: myId,
       content
     })
     .select('*')
@@ -317,36 +334,30 @@ export const sendMessage = async (conversationId: string, content: string) => {
 
   if (error) throw error;
 
-  // Attach sender profile from auth user (avoids FK join)
-  const { data: senderProfile } = await supabase
-    .from('profiles')
-    .select('id, full_name, avatar_url')
-    .eq('id', user.user.id)
-    .single();
-  const messageWithSender = { ...(data as any), sender: senderProfile ?? null };
+  const [senderProfileRes, participantsRes] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, avatar_url').eq('id', myId).single(),
+    supabase.from('conversation_participants').select('user_id').eq('conversation_id', conversationId).neq('user_id', myId),
+  ]);
+  const messageWithSender = { ...(data as any), sender: senderProfileRes.data ?? null };
 
   // Notify the other participant (fire-and-forget)
-  try {
-    const { data: participants } = await supabase
-      .from('conversation_participants')
-      .select('user_id')
-      .eq('conversation_id', conversationId)
-      .neq('user_id', user.user.id);
-    if (participants && participants.length > 0) {
-      const recipientId = participants[0].user_id;
-      await followUser(recipientId);
-      const preview = content.length > 60 ? content.substring(0, 60) + '…' : content;
-      await supabase.from('notifications').insert({
+  const participants = participantsRes.data;
+  if (participants && participants.length > 0) {
+    const recipientId = participants[0].user_id;
+    const preview = content.length > 60 ? content.substring(0, 60) + '…' : content;
+    void Promise.all([
+      followUser(recipientId),
+      supabase.from('notifications').insert({
         user_id: recipientId,
-        actor_id: user.user.id,
-        related_user_id: user.user.id,
+        actor_id: myId,
+        related_user_id: myId,
         type: 'new_message',
         title: 'New message',
         message: preview,
         action_url: `/messages?conversation=${conversationId}`
-      });
-    }
-  } catch (_) { /* non-critical */ }
+      }),
+    ]).catch(() => {});
+  }
 
   return messageWithSender as DirectMessage;
 };
@@ -394,22 +405,15 @@ export const deleteMessage = async (messageId: string) => {
  * Mark message as read
  */
 export const markMessageAsRead = async (messageId: string) => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
-
-  // Check if already marked — skip insert to avoid conflict
-  const { data: existing } = await supabase
-    .from('message_read_receipts')
-    .select('message_id')
-    .eq('message_id', messageId)
-    .eq('user_id', user.user.id)
-    .maybeSingle();
-
-  if (existing) return; // already read
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
   await supabase
     .from('message_read_receipts')
-    .insert({ message_id: messageId, user_id: user.user.id });
+    .upsert(
+      { message_id: messageId, user_id: myId },
+      { onConflict: 'message_id,user_id', ignoreDuplicates: true }
+    );
 };
 
 /**
@@ -418,13 +422,13 @@ export const markMessageAsRead = async (messageId: string) => {
 export const markNewMessageNotificationsReadForConversation = async (
   conversationId: string
 ): Promise<void> => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) return;
+  const myId = await getMyUserId();
+  if (!myId) return;
   const pattern = `%conversation=${conversationId}%`;
   const { data: rows, error: selErr } = await supabase
     .from('notifications')
     .select('id')
-    .eq('user_id', user.user.id)
+    .eq('user_id', myId)
     .eq('type', 'new_message')
     .eq('is_read', false)
     .like('action_url', pattern);
@@ -432,51 +436,42 @@ export const markNewMessageNotificationsReadForConversation = async (
   await supabase
     .from('notifications')
     .update({ is_read: true })
-    .in(
-      'id',
-      rows.map((r) => r.id)
-    );
+    .in('id', rows.map((r) => r.id));
 };
 
 /**
  * Mark all messages in a conversation as read
  */
 export const markConversationAsRead = async (conversationId: string) => {
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error('Not authenticated');
+  const myId = await getMyUserId();
+  if (!myId) throw new Error('Not authenticated');
 
-  // All messages from others in this conversation
-  const { data: messages } = await supabase
-    .from('direct_messages')
-    .select('id')
-    .eq('conversation_id', conversationId)
-    .neq('sender_id', user.user.id)
-    .is('deleted_at', null);
+  const [msgsRes, notifPromise] = [
+    await supabase
+      .from('direct_messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', myId)
+      .is('deleted_at', null),
+    markNewMessageNotificationsReadForConversation(conversationId).catch(() => {}),
+  ];
 
+  const messages = msgsRes.data;
   if (messages && messages.length > 0) {
     const allIds = messages.map(m => m.id);
-
-    const { data: alreadyRead } = await supabase
-      .from('message_read_receipts')
-      .select('message_id')
-      .eq('user_id', user.user.id)
-      .in('message_id', allIds);
-
-    const readSet = new Set((alreadyRead || []).map((r: any) => r.message_id));
-    const unreadIds = allIds.filter(id => !readSet.has(id));
-
-    if (unreadIds.length > 0) {
+    const batchSize = 200;
+    for (let i = 0; i < allIds.length; i += batchSize) {
+      const slice = allIds.slice(i, i + batchSize);
       await supabase
         .from('message_read_receipts')
-        .insert(unreadIds.map(id => ({ message_id: id, user_id: user.user!.id })));
+        .upsert(
+          slice.map(id => ({ message_id: id, user_id: myId })),
+          { onConflict: 'message_id,user_id', ignoreDuplicates: true }
+        );
     }
   }
 
-  try {
-    await markNewMessageNotificationsReadForConversation(conversationId);
-  } catch {
-    /* non-critical */
-  }
+  await notifPromise;
 };
 
 /**

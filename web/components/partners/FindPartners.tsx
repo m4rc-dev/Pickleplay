@@ -39,6 +39,8 @@ import {
   getEmptyStateCopy,
   getHeroStats,
   getNearbyPlayers,
+  normalizePlayerRow,
+  searchPartnerProfiles,
   sortSmartPlayers,
 } from './findPartners.utils';
 import type {
@@ -79,7 +81,9 @@ const FindPartners: React.FC<FindPartnersProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('best_match');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [browsePlayers, setBrowsePlayers] = useState<Player[]>([]);
+  const [searchPlayers, setSearchPlayers] = useState<Player[] | null>(null);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [viewerProfile, setViewerProfile] = useState<ViewerProfile | null>(null);
   const [courtNameMap, setCourtNameMap] = useState<Record<string, string>>({});
   const [receivedRequests, setReceivedRequests] = useState<MatchRequest[]>([]);
@@ -198,16 +202,17 @@ const FindPartners: React.FC<FindPartnersProps> = ({
           .from('profiles')
           .select(PLAYER_PROFILE_SELECT)
           .neq('id', user.id)
-          .not('full_name', 'is', null)
-          .limit(60),
+          .or('full_name.not.is.null,username.not.is.null')
+          .order('created_at', { ascending: false })
+          .limit(400),
       ]);
 
       if (playersResult.error) throw playersResult.error;
 
-      const loadedPlayers = (playersResult.data || []) as Player[];
+      const loadedPlayers = ((playersResult.data || []) as Player[]).map(normalizePlayerRow);
       const viewerData = (viewerResult.data || null) as ViewerProfile | null;
 
-      setPlayers(loadedPlayers);
+      setBrowsePlayers(loadedPlayers);
       setViewerProfile(viewerData);
 
       const allCourtIds = Array.from(new Set([
@@ -239,6 +244,72 @@ const FindPartners: React.FC<FindPartnersProps> = ({
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchPlayers(null);
+      setIsSearchLoading(false);
+      return;
+    }
+    if (!currentUserId) {
+      setIsSearchLoading(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const rows = await searchPartnerProfiles(supabase, currentUserId, q);
+          if (cancelled) return;
+          setSearchPlayers(rows);
+
+          const allCourtIds = Array.from(
+            new Set([
+              ...asArray(viewerProfile?.preferred_court_ids),
+              ...rows.flatMap((player) => asArray(player.preferred_court_ids)),
+            ])
+          );
+          if (allCourtIds.length === 0) return;
+
+          const { data: courts, error: courtsError } = await supabase
+            .from('courts')
+            .select('id, name')
+            .in('id', allCourtIds);
+
+          if (courtsError || cancelled) return;
+
+          setCourtNameMap((prev) => ({
+            ...prev,
+            ...(courts || []).reduce<Record<string, string>>((acc, court: { id: string; name: string }) => {
+              acc[court.id] = court.name;
+              return acc;
+            }, {}),
+          }));
+        } catch (error) {
+          console.error('Error searching players:', error);
+          if (!cancelled) setSearchPlayers([]);
+        } finally {
+          if (!cancelled) setIsSearchLoading(false);
+        }
+      })();
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, currentUserId, viewerProfile?.preferred_court_ids]);
+
+  const players = useMemo(() => {
+    if (!searchQuery.trim()) return browsePlayers;
+    return searchPlayers ?? [];
+  }, [searchQuery, browsePlayers, searchPlayers]);
+
+  const listLoading =
+    isLoading || (Boolean(searchQuery.trim()) && (!currentUserId || isSearchLoading));
 
   const loadReceivedRequests = async () => {
     setIsLoading(true);
@@ -367,7 +438,12 @@ const FindPartners: React.FC<FindPartnersProps> = ({
   const handleMessage = async (userId: string) => {
     try {
       const conversationId = await getOrCreateConversation(userId);
-      navigate(`/messages?conversation=${conversationId}`);
+      try {
+        sessionStorage.setItem('pickleplay_dm_outbound_conv', conversationId);
+      } catch {
+        /* ignore */
+      }
+      navigate(`/messages?conversation=${conversationId}&tab=chats`);
     } catch (error) {
       console.error('Error creating conversation:', error);
       showToast('Could not open messages.', 'error');
@@ -502,7 +578,7 @@ const FindPartners: React.FC<FindPartnersProps> = ({
             />
           )}
 
-          {!isLoading && (
+          {!listLoading && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 pb-3 text-[11px] font-semibold text-slate-500">
               <span>
                 {sortedPlayers.length} of {smartPlayers.length} players
@@ -512,7 +588,7 @@ const FindPartners: React.FC<FindPartnersProps> = ({
             </div>
           )}
 
-          {isLoading ? (
+          {listLoading ? (
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="h-[360px] animate-pulse rounded-2xl border border-slate-100 bg-white" />

@@ -83,7 +83,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 
 import FindPartners from './components/partners/FindPartners';
 import DirectMessages from './components/partners/DirectMessages';
-import { PlaceholderAvatar } from './components/partners/PlaceholderAvatar';
+import { AvatarImg, PlaceholderAvatar } from './components/partners/PlaceholderAvatar';
 import { getTotalUnreadCount } from './services/directMessages';
 import Others from './components/Others';
 
@@ -281,10 +281,13 @@ const NotificationPanel: React.FC<{
         <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
           {getNotifIcon(n)}
         </div>
-      ) : isCustomUserAvatarUrl(n.actor.avatar) ? (
-        <img src={n.actor.avatar} className="h-8 w-8 shrink-0 rounded-full object-cover" alt="" />
       ) : (
-        <PlaceholderAvatar className="h-8 w-8 shrink-0" iconSize={16} />
+        <AvatarImg
+          src={isCustomUserAvatarUrl(n.actor.avatar) ? n.actor.avatar : null}
+          className="h-8 w-8 shrink-0 rounded-full object-cover"
+          placeholderClassName="h-8 w-8 shrink-0"
+          placeholderIconSize={16}
+        />
       )}
       <div className="flex-1 min-w-0">
         <p className="text-sm text-slate-700 leading-tight group-hover:text-slate-950 transition-colors">
@@ -616,7 +619,7 @@ const NavigationHandler: React.FC<{
     isTwoFactorPending, authTransitioning
   } = props;
 
-  const role = currentUserId ? rawRole : 'guest';
+  const role = (currentUserId || isSwitchingRole) ? rawRole : 'guest';
   const isCourtOwnerRole = role === 'COURT_OWNER';
   const isCourtManagerRole = role === 'COURT_MANAGER';
   const canOperateCourt = isCourtOwnerRole || isCourtManagerRole;
@@ -1357,20 +1360,16 @@ const NavigationHandler: React.FC<{
               <div className={`flex items-center gap-2 ${isSidebarCollapsed ? 'flex-col' : ''}`}>
                 <Link to="/profile" title={isSidebarCollapsed ? "Profile Settings" : ""} className={`flex-1 min-w-0 flex items-center gap-3 w-full p-2 transition-all duration-300 group ${isSidebarCollapsed ? `${role === 'COURT_MANAGER' ? 'justify-center rounded-2xl bg-white/10 hover:bg-white/20' : 'justify-center'}` : "rounded-2xl bg-white/10 hover:bg-white/20 pr-4"}`}>
                   <div className={`relative shrink-0 rounded-full p-0.5`}>
-                    {userAvatar ? (
-                      <img
-                        src={userAvatar}
-                        alt="User"
-                        className="h-10 w-10 rounded-full border-2 border-white bg-white object-cover"
-                      />
-                    ) : (
-                      <PlaceholderAvatar
-                        className="h-10 w-10 border-2 border-white"
-                        iconSize={20}
-                        bgClassName="bg-white/25"
-                        iconClassName="text-white"
-                      />
-                    )}
+                    <AvatarImg
+                      key={userAvatar}
+                      src={userAvatar}
+                      alt="User"
+                      className="h-10 w-10 rounded-full border-2 border-white bg-white object-cover"
+                      placeholderClassName="h-10 w-10 border-2 border-white"
+                      placeholderIconSize={20}
+                      placeholderBgClassName="bg-white/25"
+                      placeholderIconClassName="text-white"
+                    />
                   </div>
                   {!isSidebarCollapsed && (
                     <div className="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300 flex-1">
@@ -1709,10 +1708,10 @@ const NavigationHandler: React.FC<{
               <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <Navigate to="/dashboard" replace /> : isCourtOwnerRole ? <LocationPolicies /> : <Navigate to="/" />} />
               <Route path="/application-status" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <ApplicationStatus /> : <Navigate to="/login" />} />
 
-              <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
-              <Route path="/admin/verifications" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} initialTab="verifications" /> : <Navigate to="/login" />} />
+              <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : role === 'guest' ? <Navigate to="/login" replace /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/admin/verifications" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} initialTab="verifications" /> : role === 'guest' ? <Navigate to="/login" replace /> : <Navigate to="/dashboard" replace />} />
               <Route path="/p/:username/:bookingId" element={<PosterPage />} />
-              <Route path="/achievements-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AchievementsManager /> : <Navigate to="/login" />} />
+              <Route path="/achievements-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AchievementsManager /> : role === 'guest' ? <Navigate to="/login" replace /> : <Navigate to="/dashboard" replace />} />
               <Route path="/match-verify" element={<MatchVerifyPage />} />
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/policy" element={<PrivacyPolicy />} />
@@ -1780,6 +1779,20 @@ const App: React.FC = () => {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const [initialNameForModal, setInitialNameForModal] = useState('');
+
+  /** Sidebar/header avatar: Profile upload runs in another route — Realtime often omits `profiles`; sync immediately. */
+  useEffect(() => {
+    const onAvatar = (e: Event) => {
+      const url = (e as CustomEvent<{ avatar_url?: string | null }>).detail?.avatar_url;
+      if (typeof url === 'string' && url.trim()) {
+        setUserAvatar(url.trim());
+      } else if (url === null || url === '') {
+        setUserAvatar(null);
+      }
+    };
+    window.addEventListener('pickleplay-profile-avatar', onAvatar);
+    return () => window.removeEventListener('pickleplay-profile-avatar', onAvatar);
+  }, []);
 
   // Maintenance & feature access
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
@@ -2716,6 +2729,16 @@ const App: React.FC = () => {
         filter: `id=eq.${currentUserId}`
       }, async (payload) => {
         const profile = payload.new as any;
+        if (profile && typeof profile.avatar_url !== 'undefined') {
+          const nextUrl = profile.avatar_url;
+          setUserAvatar(
+            typeof nextUrl === 'string' && nextUrl.trim() ? nextUrl.trim() : null
+          );
+        }
+        if (profile && typeof profile.full_name === 'string') {
+          const n = profile.full_name.trim();
+          if (n) setUserName(n);
+        }
         const nextRoles = (profile?.roles as UserRole[]) || ['PLAYER'];
         const nextActiveRole = (profile?.active_role as UserRole) || 'PLAYER';
         const nextAuthorizedProRoles = nextRoles.filter((item) =>
@@ -2756,6 +2779,16 @@ const App: React.FC = () => {
         const updated = payload.new as any;
         if (typeof updated.points === 'number') {
           setUserPoints(updated.points);
+        }
+        if (updated && typeof updated.avatar_url !== 'undefined') {
+          const nextUrl = updated.avatar_url;
+          setUserAvatar(
+            typeof nextUrl === 'string' && nextUrl.trim() ? nextUrl.trim() : null
+          );
+        }
+        if (updated && typeof updated.full_name === 'string') {
+          const n = updated.full_name.trim();
+          if (n) setUserName(n);
         }
       })
       .subscribe();

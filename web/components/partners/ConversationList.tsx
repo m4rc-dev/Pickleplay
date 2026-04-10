@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MessageCircle, X, UserCheck, Bell } from 'lucide-react';
+import { Search, MessageCircle, X, UserCheck, Bell, SquarePen } from 'lucide-react';
 import { type ConversationWithDetails } from '../../services/directMessages';
-import { PlaceholderAvatar } from './PlaceholderAvatar';
+import { AvatarImg, PlaceholderAvatar } from './PlaceholderAvatar';
 
 interface Friend {
   id: string;
   full_name: string;
   avatar_url?: string;
+  username?: string | null;
 }
 
 interface ConversationListProps {
   conversations: ConversationWithDetails[];
   selectedConversationId?: string;
+  /** Initial tab when opening Messages (e.g. from Find Partners with tab=chats). */
+  initialListTab?: 'chats' | 'requests';
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onSelect: (conversation: ConversationWithDetails) => void;
@@ -23,6 +26,8 @@ interface ConversationListProps {
   onFriendClick?: (friendId: string) => void;
   /** Warm cache before click — same idea as squad preloading */
   onConversationHover?: (conversationId: string) => void;
+  /** Opens the new-message panel (search + suggested). */
+  onNewMessage?: () => void;
 }
 
 const formatTime = (timestamp: string) => {
@@ -39,6 +44,7 @@ const formatTime = (timestamp: string) => {
 export const ConversationList: React.FC<ConversationListProps> = ({
   conversations,
   selectedConversationId,
+  initialListTab = 'chats',
   searchQuery,
   onSearchChange,
   onSelect,
@@ -49,8 +55,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   onlineUserIds = new Set(),
   onFriendClick,
   onConversationHover,
+  onNewMessage,
 }) => {
-  const [activeTab, setActiveTab] = useState<'chats' | 'requests'>('chats');
+  const [activeTab, setActiveTab] = useState<'chats' | 'requests'>(() =>
+    initialListTab === 'requests' ? 'requests' : 'chats'
+  );
 
   // Auto-switch to the correct tab when a conversation is selected externally (e.g. via URL)
   useEffect(() => {
@@ -60,7 +69,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     } else if (conversations.some(c => c.id === selectedConversationId)) {
       setActiveTab('chats');
     }
-  }, [selectedConversationId]);
+  }, [selectedConversationId, requestConvIds, conversations]);
 
   const filtered = conversations.filter(conv =>
     conv.other_user?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -80,9 +89,21 @@ export const ConversationList: React.FC<ConversationListProps> = ({
         <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">
           Pickleplay
         </p>
-        <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-4">
-          Messages
-        </h1>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h1 className="text-xl font-black uppercase tracking-tighter leading-none text-slate-900">
+            Messages
+          </h1>
+          {onNewMessage && (
+            <button
+              type="button"
+              onClick={onNewMessage}
+              title="New message"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+            >
+              <SquarePen size={18} strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
           <input
@@ -126,15 +147,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                       */}
                       <div className="h-11 w-11 rounded-full border-2 border-white bg-slate-100 shadow-md transition-colors duration-200 group-hover:border-lime-400 group-hover:shadow-lg">
                         <div className="h-full w-full overflow-hidden rounded-full">
-                          {friend.avatar_url ? (
-                            <img
-                              src={friend.avatar_url}
-                              alt={friend.full_name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <PlaceholderAvatar className="h-full w-full" iconSize={22} />
-                          )}
+                          <AvatarImg
+                            src={friend.avatar_url}
+                            alt={friend.full_name}
+                            className="h-full w-full object-cover"
+                            placeholderClassName="h-full w-full"
+                            placeholderIconSize={22}
+                          />
                         </div>
                       </div>
                       <span
@@ -189,6 +208,16 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             </span>
           )}
         </button>
+        {onNewMessage && (
+          <button
+            type="button"
+            onClick={onNewMessage}
+            title="New message"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 md:hidden"
+          >
+            <SquarePen size={18} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
 
       {/* List */}
@@ -247,20 +276,15 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   {/* Mobile: avatar-only pill */}
                   <div className="flex md:hidden flex-col items-center gap-1 pt-1">
                     <div className="relative">
-                      {conv.other_user?.avatar_url ? (
-                        <img
-                          src={conv.other_user.avatar_url}
-                          alt={conv.other_user?.full_name || 'User'}
-                          className={`w-12 h-12 rounded-full object-cover border-2 ${
-                            isActive ? 'border-blue-500' : 'border-slate-100'
-                          }`}
-                        />
-                      ) : (
-                        <PlaceholderAvatar
-                          className={`h-12 w-12 border-2 ${isActive ? 'border-blue-500' : 'border-slate-100'}`}
-                          iconSize={24}
-                        />
-                      )}
+                      <AvatarImg
+                        src={conv.other_user?.avatar_url}
+                        alt={conv.other_user?.full_name || 'User'}
+                        className={`w-12 h-12 rounded-full object-cover border-2 ${
+                          isActive ? 'border-blue-500' : 'border-slate-100'
+                        }`}
+                        placeholderClassName={`h-12 w-12 border-2 ${isActive ? 'border-blue-500' : 'border-slate-100'}`}
+                        placeholderIconSize={24}
+                      />
                       {isRequest ? (
                         <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
                       ) : hasUnread ? (
@@ -277,15 +301,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                   {/* Desktop: full row */}
                   <div className="hidden md:flex items-center gap-3 w-full">
                     <div className="relative shrink-0">
-                      {conv.other_user?.avatar_url ? (
-                        <img
-                          src={conv.other_user.avatar_url}
-                          alt={conv.other_user?.full_name || 'User'}
-                          className="h-11 w-11 rounded-full object-cover"
-                        />
-                      ) : (
-                        <PlaceholderAvatar className="h-11 w-11" iconSize={22} />
-                      )}
+                      <AvatarImg
+                        src={conv.other_user?.avatar_url}
+                        alt={conv.other_user?.full_name || 'User'}
+                        className="h-11 w-11 rounded-full object-cover"
+                        placeholderClassName="h-11 w-11"
+                        placeholderIconSize={22}
+                      />
                       {isRequest ? (
                         <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
                       ) : hasUnread ? (

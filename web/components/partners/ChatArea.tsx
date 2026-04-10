@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Lock, MessageCircle, Send, UserPlus } from 'lucide-react';
 import { type ConversationWithDetails, type DirectMessage } from '../../services/directMessages';
-import { PlaceholderAvatar } from './PlaceholderAvatar';
+import { AvatarImg, PlaceholderAvatar } from './PlaceholderAvatar';
 
 export type MessageGateState =
   | 'chat'
@@ -174,18 +174,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           to={otherUser?.id ? `/profile/${otherUser.id}` : '#'}
           className="flex items-center gap-3 min-w-0 group flex-1"
         >
-          {otherUser?.avatar_url ? (
-            <img
-              src={otherUser.avatar_url}
-              alt={otherUser?.full_name || 'User'}
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-transparent transition-all group-hover:ring-blue-400"
-            />
-          ) : (
-            <PlaceholderAvatar
-              className="h-10 w-10 shrink-0 ring-2 ring-transparent transition-all group-hover:ring-blue-400"
-              iconSize={20}
-            />
-          )}
+          <AvatarImg
+            src={otherUser?.avatar_url}
+            alt={otherUser?.full_name || 'User'}
+            className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-transparent transition-all group-hover:ring-blue-400"
+            placeholderClassName="h-10 w-10 shrink-0 ring-2 ring-transparent transition-all group-hover:ring-blue-400"
+            placeholderIconSize={20}
+          />
           <div className="min-w-0">
             <h2 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none truncate group-hover:text-blue-600 transition-colors">
               {otherUser?.full_name || 'Unknown'}
@@ -207,7 +202,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {isThreadLoading ? (
           <ThreadSkeleton />
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-20">
+          <div className="flex flex-col items-center justify-center h-full text-center py-20 px-4">
             <MessageCircle className="text-slate-300 mb-4" size={56} />
             <p className="font-black text-slate-400 text-sm uppercase tracking-wider">
               No messages yet
@@ -241,15 +236,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       {!isOwn && (
                         <div className="w-7 shrink-0 mb-1">
                           {showAvatar ? (
-                            otherUser?.avatar_url ? (
-                              <img
-                                src={otherUser.avatar_url}
-                                alt={otherUser?.full_name || 'User'}
-                                className="h-7 w-7 rounded-full object-cover"
-                              />
-                            ) : (
-                              <PlaceholderAvatar className="h-7 w-7" iconSize={14} />
-                            )
+                            <AvatarImg
+                              src={otherUser?.avatar_url}
+                              alt={otherUser?.full_name || 'User'}
+                              className="h-7 w-7 rounded-full object-cover"
+                              placeholderClassName="h-7 w-7"
+                              placeholderIconSize={14}
+                            />
                           ) : null}
                         </div>
                       )}

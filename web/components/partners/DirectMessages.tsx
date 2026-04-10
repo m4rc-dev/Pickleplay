@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MessageCircle } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowRight, MessageCircle, Users } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import {
   getUserConversations,
@@ -17,6 +17,7 @@ import {
 } from '../../services/directMessages';
 import { ConversationList } from './ConversationList';
 import { ChatArea, type MessageGateState } from './ChatArea';
+import { NewMessagePanel } from './NewMessagePanel';
 
 /** Fallback when Realtime is off or RLS blocks events (see migration 013_enable_dm_realtime_publication.sql) */
 const MESSAGE_POLL_FALLBACK_MS = 6000;
@@ -41,11 +42,47 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [canMessage, setCanMessage] = useState<boolean | null>(null);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
-  // Inbound message requests only.
-  const [requestConvIds, setRequestConvIds] = useState<Set<string>>(new Set());
+  /** Conv opened from Find Partners → Message (you send first). Drives Chats vs Requests for empty threads. */
+  const [outboundConversationId, setOutboundConversationId] = useState<string | null>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('pickleplay_dm_outbound_conv') : null;
+    } catch {
+      return null;
+    }
+  });
+  /** Mutual follow pairs — used to move threads from Requests → Chats once both follow. */
+  const [mutualUserIds, setMutualUserIds] = useState<Set<string> | null>(null);
+  /** Conv IDs where the viewer has sent ≥1 message — keeps reply threads out of Requests for the initiator. */
+  const [convIdsWhereViewerSent, setConvIdsWhereViewerSent] = useState<Set<string>>(() => new Set());
+
+  const refreshMutualFollows = useCallback(async () => {
+    if (!currentUserId) {
+      setMutualUserIds(null);
+      return;
+    }
+    try {
+      const [iFollowRes, followsMeRes] = await Promise.all([
+        supabase.from('user_follows').select('followed_id').eq('follower_id', currentUserId),
+        supabase.from('user_follows').select('follower_id').eq('followed_id', currentUserId),
+      ]);
+      const iFollowSet = new Set((iFollowRes.data || []).map((r: any) => r.followed_id));
+      const followsMeSet = new Set((followsMeRes.data || []).map((r: any) => r.follower_id));
+      const mutual = new Set([...iFollowSet].filter(id => followsMeSet.has(id)));
+      setMutualUserIds(mutual);
+    } catch {
+      setMutualUserIds(new Set());
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    void refreshMutualFollows();
+  }, [refreshMutualFollows]);
 
   // Friends chatheads
-  const [friends, setFriends] = useState<Array<{ id: string; full_name: string; avatar_url?: string }>>([]);
+  const [friends, setFriends] = useState<
+    Array<{ id: string; full_name: string; avatar_url?: string; username?: string | null }>
+  >([]);
+  const [showNewMessagePanel, setShowNewMessagePanel] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
 
   const messageCacheRef = useRef<Map<string, DirectMessage[]>>(new Map());
@@ -96,9 +133,16 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   useEffect(() => {
-    loadCurrentUser();
-    loadConversations();
-    loadFriends();
+    void (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id || null;
+      setCurrentUserId(uid);
+      if (!uid) {
+        setIsLoading(false);
+        return;
+      }
+      await Promise.all([loadConversations(), loadFriends(uid)]);
+    })();
   }, []);
 
   const refreshConversationsQuiet = useCallback(async () => {
@@ -115,6 +159,61 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     [conversations]
   );
 
+  /** Which threads include an outgoing message from the viewer (so replies stay in Chats, not Requests). */
+  useEffect(() => {
+    if (!currentUserId) {
+      setConvIdsWhereViewerSent(new Set());
+      return;
+    }
+    const convIds = [...new Set(conversations.map((c) => c.id).filter(Boolean))];
+    if (convIds.length === 0) {
+      setConvIdsWhereViewerSent(new Set());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('direct_messages')
+        .select('conversation_id')
+        .in('conversation_id', convIds)
+        .eq('sender_id', currentUserId)
+        .is('deleted_at', null)
+        .limit(1000);
+      if (cancelled || error) return;
+      const found = new Set<string>();
+      for (const row of data || []) {
+        found.add((row as { conversation_id: string }).conversation_id);
+      }
+      if (cancelled) return;
+      setConvIdsWhereViewerSent((prev) => {
+        if (found.size === 0 && prev.size === 0) return prev;
+        const next = new Set(prev);
+        found.forEach((id) => next.add(id));
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, conversationIdsKey]);
+
+  /**
+   * Requests tab only: last message from them, not mutual, and you never sent a message (true inbound request).
+   */
+  const requestConvIds = useMemo(() => {
+    if (!currentUserId) return new Set<string>();
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      const otherId = c.other_user?.id;
+      if (!otherId || !c.last_message) continue;
+      if (c.last_message.sender_id === currentUserId) continue;
+      if (mutualUserIds?.has(otherId)) continue;
+      if (convIdsWhereViewerSent.has(c.id)) continue;
+      ids.add(c.id);
+    }
+    return ids;
+  }, [conversations, currentUserId, mutualUserIds, convIdsWhereViewerSent]);
+
   // Realtime: only this user's threads + new participant rows (new conversations)
   useEffect(() => {
     if (!currentUserId) return;
@@ -125,13 +224,18 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   }, [currentUserId, conversationIdsKey, refreshConversationsQuiet]);
 
   useEffect(() => {
-    if (conversationIdFromUrl && conversations.length > 0) {
-      const conv = conversations.find(c => c.id === conversationIdFromUrl);
-      if (conv) {
-        setSelectedConversation(prev => prev?.id === conv.id ? { ...prev, ...conv } : conv);
-      }
+    if (!conversationIdFromUrl || conversations.length === 0) return;
+    const conv = conversations.find(c => c.id === conversationIdFromUrl);
+    if (!conv) return;
+    const isGhostInbound =
+      !conv.last_message && conversationIdFromUrl !== outboundConversationId;
+    if (isGhostInbound) {
+      setSelectedConversation(null);
+      setSearchParams({});
+      return;
     }
-  }, [conversationIdFromUrl, conversations]);
+    setSelectedConversation(prev => (prev?.id === conv.id ? { ...prev, ...conv } : conv));
+  }, [conversationIdFromUrl, conversations, outboundConversationId, setSearchParams]);
 
   // Check mutual follow whenever the selected conversation changes
   useEffect(() => {
@@ -183,6 +287,9 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
       });
 
     const unsubscribe = subscribeToConversation(id, (message) => {
+      if (currentUserId && message.sender_id === currentUserId) {
+        setConvIdsWhereViewerSent((prev) => new Set(prev).add(id));
+      }
       addMessageDeduped(message);
       updateConversationPreview(message);
       void markConversationAsRead(id)
@@ -229,7 +336,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
       unsubscribe();
       clearInterval(pollTimer);
     };
-  }, [selectedConversation?.id, refreshConversationsQuiet, onConversationRead]);
+  }, [selectedConversation?.id, refreshConversationsQuiet, onConversationRead, currentUserId]);
 
   useEffect(() => {
     const pollConvos = setInterval(async () => {
@@ -240,29 +347,40 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     return () => clearInterval(pollConvos);
   }, [refreshConversationsQuiet]);
 
-  const loadCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUserId(user?.id || null);
-  };
-
-  const loadFriends = async () => {
+  const loadFriends = async (uid?: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: iFollow } = await supabase
-        .from('user_follows').select('followed_id').eq('follower_id', user.id);
-      const iFollowIds = (iFollow || []).map((r: any) => r.followed_id);
-      if (!iFollowIds.length) { setFriends([]); return; }
-      const { data: theyFollow } = await supabase
-        .from('user_follows').select('follower_id')
-        .eq('followed_id', user.id).in('follower_id', iFollowIds);
-      const mutualIds = (theyFollow || []).map((r: any) => r.follower_id);
+      const userId = uid || currentUserId;
+      if (!userId) return;
+      const [iFollowRes, followsMeRes] = await Promise.all([
+        supabase.from('user_follows').select('followed_id').eq('follower_id', userId),
+        supabase.from('user_follows').select('follower_id').eq('followed_id', userId),
+      ]);
+      const iFollowIds = new Set((iFollowRes.data || []).map((r: any) => r.followed_id));
+      const followsMeIds = (followsMeRes.data || []).map((r: any) => r.follower_id);
+      const mutualIds = followsMeIds.filter((id: string) => iFollowIds.has(id));
       if (!mutualIds.length) { setFriends([]); return; }
       const { data: profiles } = await supabase
-        .from('profiles').select('id, full_name, avatar_url').in('id', mutualIds);
+        .from('profiles').select('id, full_name, avatar_url, username').in('id', mutualIds);
       setFriends(profiles || []);
     } catch (_) {}
   };
+
+  /**
+   * Hide inbound empty shells (other person has not sent anything yet) so they do not appear in Chats/Requests.
+   * Always show: threads with any message, your outbound composer session, mutual friends' empty threads.
+   */
+  const visibleConversations = useMemo(() => {
+    if (!currentUserId) return conversations;
+    const friendIds = new Set(friends.map(f => f.id));
+    return conversations.filter(c => {
+      if (c.last_message) return true;
+      if (c.id === outboundConversationId) return true;
+      const otherId = c.other_user?.id;
+      if (otherId && friendIds.has(otherId)) return true;
+      if (otherId && mutualUserIds?.has(otherId)) return true;
+      return false;
+    });
+  }, [conversations, currentUserId, outboundConversationId, mutualUserIds, friends]);
 
   // Supabase Realtime Presence — track who's online
   useEffect(() => {
@@ -287,44 +405,6 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     return () => { supabase.removeChannel(channel); };
   }, [currentUserId]);
 
-  // Compute inbound message requests (non-mutual and last message came from them).
-  const computeRequestConvIds = useCallback(async (convs: ConversationWithDetails[], myId: string) => {
-    if (convs.length === 0) {
-      setRequestConvIds(new Set());
-      return;
-    }
-    try {
-      const [iFollowRes, followsMeRes] = await Promise.all([
-        supabase.from('user_follows').select('followed_id').eq('follower_id', myId),
-        supabase.from('user_follows').select('follower_id').eq('followed_id', myId),
-      ]);
-      const iFollowSet = new Set((iFollowRes.data || []).map((r: any) => r.followed_id));
-      const followsMeSet = new Set((followsMeRes.data || []).map((r: any) => r.follower_id));
-      const mutualSet = new Set([...iFollowSet].filter(id => followsMeSet.has(id)));
-      const reqIds = new Set(
-        convs
-          .filter(c =>
-            c.other_user?.id &&
-            c.last_message &&
-            c.last_message.sender_id !== myId &&
-            !mutualSet.has(c.other_user.id)
-          )
-          .map(c => c.id)
-      );
-      setRequestConvIds(reqIds);
-    } catch (_) {
-      setRequestConvIds(new Set());
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!currentUserId) {
-      setRequestConvIds(new Set());
-      return;
-    }
-    computeRequestConvIds(conversations, currentUserId);
-  }, [computeRequestConvIds, conversations, currentUserId]);
-
   const loadConversations = async () => {
     setIsLoading(true);
     try {
@@ -338,9 +418,15 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   const selectConversation = (conversation: ConversationWithDetails) => {
+    setShowNewMessagePanel(false);
     setCanMessage(null);
     setSelectedConversation(conversation);
-    setSearchParams({ conversation: conversation.id });
+    const tab = searchParams.get('tab');
+    if (tab === 'chats' || tab === 'requests') {
+      setSearchParams({ conversation: conversation.id, tab });
+    } else {
+      setSearchParams({ conversation: conversation.id });
+    }
     prefetchConversationMessages(conversation.id);
   };
 
@@ -361,7 +447,9 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
       : messages.length > 0;
 
     if (canMessage === false) {
-      if (hasIncomingMessages) return 'incoming_request';
+      // If I messaged first, their reply is not a new "request" — no Accept banner for me.
+      if (hasIncomingMessages && !hasOwnMessages) return 'incoming_request';
+      if (hasOwnMessages && hasIncomingMessages) return 'chat';
       if (hasOwnMessages) return 'outgoing_request';
       return 'new_request';
     }
@@ -382,8 +470,18 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     setNewMessage('');
     try {
       const message = await sendMessage(selectedConversation.id, text);
+      setConvIdsWhereViewerSent((prev) => new Set(prev).add(selectedConversation.id));
       addMessageDeduped(message);      // deduplicated — realtime echo won't duplicate
       updateConversationPreview(message);
+      if (selectedConversation.id === outboundConversationId) {
+        try {
+          sessionStorage.removeItem('pickleplay_dm_outbound_conv');
+        } catch {
+          /* ignore */
+        }
+        setOutboundConversationId(null);
+      }
+      void refreshMutualFollows();
     } catch (error) {
       console.error('Error sending message:', error);
       setNewMessage(text); // restore on failure
@@ -394,10 +492,12 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   const handleBack = () => {
+    setShowNewMessagePanel(false);
     setMessages([]);
     setCanMessage(null);
     setSelectedConversation(null);
-    setSearchParams({});
+    const tab = searchParams.get('tab');
+    setSearchParams(tab === 'chats' || tab === 'requests' ? { tab } : {});
   };
 
   // Accept a message request: follow the other user, then re-check mutual follow to unlock chat
@@ -407,7 +507,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     const mutual = await checkMutualFollow(selectedConversation.other_user.id);
     setCanMessage(mutual);
     await loadFriends();
-    setRequestConvIds(prev => { const next = new Set(prev); next.delete(selectedConversation.id); return next; });
+    await refreshMutualFollows();
   };
 
   const handleFriendClick = async (friendId: string) => {
@@ -427,12 +527,13 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] md:h-screen bg-white flex flex-col md:flex-row overflow-hidden">
+    <div className="relative flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-white md:h-screen md:flex-row">
       {/* Conversation list — above on mobile (compact strip), sidebar on desktop */}
-      <div className="flex shrink-0 md:h-full max-h-36 md:max-h-none">
+      <div className="flex max-h-36 shrink-0 md:h-full md:max-h-none">
         <ConversationList
-          conversations={conversations}
+          conversations={visibleConversations}
           selectedConversationId={selectedConversation?.id}
+          initialListTab={searchParams.get('tab') === 'requests' ? 'requests' : 'chats'}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onSelect={selectConversation}
@@ -443,6 +544,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           onlineUserIds={onlineUserIds}
           onFriendClick={handleFriendClick}
           onConversationHover={prefetchConversationMessages}
+          onNewMessage={() => setShowNewMessagePanel(true)}
         />
       </div>
 
@@ -461,16 +563,65 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           onBack={handleBack}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center bg-slate-50">
-          <div className="text-center">
-            <MessageCircle className="text-slate-300 mx-auto mb-4" size={64} />
-            <h2 className="text-xl font-black text-slate-400 uppercase tracking-tight mb-1">
-              Your Messages
-            </h2>
-            <p className="text-slate-400 text-sm md:block hidden">Select a conversation to start chatting</p>
-            <p className="text-slate-400 text-sm md:hidden">Tap a conversation above to start</p>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-slate-50 px-6 py-12">
+          <div className="w-full max-w-sm text-center">
+            <MessageCircle className="mx-auto mb-4 text-slate-300" size={64} />
+            <h2 className="text-xl font-black uppercase tracking-tight text-slate-400">Your Messages</h2>
+            <p className="mt-2 text-sm text-slate-500">Send a message to start a chat.</p>
+            <button
+              type="button"
+              onClick={() => setShowNewMessagePanel(true)}
+              className="mt-8 w-full max-w-xs rounded-2xl bg-blue-600 px-8 py-3.5 text-sm font-black uppercase tracking-widest text-white shadow-md transition-colors hover:bg-blue-700"
+            >
+              Send message
+            </button>
+            <p className="mt-6 text-xs text-slate-400 md:block hidden">Or select a conversation from the list</p>
+            <p className="mt-6 text-xs text-slate-400 md:hidden">Or tap a conversation above</p>
+
+            <div className="mt-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Users size={22} strokeWidth={2} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Explore</p>
+                  <p className="mt-0.5 text-base font-black uppercase tracking-tight text-slate-900">Find Partners</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                    Browse players, compare skills, send match invites, and open full profiles — same as Find Partners.
+                  </p>
+                  <Link
+                    to="/partners"
+                    className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-blue-600 transition-colors hover:text-blue-700"
+                  >
+                    More details
+                    <ArrowRight size={14} strokeWidth={2.5} />
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      )}
+
+      {showNewMessagePanel && (
+        <>
+          <button
+            type="button"
+            aria-label="Close new message"
+            className="fixed inset-0 z-[100] cursor-default bg-slate-900/25 backdrop-blur-[1px]"
+            onClick={() => setShowNewMessagePanel(false)}
+          />
+          <div className="fixed inset-y-0 right-0 z-[101] flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-xl md:max-w-md">
+            <NewMessagePanel
+              onClose={() => setShowNewMessagePanel(false)}
+              currentUserId={currentUserId}
+              suggested={friends}
+              onSelectUser={async (userId) => {
+                await handleFriendClick(userId);
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
 
 interface PlaceholderAvatarProps {
@@ -25,3 +25,51 @@ export const PlaceholderAvatar: React.FC<PlaceholderAvatarProps> = ({
     <User size={iconSize} className={iconClassName} strokeWidth={2} />
   </div>
 );
+
+interface AvatarImgProps {
+  src: string | null | undefined;
+  alt?: string;
+  className?: string;
+  placeholderClassName?: string;
+  placeholderIconSize?: number;
+  placeholderBgClassName?: string;
+  placeholderIconClassName?: string;
+}
+
+/**
+ * `<img>` with automatic fallback to PlaceholderAvatar when the URL is falsy
+ * or the image fails to load (404, timeout, etc.).
+ */
+export const AvatarImg: React.FC<AvatarImgProps> = ({
+  src,
+  alt = 'User',
+  className = '',
+  placeholderClassName,
+  placeholderIconSize,
+  placeholderBgClassName,
+  placeholderIconClassName,
+}) => {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => { setFailed(false); }, [src]);
+
+  if (!src || failed) {
+    return (
+      <PlaceholderAvatar
+        className={placeholderClassName ?? className}
+        iconSize={placeholderIconSize}
+        bgClassName={placeholderBgClassName}
+        iconClassName={placeholderIconClassName}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setFailed(true)}
+    />
+  );
+};

@@ -66,7 +66,7 @@ import { Skeleton } from './ui/Skeleton';
 import NotFound from './NotFound';
 import { PostCard } from './community';
 import SecurityReauthModal from './SecurityReauthModal';
-import { PlaceholderAvatar } from './partners/PlaceholderAvatar';
+import { AvatarImg, PlaceholderAvatar } from './partners/PlaceholderAvatar';
 
 interface ProfileProps {
   userRole: UserRole;
@@ -1939,6 +1939,13 @@ Never share them with anyone.`;
       if (updateError) throw updateError;
       setAvatarUrl(publicUrl);
       setProfileData((prev: any) => ({ ...prev, avatar_url: publicUrl }));
+      try {
+        window.dispatchEvent(
+          new CustomEvent('pickleplay-profile-avatar', { detail: { avatar_url: publicUrl } })
+        );
+      } catch {
+        /* ignore */
+      }
       setProfileMessage({ type: 'success', text: 'Avatar updated successfully!' });
       setTimeout(() => setProfileMessage(null), 3000);
     } catch (err: any) {
@@ -2358,7 +2365,12 @@ Never share them with anyone.`;
     setIsMessaging(true);
     try {
       const conversationId = await getOrCreateConversation(targetId);
-      navigate(`/messages?conversation=${conversationId}`);
+      try {
+        sessionStorage.setItem('pickleplay_dm_outbound_conv', conversationId);
+      } catch {
+        /* ignore */
+      }
+      navigate(`/messages?conversation=${conversationId}&tab=chats`);
     } catch (err) {
       console.error('Error opening message thread:', err);
     } finally {
@@ -4074,15 +4086,13 @@ Never share them with anyone.`;
                           <div key={r.id} className="bg-slate-50 rounded-3xl p-6 space-y-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                {r.rater?.avatar_url ? (
-                                  <img
-                                    src={r.rater.avatar_url}
-                                    alt={raterName}
-                                    className="h-10 w-10 rounded-full bg-slate-200 object-cover"
-                                  />
-                                ) : (
-                                  <PlaceholderAvatar className="h-10 w-10" iconSize={20} />
-                                )}
+                                <AvatarImg
+                                  src={r.rater?.avatar_url}
+                                  alt={raterName}
+                                  className="h-10 w-10 rounded-full bg-slate-200 object-cover"
+                                  placeholderClassName="h-10 w-10"
+                                  placeholderIconSize={20}
+                                />
                                 <div>
                                   <p className="font-black text-slate-900 text-sm uppercase tracking-tight">{raterName}</p>
                                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{date}</p>
