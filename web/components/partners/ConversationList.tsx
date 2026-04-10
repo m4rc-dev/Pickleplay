@@ -32,6 +32,8 @@ interface ConversationListProps {
   /** Empty non-mutual draft threads — show remove control. */
   isDismissibleEmptyThread?: (conv: ConversationWithDetails) => boolean;
   onDismissEmptyConversation?: (conv: ConversationWithDetails) => void;
+  /** While inbox + mutual friends are loading — shows Friends strip skeleton (no online dots). */
+  friendsLoading?: boolean;
 }
 
 const formatTime = (timestamp: string) => {
@@ -43,6 +45,78 @@ const formatTime = (timestamp: string) => {
   if (days === 1) return 'Yesterday';
   if (days < 7) return date.toLocaleDateString([], { weekday: 'short' });
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+/** Placeholder row matching Friends chatheads layout — no online/status dots while loading. */
+const FriendsChatheadsSkeleton: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={className} aria-busy="true" aria-label="Loading friends">
+    <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Friends</p>
+    <div
+      className="-mx-1 flex flex-row flex-nowrap gap-4 overflow-x-hidden px-2 py-2"
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+    >
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex shrink-0 flex-col items-center gap-1">
+          <div className="h-11 w-11 shrink-0 animate-pulse rounded-full border-2 border-white bg-slate-100 shadow-md" />
+          <div className="h-2 w-9 animate-pulse rounded-full bg-slate-100" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+/** Matches avatar row + label height so tabs below don’t jump when swapping skeleton → real data. */
+const FRIENDS_STRIP_MIN_PX = 92;
+
+/**
+ * Crossfades skeleton and real chatheads in one slot so layout height stays stable
+ * (no jump on Chats / Requests tabs).
+ */
+const FriendsStripCrossfade: React.FC<{
+  friendsLoading: boolean;
+  friends: Friend[];
+  onlineUserIds: Set<string>;
+  onFriendClick?: (friendId: string) => void;
+  className?: string;
+}> = ({ friendsLoading, friends, onlineUserIds, onFriendClick, className = '' }) => {
+  if (!friendsLoading && friends.length === 0) return null;
+
+  return (
+    <div
+      className={`relative isolate transition-[min-height] duration-300 ease-out motion-reduce:transition-none ${className}`}
+      style={{
+        minHeight: friendsLoading ? `${FRIENDS_STRIP_MIN_PX}px` : undefined,
+      }}
+    >
+      {/* Skeleton layer — fades out when data is ready */}
+      <div
+        className={`transition-opacity duration-300 ease-out motion-reduce:transition-none ${
+          friendsLoading
+            ? 'relative z-[2] opacity-100'
+            : 'pointer-events-none absolute inset-x-0 top-0 z-0 opacity-0'
+        }`}
+        aria-hidden={!friendsLoading}
+      >
+        <FriendsChatheadsSkeleton />
+      </div>
+      {/* Real layer — fades in */}
+      <div
+        className={`transition-opacity duration-300 ease-out motion-reduce:transition-none ${
+          friendsLoading
+            ? 'pointer-events-none absolute inset-x-0 top-0 z-[1] opacity-0'
+            : 'relative z-[1] opacity-100'
+        }`}
+      >
+        {!friendsLoading && (
+          <FriendsChatheads
+            friends={friends}
+            onlineUserIds={onlineUserIds}
+            onFriendClick={onFriendClick}
+          />
+        )}
+      </div>
+    </div>
+  );
 };
 
 /** Horizontal mutual-friends strip — shared by desktop header and mobile Chats tab. */
@@ -117,6 +191,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   onNewMessage,
   isDismissibleEmptyThread,
   onDismissEmptyConversation,
+  friendsLoading = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'requests'>(() =>
     initialListTab === 'requests' ? 'requests' : 'chats'
@@ -184,7 +259,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           )}
         </div>
 
-        <FriendsChatheads
+        <FriendsStripCrossfade
+          friendsLoading={friendsLoading}
           friends={friends}
           onlineUserIds={onlineUserIds}
           onFriendClick={onFriendClick}
@@ -203,8 +279,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           }`}
         >
           <UserCheck size={11} />
-          Chats
-          {unreadChats > 0 && (
+          <span className="whitespace-nowrap">Chats</span>
+          {!isLoading && unreadChats > 0 && (
             <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
               {unreadChats}
             </span>
@@ -219,8 +295,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           }`}
         >
           <Bell size={11} />
-          Requests
-          {unreadRequests > 0 && (
+          <span className="whitespace-nowrap">Requests</span>
+          {!isLoading && unreadRequests > 0 && (
             <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
               {unreadRequests}
             </span>
@@ -240,7 +316,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
 
       {/* Mobile: same Friends strip under Chats tab (desktop shows it in header above) */}
       {activeTab === 'chats' && (
-        <FriendsChatheads
+        <FriendsStripCrossfade
+          friendsLoading={friendsLoading}
           friends={friends}
           onlineUserIds={onlineUserIds}
           onFriendClick={onFriendClick}

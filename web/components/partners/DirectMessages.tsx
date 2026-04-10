@@ -227,6 +227,8 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
    */
   const requestConvIds = useMemo(() => {
     if (!currentUserId) return new Set<string>();
+    // Until mutual-follow data loads, every inbound thread would be mis-tagged as a "request".
+    if (mutualUserIds === null) return new Set<string>();
     const ids = new Set<string>();
     for (const c of conversations) {
       const otherId = c.other_user?.id;
@@ -587,6 +589,31 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     await refreshMutualFollows();
   };
 
+  /**
+   * Friends strip + New Message suggestions: mutual friends first by how active the DM is.
+   * Uses latest thread activity (last_message_at) as the signal — aligns with inbox order and
+   * surfaces people you chat with most often before others with no history yet.
+   */
+  const friendsSortedByChatActivity = useMemo(() => {
+    if (friends.length === 0) return friends;
+    const mutualIds = new Set(friends.map((f) => f.id));
+    const activityMs = new Map<string, number>();
+    for (const c of conversations) {
+      const oid = c.other_user?.id;
+      if (!oid || !mutualIds.has(oid)) continue;
+      const raw = c.last_message_at || c.last_message?.created_at || '';
+      const ms = raw ? new Date(raw).getTime() : 0;
+      const prev = activityMs.get(oid) ?? 0;
+      if (ms > prev) activityMs.set(oid, ms);
+    }
+    return [...friends].sort((a, b) => {
+      const mb = activityMs.get(b.id) ?? 0;
+      const ma = activityMs.get(a.id) ?? 0;
+      if (mb !== ma) return mb - ma;
+      return (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' });
+    });
+  }, [friends, conversations]);
+
   /** Open or create a DM from Friends, New Message panel, etc. Marks outbound empty threads so they are not cleared as “ghost” inbound shells (same as Find Partners → Message). */
   const handleFriendClick = async (otherUserId: string) => {
     try {
@@ -630,13 +657,14 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           isLoading={isLoading}
           currentUserId={currentUserId}
           requestConvIds={requestConvIds}
-          friends={friends}
+          friends={friendsSortedByChatActivity}
           onlineUserIds={onlineUserIds}
           onFriendClick={handleFriendClick}
           onConversationHover={prefetchConversationMessages}
           onNewMessage={() => setShowNewMessagePanel(true)}
           isDismissibleEmptyThread={isDismissibleEmptyThread}
           onDismissEmptyConversation={dismissEmptyConversation}
+          friendsLoading={isLoading}
         />
       </div>
 
@@ -709,7 +737,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
             <NewMessagePanel
               onClose={() => setShowNewMessagePanel(false)}
               currentUserId={currentUserId}
-              suggested={friends}
+              suggested={friendsSortedByChatActivity}
               onSelectUser={async (userId) => {
                 await handleFriendClick(userId);
               }}
