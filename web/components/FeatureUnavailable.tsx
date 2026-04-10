@@ -50,15 +50,16 @@ const FeatureUnavailable: React.FC<FeatureUnavailableProps> = ({ featureName }) 
         {/* Badge */}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 text-[11px] font-black uppercase tracking-widest mb-4">
           <Lock size={10} />
-          Temporarily Unavailable
+          Temporarily Disabled
         </div>
 
         {/* Heading */}
         <h1 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-          {label}
+          Temporarily Disabled
         </h1>
+        <p className="text-slate-700 text-sm font-semibold mb-3">{label}</p>
         <p className="text-slate-500 text-sm leading-relaxed mb-8">
-          This feature is currently disabled for your account. Please contact your administrator or check back later.
+          An administrator turned off this page for your account. Contact your administrator or try again later.
         </p>
 
         {/* Action */}
