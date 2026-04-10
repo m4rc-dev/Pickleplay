@@ -575,6 +575,7 @@ const NavigationHandler: React.FC<{
   featuresLoaded: boolean;
   isActualAdmin: boolean;
   isTwoFactorPending: boolean;
+  authTransitioning: boolean;
 }> = (props) => {
   const {
     role: rawRole, setRole, isLoginModalOpen, setIsLoginModalOpen, handleLogout,
@@ -587,7 +588,7 @@ const NavigationHandler: React.FC<{
     showUsernameModal, setShowUsernameModal, isUpdatingUsername,
     initialNameForModal, handleConfirmUsername,
     isMaintenanceMode, maintenanceChecked, maintenanceMessage, isSoftLaunchMode, enabledFeatures, featuresLoaded, isActualAdmin,
-    isTwoFactorPending
+    isTwoFactorPending, authTransitioning
   } = props;
 
   const role = currentUserId ? rawRole : 'guest';
@@ -974,7 +975,7 @@ const NavigationHandler: React.FC<{
     // console.log('[FeatureGate] check', { role, currentPath, matchedFeature, enabledFeatures: [...enabledFeatures] });
     if (matchedFeature && !enabledFeatures.has(matchedFeature)) {
       // console.warn('[FeatureGate] BLOCK', { role, currentPath, matchedFeature, enabledFeatures: [...enabledFeatures] });
-      // Route-level <FeatureUnavailable /> handles the blocked UI — no redirect needed.
+      // Disabled features redirect to /dashboard (or / for guests) — no blocked UI shown.
     }
   }, [enabledFeatures, location.pathname, role, featuresLoaded, isAdminForFeatures]);
 
@@ -986,10 +987,20 @@ const NavigationHandler: React.FC<{
   // console.log('[NavigationHandler RENDER]', { role, featuresLoaded, maintenanceChecked, enabledFeaturesArray: [...enabledFeatures], pathname: location.pathname });
 
   // ── Block render until maintenance checked AND features loaded ──
-  if (role !== 'guest' && !isAuthPage) {
-    if (!maintenanceChecked || !featuresLoaded) {
-      return <div className="min-h-screen bg-slate-950" />;
-    }
+  const showAuthLoadingScreen = (!isAuthPage && authTransitioning) || (role !== 'guest' && !isAuthPage && (!maintenanceChecked || !featuresLoaded));
+  if (showAuthLoadingScreen) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-300" style={{ backgroundColor: '#EBEBE6' }}>
+        <div className="flex flex-col items-center gap-4">
+          <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-16 h-16 rounded-2xl object-contain animate-pulse" />
+          <div className="flex gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Maintenance gate ──
@@ -1418,24 +1429,18 @@ const NavigationHandler: React.FC<{
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900 rounded-xl"><X size={22} /></button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1">
-              {feat('academy') && (
-                <Link to="/academy" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                  <BookOpen size={20} />
-                  Play Guide
-                </Link>
-              )}
-              {feat('shop') && (
-                <Link to="/shop" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                  <ShoppingBag size={20} />
-                  Pro Shop
-                </Link>
-              )}
-              {feat('news') && (
-                <Link to="/news" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
-                  <Newspaper size={20} />
-                  News
-                </Link>
-              )}
+              <Link to="/guides/rules" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                <BookOpen size={20} />
+                Play Guide
+              </Link>
+              <Link to="/shop" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                <ShoppingBag size={20} />
+                Pro Shop
+              </Link>
+              <Link to="/news" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+                <Newspaper size={20} />
+                News
+              </Link>
             </nav>
             <div className="p-4 border-t border-slate-100">
               <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center gap-2 w-full px-6 py-3.5 rounded-xl bg-blue-600 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">
@@ -1534,9 +1539,9 @@ const NavigationHandler: React.FC<{
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-14 h-14 object-contain rounded-xl" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 font-black text-sm uppercase tracking-[0.2em] transition-colors ${headerActive ? 'text-slate-600' : 'text-white/80'}`}>
-            {feat('academy') && <Link to="/academy" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>}
-            {feat('shop') && <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>}
-            {feat('news') && <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>}
+            <Link to="/guides/rules" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>
+            <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>
+            <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>
             <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black bg-blue-600 text-white shadow-blue-900/20`}>LET'S PICKLE</Link>
           </nav>
         </header>
@@ -1598,29 +1603,38 @@ const NavigationHandler: React.FC<{
               } />
               <Route path="/update-password" element={<UpdatePassword />} />
               <Route path="/manager-invite" element={<ManagerInvitePage />} />
-              <Route path="/shop" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('shop') ? <FeatureUnavailable featureName="shop" /> : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />} />
-              <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
-              <Route path="/news/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
-              <Route path="/news/:legacyArticleId/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <FeatureUnavailable featureName="news" /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
-              <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? <FeatureUnavailable featureName="academy" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
+              <Route
+                path="/shop"
+                element={
+                  isTwoFactorPending
+                    ? <Navigate to="/verify-2fa" replace />
+                    : !feat('shop')
+                      ? <FeatureUnavailable featureName="shop" />
+                      : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />
+                }
+              />
+              <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
+              <Route path="/news/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
+              <Route path="/news/:legacyArticleId/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
+              <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/guides" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <GuidesIndex isLoggedIn={role !== 'guest'} />} />
-              <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
-              <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <FeatureUnavailable featureName="guides" /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
-              <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('rankings') ? <FeatureUnavailable featureName="rankings" /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
-              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('dashboard') ? <FeatureUnavailable featureName="dashboard" /> : role === 'COURT_MANAGER' ? <Navigate to={COURT_MANAGER_ROUTES.overview} replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
+              <Route path="/guides/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') && role !== 'guest' ? <Navigate to="/dashboard" replace /> : <GuideReader isLoggedIn={role !== 'guest'} />} />
+              <Route path="/rankings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('rankings') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Rankings /></div>} />
+              <Route path="/dashboard" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('dashboard') ? <Navigate to="/" replace /> : role === 'COURT_MANAGER' ? <Navigate to={COURT_MANAGER_ROUTES.overview} replace /> : role !== 'guest' ? <Dashboard userRole={role} onSubmitApplication={onSubmitApplication} setRole={setRole} applications={applications} isSidebarCollapsed={isSidebarCollapsed} userName={userName} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} /> : <Navigate to="/" />} />
               <Route path="/faq" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <FAQ />} />
-              <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
-              <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
-              <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <FeatureUnavailable featureName="booking" /> : <CourtDetail />} />
-              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : <Tournaments userRole={role !== 'guest' ? role : undefined} />} />
-              <Route path="/tournaments/:id" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <FeatureUnavailable featureName="tournaments" /> : <TournamentPage />} />
-              <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <FeatureUnavailable featureName="coaches" /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
-              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/login" />} />
-              <Route path="/groups" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <Groups /> : <Navigate to="/" />} />
-              <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
-              <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <FeatureUnavailable featureName="community" /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
-              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <FeatureUnavailable featureName="partners" /> : role !== 'guest' ? <FindPartners followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
-              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <FeatureUnavailable featureName="messages" /> : role !== 'guest' ? <DirectMessages onConversationRead={handleDmConversationRead} /> : <Navigate to="/" />} />
+              <Route path="/booking" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role === 'guest' ? <GuestBooking /> : <Booking />} />
+              <Route path="/my-bookings" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <Navigate to="/dashboard" replace /> : role !== 'guest' ? <MyBookings /> : <Navigate to="/login" />} />
+              <Route path="/court/:courtId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('booking') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <CourtDetail />} />
+              <Route path="/tournaments" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <Tournaments userRole={role !== 'guest' ? role : undefined} />} />
+              <Route path="/tournaments/:id" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : <TournamentPage />} />
+              <Route path="/coaches" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('coaches') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <Coaches currentUserId={currentUserId} /> : <Navigate to="/" />} />
+              <Route path="/community" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <Community posts={posts} setPosts={setPosts} followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/login" />} />
+              <Route path="/groups" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <Groups /> : <Navigate to="/" />} />
+              <Route path="/community/groups/:groupId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <GroupDetail /> : <Navigate to="/" />} />
+              <Route path="/community/groups/:groupId/manage" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('community') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <GroupManage /> : <Navigate to="/" />} />
+              <Route path="/partners" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('partners') ? <Navigate to="/dashboard" replace /> : role !== 'guest' ? <FindPartners followedUsers={followedUsers} onFollow={handleFollow} /> : <Navigate to="/" />} />
+              <Route path="/messages" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('messages') ? <Navigate to="/dashboard" replace /> : role !== 'guest' ? <DirectMessages onConversationRead={handleDmConversationRead} /> : <Navigate to="/" />} />
               <Route
                 path="/others"
                 element={
@@ -1629,7 +1643,7 @@ const NavigationHandler: React.FC<{
                   ) : role === 'guest' ? (
                     <Navigate to="/" />
                   ) : !hasOthersHubAccess ? (
-                    <FeatureUnavailable featureName="others" />
+                    <Navigate to="/dashboard" replace />
                   ) : (
                     <Others
                       partnersEnabled={feat('partners')}
@@ -1639,12 +1653,12 @@ const NavigationHandler: React.FC<{
                   )
                 }
               />
-              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to={`/login?redirect=${encodeURIComponent('/teams')}`} replace />} />
-              <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />} />
-              <Route path="/teams/:squadId/invite/:inviteCode" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <FeatureUnavailable featureName="teams" /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />} />
+              <Route path="/teams" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <SquadsList userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to={`/login?redirect=${encodeURIComponent('/teams')}`} replace />} />
+              <Route path="/teams/:squadId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />} />
+              <Route path="/teams/:squadId/invite/:inviteCode" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('teams') ? <Navigate to={role === 'guest' ? '/' : '/dashboard'} replace /> : role !== 'guest' ? <SquadDetail /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />} />
               <Route path="/achievements" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Achievements userRole={role} isSidebarCollapsed={isSidebarCollapsed} /> : <Navigate to="/" />} />
-              <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
-              <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <FeatureUnavailable featureName="profile" /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
+              <Route path="/profile" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <Navigate to="/dashboard" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
+              <Route path="/profile/:userId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('profile') ? <Navigate to="/dashboard" replace /> : role !== 'guest' ? <Profile userRole={role} authorizedProRoles={authorizedProRoles} currentUserId={currentUserId} followedUsers={followedUsers} onFollow={handleFollow} posts={posts} setPosts={setPosts} onRoleSwitch={handleRoleSwitch} /> : <Navigate to="/" />} />
 
               {/* Specialized Coach Routes */}
               <Route path="/students" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Students currentUserId={currentUserId} /> : <Navigate to="/login" />} />
@@ -1652,24 +1666,24 @@ const NavigationHandler: React.FC<{
               <Route path="/schedule" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <Schedule currentUserId={currentUserId} /> : <Navigate to="/login" />} />
 
               <Route path="/court-manager" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <CourtManagerLayout /> : <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />}>
-                <Route index element={!feat('locations') ? <FeatureUnavailable featureName="locations" /> : <CourtManagerOverviewPage />} />
-                <Route path="assigned-court" element={!feat('locations') ? <FeatureUnavailable featureName="locations" /> : <CourtManagerAssignedCourtPage />} />
-                <Route path="bookings" element={!feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : <CourtManagerBookingsPage />} />
-                <Route path="schedule" element={!feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : <CourtManagerSchedulePage />} />
+                <Route index element={!feat('locations') ? <Navigate to="/dashboard" replace /> : <CourtManagerOverviewPage />} />
+                <Route path="assigned-court" element={!feat('locations') ? <Navigate to="/dashboard" replace /> : <CourtManagerAssignedCourtPage />} />
+                <Route path="bookings" element={!feat('bookings-admin') ? <Navigate to="/dashboard" replace /> : <CourtManagerBookingsPage />} />
+                <Route path="schedule" element={!feat('court-calendar') ? <Navigate to="/dashboard" replace /> : <CourtManagerSchedulePage />} />
               </Route>
 
               {/* Specialized Court Owner Routes */}
-              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <LocationsList /> : <Navigate to="/" />} />
-              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <FeatureUnavailable featureName="locations" /> : isCourtOwnerRole ? <LocationDetailPage /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <Navigate to="/locations" replace /> : <Navigate to="/" />} />
+              <Route path="/locations" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <Navigate to="/dashboard" replace /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <LocationsList /> : <Navigate to="/" />} />
+              <Route path="/locations/:locationId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('locations') ? <Navigate to="/dashboard" replace /> : isCourtOwnerRole ? <LocationDetailPage /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <Navigate to="/locations" replace /> : <Navigate to="/" />} />
               <Route path="/courts" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.assignedCourt} replace /> : canOperateCourt ? <Navigate to="/locations" replace /> : <Navigate to="/" />} />
-              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <FeatureUnavailable featureName="bookings-admin" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.bookings} replace /> : canOperateCourt ? <BookingsAdmin /> : <Navigate to="/" />} />
-              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <FeatureUnavailable featureName="court-calendar" /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.schedule} replace /> : canOperateCourt ? <CourtCalendar /> : <Navigate to="/" />} />
-              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <FeatureUnavailable featureName="tournaments-admin" /> : isCourtOwnerRole ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
+              <Route path="/bookings-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('bookings-admin') ? <Navigate to="/dashboard" replace /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.bookings} replace /> : canOperateCourt ? <BookingsAdmin /> : <Navigate to="/" />} />
+              <Route path="/court-calendar" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-calendar') ? <Navigate to="/dashboard" replace /> : isCourtManagerRole ? <Navigate to={COURT_MANAGER_ROUTES.schedule} replace /> : canOperateCourt ? <CourtCalendar /> : <Navigate to="/" />} />
+              <Route path="/tournaments-admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('tournaments-admin') ? <Navigate to="/dashboard" replace /> : isCourtOwnerRole ? <TournamentsManager userRole={role} /> : <Navigate to="/" />} />
               <Route path="/tournaments-admin/manage/:tournamentId" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : (isCourtOwnerRole || role === 'ADMIN') ? <TournamentHub /> : <Navigate to="/" />} />
-              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <FeatureUnavailable featureName="revenue" /> : isCourtOwnerRole ? <Revenue /> : <Navigate to="/" />} />
+              <Route path="/revenue" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('revenue') ? <Navigate to="/dashboard" replace /> : isCourtOwnerRole ? <Revenue /> : <Navigate to="/" />} />
               <Route path="/transactions" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtOwnerRole ? <Transactions /> : <Navigate to="/" />} />
               <Route path="/court-pricing" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : isCourtOwnerRole ? <CourtPricing /> : <Navigate to="/" />} />
-              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <FeatureUnavailable featureName="court-policies" /> : isCourtOwnerRole ? <LocationPolicies /> : <Navigate to="/" />} />
+              <Route path="/court-policies" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('court-policies') ? <Navigate to="/dashboard" replace /> : isCourtOwnerRole ? <LocationPolicies /> : <Navigate to="/" />} />
               <Route path="/application-status" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role !== 'guest' ? <ApplicationStatus /> : <Navigate to="/login" />} />
 
               <Route path="/admin" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'ADMIN' ? <AdminDashboard applications={applications} onApprove={onApprove} onReject={onReject} currentAdminRole={role} /> : <Navigate to="/login" />} />
@@ -1753,11 +1767,14 @@ const App: React.FC = () => {
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [isActualAdmin, setIsActualAdmin] = useState(() => localStorage.getItem('is_actual_admin') === 'true');
   const [authLoading, setAuthLoading] = useState(true);
+  const [authTransitioning, setAuthTransitioning] = useState(false);
   const [twoFactorPending, setTwoFactorPending] = useState(false);
   const twoFactorStatusRequestRef = useRef<Promise<{ pending: boolean }> | null>(null);
   const twoFactorStatusKeyRef = useRef<string | null>(null);
   /** Avoid clearing feature gate on every auth re-sync (tab focus, token refresh) — only on sign-out or different account */
   const lastFeatureSyncedUserIdRef = useRef<string | null>(null);
+  const syncInProgressRef = useRef(false);
+  const initialSyncDoneRef = useRef(false);
 
   const hasAdminRole = (roles: (string | UserRole)[] | null | undefined) =>
     Array.isArray(roles) && roles.some(r => (r || '').toString().toUpperCase() === 'ADMIN');
@@ -1774,17 +1791,24 @@ const App: React.FC = () => {
       });
     });
 
-    // Refetch maintenance + features on tab focus.
-    // Token refresh on visibility is already handled by Supabase GoTrueClient (_recoverAndRefresh); avoid a second
-    // refreshSession() here — it races with the client and can make the UI feel like it "reloads".
+    const setsEqual = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(v => b.has(v));
+
+    // Silently refresh maintenance + features on tab focus without flashing a loading screen.
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         getMaintenanceStatus().then(m => {
           if (m) { setIsMaintenanceMode(m.enabled); setMaintenanceMessage(m.message || ''); setIsSoftLaunchMode(m.soft_launch_enabled ?? false); }
         });
-        const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
-        if (r !== 'guest') {
-          getEnabledFeaturesForRole(r as UserRole).then(f => { setEnabledFeatures(f); setFeaturesLoaded(true); });
+        if (!syncInProgressRef.current) {
+          const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
+          if (r !== 'guest') {
+            getEnabledFeaturesForRole(r as UserRole).then(f => {
+              if (!syncInProgressRef.current) {
+                setEnabledFeatures(prev => setsEqual(prev, f) ? prev : f);
+                setFeaturesLoaded(true);
+              }
+            });
+          }
         }
       }
     };
@@ -1797,21 +1821,18 @@ const App: React.FC = () => {
     };
     const pollInterval = setInterval(pollMaintenance, 15000);
 
-    let syncInProgress = false;
-    let initialSyncDone = false;
-
     const pollFeatures = async () => {
-      if (syncInProgress || !initialSyncDone) return;
+      if (syncInProgressRef.current || !initialSyncDoneRef.current) return;
       const r = (localStorage.getItem('active_role') as UserRole) || 'PLAYER';
       if (r !== 'guest') {
         await ensureDefaultFeatures(r);
         const features = await getEnabledFeaturesForRole(r as UserRole);
-        if (!syncInProgress) {
-          setEnabledFeatures(features);
+        if (!syncInProgressRef.current) {
+          setEnabledFeatures(prev => setsEqual(prev, features) ? prev : features);
           setFeaturesLoaded(true);
         }
-      } else if (!syncInProgress) {
-        setEnabledFeatures(new Set(['*']));
+      } else if (!syncInProgressRef.current) {
+        setEnabledFeatures(prev => prev.has('*') && prev.size === 1 ? prev : new Set(['*']));
         setFeaturesLoaded(true);
       }
     };
@@ -1862,7 +1883,7 @@ const App: React.FC = () => {
 
     // 1. Robust Session Sync Logic
     const syncUserSession = async (session: any) => {
-      syncInProgress = true;
+      syncInProgressRef.current = true;
       if (!session?.user) {
         lastFeatureSyncedUserIdRef.current = null;
         setRole('guest');
@@ -1873,10 +1894,23 @@ const App: React.FC = () => {
         setTwoFactorPending(false);
         setFeaturesLoaded(false);
         setEnabledFeatures(new Set());
+        setIsActualAdmin(false);
+        localStorage.removeItem('is_actual_admin');
+        setAuthTransitioning(false);
         localStorage.removeItem('active_role');
-        syncInProgress = false;
+        syncInProgressRef.current = false;
         return;
       }
+
+      const sessionUserId = session.user.id;
+      const isSameUser = lastFeatureSyncedUserIdRef.current === sessionUserId;
+
+      if (isSameUser && initialSyncDoneRef.current) {
+        syncInProgressRef.current = false;
+        return;
+      }
+
+      setAuthTransitioning(true);
 
       if (shouldBlockUnverifiedEmailSession(session.user)) {
         lastFeatureSyncedUserIdRef.current = null;
@@ -1889,7 +1923,7 @@ const App: React.FC = () => {
         setTwoFactorPending(false);
         localStorage.removeItem('active_role');
         localStorage.removeItem('auth_redirect');
-        syncInProgress = false;
+        syncInProgressRef.current = false;
 
         if (!window.location.search.includes('error=verify_email_required') || window.location.pathname !== '/login') {
           window.location.replace('/login?error=verify_email_required');
@@ -1897,12 +1931,8 @@ const App: React.FC = () => {
         return;
       }
 
-      const sessionUserId = session.user.id;
-      const accountChanged = lastFeatureSyncedUserIdRef.current !== sessionUserId;
-      if (accountChanged) {
-        setFeaturesLoaded(false);
-        lastFeatureSyncedUserIdRef.current = sessionUserId;
-      }
+      lastFeatureSyncedUserIdRef.current = sessionUserId;
+      setFeaturesLoaded(false);
 
       setCurrentUserId(session.user.id);
 
@@ -2161,27 +2191,32 @@ const App: React.FC = () => {
         if (maintenanceResult) { setIsMaintenanceMode(maintenanceResult.enabled); setMaintenanceMessage(maintenanceResult.message || ''); setIsSoftLaunchMode(maintenanceResult.soft_launch_enabled ?? false); }
         setMaintenanceChecked(true);
 
-        setRole(dbActiveRole);
         localStorage.setItem('active_role', dbActiveRole);
 
         await ensureDefaultFeatures(dbActiveRole);
         const features = await getEnabledFeaturesForRole(dbActiveRole);
+
+        // Set role and features atomically so the sidebar never renders
+        // with the new role before features are ready
+        setRole(dbActiveRole);
         setEnabledFeatures(features);
         setFeaturesLoaded(true);
-        syncInProgress = false;
+        setAuthTransitioning(false);
+        syncInProgressRef.current = false;
 
       } catch (err) {
         console.error('Error syncing user data:', err);
         setTwoFactorPending(Boolean(session?.user));
         setMaintenanceChecked(true);
         setFeaturesLoaded(true);
-        syncInProgress = false;
+        setAuthTransitioning(false);
+        syncInProgressRef.current = false;
       }
     };
 
     // 2. Auth Initialization
     supabase.auth.getSession().then(({ data: { session } }) => {
-      syncUserSession(session).finally(() => { initialSyncDone = true; setAuthLoading(false); });
+      syncUserSession(session).finally(() => { initialSyncDoneRef.current = true; setAuthLoading(false); });
     });
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -2664,13 +2699,14 @@ const App: React.FC = () => {
         );
         const nextIsActualAdmin = nextRoles.some((item) => (item || '').toString().toUpperCase() === 'ADMIN');
 
-        setAuthorizedProRoles(nextAuthorizedProRoles);
-        setRole(nextActiveRole);
-        setIsActualAdmin(nextIsActualAdmin);
         localStorage.setItem('active_role', nextActiveRole);
 
         await ensureDefaultFeatures(nextActiveRole);
         const nextFeatures = await getEnabledFeaturesForRole(nextActiveRole);
+
+        setAuthorizedProRoles(nextAuthorizedProRoles);
+        setRole(nextActiveRole);
+        setIsActualAdmin(nextIsActualAdmin);
         setEnabledFeatures(nextFeatures);
         setFeaturesLoaded(true);
       })
@@ -2730,12 +2766,13 @@ const App: React.FC = () => {
       // Small delay for the "feeling" of switching
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      setRole(newRole);
       localStorage.setItem('active_role', newRole);
 
-      // Re-load features for the new role so guards update immediately
       await ensureDefaultFeatures(newRole);
       const features = await getEnabledFeaturesForRole(newRole);
+
+      // Set role and features atomically
+      setRole(newRole);
       setEnabledFeatures(features);
       setFeaturesLoaded(true);
     } catch (err) {
@@ -2777,12 +2814,21 @@ const App: React.FC = () => {
 
   const performLogout = async () => {
     setShowLogoutConfirm(false);
+    setAuthLoading(true);
     localStorage.removeItem('two_factor_pending');
     localStorage.removeItem('auth_redirect');
     localStorage.removeItem('active_role');
+    localStorage.removeItem('is_actual_admin');
+    setIsActualAdmin(false);
+    setEnabledFeatures(new Set());
+    setFeaturesLoaded(false);
     localStorage.setItem('came_from_logout', 'true');
-    await supabase.auth.signOut();
-    window.location.href = '/login';
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Hard replace avoids back-button artifacts and removes landing-page flash.
+      window.location.replace('/login');
+    }
   };
 
   useEffect(() => {
@@ -3098,6 +3144,7 @@ const App: React.FC = () => {
           featuresLoaded={featuresLoaded}
           isActualAdmin={isActualAdmin}
           isTwoFactorPending={twoFactorPending}
+          authTransitioning={authTransitioning}
         />
         {isSwitchingRole && <RoleSwitchOverlay targetRole={roleSwitchTarget} />}
       </>
