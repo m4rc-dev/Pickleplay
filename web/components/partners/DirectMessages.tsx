@@ -587,10 +587,17 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     await refreshMutualFollows();
   };
 
-  const handleFriendClick = async (friendId: string) => {
+  /** Open or create a DM from Friends, New Message panel, etc. Marks outbound empty threads so they are not cleared as “ghost” inbound shells (same as Find Partners → Message). */
+  const handleFriendClick = async (otherUserId: string) => {
     try {
-      const convId = await getOrCreateConversation(friendId);
-      // Find in existing list or reload
+      const convId = await getOrCreateConversation(otherUserId);
+      try {
+        sessionStorage.setItem('pickleplay_dm_outbound_conv', convId);
+      } catch {
+        /* ignore */
+      }
+      setOutboundConversationId(convId);
+
       let conv = conversations.find(c => c.id === convId);
       if (!conv) {
         const fresh = await getUserConversations();
@@ -599,7 +606,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
       }
       if (conv) selectConversation(conv);
     } catch (err) {
-      console.error('Error opening friend chat:', err);
+      console.error('Error opening direct message:', err);
     }
   };
 
