@@ -974,6 +974,10 @@ const NavigationHandler: React.FC<{
       <FeatureUnavailable featureName={featureKey} />
     );
 
+  /** Default landing for players: Book Courts unless that feature is off — then overview (dashboard). */
+  const playerLandingPath = (): '/booking' | '/dashboard' =>
+    feat('booking') ? '/booking' : '/dashboard';
+
   const hasPlayerOthersNav =
     role === 'PLAYER' && (feat('community') || feat('partners') || feat('coaches'));
   const hasPlayerCompeteNav =
@@ -1237,7 +1241,7 @@ const NavigationHandler: React.FC<{
                     const nextRole: UserRole = role === 'PLAYER' ? authorizedProRoles[0] : 'PLAYER';
                     await handleRoleSwitch(nextRole);
                     // Navigation is handled via state change/Navigate in Routes or explicitly here
-                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : '/booking');
+                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : playerLandingPath());
                     else navigate('/dashboard');
                   }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
@@ -1291,7 +1295,7 @@ const NavigationHandler: React.FC<{
                             onClick={async () => {
                               await handleRoleSwitch('PLAYER');
                               setIsRoleDropdownOpen(false);
-                              navigate(isSoftLaunchMode ? '/' : '/booking');
+                              navigate(isSoftLaunchMode ? '/' : playerLandingPath());
                             }}
                             className={`w-full p-4 rounded-2xl flex items-center gap-4 transition-all text-left ${role === 'PLAYER'
                               ? 'bg-lime-400 text-slate-900'
@@ -1336,7 +1340,7 @@ const NavigationHandler: React.FC<{
                   <button onClick={async () => {
                     const nextRole: UserRole = role === 'PLAYER' ? 'COACH' : 'PLAYER';
                     await handleRoleSwitch(nextRole);
-                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : '/booking');
+                    if (nextRole === 'PLAYER') navigate(isSoftLaunchMode ? '/' : playerLandingPath());
                     else navigate('/dashboard');
                   }} className="w-full p-4 rounded-2xl flex items-center justify-between transition-all group border bg-white/10 border-white/20 text-white hover:bg-white/20">
                     <div className="flex items-center gap-3">
@@ -1614,7 +1618,7 @@ const NavigationHandler: React.FC<{
                       : role === 'guest'
                         ? <Home />
                         : role === 'PLAYER'
-                          ? (isSoftLaunchMode ? <SoftLaunchWelcome userName={userName || undefined} /> : <Navigate to="/booking" replace />)
+                          ? (isSoftLaunchMode ? <SoftLaunchWelcome userName={userName || undefined} /> : <Navigate to={playerLandingPath()} replace />)
                           : role === 'ADMIN'
                             ? <Navigate to="/admin" replace />
                             : <Navigate to="/dashboard" replace />
