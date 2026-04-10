@@ -132,6 +132,31 @@ import FeatureUnavailable from './components/FeatureUnavailable';
 import { ProfessionalApplication, UserRole, Notification, SocialPost, SocialComment, Product, CartItem } from './types';
 import { INITIAL_APPLICATIONS, INITIAL_POSTS } from './data/mockData';
 
+/** Full-screen overlay + soft redirect shown during logout so there's no black flash. */
+const LogoutOverlay: React.FC<{ onNavigated: () => void }> = ({ onNavigated }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.pathname !== '/login') {
+      navigate('/login', { replace: true });
+    } else {
+      onNavigated();
+    }
+  }, [location.pathname, navigate, onNavigated]);
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center" style={{ backgroundColor: '#EBEBE6' }}>
+      <div className="flex flex-col items-center gap-4">
+        <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-16 h-16 rounded-2xl object-contain animate-pulse" />
+        <div className="flex gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /** Marks a single notification read when its row is visible in the Activity list (updates bell count). */
 const NotificationRowSeenObserver: React.FC<{
   notification: Notification;
@@ -1186,12 +1211,10 @@ const NavigationHandler: React.FC<{
               </>
             )}
             {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="Newsfeed" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />}
-            {feat('shop') && (
-              <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
-                <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
-                <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
-              </div>
-            )}
+            <div className={`pt-4 mt-4 border-t border-white/20 ${isSidebarCollapsed ? 'mx-auto w-8' : ''}`}>
+              <p className={`text-[11px] font-black uppercase tracking-widest px-4 mb-2 ${isSidebarCollapsed ? 'hidden' : 'block'} text-white/85`}>Marketplace</p>
+              <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={isSidebarCollapsed} themeColor={themeColor} />
+            </div>
           </nav>
 
           <div className={`relative border-t border-white/20 space-y-3 ${role === 'COURT_MANAGER' ? 'shrink-0 overflow-visible p-3 md:p-4' : 'p-4'}`} style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -1429,7 +1452,7 @@ const NavigationHandler: React.FC<{
               <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-slate-900 rounded-xl"><X size={22} /></button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1">
-              <Link to="/guides/rules" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
+              <Link to="/guides" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm uppercase tracking-wider">
                 <BookOpen size={20} />
                 Play Guide
               </Link>
@@ -1521,7 +1544,7 @@ const NavigationHandler: React.FC<{
               )}
               {feat('news') && <NavItem to="/news" icon={<Newspaper size={22} />} label="News" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
               <div className="border-t border-slate-100 my-4" />
-              {feat('shop') && <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
+              <NavItem to="/shop" icon={<ShoppingBag size={22} />} label="Pro Shop" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />
               {feat('profile') && <NavItem to="/profile" icon={<User size={22} />} label="Profile" isCollapsed={false} themeColor={themeColor} onClick={() => setIsMobileMenuOpen(false)} isMobile={true} />}
             </nav>
             <button onClick={onLogoutClick} className="mt-auto flex items-center gap-3 py-6 text-rose-600 hover:text-rose-700 transition-colors font-black uppercase text-xs tracking-widest border-t border-slate-50 -mx-8 px-8 shadow-[0_-1px_0_rgba(0,0,0,0.05)]">
@@ -1539,7 +1562,7 @@ const NavigationHandler: React.FC<{
             <img src="/images/PicklePlayLogo.jpg" alt="PicklePlay" className="w-14 h-14 object-contain rounded-xl" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 font-black text-sm uppercase tracking-[0.2em] transition-colors ${headerActive ? 'text-slate-600' : 'text-white/80'}`}>
-            <Link to="/guides/rules" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>
+            <Link to="/guides" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PLAY GUIDE</Link>
             <Link to="/shop" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>PRO SHOP</Link>
             <Link to="/news" className={`transition-colors ${headerActive ? 'hover:text-lime-400' : 'hover:text-white'}`}>NEWS</Link>
             <Link to="/login" className={`px-8 py-3.5 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-2 font-black bg-blue-600 text-white shadow-blue-900/20`}>LET'S PICKLE</Link>
@@ -1768,6 +1791,7 @@ const App: React.FC = () => {
   const [isActualAdmin, setIsActualAdmin] = useState(() => localStorage.getItem('is_actual_admin') === 'true');
   const [authLoading, setAuthLoading] = useState(true);
   const [authTransitioning, setAuthTransitioning] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
   const [twoFactorPending, setTwoFactorPending] = useState(false);
   const twoFactorStatusRequestRef = useRef<Promise<{ pending: boolean }> | null>(null);
   const twoFactorStatusKeyRef = useRef<string | null>(null);
@@ -2221,16 +2245,16 @@ const App: React.FC = () => {
 
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        // Genuine sign-out — clear everything
         syncUserSession(null);
       } else if (event === 'TOKEN_REFRESHED') {
-        // Token silently refreshed — session is still valid, no need to re-sync UI
-        // Just make sure currentUserId is set in case this is the first load
         if (session?.user) {
           setCurrentUserId(session.user.id);
           refreshTwoFactorGate(session).catch(() => setTwoFactorPending(true));
         }
       } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') {
+        if (event === 'SIGNED_IN' && session?.user && lastFeatureSyncedUserIdRef.current !== session.user.id) {
+          setAuthTransitioning(true);
+        }
         syncUserSession(session);
       }
     });
@@ -2814,7 +2838,7 @@ const App: React.FC = () => {
 
   const performLogout = async () => {
     setShowLogoutConfirm(false);
-    setAuthLoading(true);
+    setLogoutPending(true);
     localStorage.removeItem('two_factor_pending');
     localStorage.removeItem('auth_redirect');
     localStorage.removeItem('active_role');
@@ -2823,12 +2847,7 @@ const App: React.FC = () => {
     setEnabledFeatures(new Set());
     setFeaturesLoaded(false);
     localStorage.setItem('came_from_logout', 'true');
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      // Hard replace avoids back-button artifacts and removes landing-page flash.
-      window.location.replace('/login');
-    }
+    await supabase.auth.signOut();
   };
 
   useEffect(() => {
@@ -3111,6 +3130,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <>
+        {logoutPending && <LogoutOverlay onNavigated={() => setLogoutPending(false)} />}
         <NavigationHandler
           role={role} setRole={setRole} isLoginModalOpen={isLoginModalOpen} setIsLoginModalOpen={setIsLoginModalOpen}
           handleLogout={handleLogout} applications={applications} onApprove={handleApprove} onReject={handleReject}
