@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MessageCircle, X, UserCheck, Bell, SquarePen } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Bell, MessageCircle, Search, SquarePen, UserCheck, Users, X } from 'lucide-react';
 import { type ConversationWithDetails } from '../../services/directMessages';
-import { AvatarImg, PlaceholderAvatar } from './PlaceholderAvatar';
+import { AvatarImg } from './PlaceholderAvatar';
 
 interface Friend {
   id: string;
@@ -28,6 +29,9 @@ interface ConversationListProps {
   onConversationHover?: (conversationId: string) => void;
   /** Opens the new-message panel (search + suggested). */
   onNewMessage?: () => void;
+  /** Empty non-mutual draft threads — show remove control. */
+  isDismissibleEmptyThread?: (conv: ConversationWithDetails) => boolean;
+  onDismissEmptyConversation?: (conv: ConversationWithDetails) => void;
 }
 
 const formatTime = (timestamp: string) => {
@@ -39,6 +43,61 @@ const formatTime = (timestamp: string) => {
   if (days === 1) return 'Yesterday';
   if (days < 7) return date.toLocaleDateString([], { weekday: 'short' });
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+/** Horizontal mutual-friends strip — shared by desktop header and mobile Chats tab. */
+const FriendsChatheads: React.FC<{
+  friends: Friend[];
+  onlineUserIds: Set<string>;
+  onFriendClick?: (friendId: string) => void;
+  className?: string;
+}> = ({ friends, onlineUserIds, onFriendClick, className = '' }) => {
+  if (friends.length === 0) return null;
+  return (
+    <div className={className}>
+      <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Friends</p>
+      <div
+        className="-mx-1 flex flex-row flex-nowrap gap-4 overflow-x-auto px-2 py-2"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {friends.map((friend) => {
+          const isOnline = onlineUserIds.has(friend.id);
+          return (
+            <button
+              key={friend.id}
+              type="button"
+              onClick={() => onFriendClick?.(friend.id)}
+              className="group flex shrink-0 flex-col items-center gap-1"
+              title={friend.full_name}
+            >
+              <div className="relative isolate">
+                <div className="h-11 w-11 rounded-full border-2 border-white bg-slate-100 shadow-md transition-colors duration-200 group-hover:border-lime-400 group-hover:shadow-lg">
+                  <div className="h-full w-full overflow-hidden rounded-full">
+                    <AvatarImg
+                      src={friend.avatar_url}
+                      alt={friend.full_name}
+                      className="h-full w-full object-cover"
+                      placeholderClassName="h-full w-full"
+                      placeholderIconSize={22}
+                    />
+                  </div>
+                </div>
+                <span
+                  className={`absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-2 border-white shadow-sm transition-colors ${
+                    isOnline ? 'bg-emerald-400' : 'bg-slate-300'
+                  }`}
+                  aria-hidden
+                />
+              </div>
+              <span className="w-11 truncate text-center text-[9px] font-semibold text-slate-500 transition-colors group-hover:text-slate-800">
+                {(friend.full_name || '').split(' ')[0]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 export const ConversationList: React.FC<ConversationListProps> = ({
@@ -56,6 +115,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   onFriendClick,
   onConversationHover,
   onNewMessage,
+  isDismissibleEmptyThread,
+  onDismissEmptyConversation,
 }) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'requests'>(() =>
     initialListTab === 'requests' ? 'requests' : 'chats'
@@ -83,7 +144,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   const unreadRequests = requestConvs.length; // every request is "new"
 
   return (
-    <div className="flex flex-col w-full md:w-80 lg:w-96 bg-white border-b md:border-b-0 md:border-r border-slate-100 shrink-0 md:h-full">
+    <div className="flex min-h-0 flex-1 flex-col border-b border-slate-100 bg-white md:h-full md:w-80 md:shrink-0 md:flex-none lg:w-96 md:border-b-0 md:border-r">
       {/* Header — desktop only */}
       <div className="hidden md:block px-5 pt-6 pb-3 shrink-0">
         <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">
@@ -123,55 +184,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           )}
         </div>
 
-        {/* Friends chatheads — below search */}
-        {friends.length > 0 && (
-          <div className="mt-4">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Friends</p>
-            <div
-              className="-mx-1 flex flex-row flex-nowrap gap-4 overflow-x-auto px-2 py-2"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {friends.map(friend => {
-                const isOnline = onlineUserIds.has(friend.id);
-                return (
-                  <button
-                    key={friend.id}
-                    onClick={() => onFriendClick?.(friend.id)}
-                    className="flex flex-col items-center gap-1 shrink-0 group"
-                    title={friend.full_name}
-                  >
-                    <div className="relative isolate">
-                      {/*
-                        Border (not ring): ring uses box-shadow and gets clipped by overflow-x-auto.
-                        Border sits inside the box so the circle stays perfect inside the scrollport.
-                      */}
-                      <div className="h-11 w-11 rounded-full border-2 border-white bg-slate-100 shadow-md transition-colors duration-200 group-hover:border-lime-400 group-hover:shadow-lg">
-                        <div className="h-full w-full overflow-hidden rounded-full">
-                          <AvatarImg
-                            src={friend.avatar_url}
-                            alt={friend.full_name}
-                            className="h-full w-full object-cover"
-                            placeholderClassName="h-full w-full"
-                            placeholderIconSize={22}
-                          />
-                        </div>
-                      </div>
-                      <span
-                        className={`absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-2 border-white shadow-sm transition-colors ${
-                          isOnline ? 'bg-emerald-400' : 'bg-slate-300'
-                        }`}
-                        aria-hidden
-                      />
-                    </div>
-                    <span className="text-[9px] font-semibold text-slate-500 w-11 truncate text-center group-hover:text-slate-800 transition-colors">
-                      {(friend.full_name || '').split(' ')[0]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <FriendsChatheads
+          friends={friends}
+          onlineUserIds={onlineUserIds}
+          onFriendClick={onFriendClick}
+          className="mt-4"
+        />
       </div>
 
       {/* Tabs — visible on both mobile and desktop */}
@@ -220,16 +238,26 @@ export const ConversationList: React.FC<ConversationListProps> = ({
         )}
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto md:overflow-y-auto overflow-x-auto">
+      {/* Mobile: same Friends strip under Chats tab (desktop shows it in header above) */}
+      {activeTab === 'chats' && (
+        <FriendsChatheads
+          friends={friends}
+          onlineUserIds={onlineUserIds}
+          onFriendClick={onFriendClick}
+          className="shrink-0 border-b border-slate-100 bg-white px-3 pb-3 pt-1 md:hidden"
+        />
+      )}
+
+      {/* List — vertical rows on mobile + desktop (inbox style) */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {isLoading ? (
-          <div className="flex md:flex-col gap-3 md:gap-0 px-3 md:px-3 pb-3 md:pb-0 md:pt-1 md:space-y-1 flex-row">
+          <div className="flex flex-col gap-3 space-y-1 px-3 pb-3 pt-1">
             {Array(4).fill(0).map((_, i) => (
-              <div key={i} className="flex md:flex-row flex-col items-center md:items-center gap-2 md:gap-3 p-3 rounded-2xl shrink-0 md:shrink md:w-auto w-20">
-                <div className="w-12 h-12 rounded-full bg-slate-100 animate-pulse shrink-0" />
-                <div className="hidden md:flex flex-1 flex-col space-y-2 w-full">
-                  <div className="h-3 bg-slate-100 rounded-full animate-pulse w-2/3" />
-                  <div className="h-2.5 bg-slate-100 rounded-full animate-pulse w-4/5" />
+              <div key={i} className="flex w-full items-center gap-3 rounded-2xl p-3">
+                <div className="h-12 w-12 shrink-0 animate-pulse rounded-full bg-slate-100" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-3 w-2/3 animate-pulse rounded-full bg-slate-100" />
+                  <div className="h-2.5 w-4/5 animate-pulse rounded-full bg-slate-100" />
                 </div>
               </div>
             ))}
@@ -257,49 +285,28 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             )}
           </div>
         ) : (
-          <div className="flex md:flex-col gap-2 md:gap-0 px-3 pb-3 md:pb-4 md:px-3 md:space-y-1 flex-row md:flex-nowrap flex-nowrap md:overflow-visible overflow-x-auto">
+          <div className="flex flex-col gap-1 px-3 pb-3 md:space-y-1 md:px-3 md:pb-4">
             {displayed.map((conv) => {
               const isActive = selectedConversationId === conv.id;
               const hasUnread = (conv.unread_count ?? 0) > 0;
               const isRequest = requestConvIds.has(conv.id);
+              const showDismiss =
+                Boolean(isDismissibleEmptyThread?.(conv) && onDismissEmptyConversation);
               return (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => onSelect(conv)}
-                  onMouseEnter={() => onConversationHover?.(conv.id)}
-                  className={`shrink-0 md:shrink md:w-full transition-all text-left ${
+                  className={`group relative flex w-full items-stretch gap-0.5 rounded-2xl border transition-all ${
                     isActive
-                      ? 'md:bg-blue-50 md:border-blue-200'
-                      : 'md:hover:bg-slate-50'
-                  } md:rounded-2xl md:p-3 md:flex md:items-center md:gap-3 md:border md:border-transparent`}
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-transparent hover:bg-slate-50'
+                  }`}
                 >
-                  {/* Mobile: avatar-only pill */}
-                  <div className="flex md:hidden flex-col items-center gap-1 pt-1">
-                    <div className="relative">
-                      <AvatarImg
-                        src={conv.other_user?.avatar_url}
-                        alt={conv.other_user?.full_name || 'User'}
-                        className={`w-12 h-12 rounded-full object-cover border-2 ${
-                          isActive ? 'border-blue-500' : 'border-slate-100'
-                        }`}
-                        placeholderClassName={`h-12 w-12 border-2 ${isActive ? 'border-blue-500' : 'border-slate-100'}`}
-                        placeholderIconSize={24}
-                      />
-                      {isRequest ? (
-                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
-                      ) : hasUnread ? (
-                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">{conv.unread_count}</span>
-                      ) : null}
-                    </div>
-                    <span className={`text-[9px] font-black uppercase tracking-tight w-14 text-center truncate leading-tight ${
-                      isActive ? 'text-blue-600' : 'text-slate-600'
-                    }`}>
-                      {(conv.other_user?.full_name || 'Unknown').split(' ')[0]}
-                    </span>
-                  </div>
-
-                  {/* Desktop: full row */}
-                  <div className="hidden md:flex items-center gap-3 w-full">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(conv)}
+                    onMouseEnter={() => onConversationHover?.(conv.id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
+                  >
                     <div className="relative shrink-0">
                       <AvatarImg
                         src={conv.other_user?.avatar_url}
@@ -309,19 +316,21 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         placeholderIconSize={22}
                       />
                       {isRequest ? (
-                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-amber-400 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">!</span>
+                        <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-black leading-none text-white">!</span>
                       ) : hasUnread ? (
-                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">{conv.unread_count}</span>
+                        <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black leading-none text-white">{conv.unread_count}</span>
                       ) : null}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className={`font-black text-sm uppercase tracking-tight truncate ${
-                          isActive ? 'text-blue-700' : 'text-slate-800'
-                        }`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center justify-between gap-1">
+                        <span
+                          className={`truncate text-sm font-black uppercase tracking-tight ${
+                            isActive ? 'text-blue-700' : 'text-slate-800'
+                          }`}
+                        >
                           {conv.other_user?.full_name || 'Unknown'}
                         </span>
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex shrink-0 items-center gap-1">
                           {conv.last_message && (
                             <span className="text-[10px] font-semibold text-slate-400">
                               {formatTime(conv.last_message.created_at)}
@@ -330,9 +339,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         </div>
                       </div>
                       {conv.last_message ? (
-                        <p className={`text-xs truncate ${
-                          hasUnread ? 'text-slate-700 font-semibold' : 'text-slate-400'
-                        }`}>
+                        <p
+                          className={`truncate text-xs ${
+                            hasUnread ? 'font-semibold text-slate-700' : 'text-slate-400'
+                          }`}
+                        >
                           {conv.last_message.sender_id === currentUserId ? 'You: ' : ''}
                           {conv.last_message.content}
                         </p>
@@ -340,12 +351,45 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         <p className="text-xs text-slate-400">No messages yet</p>
                       )}
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {showDismiss && (
+                    <button
+                      type="button"
+                      title="Remove from list"
+                      aria-label="Remove draft conversation from list"
+                      className="flex shrink-0 items-center justify-center self-center rounded-xl px-2 text-slate-400 transition-colors hover:bg-slate-200/80 hover:text-slate-700 max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDismissEmptyConversation?.(conv);
+                      }}
+                    >
+                      <X size={18} strokeWidth={2.25} />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
         )}
+      </div>
+
+      {/* Mobile footer — Explore / Find Partners (flat, no card chrome) */}
+      <div className="shrink-0 border-t border-slate-100 bg-slate-50/90 px-4 py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+        <Link to="/partners" className="flex items-start gap-3 text-left active:opacity-80">
+          <Users className="mt-0.5 shrink-0 text-blue-600" size={22} strokeWidth={2} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Explore</p>
+            <p className="mt-0.5 text-base font-black uppercase tracking-tight text-slate-900">Find Partners</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+              Browse players, compare skills, send match invites, and open full profiles — same as Find Partners.
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-blue-600">
+              More details
+              <ArrowRight size={14} strokeWidth={2.5} />
+            </span>
+          </div>
+        </Link>
       </div>
     </div>
   );

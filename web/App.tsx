@@ -1571,7 +1571,7 @@ const NavigationHandler: React.FC<{
 
       <main
         ref={scrollContainerRef}
-        className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''}`}
+        className={`flex-1 flex flex-col h-screen overflow-y-auto relative scroll-smooth transition-all ${role !== 'guest' && !isAuthPage ? 'pt-16 md:pt-0' : ''} ${messagesPathActive ? 'max-md:overflow-hidden' : ''}`}
         data-page-theme={pageTheme}
         style={{ backgroundColor: mainBackgroundColor }}
       >

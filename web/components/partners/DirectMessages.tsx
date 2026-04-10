@@ -23,6 +23,29 @@ import { NewMessagePanel } from './NewMessagePanel';
 const MESSAGE_POLL_FALLBACK_MS = 6000;
 const CONVERSATION_POLL_FALLBACK_MS = 55000;
 
+const DISMISSED_EMPTY_CONV_KEY = 'pickleplay_dm_dismissed_empty';
+
+function loadDismissedEmptyConvIds(): Set<string> {
+  try {
+    if (typeof sessionStorage === 'undefined') return new Set();
+    const raw = sessionStorage.getItem(DISMISSED_EMPTY_CONV_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((x): x is string => typeof x === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistDismissedEmptyConvIds(ids: Set<string>) {
+  try {
+    sessionStorage.setItem(DISMISSED_EMPTY_CONV_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* ignore */
+  }
+}
+
 interface DirectMessagesProps {
   /** Fired after we attempt to mark the thread read — use to refresh nav / bell badges */
   onConversationRead?: (conversationId: string) => void;
@@ -54,6 +77,8 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   const [mutualUserIds, setMutualUserIds] = useState<Set<string> | null>(null);
   /** Conv IDs where the viewer has sent ≥1 message — keeps reply threads out of Requests for the initiator. */
   const [convIdsWhereViewerSent, setConvIdsWhereViewerSent] = useState<Set<string>>(() => new Set());
+  /** Empty non-mutual threads removed from the inbox until opened again or a message exists. */
+  const [dismissedEmptyConvIds, setDismissedEmptyConvIds] = useState<Set<string>>(loadDismissedEmptyConvIds);
 
   const refreshMutualFollows = useCallback(async () => {
     if (!currentUserId) {
@@ -374,13 +399,27 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     const friendIds = new Set(friends.map(f => f.id));
     return conversations.filter(c => {
       if (c.last_message) return true;
+      if (dismissedEmptyConvIds.has(c.id)) return false;
       if (c.id === outboundConversationId) return true;
       const otherId = c.other_user?.id;
       if (otherId && friendIds.has(otherId)) return true;
       if (otherId && mutualUserIds?.has(otherId)) return true;
       return false;
     });
-  }, [conversations, currentUserId, outboundConversationId, mutualUserIds, friends]);
+  }, [conversations, currentUserId, outboundConversationId, mutualUserIds, friends, dismissedEmptyConvIds]);
+
+  /** Empty thread with someone who is not a mutual friend — draft message request only. */
+  const isDismissibleEmptyThread = useCallback(
+    (c: ConversationWithDetails) => {
+      if (c.last_message) return false;
+      const oid = c.other_user?.id;
+      if (!oid) return false;
+      if (friends.some((f) => f.id === oid)) return false;
+      if (mutualUserIds?.has(oid)) return false;
+      return true;
+    },
+    [friends, mutualUserIds]
+  );
 
   // Supabase Realtime Presence — track who's online
   useEffect(() => {
@@ -418,6 +457,13 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   const selectConversation = (conversation: ConversationWithDetails) => {
+    setDismissedEmptyConvIds((prev) => {
+      if (!prev.has(conversation.id)) return prev;
+      const next = new Set(prev);
+      next.delete(conversation.id);
+      persistDismissedEmptyConvIds(next);
+      return next;
+    });
     setShowNewMessagePanel(false);
     setCanMessage(null);
     setSelectedConversation(conversation);
@@ -500,6 +546,37 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
     setSearchParams(tab === 'chats' || tab === 'requests' ? { tab } : {});
   };
 
+  /** Remove an empty draft “message request” thread from the Chats list (client-side; not deleted on server). */
+  const dismissEmptyConversation = useCallback(
+    (conv: ConversationWithDetails) => {
+      if (!isDismissibleEmptyThread(conv)) return;
+      setDismissedEmptyConvIds((prev) => {
+        const next = new Set(prev);
+        next.add(conv.id);
+        persistDismissedEmptyConvIds(next);
+        return next;
+      });
+      messageCacheRef.current.delete(conv.id);
+      if (selectedConversationRef.current?.id === conv.id) {
+        setShowNewMessagePanel(false);
+        setMessages([]);
+        setCanMessage(null);
+        setSelectedConversation(null);
+        const tab = searchParams.get('tab');
+        setSearchParams(tab === 'chats' || tab === 'requests' ? { tab } : {});
+      }
+      if (outboundConversationId === conv.id) {
+        setOutboundConversationId(null);
+        try {
+          sessionStorage.removeItem('pickleplay_dm_outbound_conv');
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [isDismissibleEmptyThread, outboundConversationId, searchParams, setSearchParams]
+  );
+
   // Accept a message request: follow the other user, then re-check mutual follow to unlock chat
   const handleAcceptRequest = async () => {
     if (!selectedConversation?.other_user?.id) return;
@@ -527,9 +604,15 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
   };
 
   return (
-    <div className="relative flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-white md:h-screen md:flex-row">
-      {/* Conversation list — above on mobile (compact strip), sidebar on desktop */}
-      <div className="flex max-h-36 shrink-0 md:h-full md:max-h-none">
+    <div className="relative flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-white md:h-screen md:max-h-none md:flex-row">
+      {/* Conversation list — mobile: full-height inbox; hidden while a thread is open. */}
+      <div
+        className={`md:max-h-none ${
+          selectedConversation
+            ? 'hidden shrink-0 md:flex md:h-full md:flex-col'
+            : 'flex min-h-0 flex-col max-md:flex-1 md:h-full md:shrink-0 md:flex-initial'
+        }`}
+      >
         <ConversationList
           conversations={visibleConversations}
           selectedConversationId={selectedConversation?.id}
@@ -545,25 +628,30 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
           onFriendClick={handleFriendClick}
           onConversationHover={prefetchConversationMessages}
           onNewMessage={() => setShowNewMessagePanel(true)}
+          isDismissibleEmptyThread={isDismissibleEmptyThread}
+          onDismissEmptyConversation={dismissEmptyConversation}
         />
       </div>
 
       {selectedConversation ? (
-        <ChatArea
-          conversation={selectedConversation}
-          messages={messages}
-          currentUserId={currentUserId}
-          newMessage={newMessage}
-          isSending={isSending}
-          messageGateState={composerGateState}
-          isThreadLoading={isMessagesLoading && messages.length === 0}
-          onAcceptRequest={handleAcceptRequest}
-          onNewMessageChange={setNewMessage}
-          onSendMessage={handleSendMessage}
-          onBack={handleBack}
-        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <ChatArea
+            conversation={selectedConversation}
+            messages={messages}
+            currentUserId={currentUserId}
+            newMessage={newMessage}
+            isSending={isSending}
+            messageGateState={composerGateState}
+            isThreadLoading={isMessagesLoading && messages.length === 0}
+            onAcceptRequest={handleAcceptRequest}
+            onNewMessageChange={setNewMessage}
+            onSendMessage={handleSendMessage}
+            onBack={handleBack}
+          />
+        </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-slate-50 px-6 py-12">
+        /* Desktop only: placeholder when no thread selected (mobile uses full-height list only). */
+        <div className="hidden min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-y-auto bg-slate-50 px-6 py-12 md:flex">
           <div className="w-full max-w-sm text-center">
             <MessageCircle className="mx-auto mb-4 text-slate-300" size={64} />
             <h2 className="text-xl font-black uppercase tracking-tight text-slate-400">Your Messages</h2>
@@ -575,8 +663,7 @@ const DirectMessages: React.FC<DirectMessagesProps> = ({ onConversationRead }) =
             >
               Send message
             </button>
-            <p className="mt-6 text-xs text-slate-400 md:block hidden">Or select a conversation from the list</p>
-            <p className="mt-6 text-xs text-slate-400 md:hidden">Or tap a conversation above</p>
+            <p className="mt-6 text-xs text-slate-400">Or select a conversation from the list</p>
 
             <div className="mt-10 w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm">
               <div className="flex items-start gap-3">

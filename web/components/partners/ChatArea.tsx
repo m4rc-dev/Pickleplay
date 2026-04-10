@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Lock, MessageCircle, Send, UserPlus } from 'lucide-react';
 import { type ConversationWithDetails, type DirectMessage } from '../../services/directMessages';
@@ -78,10 +78,43 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevMessageCountRef = useRef(0);
   const [isAcceptingRequest, setIsAcceptingRequest] = useState(false);
+  /** Extra bottom padding when the mobile OS keyboard shrinks the visual viewport */
+  const [keyboardOverlapPx, setKeyboardOverlapPx] = useState(0);
 
   useEffect(() => {
     prevMessageCountRef.current = 0;
   }, [conversation.id]);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const syncKeyboardInset = () => {
+      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOverlapPx(overlap);
+    };
+    vv.addEventListener('resize', syncKeyboardInset);
+    vv.addEventListener('scroll', syncKeyboardInset);
+    syncKeyboardInset();
+    return () => {
+      vv.removeEventListener('resize', syncKeyboardInset);
+      vv.removeEventListener('scroll', syncKeyboardInset);
+    };
+  }, []);
+
+  const bottomInsetStyle = useMemo(
+    () =>
+      ({
+        paddingBottom: `calc(max(0.75rem, env(safe-area-inset-bottom, 0px)) + ${keyboardOverlapPx}px)`,
+      }) as React.CSSProperties,
+    [keyboardOverlapPx]
+  );
+
+  useEffect(() => {
+    if (keyboardOverlapPx <= 0) return;
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    });
+  }, [keyboardOverlapPx]);
 
   // Squad-style: instant scroll on first paint; smooth only when new messages arrive
   useEffect(() => {
@@ -123,15 +156,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const otherUser = conversation.other_user;
 
   const renderComposer = (helperText: string, banner?: React.ReactNode) => (
-    <div className="bg-white border-t border-slate-100 px-4 py-3 shrink-0">
+    <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-3" style={bottomInsetStyle}>
       {banner}
       <form onSubmit={onSendMessage}>
         <div className="flex items-end gap-3">
-          <div className="flex-1 bg-slate-100 rounded-2xl px-4 py-2.5 min-h-[44px] flex items-end">
+          <div className="flex min-h-[44px] flex-1 items-end rounded-2xl bg-slate-100 px-4 py-2.5">
             <textarea
               ref={textareaRef}
               value={newMessage}
               onChange={handleInput}
+              onFocus={(e) => {
+                requestAnimationFrame(() =>
+                  e.target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                );
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -140,7 +178,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }}
               placeholder="Type a message..."
               rows={1}
-              className="w-full bg-transparent text-slate-900 placeholder-slate-400 text-sm resize-none outline-none max-h-32 leading-relaxed"
+              className="max-h-32 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-400"
               style={{ minHeight: '22px' }}
             />
           </div>
@@ -160,8 +198,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
-      <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 shrink-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 bg-white px-4 py-3">
         <button
           onClick={onBack}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest transition-all shadow-sm shrink-0"
@@ -198,7 +236,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </Link>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1 min-h-0">
+      <div className="min-h-0 flex-1 touch-pan-y space-y-1 overflow-y-auto overscroll-y-contain px-4 py-6">
         {isThreadLoading ? (
           <ThreadSkeleton />
         ) : messages.length === 0 ? (
@@ -275,7 +313,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {messageGateState === 'incoming_request' ? (
-        <div className="bg-white border-t border-slate-100 px-4 py-4 shrink-0">
+        <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-4" style={bottomInsetStyle}>
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
@@ -319,7 +357,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
       ) : messageGateState === 'outgoing_request' ? (
-        <div className="bg-white border-t border-slate-100 px-4 py-4 shrink-0">
+        <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-4" style={bottomInsetStyle}>
           <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
@@ -349,7 +387,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       ) : messageGateState === 'chat' ? (
         renderComposer('Enter to send - Shift+Enter for new line')
       ) : (
-        <div className="bg-white border-t border-slate-100 px-4 py-4 shrink-0">
+        <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-4" style={bottomInsetStyle}>
           <div className="flex flex-col items-center gap-2 py-2 text-center">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Lock size={15} className="text-slate-400" />

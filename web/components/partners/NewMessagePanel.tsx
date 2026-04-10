@@ -173,22 +173,20 @@ export const NewMessagePanel: React.FC<NewMessagePanelProps> = ({
       </div>
 
       <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Explore</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Explore</p>
         <Link
           to="/partners"
           onClick={onClose}
-          className="mt-1.5 flex items-center gap-2 rounded-xl py-1 text-left text-sm font-bold text-slate-800 transition-colors hover:text-blue-600"
+          className="mt-1.5 flex items-start gap-2.5 text-left text-sm font-bold text-slate-800 transition-colors hover:text-blue-600"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm ring-1 ring-slate-200">
-            <Users size={18} strokeWidth={2} />
-          </span>
+          <Users size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-blue-600" aria-hidden />
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-black uppercase tracking-tight text-slate-900">Find Partners</span>
             <span className="mt-0.5 block text-[11px] font-medium leading-snug text-slate-500">
               Profiles, skill fit, invites &amp; more
             </span>
           </span>
-          <ArrowRight size={18} className="shrink-0 text-slate-400" />
+          <ArrowRight size={18} className="mt-0.5 shrink-0 text-slate-400" />
         </Link>
       </div>
     </div>
