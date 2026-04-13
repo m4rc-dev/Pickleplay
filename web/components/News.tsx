@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, ArrowUpRight, Facebook, Copy } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Share2, Bookmark, AlertCircle, ExternalLink, Newspaper, RefreshCw, Clock, TrendingUp, Eye, ChevronRight, ChevronLeft, Flame, Zap, Trophy, UsersRound, Search, Filter, Loader2, Calendar, User, Tag, BookOpen, Facebook, Copy } from 'lucide-react';
 import useSEO from '../hooks/useSEO';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -474,24 +474,6 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
             />
           </div>
           <p className="max-w-3xl mx-auto text-[12px] text-slate-400 italic mb-10 font-medium">Photo credit: HomesPhNews</p>
-        </div>
-
-        {/* External Source Banner */}
-        <div className="px-6 sm:px-8 md:px-14 lg:px-20">
-          <div className="max-w-3xl mx-auto bg-slate-950 rounded-xl p-5 mb-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <ExternalLink size={16} className="text-lime-400 shrink-0" />
-              <p className="text-slate-300 text-sm font-medium">Originally published on <span className="text-white font-bold">HomesPhNews</span></p>
-            </div>
-            <a
-              href={article.sourceUrl || (article.slug ? `https://news.homes.ph/article/${article.slug}` : 'https://news.homes.ph/')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-lime-400 hover:bg-lime-300 text-slate-950 px-5 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 whitespace-nowrap flex items-center gap-1.5"
-            >
-              View Source <ArrowUpRight size={12} />
-            </a>
-          </div>
         </div>
 
         {/* ── Article Body ── */}
