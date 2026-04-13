@@ -92,6 +92,9 @@ const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1593113598332-cd288d649433?auto=format&fit=crop&q=80&w=800',
 ];
 
+/** Shown everywhere in the newsfeed and article view instead of API author names */
+const NEWSFEED_DISPLAY_AUTHOR = 'Pickleplay';
+
 const getNewsArticleSlug = (article: Pick<NormalizedArticle, 'slug' | 'title'>) => {
   const safeSlug = (article.slug || article.title || 'article')
     .toLowerCase()
@@ -161,7 +164,7 @@ function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
     publishedAt,
     image,
     readTime,
-    author: raw.author || raw.author_name || 'Staff',
+    author: NEWSFEED_DISPLAY_AUTHOR,
     slug: raw.slug || '',
     tags: raw.tags || raw.topics || raw.keywords || [],
     sourceUrl: raw.url || raw.external_url || '',
