@@ -210,7 +210,7 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
   if (!blocks || blocks.length === 0) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="sports-article-body">
       {blocks.map((block, idx) => {
         const style = buildBlockStyle(block.settings);
         const key = block.id ?? idx;
@@ -219,34 +219,21 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
           case 'text': {
             const text = block.content?.text;
             if (!text) return null;
-            const isHtml = /<[a-z][\s\S]*>/i.test(text);
 
             if (block.settings?.listType === 'bullet') {
-              return <ul key={key} className="list-disc pl-6 space-y-2 text-base md:text-lg leading-[1.8] font-medium text-slate-800" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ul key={key} className="list-disc pl-6 space-y-2 text-[1.0625rem] leading-[1.6] text-slate-500 font-normal my-5" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
             if (block.settings?.listType === 'number') {
-              return <ol key={key} className="list-decimal pl-6 space-y-2 text-base md:text-lg leading-[1.8] font-medium text-slate-800" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ol key={key} className="list-decimal pl-6 space-y-2 text-[1.0625rem] leading-[1.6] text-slate-500 font-normal my-5" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
 
-            // Strip HTML to get plain text, then split into 5-sentence paragraphs
-            const plainText = isHtml ? stripHtml(text) : text;
-            const groups = splitIntoSentenceGroups(plainText, 5);
-            if (groups.length === 0) return null;
             return (
-              <div key={key} className="space-y-8" style={style}>
-                {groups.map((chunk, gi) => (
-                  <p
-                    key={gi}
-                    className={
-                      idx === 0 && gi === 0
-                        ? 'text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight first-letter:text-6xl first-letter:font-black first-letter:text-blue-600 first-letter:mr-2 first-letter:float-left first-letter:leading-[0.8]'
-                        : 'text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight'
-                    }
-                  >
-                    {chunk}
-                  </p>
-                ))}
-              </div>
+              <div
+                key={key}
+                className="sports-text-block"
+                style={style}
+                dangerouslySetInnerHTML={{ __html: text }}
+              />
             );
           }
 
@@ -257,9 +244,9 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             if (!isValidImageUrl(src)) return null;
             if (heroImage && src === heroImage) return null;
             return (
-              <figure key={key} className="my-8">
-                <img src={src} alt={caption || ''} className="w-full rounded-2xl shadow-md" loading="lazy" />
-                {caption && <figcaption className="text-sm text-slate-400 mt-3 text-center italic">{caption}</figcaption>}
+              <figure key={key} className="my-10 -mx-2 sm:mx-0">
+                <img src={src} alt={caption || ''} className="w-full rounded-xl" loading="lazy" />
+                {caption && <figcaption className="text-[13px] text-slate-400 mt-3 italic font-medium">{caption}</figcaption>}
               </figure>
             );
           }
@@ -271,14 +258,14 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             const caption = block.content?.caption;
             const isLeft = block.type === 'left-image';
             return (
-              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-8 items-start`}>
+              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-10 items-start`}>
                 {isValidImageUrl(imgSrc) && (
                   <figure className="md:w-2/5 shrink-0">
-                    <img src={imgSrc} alt={caption || ''} className="w-full rounded-2xl shadow-md" loading="lazy" />
-                    {caption && <figcaption className="text-sm text-slate-400 mt-2 text-center italic">{caption}</figcaption>}
+                    <img src={imgSrc} alt={caption || ''} className="w-full rounded-xl" loading="lazy" />
+                    {caption && <figcaption className="text-[13px] text-slate-400 mt-2 italic font-medium">{caption}</figcaption>}
                   </figure>
                 )}
-                <div className="flex-1 text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+                <div className="flex-1 sports-text-block" style={style} dangerouslySetInnerHTML={{ __html: text }} />
               </div>
             );
           }
@@ -289,13 +276,13 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             const text = block.content?.text || '';
             const isLeft = block.type === 'split-left';
             return (
-              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-8 items-center`}>
+              <div key={key} className={`flex flex-col ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'} gap-6 my-10 items-center`}>
                 {isValidImageUrl(imgSrc) && (
                   <div className="md:w-1/2 shrink-0">
-                    <img src={imgSrc} alt="" className="w-full rounded-2xl shadow-md" loading="lazy" />
+                    <img src={imgSrc} alt="" className="w-full rounded-xl" loading="lazy" />
                   </div>
                 )}
-                <div className="flex-1 text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight" style={style} dangerouslySetInnerHTML={{ __html: text }} />
+                <div className="flex-1 sports-text-block" style={style} dangerouslySetInnerHTML={{ __html: text }} />
               </div>
             );
           }
@@ -306,9 +293,9 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             if (validImages.length === 0) return null;
             const cols = validImages.length <= 2 ? 'grid-cols-2' : validImages.length === 3 ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-3';
             return (
-              <div key={key} className={`grid ${cols} gap-3 my-8`}>
+              <div key={key} className={`grid ${cols} gap-3 my-10`}>
                 {validImages.map((src, i) => (
-                  <img key={i} src={src} alt="" className="w-full rounded-xl shadow-sm object-cover aspect-square" loading="lazy" />
+                  <img key={i} src={src} alt="" className="w-full rounded-xl object-cover aspect-square" loading="lazy" />
                 ))}
               </div>
             );
@@ -319,9 +306,9 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             const validImages = images.filter(isValidImageUrl);
             if (validImages.length === 0) return null;
             return (
-              <div key={key} className="flex flex-wrap gap-3 my-8">
+              <div key={key} className="flex flex-wrap gap-3 my-10">
                 {validImages.map((src, i) => (
-                  <img key={i} src={src} alt="" className="rounded-xl shadow-sm max-h-72 object-cover" loading="lazy" />
+                  <img key={i} src={src} alt="" className="rounded-xl max-h-72 object-cover" loading="lazy" />
                 ))}
               </div>
             );
@@ -335,17 +322,7 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
   );
 };
 
-function splitIntoSentenceGroups(text: string, perGroup: number): string[] {
-  const sentences = text.match(/[^.!?]+[.!?]+["']?/g) || [text];
-  const groups: string[] = [];
-  for (let i = 0; i < sentences.length; i += perGroup) {
-    const chunk = sentences.slice(i, i + perGroup).join('').trim();
-    if (chunk) groups.push(chunk);
-  }
-  return groups;
-}
-
-/** Format plain body text into paragraphs — 5 sentences per paragraph */
+/** Format plain body text into paragraphs — preserve original structure */
 function formatArticleBody(body: string): string {
   if (!body) return '';
 
@@ -355,23 +332,12 @@ function formatArticleBody(body: string): string {
     return body;
   }
 
-  // Try natural line-break paragraphs first
-  let paragraphs = body.split(/\n\n+/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean);
+  const paragraphs = body.split(/\n\n+/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean);
 
-  // If the whole body came as one big block, split by sentences into groups of 5
-  if (paragraphs.length <= 1 && body.length > 300) {
-    paragraphs = splitIntoSentenceGroups(body, 5);
-  }
-
-  const formatted = paragraphs.map((p, idx) => {
+  const formatted = paragraphs.map((p) => {
     let html = p.trim();
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    if (idx === 0) {
-      return `<p class="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight mb-8 first-letter:text-6xl first-letter:font-black first-letter:text-blue-600 first-letter:mr-2 first-letter:float-left first-letter:leading-[0.8]">${html}</p>`;
-    }
-
-    return `<p class="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight mb-8">${html}</p>`;
+    return `<p>${html}</p>`;
   }).join('');
 
   return formatted;
@@ -420,152 +386,130 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-700 pb-12">
+    <div className="animate-in fade-in duration-700 pb-12">
       {/* Back Button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-2.5 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+        className="flex items-center gap-2 px-4 py-2.5 mb-6 text-slate-500 hover:text-slate-900 font-bold text-xs uppercase tracking-widest transition-colors active:scale-95"
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={14} />
         Back to Newsfeed
       </button>
 
       {/* Article Content Card */}
-      <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-        {/* Category + Date Header */}
-        <div className="px-6 sm:px-8 md:px-12 pt-8 md:pt-10">
-          <div className="flex flex-wrap items-center gap-3 mb-5">
-            <span className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-600/20">
+      <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
+        {/* ── Top Bar: category accent stripe ── */}
+        <div className="h-1.5 bg-gradient-to-r from-blue-600 via-blue-500 to-lime-400" />
+
+        {/* ── Header Section ── */}
+        <div className="px-6 sm:px-8 md:px-14 lg:px-20 pt-10 md:pt-14">
+          {/* Category + Date */}
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <span className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-[0.2em]">
               {article.category}
             </span>
-            {article.publishedAt ? (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                <Calendar size={12} className="text-slate-300" />
-                Published&nbsp;{formatDateLong(article.publishedAt)}
+            {(article.publishedAt || article.rawDate) && (
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <Calendar size={12} />
+                {formatDateLong(article.publishedAt || article.rawDate)}
               </span>
-            ) : article.rawDate ? (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                <Calendar size={12} className="text-slate-300" />
-                {formatDateLong(article.rawDate)}
-              </span>
-            ) : null}
+            )}
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-[1.1] mb-7 uppercase">
+          <h1 className="text-3xl sm:text-4xl md:text-[2.75rem] lg:text-5xl font-black text-slate-950 tracking-[-0.03em] leading-[1.08] mb-5">
             {article.title}
           </h1>
 
+          {/* Excerpt / Lede */}
+          {article.excerpt && (
+            <p className="text-base md:text-lg text-slate-500 font-normal leading-[1.6] mb-8 max-w-2xl antialiased">
+              {article.excerpt}
+            </p>
+          )}
+
           {/* Author & Meta Row */}
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 mb-8 pb-8 border-b border-slate-100">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5 pb-8 border-b-2 border-slate-100">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm shadow-lg">
+              <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-lime-400 font-black text-sm ring-2 ring-slate-200">
                 {article.author.charAt(0).toUpperCase()}
               </div>
               <div>
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Written by</p>
-                <p className="text-sm font-black text-slate-900">{article.author}</p>
+                <p className="text-sm font-black text-slate-900 leading-tight">{article.author}</p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{article.readTime}</p>
               </div>
-            </div>
-
-            <div className="h-8 w-px bg-slate-100 hidden sm:block" />
-
-            {article.publishedAt && (
-              <>
-                <div>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Published</p>
-                  <p className="text-sm font-black text-slate-900">{formatDateLong(article.publishedAt)}</p>
-                </div>
-                <div className="h-8 w-px bg-slate-100 hidden sm:block" />
-              </>
-            )}
-
-            <div>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Reading Time</p>
-              <p className="text-sm font-black text-slate-900">{article.readTime}</p>
             </div>
 
             <div className="ml-auto flex flex-wrap justify-end gap-2">
               <button
                 onClick={handleFacebookShare}
-                className="h-10 px-4 flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#166FE5] rounded-xl text-white transition-all border border-[#1877F2]"
+                className="h-9 px-3.5 flex items-center justify-center gap-1.5 bg-[#1877F2] hover:bg-[#166FE5] rounded-lg text-white transition-all text-[10px] font-bold uppercase tracking-wider"
               >
-                <Facebook size={16} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Facebook</span>
+                <Facebook size={14} /> Share
               </button>
               <button
                 onClick={() => void handleCopyLink()}
-                className="h-10 px-4 flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-600 hover:text-blue-600 transition-all border border-slate-100"
+                className="h-9 px-3.5 flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-all text-[10px] font-bold uppercase tracking-wider"
               >
-                <Copy size={16} />
-                <span className="text-[10px] font-black uppercase tracking-widest">{copiedLink ? 'Copied' : 'Copy Link'}</span>
+                <Copy size={14} /> {copiedLink ? 'Copied!' : 'Link'}
               </button>
               <button
                 onClick={() => void handleShareMore()}
-                className="h-10 px-4 flex items-center justify-center gap-2 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-blue-600 transition-all border border-slate-200"
+                className="h-9 px-3.5 flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-all text-[10px] font-bold uppercase tracking-wider"
               >
-                <Share2 size={16} />
-                <span className="text-[10px] font-black uppercase tracking-widest">More</span>
+                <Share2 size={14} />
               </button>
             </div>
           </div>
         </div>
 
         {/* Hero Image */}
-        <div className="px-6 sm:px-8 md:px-12">
-          <div className="aspect-[16/9] w-full rounded-[20px] md:rounded-[24px] overflow-hidden mb-10 shadow-lg border border-slate-100">
+        <div className="px-6 sm:px-8 md:px-14 lg:px-20 pt-10">
+          <div className="max-w-3xl mx-auto rounded-xl overflow-hidden mb-2">
             <img
               src={article.image}
               alt={article.title}
-              className="w-full h-full object-cover"
+              className="w-full h-auto object-cover"
               onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
             />
           </div>
+          <p className="max-w-3xl mx-auto text-[12px] text-slate-400 italic mb-10 font-medium">Photo credit: HomesPhNews</p>
         </div>
 
         {/* External Source Banner */}
-        <div className="px-6 sm:px-8 md:px-12">
-          <div className="bg-slate-900 rounded-[20px] md:rounded-[24px] p-5 sm:p-6 md:p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-52 h-52 bg-blue-600/10 blur-[70px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-40 h-40 bg-lime-400/5 blur-[50px] translate-y-1/2 -translate-x-1/4 pointer-events-none" />
-
-            <div className="relative z-10 flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <ExternalLink size={18} className="text-lime-400" />
-              </div>
-              <div>
-                <p className="text-white text-sm font-black uppercase tracking-widest">External News</p>
-                <p className="text-slate-400 text-[11px] font-medium">This article was originally published on an external news site.</p>
-              </div>
+        <div className="px-6 sm:px-8 md:px-14 lg:px-20">
+          <div className="max-w-3xl mx-auto bg-slate-950 rounded-xl p-5 mb-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <ExternalLink size={16} className="text-lime-400 shrink-0" />
+              <p className="text-slate-300 text-sm font-medium">Originally published on <span className="text-white font-bold">HomesPhNews</span></p>
             </div>
-
             <a
               href={article.sourceUrl || (article.slug ? `https://news.homes.ph/article/${article.slug}` : 'https://news.homes.ph/')}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative z-10 bg-lime-400 hover:bg-lime-500 text-slate-950 px-6 sm:px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg whitespace-nowrap flex items-center gap-2"
+              className="bg-lime-400 hover:bg-lime-300 text-slate-950 px-5 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 whitespace-nowrap flex items-center gap-1.5"
             >
-              View Original Source <ArrowUpRight size={14} />
+              View Source <ArrowUpRight size={12} />
             </a>
           </div>
         </div>
 
-        {/* Article Body */}
-        <div className="px-6 sm:px-8 md:px-12 pb-10">
+        {/* ── Article Body ── */}
+        <div className="px-6 sm:px-8 md:px-14 lg:px-20 pb-10">
           <div className="max-w-3xl mx-auto">
             {hasContentBlocks ? (
               <ContentBlocksRenderer blocks={article.contentBlocks} heroImage={article.image} />
             ) : article.body ? (
-              <div className="article-body-content" dangerouslySetInnerHTML={{ __html: formattedBody }} />
+              <div className="sports-article-body" dangerouslySetInnerHTML={{ __html: formattedBody }} />
             ) : (
               <div className="space-y-6">
-                <p className="text-base md:text-[1.125rem] leading-[1.85] text-slate-800 font-medium tracking-tight">{article.excerpt}</p>
+                <p className="text-base md:text-lg text-slate-500 font-normal leading-[1.6] antialiased">{article.excerpt}</p>
                 {article.sourceUrl && (
                   <a
                     href={article.sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
                   >
                     Read Full Article <ExternalLink size={14} />
                   </a>
@@ -576,11 +520,11 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
 
           {/* Tags */}
           {article.tags.length > 0 && (
-            <div className="max-w-3xl mx-auto flex flex-wrap gap-2 pt-8 mt-8 border-t border-slate-100">
-              <Tag size={14} className="text-slate-300 mt-1" />
+            <div className="max-w-3xl mx-auto flex flex-wrap gap-2 pt-8 mt-10 border-t-2 border-slate-100">
+              <Tag size={14} className="text-slate-300 mt-0.5" />
               {article.tags.map((tag, i) => (
-                <span key={i} className="px-3.5 py-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 cursor-default rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors border border-slate-100">
-                  #{tag}
+                <span key={i} className="px-3 py-1 bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 cursor-default rounded-md text-[10px] font-bold uppercase tracking-widest transition-colors border border-slate-100">
+                  {tag}
                 </span>
               ))}
             </div>
@@ -588,21 +532,22 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         </div>
 
         {/* Bottom Actions */}
-        <div className="px-6 sm:px-8 md:px-12 pb-8 md:pb-10">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl mx-auto">
-            <button
-              onClick={onBack}
-              className="flex items-center justify-center gap-2.5 bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
-            >
-              <ArrowLeft size={16} />
-              Back to Stories
-            </button>
-            <button
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="flex items-center justify-center gap-2.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
-            >
-              Back to Top
-            </button>
+        <div className="border-t-2 border-slate-100">
+          <div className="px-6 sm:px-8 md:px-14 lg:px-20 py-6">
+            <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
+              <button
+                onClick={onBack}
+                className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95"
+              >
+                <ArrowLeft size={14} /> More Stories
+              </button>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="flex-1 flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-600 py-3.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 border border-slate-200"
+              >
+                Back to Top
+              </button>
+            </div>
           </div>
         </div>
       </div>

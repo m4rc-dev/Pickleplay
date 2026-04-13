@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import useSEO from '../hooks/useSEO';
 import { Search, ShoppingBag, SlidersHorizontal, Star, Heart, ArrowRight, PlusCircle, CheckCircle2, X, Trash2, Plus, Minus } from 'lucide-react';
 import { Product, CartItem } from '../types';
-import { ProductSkeleton } from './ui/Skeleton';
 
 const PRODUCTS: Product[] = [
   {
@@ -82,16 +81,10 @@ const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantit
   });
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
   const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const filteredProducts = PRODUCTS.filter(product => {
     const matchesCategory = activeCategory === 'All' || product.category === activeCategory;
@@ -178,46 +171,42 @@ const Shop: React.FC<ShopProps> = ({ cartItems, onAddToCart, onUpdateCartQuantit
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
-            {isLoading ? (
-              Array(8).fill(0).map((_, i) => <ProductSkeleton key={i} />)
-            ) : (
-              filteredProducts.map((product) => {
-                const isJustAdded = justAddedProductId === product.id;
-                return (
-                  <div key={product.id} className="group relative">
-                    <div className="aspect-[3/4] rounded-[40px] overflow-hidden bg-white relative mb-6 border border-slate-200 transition-all group-hover:shadow-2xl group-hover:-translate-y-2">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <button
-                        onClick={() => handleAddToCartClick(product)}
-                        disabled={isJustAdded}
-                        className={`absolute bottom-6 left-6 right-6 h-14 rounded-2xl font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all flex items-center justify-center gap-2 shadow-2xl ${isJustAdded ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-950 hover:bg-lime-400'
-                          }`}
-                      >
-                        {isJustAdded ? (
-                          <span className="flex items-center gap-2 animate-in fade-in">
-                            <CheckCircle2 size={16} /> ADDED!
-                          </span>
-                        ) : (
-                          <>
-                            <PlusCircle size={16} /> ADD TO CART
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="space-y-1 px-2">
-                      <h4 className="text-lg font-black text-slate-950 group-hover:text-blue-600 transition-colors leading-tight">{product.name}</h4>
-                      <p className="text-xl font-black text-slate-900">₱{product.price}</p>
-                    </div>
+            {filteredProducts.map((product) => {
+              const isJustAdded = justAddedProductId === product.id;
+              return (
+                <div key={product.id} className="group relative">
+                  <div className="aspect-[3/4] rounded-[40px] overflow-hidden bg-white relative mb-6 border border-slate-200 transition-all group-hover:shadow-2xl group-hover:-translate-y-2">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <button
+                      onClick={() => handleAddToCartClick(product)}
+                      disabled={isJustAdded}
+                      className={`absolute bottom-6 left-6 right-6 h-14 rounded-2xl font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all flex items-center justify-center gap-2 shadow-2xl ${isJustAdded ? 'bg-lime-400 text-slate-950' : 'bg-white text-slate-950 hover:bg-lime-400'
+                        }`}
+                    >
+                      {isJustAdded ? (
+                        <span className="flex items-center gap-2 animate-in fade-in">
+                          <CheckCircle2 size={16} /> ADDED!
+                        </span>
+                      ) : (
+                        <>
+                          <PlusCircle size={16} /> ADD TO CART
+                        </>
+                      )}
+                    </button>
                   </div>
-                )
-              })
-            )}
+
+                  <div className="space-y-1 px-2">
+                    <h4 className="text-lg font-black text-slate-950 group-hover:text-blue-600 transition-colors leading-tight">{product.name}</h4>
+                    <p className="text-xl font-black text-slate-900">₱{product.price}</p>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
