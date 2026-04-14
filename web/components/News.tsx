@@ -540,70 +540,223 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
   );
 };
 
-
-// ─── Skeleton ───────────────────────────────────────────────────
-const NewsSkeleton: React.FC = () => (
-  <div className="space-y-8 animate-in fade-in duration-700 pb-12">
+/** Page title block — matches Dashboard header rhythm (eyebrow + responsive h1 + body line). */
+const NewsfeedPageHeader: React.FC<{
+  actions?: React.ReactNode;
+  description?: string;
+}> = ({
+  actions,
+  description = 'Stay updated with the latest stories and community highlights.',
+}) => (
+  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
     <div>
-      <div className="h-10 bg-slate-200 rounded-xl w-64 mb-2 animate-pulse" />
-      <div className="h-5 bg-slate-100 rounded-lg w-80 animate-pulse" />
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+        <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Stories & updates</p>
+      </div>
+      <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-tight">
+        Newsfeed
+      </h1>
+      {description ? (
+        <p className="text-sm font-medium leading-relaxed text-slate-600 mt-2 max-w-xl">{description}</p>
+      ) : null}
     </div>
-    <div className="bg-white rounded-[32px] border border-slate-100 p-4 animate-pulse">
-      <div className="h-14 bg-slate-50 rounded-[20px] w-full" />
-    </div>
-    <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden animate-pulse">
-      <div className="flex flex-col lg:flex-row">
-        <div className="lg:w-3/5 aspect-[16/10] lg:aspect-auto bg-slate-100 min-h-[300px]" />
-        <div className="lg:w-2/5 p-10 space-y-4">
-          <div className="h-3 bg-slate-100 rounded w-20" />
-          <div className="h-8 bg-slate-100 rounded w-full" />
-          <div className="h-8 bg-slate-100 rounded w-3/4" />
+    {actions ? (
+      <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-0 shrink-0">{actions}</div>
+    ) : null}
+  </div>
+);
+
+// ─── Skeletons (mirror loaded newsfeed / article layouts) ───────
+const pulse = 'animate-pulse bg-slate-200/80';
+
+/** Featured + stories grid + promo + bottom cards + pagination */
+const NewsfeedBodySkeleton: React.FC = () => (
+  <div className="space-y-8">
+    {/* Featured story */}
+    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="flex flex-col lg:flex-row animate-pulse">
+        <div className="lg:w-3/5 aspect-[16/10] lg:aspect-auto bg-slate-100 min-h-[280px] lg:min-h-[360px]" />
+        <div className="lg:w-2/5 p-6 sm:p-8 lg:p-10 space-y-4">
+          <div className="h-3 bg-slate-100 rounded w-24" />
+          <div className="h-9 bg-slate-100 rounded w-full" />
+          <div className="h-9 bg-slate-100 rounded w-[92%] max-w-full" />
           <div className="h-4 bg-slate-100 rounded w-full" />
-          <div className="h-4 bg-slate-100 rounded w-2/3" />
+          <div className="h-4 bg-slate-100 rounded w-4/5" />
+          <div className="flex gap-3 pt-2">
+            <div className="h-8 w-8 rounded-lg bg-slate-100" />
+            <div className="h-4 w-24 bg-slate-100 rounded mt-2" />
+          </div>
         </div>
       </div>
     </div>
-    <div className="bg-white rounded-[32px] border border-slate-100 p-8 animate-pulse">
-      <div className="h-5 bg-slate-100 rounded w-32 mb-6" />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {[1, 2, 3, 4, 5, 6].map(i => (
-          <div key={i} className="space-y-4 rounded-[24px] border border-slate-50 p-1">
-            <div className="aspect-[16/10] bg-slate-100 rounded-[20px]" />
-            <div className="px-4 pb-4 space-y-3">
-              <div className="h-3 bg-slate-100 rounded w-16" />
-              <div className="h-5 bg-slate-100 rounded w-full" />
-              <div className="h-4 bg-slate-100 rounded w-3/4" />
-              <div className="h-3 bg-slate-100 rounded w-1/3" />
+
+    {/* Section + grid */}
+    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-50 animate-pulse">
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 rounded bg-slate-100" />
+          <div className="h-5 w-28 bg-slate-100 rounded" />
+          <div className="h-6 w-10 bg-slate-100 rounded-full" />
+        </div>
+        <div className="h-4 w-32 bg-slate-100 rounded" />
+      </div>
+      <div className="p-4 sm:p-6 md:p-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="rounded-[20px] sm:rounded-[24px] border border-slate-100 overflow-hidden animate-pulse">
+              <div className="aspect-[16/10] bg-slate-100" />
+              <div className="p-4 sm:p-5 space-y-3">
+                <div className="h-3 bg-slate-100 rounded w-20" />
+                <div className="h-5 bg-slate-100 rounded w-full" />
+                <div className="h-5 bg-slate-100 rounded w-5/6" />
+                <div className="h-3 bg-slate-100 rounded w-full" />
+                <div className="h-3 bg-slate-100 rounded w-2/3" />
+                <div className="flex justify-between pt-3 border-t border-slate-50">
+                  <div className="h-6 w-20 bg-slate-100 rounded" />
+                  <div className="h-4 w-16 bg-slate-100 rounded" />
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Promo banner */}
+    <div className="bg-slate-900 rounded-[32px] p-6 sm:p-8 md:p-12 flex flex-col lg:flex-row gap-8 lg:gap-10 animate-pulse">
+      <div className="lg:w-1/2 space-y-4">
+        <div className="h-6 w-40 bg-slate-700/80 rounded-full" />
+        <div className="h-10 w-full max-w-md bg-slate-700/60 rounded-xl" />
+        <div className="h-10 w-4/5 bg-slate-700/60 rounded-xl" />
+        <div className="h-16 w-full max-w-sm bg-slate-700/40 rounded-xl" />
+        <div className="h-12 w-48 bg-slate-700/80 rounded-2xl" />
+      </div>
+      <div className="lg:w-1/2 flex justify-center">
+        <div className="w-full max-w-xs sm:max-w-sm aspect-[4/3] rounded-[28px] bg-slate-700/50" />
+      </div>
+    </div>
+
+    {/* Bottom cards row */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-6 sm:p-8 animate-pulse">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="h-5 w-5 rounded bg-slate-100" />
+            <div className="h-5 w-36 bg-slate-100 rounded" />
           </div>
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map((j) => (
+              <div key={j} className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-slate-100 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-100 rounded w-3/4" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Pagination */}
+    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+      <div className="h-12 w-36 bg-slate-100 rounded-2xl" />
+      <div className="flex gap-2">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="w-10 h-10 rounded-xl bg-slate-100" />
+        ))}
+      </div>
+      <div className="h-12 w-36 bg-slate-100 rounded-2xl" />
+    </div>
+  </div>
+);
+
+const NewsSkeleton: React.FC = () => (
+  <div className="space-y-8 md:space-y-10 animate-fade-in pb-12" aria-busy="true" aria-label="Loading newsfeed">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="max-w-xl w-full space-y-3">
+        <div className="flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${pulse}`} />
+          <div className={`h-2.5 w-36 rounded ${pulse}`} />
+        </div>
+        <div className={`h-9 md:h-11 rounded-xl w-52 max-w-[85%] ${pulse}`} />
+        <div className={`h-4 rounded-lg w-full max-w-md ${pulse}`} />
+      </div>
+      <div className={`h-12 w-36 rounded-2xl shrink-0 ${pulse}`} />
+    </div>
+
+    <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 animate-pulse">
+      <div className="flex-1 h-14 bg-slate-100 rounded-[20px]" />
+      <div className="flex gap-2 overflow-hidden">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-12 w-24 shrink-0 bg-slate-100 rounded-[20px]" />
         ))}
       </div>
     </div>
+
+    <NewsfeedBodySkeleton />
   </div>
 );
 
-const NewsLoadingCard: React.FC<{ title?: string; subtitle?: string }> = ({
-  title = 'Loading News',
-  subtitle = 'Fetching the latest stories for you.',
-}) => (
-  <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-    <div>
-      <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
-      <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
-    </div>
-    <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-5 mx-auto">
-        <div className="flex gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+const ArticleDetailSkeleton: React.FC = () => (
+  <div className="animate-in fade-in duration-700 pb-12" aria-busy="true" aria-label="Loading article">
+    <div className={`h-10 w-44 rounded-lg mb-6 ${pulse}`} />
+    <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="h-1.5 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 animate-pulse" />
+      <div className="px-6 sm:px-8 md:px-14 lg:px-20 pt-10 md:pt-14 space-y-6">
+        <div className="flex flex-wrap gap-3 animate-pulse">
+          <div className="h-8 w-28 bg-slate-100 rounded-md" />
+          <div className="h-8 w-40 bg-slate-100 rounded-md" />
+        </div>
+        <div className="space-y-3">
+          <div className="h-12 sm:h-14 bg-slate-100 rounded-xl w-full max-w-4xl animate-pulse" />
+          <div className="h-12 sm:h-14 bg-slate-100 rounded-xl w-[92%] max-w-3xl animate-pulse" />
+          <div className="h-8 bg-slate-100 rounded-lg w-2/3 max-w-xl animate-pulse" />
+        </div>
+        <div className="space-y-2 max-w-2xl animate-pulse">
+          <div className="h-5 bg-slate-100 rounded w-full" />
+          <div className="h-5 bg-slate-100 rounded w-5/6" />
+        </div>
+        <div className="flex flex-wrap items-center gap-4 pb-8 border-b-2 border-slate-100 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-100" />
+            <div className="space-y-2">
+              <div className="h-4 w-28 bg-slate-100 rounded" />
+              <div className="h-3 w-20 bg-slate-100 rounded" />
+            </div>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <div className="h-9 w-24 bg-slate-100 rounded-lg" />
+            <div className="h-9 w-20 bg-slate-100 rounded-lg" />
+            <div className="h-9 w-10 bg-slate-100 rounded-lg" />
+          </div>
         </div>
       </div>
-      <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">{title}</h3>
-      <p className="text-slate-500 text-sm font-medium">{subtitle}</p>
+      <div className="px-6 sm:px-8 md:px-14 lg:px-20 pt-10 animate-pulse">
+        <div className="max-w-3xl mx-auto aspect-[16/9] bg-slate-100 rounded-xl mb-4" />
+        <div className="max-w-3xl mx-auto h-4 w-48 bg-slate-100 rounded mx-auto mb-10" />
+      </div>
+      <div className="px-6 sm:px-8 md:px-14 lg:px-20 pb-10 max-w-3xl mx-auto space-y-4 animate-pulse">
+        <div className="h-4 bg-slate-100 rounded w-full" />
+        <div className="h-4 bg-slate-100 rounded w-full" />
+        <div className="h-4 bg-slate-100 rounded w-[92%]" />
+        <div className="h-4 bg-slate-100 rounded w-full" />
+        <div className="h-4 bg-slate-100 rounded w-4/5" />
+        <div className="h-4 bg-slate-100 rounded w-full" />
+        <div className="h-4 bg-slate-100 rounded w-2/3" />
+      </div>
+      <div className="border-t-2 border-slate-100 px-6 sm:px-8 md:px-14 lg:px-20 py-6 animate-pulse">
+        <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
+          <div className="flex-1 h-12 bg-slate-100 rounded-xl" />
+          <div className="flex-1 h-12 bg-slate-100 rounded-xl" />
+        </div>
+      </div>
     </div>
   </div>
 );
+
 
 // ─── Main News Component ────────────────────────────────────────
 const News: React.FC = () => {
@@ -611,7 +764,8 @@ const News: React.FC = () => {
   const { legacyArticleId, slug } = useParams<{ legacyArticleId?: string; slug?: string }>();
   const isArticleRoute = Boolean(slug || legacyArticleId);
   const [articles, setArticles] = useState<NormalizedArticle[]>([]);
-  const [loading, setLoading] = useState(isArticleRoute);
+  /** Start true: list and article routes both load async; avoids empty-state flash on /news. */
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -687,7 +841,8 @@ const News: React.FC = () => {
   useEffect(() => {
     if (!isArticleRoute) {
       setSelectedArticle(null);
-      setLoading(false);
+      // Do not setLoading(false) here — it runs after fetchArticles' setLoading(true) on /news
+      // and would cancel the newsfeed skeleton until the request finishes.
       return;
     }
     fetchArticleDetail({ legacyId: legacyArticleId, articleSlug: slug });
@@ -778,11 +933,8 @@ const News: React.FC = () => {
   // ── Error State ──
   if (error) {
     return (
-      <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories.</p>
-        </div>
+      <div className="space-y-8 md:space-y-10 animate-fade-in pb-12">
+        <NewsfeedPageHeader />
         <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
           <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-5 mx-auto">
             <AlertCircle size={28} className="text-red-500" />
@@ -802,37 +954,42 @@ const News: React.FC = () => {
 
   // ── Loading ──
   if (loading) {
-    return isArticleRoute
-      ? <NewsLoadingCard title="Loading Article" subtitle="Opening this story for you." />
-      : <NewsSkeleton />;
+    return isArticleRoute ? <ArticleDetailSkeleton /> : <NewsSkeleton />;
   }
 
   if (isArticleRoute) {
-    return <NewsLoadingCard title="Loading Article" subtitle="Opening this story for you." />;
+    return <ArticleDetailSkeleton />;
   }
 
   // ── Empty State ──
   if (articles.length === 0) {
-    return <NewsLoadingCard title="Loading News" subtitle="Fetching the latest stories for you." />;
+    return (
+      <div className="space-y-8 md:space-y-10 animate-fade-in pb-12">
+        <NewsfeedPageHeader />
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm p-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-5 mx-auto">
+            <Newspaper size={28} className="text-slate-300" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">No articles yet</h3>
+          <p className="text-slate-500 text-sm font-medium max-w-md mx-auto">Check back soon for pickleball news and updates.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-      {/* ── Header ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase mb-2">Newsfeed</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Stay updated with the latest stories and community highlights.</p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="space-y-8 md:space-y-10 animate-fade-in pb-12">
+      <NewsfeedPageHeader
+        actions={
           <button
+            type="button"
             onClick={() => (isArticleRoute ? fetchArticleDetail({ legacyId: legacyArticleId, articleSlug: slug }) : fetchArticles(page))}
-            className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+            className="whitespace-nowrap bg-white border border-slate-200 text-slate-500 font-black text-[9px] md:text-[10px] uppercase tracking-widest h-12 px-6 rounded-2xl transition-all flex items-center gap-2 hover:text-slate-950 hover:border-slate-300 shadow-sm"
           >
             <RefreshCw size={16} /> Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Search + Category Filter Bar ── */}
       <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
@@ -863,6 +1020,10 @@ const News: React.FC = () => {
         </div>
       </div>
 
+      {loadingMore ? (
+        <NewsfeedBodySkeleton />
+      ) : (
+      <>
       {/* ── Featured Story Card ── */}
       {featuredArticle && (
         <div
@@ -1124,6 +1285,8 @@ const News: React.FC = () => {
             Next <ChevronRight size={16} />
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
