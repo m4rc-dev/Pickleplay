@@ -974,6 +974,22 @@ const NavigationHandler: React.FC<{
       <FeatureUnavailable featureName={featureKey} />
     );
 
+  // Guests are not blocked by showAuthLoadingScreen, so `feat()` must not deny routes until features are known.
+  const newsRouteElement =
+    isTwoFactorPending ? (
+      <Navigate to="/verify-2fa" replace />
+    ) : !featuresLoaded || feat('news') ? (
+      role === 'guest' ? (
+        <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full">
+          <News />
+        </div>
+      ) : (
+        <News />
+      )
+    ) : (
+      whenFeatureDisabled('news', role === 'guest' ? '/' : '/dashboard')
+    );
+
   const hasPlayerOthersNav =
     role === 'PLAYER' && (feat('community') || feat('partners') || feat('coaches'));
   const hasPlayerCompeteNav =
@@ -1643,9 +1659,9 @@ const NavigationHandler: React.FC<{
                       : <Shop cartItems={cartItems} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} onRemoveFromCart={onRemoveFromCart} />
                 }
               />
-              <Route path="/news" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('news') ? whenFeatureDisabled('news', role === 'guest' ? '/' : '/dashboard') : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
-              <Route path="/news/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
-              <Route path="/news/:legacyArticleId/:slug" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : role === 'guest' ? <div className="p-4 md:p-8 pt-20 md:pt-32 max-w-[1800px] mx-auto w-full"><News /></div> : <News />} />
+              <Route path="/news" element={newsRouteElement} />
+              <Route path="/news/:slug" element={newsRouteElement} />
+              <Route path="/news/:legacyArticleId/:slug" element={newsRouteElement} />
               <Route path="/academy" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('academy') ? whenFeatureDisabled('academy', role === 'guest' ? '/' : '/dashboard') : <div className="p-4 md:p-8 pt-24 max-w-[1800px] mx-auto w-full"><Academy /></div>} />
               <Route path="/guides" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : <GuidesIndex isLoggedIn={role !== 'guest'} />} />
               <Route path="/guides/skill-rating" element={isTwoFactorPending ? <Navigate to="/verify-2fa" replace /> : !feat('guides') ? whenFeatureDisabled('guides', role === 'guest' ? '/' : '/dashboard') : <SkillRatingQuiz isLoggedIn={role !== 'guest'} />} />
