@@ -224,10 +224,10 @@ const ContentBlocksRenderer: React.FC<{ blocks: ContentBlock[]; heroImage?: stri
             if (!text) return null;
 
             if (block.settings?.listType === 'bullet') {
-              return <ul key={key} className="list-disc pl-6 space-y-2 text-[1.0625rem] leading-[1.6] text-slate-500 font-normal my-5" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ul key={key} className="list-disc pl-6 space-y-2.5 text-[1.125rem] leading-[1.75] text-slate-800 font-medium my-5 tracking-[-0.005em]" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
             if (block.settings?.listType === 'number') {
-              return <ol key={key} className="list-decimal pl-6 space-y-2 text-[1.0625rem] leading-[1.6] text-slate-500 font-normal my-5" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+              return <ol key={key} className="list-decimal pl-6 space-y-2.5 text-[1.125rem] leading-[1.75] text-slate-800 font-medium my-5 tracking-[-0.005em]" style={style} dangerouslySetInnerHTML={{ __html: text }} />;
             }
 
             return (
@@ -420,13 +420,13 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
           </div>
 
           {/* Title */}
-          <h1 className="text-3xl sm:text-4xl md:text-[2.75rem] lg:text-5xl font-black text-slate-950 tracking-[-0.03em] leading-[1.08] mb-5">
+          <h1 className="text-3xl sm:text-4xl md:text-[2.75rem] lg:text-5xl font-black text-slate-950 tracking-[-0.04em] leading-[1.05] mb-5 uppercase">
             {article.title}
           </h1>
 
           {/* Excerpt / Lede */}
           {article.excerpt && (
-            <p className="text-base md:text-lg text-slate-500 font-normal leading-[1.6] mb-8 max-w-2xl antialiased">
+            <p className="text-base md:text-lg text-slate-700 font-semibold leading-[1.7] mb-8 max-w-2xl antialiased tracking-[-0.01em]">
               {article.excerpt}
             </p>
           )}
@@ -488,7 +488,7 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
               <div className="sports-article-body" dangerouslySetInnerHTML={{ __html: formattedBody }} />
             ) : (
               <div className="space-y-6">
-                <p className="text-base md:text-lg text-slate-500 font-normal leading-[1.6] antialiased">{article.excerpt}</p>
+                <p className="text-base md:text-lg text-slate-700 font-semibold leading-[1.7] antialiased tracking-[-0.01em]">{article.excerpt}</p>
                 {article.sourceUrl && (
                   <a
                     href={article.sourceUrl}
@@ -1056,7 +1056,7 @@ const News: React.FC = () => {
               <h2 className="hidden lg:block text-2xl xl:text-3xl font-black text-slate-900 tracking-tight leading-tight uppercase mb-4 group-hover:text-blue-600 transition-colors">
                 {featuredArticle.title}
               </h2>
-              <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-3 mb-6">
+              <p className="text-sm text-slate-600 font-semibold leading-relaxed line-clamp-3 mb-6 tracking-[-0.005em]">
                 {featuredArticle.excerpt}
               </p>
               <div className="flex flex-wrap items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -1128,7 +1128,7 @@ const News: React.FC = () => {
                     <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug uppercase tracking-tight mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
                       {article.title}
                     </h3>
-                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium leading-relaxed line-clamp-2 mb-4 flex-1">
+                    <p className="text-[11px] sm:text-xs text-slate-600 font-semibold leading-relaxed line-clamp-2 mb-4 flex-1 tracking-[-0.005em]">
                       {article.excerpt}
                     </p>
                     <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-slate-50">
