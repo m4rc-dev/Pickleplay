@@ -34,11 +34,11 @@
         },
         {
             "source": "/news/:slug",
-            "destination": "/api/news/og/:slug"
+            "destination": "/api/v1/news/articles/slug/:slug?format=html"
         },
         {
             "source": "/news/:id/:slug",
-            "destination": "/api/news/og/:slug"
+            "destination": "/api/v1/news/articles/slug/:slug?format=html"
         },
         {
             "source": "/api/(.*)",
