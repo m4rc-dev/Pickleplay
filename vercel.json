@@ -37,6 +37,14 @@
             "destination": "/api/$1"
         },
         {
+            "source": "/news/:slug",
+            "destination": "/api/news/og/:slug"
+        },
+        {
+            "source": "/news/:legacyId/:slug",
+            "destination": "/api/news/og/:slug"
+        },
+        {
             "source": "/((?!assets/|images/|api/).*)",
             "destination": "/index.html"
         }
