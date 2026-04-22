@@ -33,6 +33,14 @@
             "destination": "/api/sitemap.xml"
         },
         {
+            "source": "/news/:slug",
+            "destination": "/api/news/og/:slug"
+        },
+        {
+            "source": "/news/:id/:slug",
+            "destination": "/api/news/og/:slug"
+        },
+        {
             "source": "/api/(.*)",
             "destination": "/api/$1"
         },
