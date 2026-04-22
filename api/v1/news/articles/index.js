@@ -1,4 +1,6 @@
-﻿// Simple in-memory rate limiter for serverless
+﻿import { withResolvedArticleImage } from '../../../../shared/newsImage.js';
+
+// Simple in-memory rate limiter for serverless
 const ipHits = new Map();
 const RATE_WINDOW = 60_000; // 1 minute
 const RATE_MAX = 30;        // 30 requests per minute per IP
@@ -55,6 +57,15 @@ export default async function handler(req, res) {
         }
 
         const data = await response.json();
+
+        // Normalise article image URLs (objects/arrays/relative paths) so
+        // the client can treat `article.image` as a plain absolute URL.
+        if (Array.isArray(data?.data?.data)) {
+            data.data.data = data.data.data.map((article) =>
+                withResolvedArticleImage(article, NEWS_API_URL)
+            );
+        }
+
         res.setHeader('Content-Type', 'application/json');
         return res.status(200).json(data);
     } catch (error) {

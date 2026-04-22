@@ -141,8 +141,81 @@ const buildExcerpt = (raw: ApiArticle) => {
   return plainBody.length > 180 ? `${plainBody.substring(0, 180)}...` : plainBody;
 };
 
+// Looks at every plausible image field on an article and returns the first
+// value that is actually a usable URL string. The server-side proxy already
+// resolves object/array/relative shapes into a clean absolute URL, but we
+// repeat a tolerant version here so a misbehaving deployment, cache, or
+// unproxied API response can't take a thumbnail down silently.
+function extractArticleImage(raw: ApiArticle & Record<string, any>): string | null {
+  const candidates: unknown[] = [
+    raw.image,
+    raw.image_url,
+    (raw as any).imageUrl,
+    raw.featured_image,
+    (raw as any).featuredImage,
+    raw.thumbnail,
+    (raw as any).thumbnail_url,
+    (raw as any).thumbnailUrl,
+    (raw as any).cover_image,
+    (raw as any).coverImage,
+    (raw as any).cover,
+    (raw as any).hero_image,
+    (raw as any).heroImage,
+    (raw as any).main_image,
+    (raw as any).mainImage,
+    (raw as any).photo,
+    (raw as any).banner,
+    Array.isArray((raw as any).images) ? (raw as any).images[0] : undefined,
+  ];
+
+  const nestedKeys = ['url', 'src', 'href', 'path', 'file', 'original', 'large', 'medium', 'thumbnail', 'secure_url'];
+
+  const pickString = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = pickString(item);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (value && typeof value === 'object') {
+      for (const key of nestedKeys) {
+        if (key in (value as Record<string, unknown>)) {
+          const found = pickString((value as Record<string, unknown>)[key]);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  };
+
+  for (const candidate of candidates) {
+    const str = pickString(candidate);
+    if (!str) continue;
+    // Treat only absolute or protocol-relative URLs as usable on the client.
+    // The server already absolutises site-relative paths; if one still slips
+    // through here it would 404 against our own origin, so skip it.
+    if (/^(https?:\/\/|\/\/|data:image\/|blob:)/i.test(str)) return str;
+  }
+
+  return null;
+}
+
 function normalizeArticle(raw: ApiArticle, index: number): NormalizedArticle {
-  const image = raw.image || raw.image_url || raw.featured_image || raw.thumbnail || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
+  const resolvedImage = extractArticleImage(raw);
+  if (!resolvedImage && import.meta.env.DEV) {
+    console.warn('[News] Article has no resolvable thumbnail — using placeholder:', {
+      id: raw.id,
+      slug: raw.slug,
+      title: raw.title,
+      imageField: raw.image,
+    });
+  }
+  const image = resolvedImage || PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
   const publishedAt = raw.published_at || null;
   const date = publishedAt || raw.created_at || raw.date || '';
   const contentBlocks = parseContentBlocks(raw);
@@ -470,10 +543,13 @@ const ArticleDetail: React.FC<{ article: NormalizedArticle; onBack: () => void }
         <div className="px-6 sm:px-8 md:px-14 lg:px-20 pt-10">
           <div className="max-w-3xl mx-auto rounded-xl overflow-hidden mb-2">
             <img
-              src={article.image}
+              src={typeof article.image === 'string' && article.image.trim() ? article.image : FALLBACK_IMAGE}
               alt={article.title}
               className="w-full h-auto object-cover"
-              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                if (img.src !== FALLBACK_IMAGE) img.src = FALLBACK_IMAGE;
+              }}
             />
           </div>
           <p className="max-w-3xl mx-auto text-[12px] text-slate-400 italic mb-10 font-medium">Photo credit: HomesPhNews</p>
@@ -859,7 +935,10 @@ const News: React.FC = () => {
 
   const getArticleImage = (article: NormalizedArticle | undefined) => {
     if (!article) return FALLBACK_IMAGE;
-    return imageErrors.has(article.id) ? FALLBACK_IMAGE : article.image;
+    if (imageErrors.has(article.id)) return FALLBACK_IMAGE;
+    const { image } = article;
+    if (typeof image !== 'string' || !image.trim()) return FALLBACK_IMAGE;
+    return image;
   };
 
   useSEO(
@@ -869,13 +948,13 @@ const News: React.FC = () => {
           description: selectedArticle.excerpt,
           canonical: `https://www.pickleplay.ph${buildNewsArticlePath(selectedArticle)}`,
           ogType: 'article',
-          image: selectedArticle.image,
+          image: getArticleImage(selectedArticle),
           structuredData: {
             '@context': 'https://schema.org',
             '@type': 'NewsArticle',
             headline: selectedArticle.title,
             description: selectedArticle.excerpt,
-            image: [selectedArticle.image],
+            image: [getArticleImage(selectedArticle)],
             author: {
               '@type': 'Person',
               name: selectedArticle.author,

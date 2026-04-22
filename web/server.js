@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { createTwoFactorRouter } from './server/twoFactorRoutes.js';
+import { withResolvedArticleImage } from '../shared/newsImage.js';
 import { createSecurityReauthToolkit } from './server/securityReauthRoutes.js';
 import { buildPaymentConfirmationEmailHtml } from '../shared/paymentConfirmationEmailTemplate.js';
 
@@ -923,6 +924,13 @@ app.get('/api/v1/news/articles', async (req, res) => {
     const page = req.query.page || 1;
     const category = req.query.category || '';
     console.log(`📰 News API: fetched page ${page}${category ? ` (category: ${category})` : ' (all categories)'} - ${data?.data?.total || 0} total articles`);
+
+    if (Array.isArray(data?.data?.data)) {
+      data.data.data = data.data.data.map((article) =>
+        withResolvedArticleImage(article, NEWS_API_URL)
+      );
+    }
+
     res.json(data);
   } catch (error) {
     if (error.details) {
@@ -945,7 +953,7 @@ app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    res.json({ data: article });
+    res.json({ data: withResolvedArticleImage(article, NEWS_API_URL) });
   } catch (error) {
     if (error.status === 404) {
       return res.status(404).json({ error: 'Article not found' });
@@ -970,7 +978,7 @@ app.get('/api/v1/news/articles/:id', async (req, res) => {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    res.json({ data: article });
+    res.json({ data: withResolvedArticleImage(article, NEWS_API_URL) });
   } catch (error) {
     if (error.status === 404) {
       return res.status(404).json({ error: 'Article not found' });

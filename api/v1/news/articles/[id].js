@@ -1,3 +1,5 @@
+import { withResolvedArticleImage } from '../../../../shared/newsImage.js';
+
 // Simple in-memory rate limiter for serverless
 const ipHits = new Map();
 const RATE_WINDOW = 60_000;
@@ -87,7 +89,9 @@ export default async function handler(req, res) {
             return res.status(404).json({ error: 'Article not found' });
         }
 
-        return res.status(200).json({ data: article });
+        return res.status(200).json({
+            data: withResolvedArticleImage(article, NEWS_API_URL),
+        });
     } catch (error) {
         if (error.details) {
             console.error('News article detail upstream error:', error.status, error.details);

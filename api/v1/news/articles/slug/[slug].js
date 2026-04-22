@@ -1,3 +1,5 @@
+import { resolveArticleImage, withResolvedArticleImage } from '../../../../../shared/newsImage.js';
+
 // Article-by-slug endpoint.
 //
 // Primary mode (JSON):
@@ -153,28 +155,8 @@ function buildDescription(article) {
     return DEFAULT_DESCRIPTION;
 }
 
-function toAbsoluteImage(raw) {
-    if (!raw) return null;
-    const url = String(raw).trim();
-    if (!url) return null;
-    if (/^https?:\/\//i.test(url)) return url;
-    if (url.startsWith('//')) return `https:${url}`;
-    if (url.startsWith('/')) return `${SITE_URL}${url}`;
-    return url;
-}
-
-function pickImage(article) {
-    const candidates = [
-        article?.image,
-        article?.image_url,
-        article?.featured_image,
-        article?.thumbnail,
-    ];
-    for (const candidate of candidates) {
-        const absolute = toAbsoluteImage(candidate);
-        if (absolute) return absolute;
-    }
-    return DEFAULT_IMAGE;
+function pickImage(article, apiBase) {
+    return resolveArticleImage(article, apiBase) || DEFAULT_IMAGE;
 }
 
 function buildMetaBlock({ title, description, image, url }) {
@@ -332,7 +314,9 @@ export default async function handler(req, res) {
     if (!article) {
         return res.status(404).json({ error: 'Article not found' });
     }
-    return res.status(200).json({ data: article });
+    return res.status(200).json({
+        data: withResolvedArticleImage(article, process.env.HOMESPH_NEWS_API_URL),
+    });
 }
 
 function respondHtml(res, html) {
@@ -349,7 +333,7 @@ async function renderOgResponse(req, res, slug, article) {
         meta = {
             title: `${articleTitle} | Pickleball News Philippines`,
             description: buildDescription(article),
-            image: pickImage(article),
+            image: pickImage(article, process.env.HOMESPH_NEWS_API_URL),
             url: canonicalUrl,
         };
     } else {
