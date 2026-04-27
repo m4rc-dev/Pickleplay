@@ -1,4 +1,4 @@
-﻿import { withResolvedArticleImage } from '../../../../shared/newsImage.js';
+﻿import { resolveNewsApiBase, withResolvedArticleImage } from '../../../../shared/newsImage.js';
 
 // Simple in-memory rate limiter for serverless
 const ipHits = new Map();
@@ -26,12 +26,12 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many requests. Please slow down.' });
     }
 
-    const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
+    const NEWS_API_URL = resolveNewsApiBase();
     const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 
     try {
-        if (!NEWS_API_URL || !NEWS_API_KEY) {
-            console.error('News API not configured in environment variables');
+        if (!NEWS_API_KEY) {
+            console.error('News API key not configured in environment variables');
             return res.status(500).json({ error: 'News API not configured on server.' });
         }
 

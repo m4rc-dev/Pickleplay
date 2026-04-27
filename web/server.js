@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { createTwoFactorRouter } from './server/twoFactorRoutes.js';
-import { withResolvedArticleImage } from '../shared/newsImage.js';
+import { resolveNewsApiBase, withResolvedArticleImage } from '../shared/newsImage.js';
 import { createSecurityReauthToolkit } from './server/securityReauthRoutes.js';
 import { buildPaymentConfirmationEmailHtml } from '../shared/paymentConfirmationEmailTemplate.js';
 
@@ -755,7 +755,7 @@ const sendTwoFactorEmail = async ({ to, code, expiresInMinutes }) => {
 };
 
 // News API config
-const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
+const NEWS_API_URL = resolveNewsApiBase();
 const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
 
 const getNewsApiHeaders = () => ({
@@ -916,8 +916,8 @@ app.get('/auth/callback', (req, res) => {
 // Proxies requests to HomesPh News API, injecting the secure API key
 app.get('/api/v1/news/articles', async (req, res) => {
   try {
-    if (!NEWS_API_URL || !NEWS_API_KEY) {
-      return res.status(500).json({ error: 'News API not configured. Set HOMESPH_NEWS_API_URL and HOMESPH_NEWS_API_KEY in .env.local' });
+    if (!NEWS_API_KEY) {
+      return res.status(500).json({ error: 'News API not configured. Set HOMESPH_NEWS_API_KEY in .env.local' });
     }
 
     const data = await fetchNewsArticlesPage(req.query);
@@ -943,7 +943,7 @@ app.get('/api/v1/news/articles', async (req, res) => {
 
 app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
   try {
-    if (!NEWS_API_URL || !NEWS_API_KEY) {
+    if (!NEWS_API_KEY) {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 
@@ -968,7 +968,7 @@ app.get('/api/v1/news/articles/slug/:slug', async (req, res) => {
 
 app.get('/api/v1/news/articles/:id', async (req, res) => {
   try {
-    if (!NEWS_API_URL || !NEWS_API_KEY) {
+    if (!NEWS_API_KEY) {
       return res.status(500).json({ error: 'News API not configured.' });
     }
 

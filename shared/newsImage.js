@@ -1,14 +1,50 @@
-// Shared thumbnail resolver for HomesPhNews article payloads.
+// Shared utilities for HomesPh / api.homes.ph news article payloads.
 //
-// The upstream API is inconsistent: for some articles the image is a plain
-// URL string, for others it's nested inside an object (e.g. { url, src, path,
-// file, original, large, thumbnail }) or the first element of an images[]
-// array, or a site-relative path like "storage/articles/xxx.jpg".
+// 1. Thumbnail resolver (resolveArticleImage / withResolvedArticleImage)
+//    The upstream API is inconsistent: for some articles the image is a plain
+//    URL string, for others it's nested inside an object (e.g.
+//    { url, src, path, file, original, large, thumbnail }) or the first
+//    element of an images[] array, or a site-relative path like
+//    "storage/articles/xxx.jpg". This module centralises that mess so every
+//    place that surfaces an article image (the list/detail/slug proxies, the
+//    OG renderer, and the React newsfeed) gets the same behaviour: a
+//    guaranteed absolute URL, or null if nothing usable can be found.
 //
-// This module centralises that mess so every place that surfaces an article
-// image (the list/detail/slug proxies, the OG renderer, and the React
-// newsfeed) ends up with the same behaviour: a guaranteed absolute URL, or
-// null if we truly couldn't find anything usable.
+// 2. API base resolver (resolveNewsApiBase)
+//    Defensive resolver for the news API host. Falls back to the current
+//    production host when the env var is missing OR still points at the
+//    decommissioned Cloud Run deployment. See function for details.
+
+const DEFAULT_NEWS_API_BASE = 'https://api.homes.ph';
+// Hosts that used to serve the news API but no longer respond (return 404).
+// We override env vars that still reference these so a stale Vercel config
+// doesn't 404 the production newsfeed.
+const DECOMMISSIONED_NEWS_API_HOSTS = [
+    'homesphnews-api-394504332858',
+];
+
+/**
+ * Resolves the base URL for the HomesPh / api.homes.ph external news API.
+ *
+ * Resolution order:
+ *   1. `process.env.HOMESPH_NEWS_API_URL` — when set AND not pointing at a
+ *      known-decommissioned host.
+ *   2. `https://api.homes.ph` — the current production host.
+ *
+ * The override on (1) exists because the previous Cloud Run host
+ * (homesphnews-api-394504332858.asia-southeast1.run.app) was retired and now
+ * returns HTTP 404. Some deployed environments still have that host pinned
+ * in their env vars; rather than silently 404 the entire newsfeed we route
+ * those callers at the live host.
+ */
+export function resolveNewsApiBase() {
+    const raw = String(process.env.HOMESPH_NEWS_API_URL || '').trim();
+    if (!raw) return DEFAULT_NEWS_API_BASE;
+    if (DECOMMISSIONED_NEWS_API_HOSTS.some((host) => raw.includes(host))) {
+        return DEFAULT_NEWS_API_BASE;
+    }
+    return raw.replace(/\/+$/, '');
+}
 
 const IMAGE_KEYS_IN_PRIORITY = [
     'image',

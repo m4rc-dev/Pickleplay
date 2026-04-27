@@ -1,4 +1,4 @@
-import { resolveArticleImage, withResolvedArticleImage } from '../../../../../shared/newsImage.js';
+import { resolveArticleImage, resolveNewsApiBase, withResolvedArticleImage } from '../../../../../shared/newsImage.js';
 
 // Article-by-slug endpoint.
 //
@@ -290,7 +290,7 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many requests. Please slow down.' });
     }
 
-    const NEWS_API_URL = process.env.HOMESPH_NEWS_API_URL;
+    const NEWS_API_URL = resolveNewsApiBase();
     const NEWS_API_KEY = process.env.HOMESPH_NEWS_API_KEY;
     const rawSlug = req.query?.slug;
     const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
@@ -309,7 +309,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid article slug.' });
     }
 
-    if (!NEWS_API_URL || !NEWS_API_KEY) {
+    if (!NEWS_API_KEY) {
         if (wantsHtml) {
             return respondHtml(res, renderFallbackHtml({
                 title: DEFAULT_TITLE,
@@ -345,7 +345,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Article not found' });
     }
     return res.status(200).json({
-        data: withResolvedArticleImage(article, process.env.HOMESPH_NEWS_API_URL),
+        data: withResolvedArticleImage(article, resolveNewsApiBase()),
     });
 }
 
@@ -374,7 +374,7 @@ async function renderOgResponse(req, res, slug, article) {
         meta = {
             title: `${articleTitle} | Pickleball News Philippines`,
             description: buildDescription(article),
-            image: pickImage(article, process.env.HOMESPH_NEWS_API_URL),
+            image: pickImage(article, resolveNewsApiBase()),
             url: canonicalUrl,
             publishedAt: toIsoDate(article.published_at || article.created_at || article.date),
             updatedAt: toIsoDate(article.updated_at || article.published_at || article.created_at),

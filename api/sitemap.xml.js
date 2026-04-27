@@ -1,3 +1,5 @@
+import { resolveNewsApiBase } from '../shared/newsImage.js';
+
 const BASE_URL = 'https://www.pickleplay.ph';
 
 const STATIC_ROUTES = [
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
     return res.status(405).send('Method not allowed');
   }
 
-  const newsApiUrl = process.env.HOMESPH_NEWS_API_URL;
+  const newsApiUrl = resolveNewsApiBase();
   const newsApiKey = process.env.HOMESPH_NEWS_API_KEY;
 
   const staticEntries = STATIC_ROUTES.map((route) =>
