@@ -18,7 +18,7 @@ It focuses on "what to call" and "how to render" for a partner frontend integrat
 
 | Environment | Base URL |
 |---|---|
-| Production | `https://homesphnews-api-394504332858.asia-southeast1.run.app/api` |
+| Production | `https://api.homes.ph/api` |
 | Local (server) | `http://127.0.0.1:8000/api` |
 
 All partner endpoints live under:

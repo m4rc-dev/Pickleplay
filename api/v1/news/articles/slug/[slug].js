@@ -159,11 +159,39 @@ function pickImage(article, apiBase) {
     return resolveArticleImage(article, apiBase) || DEFAULT_IMAGE;
 }
 
-function buildMetaBlock({ title, description, image, url }) {
+async function probeImageMeta(imageUrl) {
+    // Ask the image host what it actually is. We use this to:
+    //   1. Declare og:image:type honestly (scrapers reject previews when
+    //      the URL extension and Content-Type disagree without a declared
+    //      type).
+    //   2. Avoid lying about width/height - Facebook silently drops the
+    //      preview when declared dimensions don't match the decoded image.
+    const fallback = { type: 'image/jpeg' };
+    try {
+        const response = await fetch(imageUrl, {
+            method: 'HEAD',
+            headers: { 'User-Agent': 'PicklePlayOGRenderer/1.0' },
+        });
+        if (!response.ok) return fallback;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.startsWith('image/')) {
+            return { type: contentType.split(';')[0].trim() };
+        }
+        return fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+function buildMetaBlock({ title, description, image, url, imageType, publishedAt, updatedAt }) {
     const safeTitle = escapeHtml(title);
     const safeDescription = escapeHtml(description);
     const safeImage = escapeHtml(image);
     const safeUrl = escapeHtml(url);
+    const safeImageType = escapeHtml(imageType || 'image/jpeg');
+    const now = new Date().toISOString();
+    const safeUpdated = escapeHtml(updatedAt || publishedAt || now);
+    const safePublished = escapeHtml(publishedAt || '');
 
     return `
     <!-- Dynamic Open Graph (injected by /api/v1/news/articles/slug) -->
@@ -179,9 +207,11 @@ function buildMetaBlock({ title, description, image, url }) {
     <meta property="og:description" content="${safeDescription}">
     <meta property="og:image" content="${safeImage}">
     <meta property="og:image:secure_url" content="${safeImage}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="${safeImageType}">
     <meta property="og:image:alt" content="${safeTitle}">
+    <meta property="og:updated_time" content="${safeUpdated}">${safePublished ? `
+    <meta property="article:published_time" content="${safePublished}">` : ''}
+    <meta property="article:modified_time" content="${safeUpdated}">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@PicklePlayPH">
@@ -325,6 +355,17 @@ function respondHtml(res, html) {
     return res.status(200).send(html);
 }
 
+function toIsoDate(value) {
+    if (!value) return '';
+    try {
+        const date = new Date(String(value).replace(' ', 'T'));
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toISOString();
+    } catch {
+        return '';
+    }
+}
+
 async function renderOgResponse(req, res, slug, article) {
     const canonicalUrl = `${SITE_URL}/news/${encodeURIComponent(slug)}`;
     let meta;
@@ -335,6 +376,8 @@ async function renderOgResponse(req, res, slug, article) {
             description: buildDescription(article),
             image: pickImage(article, process.env.HOMESPH_NEWS_API_URL),
             url: canonicalUrl,
+            publishedAt: toIsoDate(article.published_at || article.created_at || article.date),
+            updatedAt: toIsoDate(article.updated_at || article.published_at || article.created_at),
         };
     } else {
         meta = {
@@ -344,6 +387,11 @@ async function renderOgResponse(req, res, slug, article) {
             url: canonicalUrl,
         };
     }
+
+    // Probe the actual image so we declare og:image:type honestly. If the
+    // probe fails we gracefully fall back to image/jpeg inside buildMetaBlock.
+    const probe = await probeImageMeta(meta.image);
+    meta.imageType = probe.type;
 
     const origin = resolveOrigin(req);
     const baseHtml = await fetchIndexHtml(origin);

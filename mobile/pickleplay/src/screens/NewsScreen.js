@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 
-const HOMESPH_NEWS_API_URL = 'https://homesphnews-api-394504332858.asia-southeast1.run.app';
+const HOMESPH_NEWS_API_URL = 'https://api.homes.ph';
 const HOMESPH_NEWS_API_KEY = '1nZKZvIK2EPpCIykBheHylG5tuGCJ5wVSSSwui2ESxhZwDrqwNiWxQJOCyr2XEW6';
 
 const MOCK_NEWS = [
