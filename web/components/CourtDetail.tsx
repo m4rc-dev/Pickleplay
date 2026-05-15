@@ -45,6 +45,12 @@ const ALL_HOUR_SLOTS = [
 const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
     const openH = parseInt(openTime.split(':')[0], 10);
     const closeH = parseInt(closeTime.split(':')[0], 10);
+    if (closeH < openH || closeH === 0) {
+        return [
+            ...ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH),
+            ...ALL_HOUR_SLOTS.filter((_, idx) => idx < closeH),
+        ];
+    }
     return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
 };
 

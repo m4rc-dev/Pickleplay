@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 
+let _dmUnreadRpcUnavailable = false;
+
 function debounceLead(fn: () => void, ms: number) {
   let t: ReturnType<typeof setTimeout> | null = null;
   return () => {
@@ -19,8 +21,17 @@ export const getTotalUnreadCount = async (): Promise<number> => {
   if (!uid) return 0;
   const user = { id: uid };
   try {
-    const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_dm_unread_total');
-    if (!rpcErr && typeof rpcCount === 'number') return rpcCount;
+    if (!_dmUnreadRpcUnavailable) {
+      const { data: rpcCount, error: rpcErr } = await supabase.rpc('get_dm_unread_total');
+      if (!rpcErr && typeof rpcCount === 'number') return rpcCount;
+
+      const rpcCode = (rpcErr as any)?.code;
+      const rpcMessage = String((rpcErr as any)?.message || '').toLowerCase();
+      const functionMissing = rpcCode === '42883' || rpcCode === 'PGRST202' || rpcMessage.includes('get_dm_unread_total');
+      if (functionMissing) {
+        _dmUnreadRpcUnavailable = true;
+      }
+    }
 
     const { data: participantData } = await supabase
       .from('conversation_participants')

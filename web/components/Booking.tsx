@@ -41,12 +41,19 @@ const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
   const openH = open.h;
   let closeH = close.h;
 
-  // Handle 00:00 (midnight) or reversed ranges as 24:00 for 24h operation
-  if ((closeH === 0 && close.m === 0) || closeH < openH || (closeH === openH && close.m <= open.m)) {
+  // Same start/end means 24-hour operation.
+  if (closeH === openH && close.m <= open.m) {
     closeH = 24;
   } else if (close.m > 0) {
     // Round up to include the last hour slot when closing at hh:mm
     closeH = Math.min(24, closeH + 1);
+  }
+
+  if (closeH < openH || (closeH === 0 && close.m === 0)) {
+    return [
+      ...ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH),
+      ...ALL_HOUR_SLOTS.filter((_, idx) => idx < closeH),
+    ];
   }
 
   return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
@@ -74,6 +81,8 @@ type LocationGroup = {
   description: string;
   amenities: string[];
 };
+
+type CourtPriceRange = { min: number; max: number; hasRules: boolean };
 
 const toPhDateStr = (date: Date) => {
   const phDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
@@ -201,6 +210,70 @@ const getRegion = (city: string | null | undefined) => city || '';
 
 const filterCourtsByPricingRules = async (courts: any[]) => ({ filtered: courts });
 
+const getCourtDisplayPriceRange = (
+  court: Court,
+  ranges: Map<string, CourtPriceRange>
+): CourtPriceRange => (
+  ranges.get(court.id) || {
+    min: (court as any).pricePerHour ?? (court as any).base_price ?? 0,
+    max: (court as any).pricePerHour ?? (court as any).base_price ?? 0,
+    hasRules: false,
+  }
+);
+
+const formatCourtPriceRange = (range: CourtPriceRange): string => {
+  if (range.max <= 0) return 'Price not set';
+  return range.min === range.max ? `₱${range.min}/hr` : `₱${range.min}–₱${range.max}/hr`;
+};
+
+const getDayOfWeekFromDateStr = (dateStr: string): number => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).getDay();
+};
+
+const timeToMinutes = (time: string): number => {
+  const [hour, minute = 0] = time.split(':').map(Number);
+  return hour * 60 + minute;
+};
+
+const slotTo24hTime = (slot: string): string => {
+  const [time, period] = slot.split(' ');
+  let [hour, minute] = time.split(':').map(Number);
+  if (period === 'PM' && hour !== 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return `${hour.toString().padStart(2, '0')}:${(minute || 0).toString().padStart(2, '0')}:00`;
+};
+
+const isSlotCoveredByRule = (slot: string, rule: PricingRule): boolean => {
+  const slotStart = timeToMinutes(slotTo24hTime(slot));
+  const ruleStart = timeToMinutes(rule.start_time);
+  const ruleEnd = timeToMinutes(rule.end_time);
+  return slotStart >= ruleStart && slotStart < ruleEnd;
+};
+
+const getRuleOnlyPriceRange = (
+  rules: PricingRule[],
+  dateStr: string,
+  basePricePerHour: number,
+  slots?: string[]
+): CourtPriceRange => {
+  const dateRules = rules.filter(rule => rule.specific_date === dateStr);
+  const dayRules = dateRules.length > 0
+    ? dateRules
+    : rules.filter(rule => rule.specific_date === null && rule.day_of_week === getDayOfWeekFromDateStr(dateStr));
+
+  const relevantRules = slots && slots.length > 0
+    ? dayRules.filter(rule => slots.some(slot => isSlotCoveredByRule(slot, rule)))
+    : dayRules;
+
+  const prices = (relevantRules.length > 0 ? relevantRules : dayRules).map(rule => Number(rule.price_per_hour));
+  if (prices.length > 0) {
+    return { min: Math.min(...prices), max: Math.max(...prices), hasRules: true };
+  }
+
+  return { min: basePricePerHour, max: basePricePerHour, hasRules: false };
+};
+
 const MiniMapCard: React.FC<{ lat?: number; lng?: number; heightClassName?: string }> = ({ lat, lng, heightClassName }) => (
   <div className={`w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-600 ${heightClassName || ''}`}>
     <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Location</div>
@@ -210,6 +283,12 @@ const MiniMapCard: React.FC<{ lat?: number; lng?: number; heightClassName?: stri
 );
 
 const sanitizeImageUrl = (value?: string | null, fallback = '') => (isLikelyImageUrl(value) ? value!.trim() : fallback);
+
+const isCourtVisibleForBooking = (court: any) => {
+  if (court?.is_active === false) return false;
+
+  return true;
+};
 
 const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   useSEO({
@@ -539,8 +618,9 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   // Dynamic pricing state
   const [slotPrices, setSlotPrices] = useState<Map<string, number>>(new Map());
   const [pricingRulesCache, setPricingRulesCache] = useState<PricingRule[]>([]);
-  const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
-  const [locationSlotPriceRanges, setLocationSlotPriceRanges] = useState<Map<string, { min: number; max: number; hasRules: boolean }>>(new Map());
+  const [courtPriceRanges, setCourtPriceRanges] = useState<Map<string, CourtPriceRange>>(new Map());
+  const [allCourtPriceRanges, setAllCourtPriceRanges] = useState<Map<string, CourtPriceRange>>(new Map());
+  const [locationSlotPriceRanges, setLocationSlotPriceRanges] = useState<Map<string, CourtPriceRange>>(new Map());
 
   // Court-level operation hours (resolved per court+date, overrides location hours)
   const [courtEffectiveHours, setCourtEffectiveHours] = useState<EffectiveHours | null>(null);
@@ -788,7 +868,8 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
         setLocationConfirmed(true);
         setShowLocationEntryModal(false);
 
-        // Fetch courts belonging to this location (only setup-complete courts)
+        // Fetch courts belonging to this location.
+        // Keep query broad and apply legacy-safe visibility rules client-side.
         const { data: courtsData, error: courtsError } = await supabase
           .from('courts')
           .select(`
@@ -804,15 +885,12 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
               rating
             )
           `)
-          .eq('location_id', activeLocationId)
-          .eq('setup_complete', true)
-          .eq('has_pricing', true)
-          .neq('status', 'Coming Soon')
-          .neq('status', 'Setup Required');
+          .eq('location_id', activeLocationId);
 
         if (courtsError) throw courtsError;
 
-        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(courtsData || []);
+        const visibleCourts = (courtsData || []).filter(isCourtVisibleForBooking);
+        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(visibleCourts);
 
         const mappedCourts: Court[] = (courtsWithPricing || []).map((c: any) => {
           const loc = c.locations;
@@ -926,19 +1004,16 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
               latitude,
               longitude
             )
-          `)
-          .eq('setup_complete', true)
-          .eq('has_pricing', true)
-          .neq('status', 'Coming Soon')
-          .neq('status', 'Setup Required');
+          `);
 
         if (error) throw error;
-        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(data || []);
+        const visibleCourts = (data || []).filter(isCourtVisibleForBooking);
+        const { filtered: courtsWithPricing } = await filterCourtsByPricingRules(visibleCourts);
 
         locationIdsWithPricing.clear();
         (courtsWithPricing || []).forEach(c => locationIdsWithPricing.add(c.location_id));
 
-        const readyCourts = (courtsWithPricing || []).filter((c: any) => c.status !== 'Coming Soon' && c.status !== 'Setup Required');
+        const readyCourts = courtsWithPricing || [];
 
         const mappedCourts: Court[] = readyCourts.map((c: any) => {
           const loc = c.locations;
@@ -1100,6 +1175,35 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   }, [locationCourts, selectedLocation, selectedDate, activeLocationId]);
 
   useEffect(() => {
+    if (courts.length === 0) {
+      setAllCourtPriceRanges(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    const loadAllCourtDateRanges = async () => {
+      const dateStr = toPhDateStr(selectedDate);
+      const rangesMap = new Map<string, CourtPriceRange>();
+
+      await Promise.all(courts.map(async court => {
+        try {
+          const rules = await fetchCourtPricingRules(court.id);
+          rangesMap.set(court.id, getRuleOnlyPriceRange(rules, dateStr, court.pricePerHour));
+        } catch {
+          rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
+        }
+      }));
+
+      if (!cancelled) setAllCourtPriceRanges(rangesMap);
+    };
+
+    loadAllCourtDateRanges();
+    return () => {
+      cancelled = true;
+    };
+  }, [courts, selectedDate]);
+
+  useEffect(() => {
     if (locationSelectedSlots.length === 0 || locationTimeSlots.length === 0) return;
     const filtered = locationSelectedSlots.filter(slot => locationTimeSlots.includes(slot));
     if (filtered.length !== locationSelectedSlots.length) {
@@ -1230,18 +1334,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
     if (locationCourts.length === 0) return;
     const loadDateRanges = async () => {
       const dateStr = toPhDateStr(selectedDate);
-      const slots = getCourtTimeSlots();
-      const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
+      const rangesMap = new Map<string, CourtPriceRange>();
       for (const court of locationCourts) {
         try {
-          const prices = await getSlotPrices(court.id, dateStr, slots, court.pricePerHour);
-          const vals = Array.from(prices.values());
-          if (vals.length > 0) {
-            const hasRules = vals.some(v => v !== court.pricePerHour);
-            rangesMap.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules: hasRules || vals.length > 0 });
-          } else {
-            rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
-          }
+          const rules = await fetchCourtPricingRules(court.id);
+          rangesMap.set(court.id, getRuleOnlyPriceRange(rules, dateStr, court.pricePerHour));
         } catch {
           rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
         }
@@ -1264,17 +1361,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
     }
     const loadRanges = async () => {
       const dateStr = toPhDateStr(selectedDate);
-      const rangesMap = new Map<string, { min: number; max: number; hasRules: boolean }>();
+      const rangesMap = new Map<string, CourtPriceRange>();
       for (const court of locationCourts) {
         try {
-          const prices = await getSlotPrices(court.id, dateStr, locationSelectedSlots, court.pricePerHour);
-          const vals = Array.from(prices.values()) as number[];
-          if (vals.length > 0) {
-            const hasRules = vals.some(v => v !== court.pricePerHour);
-            rangesMap.set(court.id, { min: Math.min(...vals), max: Math.max(...vals), hasRules });
-          } else {
-            rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
-          }
+          const rules = await fetchCourtPricingRules(court.id);
+          rangesMap.set(court.id, getRuleOnlyPriceRange(rules, dateStr, court.pricePerHour, locationSelectedSlots));
         } catch {
           rangesMap.set(court.id, { min: court.pricePerHour, max: court.pricePerHour, hasRules: false });
         }
@@ -2183,16 +2274,16 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
 
       // Filter by free only
       if (filterFreeOnly) {
-        const hasFree = locCourts.some((c: any) => !c.pricePerHour || c.pricePerHour === 0);
+        const hasFree = locCourts.some((c: any) => getCourtDisplayPriceRange(c, allCourtPriceRanges).min === 0);
         if (!hasFree) return false;
       }
 
       // Filter by price range
       if (filterPriceRange[0] > 0 || filterPriceRange[1] < 2000) {
-        const prices = locCourts.map((c: any) => c.pricePerHour || 0).filter((p: number) => p > 0);
-        if (prices.length > 0) {
-          const minP = Math.min(...prices);
-          if (minP > filterPriceRange[1] || Math.max(...prices) < filterPriceRange[0]) return false;
+        const ranges = locCourts.map((c: any) => getCourtDisplayPriceRange(c, allCourtPriceRanges));
+        if (ranges.length > 0) {
+          const hasOverlap = ranges.some(range => range.max >= filterPriceRange[0] && range.min <= filterPriceRange[1]);
+          if (!hasOverlap) return false;
         }
       }
 
@@ -2247,10 +2338,10 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
       });
 
       // Price range computation
-      const prices = locCourts.map((c: any) => c.pricePerHour || 0);
-      const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-      const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
-      const hasFree = prices.some((p: number) => p === 0);
+      const priceRanges = locCourts.map((c: any) => getCourtDisplayPriceRange(c, allCourtPriceRanges));
+      const minPrice = priceRanges.length > 0 ? Math.min(...priceRanges.map(range => range.min)) : 0;
+      const maxPrice = priceRanges.length > 0 ? Math.max(...priceRanges.map(range => range.max)) : 0;
+      const hasFree = priceRanges.some(range => range.min === 0);
 
       return {
         ...loc,
@@ -2815,14 +2906,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
                         {(() => {
-                          const range = courtPriceRanges.get(selectedCourt.id);
-                          if (range?.hasRules) {
-                            return <p className="text-lg font-black text-slate-900">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>;
-                          }
-                          if (selectedCourt.pricePerHour > 0) {
-                            return <p className="text-lg font-black text-slate-900">₱{selectedCourt.pricePerHour}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>;
-                          }
-                          return <p className="text-sm font-bold text-slate-400 italic">Not Set</p>;
+                          const range = courtPriceRanges.get(selectedCourt.id)
+                            || allCourtPriceRanges.get(selectedCourt.id)
+                            || getCourtDisplayPriceRange(selectedCourt, allCourtPriceRanges);
+                          if (range.max <= 0) return <p className="text-sm font-bold text-slate-400 italic">Not Set</p>;
+                          return <p className="text-lg font-black text-slate-900">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[10px] font-bold text-slate-400 ml-0.5">/hr</span></p>;
                         })()}
                       </div>
                       <div className="rounded-xl border border-slate-100 bg-white p-3">
@@ -3570,13 +3658,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                                         <div className="mt-auto flex items-center justify-between">
                                           <p className={`text-xs font-black ${isSlotSelected ? 'text-[#1E40AF]' : 'text-slate-400'}`}>
                                             {(() => {
-                                              const range = locationSlotPriceRanges.get(court.id);
-                                              if (range?.hasRules) {
-                                                return range.min === range.max
-                                                  ? `₱${range.min}/hr`
-                                                  : `₱${range.min}–₱${range.max}/hr`;
-                                              }
-                                              return court.pricePerHour > 0 ? `₱${court.pricePerHour}/hr` : 'Price not set';
+                                              const range = locationSlotPriceRanges.get(court.id)
+                                                || courtPriceRanges.get(court.id)
+                                                || allCourtPriceRanges.get(court.id)
+                                                || getCourtDisplayPriceRange(court, allCourtPriceRanges);
+                                              return formatCourtPriceRange(range);
                                             })()}
                                           </p>
                                           <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isSlotSelected ? 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white' : 'bg-slate-200 text-slate-400'}`}>
@@ -3644,14 +3730,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                             <div>
                               <p className="text-[8px] font-black text-blue-200 uppercase tracking-widest leading-none">Rate</p>
                               {(() => {
-                                const range = courtPriceRanges.get(heroActiveCourt.id);
-                                if (range?.hasRules) {
-                                  return <p className="text-lg font-black leading-tight">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
-                                }
-                                if (heroActiveCourt.pricePerHour > 0) {
-                                  return <p className="text-lg font-black leading-tight">₱{heroActiveCourt.pricePerHour}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
-                                }
-                                return <p className="text-sm font-bold leading-tight text-blue-300 italic">Not Set</p>;
+                                const range = courtPriceRanges.get(heroActiveCourt.id)
+                                  || allCourtPriceRanges.get(heroActiveCourt.id)
+                                  || getCourtDisplayPriceRange(heroActiveCourt, allCourtPriceRanges);
+                                if (range.max <= 0) return <p className="text-sm font-bold leading-tight text-blue-300 italic">Not Set</p>;
+                                return <p className="text-lg font-black leading-tight">{range.min === range.max ? `₱${range.min}` : `₱${range.min}–₱${range.max}`}<span className="text-[9px] font-bold text-blue-300 ml-0.5">/hr</span></p>;
                               })()}
                             </div>
                           </div>

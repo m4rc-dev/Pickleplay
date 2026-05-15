@@ -41,6 +41,13 @@ export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_OPEN = '08:00';
 const DEFAULT_CLOSE = '18:00';
 
+function formatOperationHoursError(message?: string): string {
+  if (message?.includes('op_hours_range')) {
+    return 'Overnight hours require migration 012_allow_overnight_court_operation_hours.sql to be applied in Supabase.';
+  }
+  return message || 'Failed to save operation hours.';
+}
+
 // ────────────────────────────────────────────────────────────────
 // CRUD Operations
 // ────────────────────────────────────────────────────────────────
@@ -96,12 +103,12 @@ export async function saveCourtDayHours(
       .from('court_operation_hours')
       .update(payload)
       .eq('id', existing.id);
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: formatOperationHoursError(error.message) };
   } else {
     const { error } = await supabase
       .from('court_operation_hours')
       .insert(payload);
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: formatOperationHoursError(error.message) };
   }
 
   return { success: true };
@@ -125,7 +132,7 @@ export async function saveAllDayHours(
     .eq('court_id', courtId)
     .not('day_of_week', 'is', null);
 
-  if (deleteError) return { success: false, error: deleteError.message };
+  if (deleteError) return { success: false, error: formatOperationHoursError(deleteError.message) };
 
   // Insert all 7 days
   const rows = schedule.map(s => ({
@@ -144,7 +151,7 @@ export async function saveAllDayHours(
     .from('court_operation_hours')
     .insert(rows);
 
-  if (insertError) return { success: false, error: insertError.message };
+  if (insertError) return { success: false, error: formatOperationHoursError(insertError.message) };
   return { success: true };
 }
 
@@ -182,12 +189,12 @@ export async function saveDateOverrideHours(
       .from('court_operation_hours')
       .update(payload)
       .eq('id', existing.id);
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: formatOperationHoursError(error.message) };
   } else {
     const { error } = await supabase
       .from('court_operation_hours')
       .insert(payload);
-    if (error) return { success: false, error: error.message };
+    if (error) return { success: false, error: formatOperationHoursError(error.message) };
   }
 
   return { success: true };
@@ -199,7 +206,7 @@ export async function deleteCourtHoursEntry(id: string): Promise<{ success: bool
     .from('court_operation_hours')
     .delete()
     .eq('id', id);
-  if (error) return { success: false, error: error.message };
+  if (error) return { success: false, error: formatOperationHoursError(error.message) };
   return { success: true };
 }
 
