@@ -2277,7 +2277,7 @@ const LocationsList: React.FC = () => {
                                                 ) : (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
-                                                        className="text-xs font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors">
+                                                        className={`text-xs font-black text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors ${getPricingPulseClass(court, 'inline')}`}>
                                                         Set Pricing
                                                     </button>
                                                 )}
@@ -2314,7 +2314,7 @@ const LocationsList: React.FC = () => {
                                                 {isSetupRequired ? (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); navigate(`/court-pricing?court=${court.id}`); }}
-                                                        className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-50 border-amber-100 text-amber-700 hover:bg-amber-100 transition-colors">
+                                                        className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-50 border-amber-100 text-amber-700 transition-colors ${getPricingPulseClass(court, 'pill')}`}>
                                                         Setup Required →
                                                     </button>
                                                 ) : (
@@ -2356,7 +2356,7 @@ const LocationsList: React.FC = () => {
                                                 ) : (
                                                     <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
                                                         <button onClick={() => navigate(`/court-pricing?court=${court.id}`)}
-                                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Set Pricing">
+                                                            className={`p-2 rounded-xl transition-all ${getPricingPulseClass(court, 'icon')}`} title="Set Pricing">
                                                             <PhilippinePeso size={16} />
                                                         </button>
                                                         <button onClick={() => openEditCourtModal(court)}
@@ -3440,6 +3440,22 @@ const CourtManagerModal: React.FC<{
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const getPricingPulseClass = (court: CourtItem, variant: 'inline' | 'pill' | 'icon' = 'inline') => {
+        const isSetupRequired = (court.status || (court.is_active ? 'Available' : 'Maintenance')) === 'Setup Required';
+
+        if (variant === 'icon') {
+            return isSetupRequired
+                ? 'animate-pulse ring-2 ring-amber-200/80 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800'
+                : 'animate-pulse ring-2 ring-blue-200/70 text-emerald-600 bg-emerald-50 hover:text-emerald-700 hover:bg-emerald-100';
+        }
+
+        if (variant === 'pill') {
+            return 'animate-pulse ring-4 ring-amber-100/80 hover:bg-amber-100';
+        }
+
+        return 'animate-pulse rounded-lg px-2 py-1 ring-4 ring-blue-100/70 hover:text-blue-900';
     };
 
     return ReactDOM.createPortal(

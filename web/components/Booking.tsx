@@ -59,6 +59,62 @@ const generateTimeSlots = (openTime: string, closeTime: string): string[] => {
   return ALL_HOUR_SLOTS.filter((_, idx) => idx >= openH && idx < closeH);
 };
 
+const getSlotHour = (slot: string): number => {
+  const [time, period] = slot.split(' ');
+  let [hour] = time.split(':').map(Number);
+  if (period === 'PM' && hour !== 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return hour;
+};
+
+const getHourFrom24Time = (time: string): number => {
+  const [hour] = time.split(':').map(Number);
+  return hour;
+};
+
+const sortSlotsFromHour = (slots: string[], startHour: number): string[] => {
+  const uniqueSlots = Array.from(new Set(slots));
+  return uniqueSlots.sort((a, b) => {
+    const aHour = getSlotHour(a);
+    const bHour = getSlotHour(b);
+    const aShifted = aHour < startHour ? aHour + 24 : aHour;
+    const bShifted = bHour < startHour ? bHour + 24 : bHour;
+    return aShifted - bShifted;
+  });
+};
+
+const getPreferredStartHour = (hoursList: EffectiveHours[]): number => {
+  const activeHours = hoursList.filter(hours => !hours.is_closed);
+  if (activeHours.length === 0) return 0;
+
+  const hasFullDaySchedule = activeHours.some(hours => generateTimeSlots(hours.open_time, hours.close_time).length === 24);
+  if (hasFullDaySchedule) return 0;
+
+  return Math.min(...activeHours.map(hours => getHourFrom24Time(hours.open_time)));
+};
+
+const getNextDaySlotSet = (slots: string[]): Set<string> => {
+  const nextDaySlots = new Set<string>();
+  if (slots.length === 0) return nextDaySlots;
+
+  let previousHour = getSlotHour(slots[0]);
+  let hasWrapped = false;
+
+  slots.forEach((slot, index) => {
+    if (index === 0) return;
+    const currentHour = getSlotHour(slot);
+    if (currentHour < previousHour) {
+      hasWrapped = true;
+    }
+    if (hasWrapped) {
+      nextDaySlots.add(slot);
+    }
+    previousHour = currentHour;
+  });
+
+  return nextDaySlots;
+};
+
 const isLikelyImageUrl = (value?: string | null) => {
   if (!value || typeof value !== 'string') return false;
   const trimmed = value.trim().toLowerCase();
@@ -83,6 +139,11 @@ type LocationGroup = {
 };
 
 type CourtPriceRange = { min: number; max: number; hasRules: boolean };
+type BookingGuideStep = {
+  step: number;
+  title: string;
+  description: string;
+};
 
 const toPhDateStr = (date: Date) => {
   const phDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
@@ -326,6 +387,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isConfirmingMulti, setIsConfirmingMulti] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showBookingGuide, setShowBookingGuide] = useState(true);
 
   // For Location View
   const [locationSelectedSlots, setLocationSelectedSlots] = useState<string[]>([]);
@@ -358,6 +420,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   const [locationUserBookedByCourt, setLocationUserBookedByCourt] = useState<Map<string, Set<string>>>(new Map());
   const [locationEffectiveHours, setLocationEffectiveHours] = useState<Map<string, EffectiveHours>>(new Map());
   const [locationTimeSlots, setLocationTimeSlots] = useState<string[]>([]);
+  const [isResolvingLocationHours, setIsResolvingLocationHours] = useState(false);
   const [isCheckingLocationAvailability, setIsCheckingLocationAvailability] = useState(false);
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date(getNowPH()));
   const [showLeftCalendar, setShowLeftCalendar] = useState(false);
@@ -365,6 +428,17 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
   const [galleryModalImage, setGalleryModalImage] = useState<string | null>(null);
   const galleryScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const dismissed = window.localStorage.getItem('booking-guide-dismissed');
+      if (dismissed === 'true') {
+        setShowBookingGuide(false);
+      }
+    } catch {
+      // Ignore local storage access errors.
+    }
+  }, []);
 
   const handleCloseFilters = () => {
     setIsFilterClosing(true);
@@ -586,6 +660,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   const [ownerPaymentMethods, setOwnerPaymentMethods] = useState<any[]>([]);
   const [selectedQRMethod, setSelectedQRMethod] = useState<any | null>(null);
   const [showQRPaymentStep, setShowQRPaymentStep] = useState(false);
+  const [showPaymentQRPreview, setShowPaymentQRPreview] = useState(false);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
@@ -724,6 +799,81 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
   const urlLocationId = searchParams.get('locationId');
 
   const [activeLocationId, setActiveLocationId] = useState<string | null>(urlLocationId);
+  const hasResolvedLocationHours = !!activeLocationId && locationCourts.length > 0 && locationEffectiveHours.size === locationCourts.length;
+  const locationDisplaySlots = useMemo(() => {
+    if (locationTimeSlots.length > 0) return locationTimeSlots;
+    if (isResolvingLocationHours) return [];
+    if (hasResolvedLocationHours) return [];
+    if (!activeLocationId && selectedLocation?.opening_time && selectedLocation?.closing_time) {
+      return generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time);
+    }
+    return activeLocationId ? [] : TIME_SLOTS;
+  }, [activeLocationId, locationTimeSlots, isResolvingLocationHours, hasResolvedLocationHours, selectedLocation]);
+  const locationNextDaySlots = useMemo(() => getNextDaySlotSet(locationDisplaySlots), [locationDisplaySlots]);
+  const locationScheduleSummary = useMemo(() => {
+    if (locationDisplaySlots.length === 0) return null;
+
+    const firstSlot = locationDisplaySlots[0];
+    const lastSlot = locationDisplaySlots[locationDisplaySlots.length - 1];
+    const lastIsNextDay = locationNextDaySlots.has(lastSlot);
+
+    if (locationDisplaySlots.length === 24) {
+      return '24 hours';
+    }
+
+    return `${slotToRange(firstSlot)} - ${slotToRange(lastSlot).split(' - ')[1]}${lastIsNextDay ? ' next day' : ''}`;
+  }, [locationDisplaySlots, locationNextDaySlots]);
+  const bookingGuideStep = useMemo<BookingGuideStep | null>(() => {
+    if (!showBookingGuide) return null;
+    if (!activeLocationId) {
+      return {
+        step: 1,
+        title: 'Start with a location',
+        description: 'Pick a venue first so we can show the playable schedule and available courts.',
+      };
+    }
+    if (showLocationEntryModal && !locationConfirmed) {
+      return {
+        step: 2,
+        title: 'Confirm the venue',
+        description: 'Review the selected branch, then continue into the booking flow.',
+      };
+    }
+    if (!selectedCourt && locationSelectedSlots.length === 0) {
+      return {
+        step: 3,
+        title: 'Choose your time',
+        description: 'Start by selecting one or more time slots that fit the court schedule for this date.',
+      };
+    }
+    if (!selectedCourt && locationSelectedSlots.length > 0) {
+      return {
+        step: 4,
+        title: 'Choose a court',
+        description: 'Now pick one of the available courts that matches your selected time.',
+      };
+    }
+    if (selectedCourt && showBookingSummary) {
+      return {
+        step: 5,
+        title: 'Review and continue',
+        description: 'Check the court, time, and total, then continue to payment.',
+      };
+    }
+    return null;
+  }, [
+    activeLocationId,
+    locationConfirmed,
+    locationSelectedSlots.length,
+    selectedCourt,
+    showBookingGuide,
+    showBookingSummary,
+    showLocationEntryModal,
+  ]);
+  const shouldPulseLocationEntryButton = !!selectedLocation && showLocationDetailHero && activeLocationId && !selectedCourt && !showLocationMapView;
+  const shouldPulseTimeSlots = !!bookingGuideStep && bookingGuideStep.step === 3;
+  const shouldPulseCourtCards = !!bookingGuideStep && bookingGuideStep.step === 4;
+  const shouldPulseContinuePayment = !!bookingGuideStep && bookingGuideStep.step === 5;
 
   useEffect(() => {
     if (urlLocationId) {
@@ -1126,45 +1276,55 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
     if (!activeLocationId || locationCourts.length === 0) {
       setLocationEffectiveHours(new Map());
       setLocationTimeSlots([]);
+      setIsResolvingLocationHours(false);
       return;
     }
 
     let cancelled = false;
     const resolveLocationHours = async () => {
-      const dateStr = toPhDateStr(selectedDate);
-      const hoursList = await Promise.all(
-        locationCourts.map(c =>
-          getEffectiveHours(
-            c.id,
-            dateStr,
-            selectedLocation?.opening_time,
-            selectedLocation?.closing_time
+      setIsResolvingLocationHours(true);
+      setLocationEffectiveHours(new Map());
+      setLocationTimeSlots([]);
+      try {
+        const dateStr = toPhDateStr(selectedDate);
+        const hoursList = await Promise.all(
+          locationCourts.map(c =>
+            getEffectiveHours(
+              c.id,
+              dateStr,
+              selectedLocation?.opening_time,
+              selectedLocation?.closing_time
+            )
           )
-        )
-      );
+        );
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      const hoursMap = new Map<string, EffectiveHours>();
-      const slotSet = new Set<string>();
+        const hoursMap = new Map<string, EffectiveHours>();
+        const slotSet = new Set<string>();
+        const allClosed = hoursList.length > 0 && hoursList.every(h => h.is_closed);
+        const preferredStartHour = getPreferredStartHour(hoursList);
 
-      const allClosed = hoursList.length > 0 && hoursList.every(h => h.is_closed);
+        hoursList.forEach((hours, idx) => {
+          const courtId = locationCourts[idx]?.id;
+          if (!courtId) return;
+          hoursMap.set(courtId, hours);
+          if (!hours.is_closed) {
+            generateTimeSlots(hours.open_time, hours.close_time).forEach(s => slotSet.add(s));
+          }
+        });
 
-      hoursList.forEach((hours, idx) => {
-        const courtId = locationCourts[idx]?.id;
-        if (!courtId) return;
-        hoursMap.set(courtId, hours);
-        if (!hours.is_closed) {
-          generateTimeSlots(hours.open_time, hours.close_time).forEach(s => slotSet.add(s));
+        setLocationEffectiveHours(hoursMap);
+        if (allClosed) {
+          setLocationTimeSlots([]); // closed day
+        } else {
+          const resolvedSlots = Array.from(slotSet);
+          setLocationTimeSlots(resolvedSlots.length > 0 ? sortSlotsFromHour(resolvedSlots, preferredStartHour) : []);
         }
-      });
-
-      const slots = ALL_HOUR_SLOTS.filter(s => slotSet.has(s));
-      setLocationEffectiveHours(hoursMap);
-      if (allClosed) {
-        setLocationTimeSlots([]); // closed day
-      } else {
-        setLocationTimeSlots(slots.length > 0 ? slots : TIME_SLOTS);
+      } finally {
+        if (!cancelled) {
+          setIsResolvingLocationHours(false);
+        }
       }
     };
 
@@ -2402,7 +2562,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
 
   // Fetch location availability whenever date or location changes
   useEffect(() => {
-    if (!activeLocationId || locationCourts.length === 0 || locationTimeSlots.length === 0) return;
+    if (!activeLocationId || locationCourts.length === 0 || locationDisplaySlots.length === 0) return;
     const checkAllAvailability = async () => {
       setIsCheckingLocationAvailability(true);
       const result = new Map<string, { blocked: Set<string>, booked: Set<string> }>();
@@ -2423,11 +2583,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
         .in('court_id', locationCourts.map(c => c.id))
         .eq('blocks_bookings', true);
   
-      const slotsToCheck = locationTimeSlots.length > 0
-        ? locationTimeSlots
-        : (selectedLocation?.opening_time && selectedLocation?.closing_time
-          ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-          : TIME_SLOTS);
+      const slotsToCheck = locationDisplaySlots;
   
       for (const court of locationCourts) {
         const newBlockedSlots = new Set<string>();
@@ -2485,7 +2641,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
       setIsCheckingLocationAvailability(false);
     };
     checkAllAvailability();
-  }, [locationCourts, selectedDate, activeLocationId, selectedLocation, locationEffectiveHours, locationTimeSlots, user]);
+  }, [activeLocationId, locationCourts, locationDisplaySlots, selectedDate, selectedLocation, locationEffectiveHours, user]);
 
   return (
     <div className="md:space-y-6 animate-in fade-in duration-700 bg-white md:bg-transparent min-h-screen md:h-screen md:overflow-hidden">
@@ -3382,7 +3538,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
 
                           <button
                             onClick={() => requireLogin(openLocationConfirmModal)}
-                            className="w-full py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all"
+                            className={`w-full py-4 rounded-2xl bg-[#1E40AF] hover:bg-blue-800 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 transition-all ${shouldPulseLocationEntryButton ? 'animate-pulse ring-4 ring-blue-200/70' : ''}`}
                           >
                             Book Now
                           </button>
@@ -3436,16 +3592,64 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                       </>
                     ) : (
                       <>
+                        {bookingGuideStep && (
+                          <div className="border-b border-slate-200 bg-gradient-to-r from-blue-50 via-white to-lime-50 px-4 py-3 shadow-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#1E40AF] text-white shadow-lg shadow-blue-900/20">
+                                  <ClipboardList size={18} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
+                                      Step {bookingGuideStep.step} of 5
+                                    </span>
+                                    <p className="text-sm font-black text-slate-900">{bookingGuideStep.title}</p>
+                                  </div>
+                                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">
+                                    {bookingGuideStep.description}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowBookingGuide(false);
+                                  try {
+                                    window.localStorage.setItem('booking-guide-dismissed', 'true');
+                                  } catch {
+                                    // Ignore local storage access errors.
+                                  }
+                                }}
+                                className="shrink-0 rounded-xl bg-white px-2.5 py-2 text-slate-400 transition-colors hover:text-slate-700 border border-slate-200"
+                                aria-label="Dismiss booking guide"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         {/* Top Row: Time Slots Grid */}
-                        <div className="flex flex-col bg-white p-4 border-b border-slate-200 shadow-sm z-10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
+                        <div className={`flex flex-col bg-white p-4 border-b border-slate-200 shadow-sm z-10 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out ${shouldPulseTimeSlots ? 'ring-2 ring-blue-200/70 ring-inset' : ''}`}>
+                          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
                               <Clock className="text-[#1E40AF]" size={18} />
                               <h3 className="text-lg font-black text-slate-800 tracking-tight">Total time slots of all courts</h3>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">Court-based schedule</span>
+                                {locationScheduleSummary && (
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{locationScheduleSummary}</span>
+                                )}
+                                {!isResolvingLocationHours && (
+                                  <span className="rounded-full bg-lime-50 px-2.5 py-1 text-lime-700">{locationDisplaySlots.length} slots</span>
+                                )}
+                              </div>
                             </div>
                             <button
                               onClick={openWeeklyPricing}
-                              className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
+                              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-[11px] font-black uppercase tracking-[0.16em] hover:bg-white border border-slate-200 shadow-sm"
                             >
                               This Week's Pricing
                             </button>
@@ -3468,15 +3672,31 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                                 <span>You've selected multiple non-consecutive time slots. Each will be booked separately.</span>
                               </div>
                             )}
+                            {locationNextDaySlots.size > 0 && (
+                              <div className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold">
+                                <Clock size={14} className="shrink-0" />
+                                <span>Late-night court hours continue into the next day. Those slots are labeled below.</span>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex flex-wrap gap-3 overflow-y-auto pb-2 content-start pr-2 custom-scrollbar animate-in fade-in duration-300 ease-out">
-                            {(() => {
-                               const slots = locationTimeSlots.length > 0
-                                 ? locationTimeSlots
-                                 : (selectedLocation?.opening_time && selectedLocation?.closing_time
-                                   ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                                   : TIME_SLOTS);
-                               return slots.map((slot, idx) => {
+                          {isResolvingLocationHours ? (
+                            <div className="flex min-h-[128px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 text-center">
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 size={22} className="animate-spin text-blue-600" />
+                                <p className="text-sm font-black text-slate-800">Loading court schedule</p>
+                                <p className="text-xs font-medium text-slate-500">Showing the exact playable hours for this date.</p>
+                              </div>
+                            </div>
+                          ) : locationDisplaySlots.length === 0 && hasResolvedLocationHours ? (
+                            <div className="flex min-h-[128px] items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 text-center">
+                              <div>
+                                <p className="text-sm font-black text-slate-800">No active court hours for this day</p>
+                                <p className="mt-1 text-xs font-medium text-slate-500">This location has no playable court schedule on the selected date.</p>
+                              </div>
+                            </div>
+                          ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-2.5 sm:gap-3 overflow-y-auto pb-2 pr-1 custom-scrollbar animate-in fade-in duration-300 ease-out">
+                            {locationDisplaySlots.map((slot, idx) => {
                                 const isSelected = locationSelectedSlots.includes(slot);
                                  const isPast = isSlotInPast(slot, selectedDate);
                                  
@@ -3492,31 +3712,33 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
 
                                  const hasAvailability = availableCount > 0;
                                  const isDisabled = isPast || isCheckingLocationAvailability || !hasAvailability;
+                                 const isNextDaySlot = locationNextDaySlots.has(slot);
                                  
                                  return (
                                    <button 
                                      key={`${toPhDateStr(selectedDate)}-${slot}`}
                                      disabled={isDisabled}
-                                    onClick={() => !isDisabled && toggleLocationSlotSelection(slot, slots)}
-                                     className={`slot-lime-entrance flex flex-col items-center justify-center px-3 py-2 min-w-[108px] rounded-xl transition-all border-2 relative overflow-hidden flex-shrink-0 ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : isCheckingLocationAvailability ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-wait' : !hasAvailability ? 'bg-rose-50 border-rose-300 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-lime-50 border-lime-300 text-lime-700 hover:bg-lime-100 hover:border-lime-400'}`}
+                                    onClick={() => !isDisabled && toggleLocationSlotSelection(slot, locationDisplaySlots)}
+                                     className={`slot-lime-entrance flex h-[66px] w-full flex-col items-center justify-center px-2 sm:px-3 py-2 rounded-xl transition-all border-2 relative overflow-hidden ${isPast ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : isCheckingLocationAvailability ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-wait' : !hasAvailability ? 'bg-rose-50 border-rose-300 text-rose-600 cursor-not-allowed' : isSelected ? 'bg-[#1E40AF] border-[#1E40AF] text-white shadow-lg shadow-blue-900/20 z-10' : 'bg-lime-50 border-lime-300 text-lime-700 hover:bg-lime-100 hover:border-lime-400'}`}
                                      style={{ animationDelay: `${idx * 45}ms` }}
                                    >
-                                     <span className="text-xs font-bold uppercase whitespace-nowrap">{slotToRange(slot)}</span>
+                                     <span className="text-[11px] sm:text-xs font-bold uppercase leading-tight text-center">{slotToRange(slot)}</span>
+                                     {isNextDaySlot && (
+                                      <span className={`mt-1 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ${isSelected ? 'bg-white/20 text-white' : 'bg-white/80 text-blue-700'}`}>
+                                        Next day
+                                      </span>
+                                     )}
                                    </button>
                                  );
-                               });
-                            })()}
+                            })}
                           </div>
+                          )}
                         </div>
 
                         {/* Bottom Row: Available Courts */}
                         <div className="h-[280px] shrink-0 overflow-y-hidden p-4 pt-3 relative bg-slate-50/50 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
                           {(() => {
-                            const slots = locationTimeSlots.length > 0
-                              ? locationTimeSlots
-                              : (selectedLocation?.opening_time && selectedLocation?.closing_time
-                                ? generateTimeSlots(selectedLocation.opening_time, selectedLocation.closing_time)
-                                : TIME_SLOTS);
+                            const slots = locationDisplaySlots;
                             const todayStr = toPhDateStr(getNowPH());
                             const selectedStr = toPhDateStr(selectedDate);
                             const isSelectedDateToday = selectedStr === todayStr;
@@ -3644,7 +3866,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                                       setShowMobileSchedule(false);
                                       setShowBookingSummary(true);
                                     }}
-                                    className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'}`}
+                                    className={`court-sweep-entrance group flex flex-row bg-white border border-slate-200 rounded-2xl overflow-hidden transition-all duration-300 ease-out text-left h-[100px] appearance-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 active:outline-none active:ring-0 opacity-100 scale-100 translate-y-0 ${isSlotSelected ? 'hover:border-[#1E40AF] hover:shadow-xl hover:shadow-blue-900/10 cursor-pointer' : 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed grayscale'} ${shouldPulseCourtCards && isSlotSelected ? 'animate-pulse ring-2 ring-blue-200/70' : ''}`}
                                     style={{ animationDelay: `${idx * 55}ms` }}
                                   >
                                      <div className="w-[100px] h-full shrink-0 relative overflow-hidden bg-slate-100">
@@ -3794,8 +4016,8 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
               >
                 {selectedCourt && showBookingSummary && (
                   <>
-                    <div className="flex-1 overflow-y-auto min-h-0">
-                      <div className="h-full flex flex-col gap-2.5">
+                    <div className="flex-1 overflow-y-auto min-h-0 pb-3">
+                      <div className="flex flex-col gap-2.5">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Booking Details</h3>
@@ -3854,11 +4076,11 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                           </div>
                         </div>
 
-                        <div className="flex-1 min-h-[210px] flex flex-col gap-2">
+                        <div className="flex flex-col gap-3">
                           {selectedLocation?.latitude && selectedLocation?.longitude && (
-                            <div className="flex-1 min-h-[160px] flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-2">
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Location Preview</p>
-                              <div className="flex-1 min-h-[130px]">
+                              <div className="min-h-[130px]">
                                 <MiniMapCard lat={selectedLocation.latitude} lng={selectedLocation.longitude} heightClassName="h-full min-h-[130px]" />
                               </div>
                               {isAdvanceBooking && (
@@ -3870,14 +4092,14 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                             </div>
                           )}
 
-                          <div className="p-2.5 rounded-2xl border border-slate-100 bg-blue-50/70 shadow-sm flex flex-wrap items-center gap-2.5">
-                            <div>
+                          <div className="p-3 rounded-2xl border border-slate-100 bg-blue-50/70 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="min-w-0">
                               <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-1">Total</p>
                               <p className="text-2xl font-black text-[#1E40AF] leading-none">₱{getSelectedSlotsTotal() || 0}</p>
                               <p className="text-[10px] font-medium text-blue-600">Includes court rate and selected hours</p>
                             </div>
                             {selectedCourt.cleaningTimeMinutes ? (
-                              <div className="px-3 py-2 rounded-xl bg-white text-slate-700 border border-blue-100 shadow-sm">
+                              <div className="w-full sm:w-auto px-3 py-2 rounded-xl bg-white text-slate-700 border border-blue-100 shadow-sm shrink-0">
                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Cleaning Buffer</p>
                                 <p className="text-sm font-bold">{selectedCourt.cleaningTimeMinutes} min</p>
                               </div>
@@ -3896,7 +4118,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                           <button
                             disabled={selectedSlots.length === 0 || isBooked || isProcessing || isOwner}
                             onClick={handleBookClick}
-                            className={`w-full py-5 rounded-[22px] font-black text-[13px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                            className={`w-full py-5 rounded-[22px] font-black text-[13px] uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-3 ${isBooked ? 'bg-emerald-500 text-white cursor-default' : isOwner ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-[#1E40AF] hover:bg-blue-800 text-white shadow-xl shadow-blue-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed'} ${shouldPulseContinuePayment && selectedSlots.length > 0 && !isProcessing && !isBooked && !isOwner ? 'animate-pulse ring-4 ring-blue-200/70' : ''}`}
                           >
                             {isProcessing ? <Loader2 className="animate-spin" size={20} /> : isBooked ? <><CheckCircle2 size={20} /> Confirmed</> : isOwner ? <><Ban size={18} /> Owner Restricted</> : selectedSlots.length > 0 ? <>{`Continue Payment — ₱${getSelectedSlotsTotal()}`} {String.fromCharCode(8594)}</> : <>Select Time Slots</>}
                           </button>
@@ -4044,7 +4266,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                   <div className="space-y-3 pt-2">
                     <button
                       onClick={confirmLocationEntry}
-                      className="w-full py-3.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
+                      className="w-full py-3.5 bg-[#1E40AF] hover:bg-blue-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20 animate-pulse ring-4 ring-blue-100/80"
                     >
                       Confirm & Continue
                     </button>
@@ -4180,7 +4402,7 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
         {showPaymentModal && ReactDOM.createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { if (!isProcessing) setShowPaymentModal(false); }} />
-            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
+            <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
 
               {!showQRPaymentStep ? (
                 <>
@@ -4261,18 +4483,26 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
                   </div>
 
                   {selectedQRMethod && (
-                    <div className="bg-slate-50 rounded-xl p-4 flex flex-col items-center gap-3">
-                      <div className="bg-white rounded-xl border border-slate-200 p-3 w-56 h-56">
+                    <div className="bg-slate-50 rounded-2xl p-5 sm:p-6 flex flex-col items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentQRPreview(true)}
+                        className="relative bg-white rounded-2xl border border-slate-200 p-4 w-[280px] h-[280px] sm:w-[340px] sm:h-[340px] shadow-sm transition-all hover:shadow-lg hover:border-blue-200"
+                      >
                         <img src={selectedQRMethod.qr_code_url} alt="QR Code" className="w-full h-full object-contain" />
-                      </div>
+                        <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-blue-700 shadow-sm border border-blue-100">
+                          <Maximize2 size={12} />
+                          Preview
+                        </span>
+                      </button>
                       <div className="text-center">
-                        <p className="text-xs font-bold text-slate-700">{selectedQRMethod.account_name || 'Account Name'}</p>
-                        <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                        <p className="text-sm font-bold text-slate-700">{selectedQRMethod.account_name || 'Account Name'}</p>
+                        <p className="mt-1 text-[11px] text-slate-400 font-medium uppercase tracking-wider">
                           {selectedQRMethod.payment_type === 'gcash' ? 'GCash' : 'Maya'}
                         </p>
                       </div>
-                      <div className="bg-blue-50 rounded-lg px-3 py-1.5">
-                        <p className="text-sm font-black text-blue-700">₱{getSelectedSlotsTotal()}</p>
+                      <div className="bg-blue-50 rounded-xl px-4 py-2">
+                        <p className="text-lg font-black text-blue-700">₱{getSelectedSlotsTotal()}</p>
                       </div>
                     </div>
                   )}
@@ -4370,6 +4600,49 @@ const Booking: React.FC<BookingProps> = ({ enableSlotGrouping = true }) => {
           document.body
         )}
 
+
+        {showPaymentQRPreview && selectedQRMethod && ReactDOM.createPortal(
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6">
+            <div
+              className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
+              onClick={() => setShowPaymentQRPreview(false)}
+            />
+            <div className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+                <div>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.18em]">QR Preview</p>
+                  <p className="text-base font-black text-slate-900">
+                    {selectedQRMethod.payment_type === 'gcash' ? 'GCash' : 'Maya'} payment
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentQRPreview(false)}
+                  className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-5 sm:p-8 flex flex-col items-center gap-5 bg-slate-50">
+                <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 w-full max-w-[620px] shadow-sm">
+                  <img
+                    src={selectedQRMethod.qr_code_url}
+                    alt="Payment QR code preview"
+                    className="w-full h-auto max-h-[70vh] object-contain"
+                  />
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-slate-800">{selectedQRMethod.account_name || 'Account Name'}</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Tap and scan with your e-wallet app
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
         {/* ──────────── AMENITIES MODAL ──────────── */}
         {showAmenitiesModal && ReactDOM.createPortal(
