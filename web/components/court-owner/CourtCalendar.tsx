@@ -37,20 +37,49 @@ interface Court {
     name: string;
 }
 
+type TimeBlock = {
+    id: string;
+    date: string;
+    start_time: string;
+    end_time: string;
+};
+
+const formatDateInput = (date: Date) => {
+    const localDate = new Date(date);
+    localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
+    return localDate.toISOString().split('T')[0];
+};
+
+const getTodayInputDate = () => formatDateInput(new Date());
+
+const createTimeBlock = (overrides: Partial<TimeBlock> = {}): TimeBlock => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    date: getTodayInputDate(),
+    start_time: '08:00',
+    end_time: '17:00',
+    ...overrides,
+});
+
 // Event Modal Component
 const EventModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onSave: (eventData: Partial<CourtEvent>) => Promise<void>;
+    onSave: (eventData: Partial<CourtEvent> | Partial<CourtEvent>[]) => Promise<void>;
+    onDelete?: (event: CourtEvent) => void;
     courts: Court[];
     editingEvent?: CourtEvent | null;
-}> = ({ isOpen, onClose, onSave, courts, editingEvent }) => {
+}> = ({ isOpen, onClose, onSave, onDelete, courts, editingEvent }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([createTimeBlock()]);
+    const [formError, setFormError] = useState<string | null>(null);
+    const [titleError, setTitleError] = useState(false);
+    const [courtError, setCourtError] = useState(false);
+    const [invalidBlockIds, setInvalidBlockIds] = useState<string[]>([]);
     const [formData, setFormData] = useState({
         court_id: '',
         title: '',
         description: '',
-        date: new Date().toISOString().split('T')[0],
+        date: getTodayInputDate(),
         start_time: '08:00',
         end_time: '17:00',
         event_type: 'maintenance' as CourtEventType,
@@ -65,50 +94,153 @@ const EventModal: React.FC<{
                 court_id: editingEvent.court_id,
                 title: editingEvent.title,
                 description: editingEvent.description || '',
-                date: startDate.toISOString().split('T')[0],
+                date: formatDateInput(startDate),
                 start_time: startDate.toTimeString().slice(0, 5),
                 end_time: endDate.toTimeString().slice(0, 5),
                 event_type: editingEvent.event_type,
                 blocks_bookings: editingEvent.blocks_bookings
             });
+            setTimeBlocks([
+                createTimeBlock({
+                    date: formatDateInput(startDate),
+                    start_time: startDate.toTimeString().slice(0, 5),
+                    end_time: endDate.toTimeString().slice(0, 5),
+                }),
+            ]);
         } else {
+            const initialBlock = createTimeBlock();
             setFormData({
                 court_id: courts[0]?.id || '',
                 title: '',
                 description: '',
-                date: new Date().toISOString().split('T')[0],
+                date: initialBlock.date,
                 start_time: '08:00',
                 end_time: '17:00',
                 event_type: 'maintenance',
                 blocks_bookings: true
             });
+            setTimeBlocks([initialBlock]);
         }
+        setFormError(null);
+        setTitleError(false);
+        setCourtError(false);
+        setInvalidBlockIds([]);
     }, [editingEvent, courts, isOpen]);
+
+    const updateTimeBlock = (id: string, updates: Partial<TimeBlock>) => {
+        setFormError(null);
+        setInvalidBlockIds([]);
+        setTimeBlocks(prev => prev.map(block => block.id === id ? { ...block, ...updates } : block));
+    };
+
+    const addTimeBlock = () => {
+        setFormError(null);
+        setInvalidBlockIds([]);
+        const lastBlock = timeBlocks[timeBlocks.length - 1];
+        setTimeBlocks(prev => [
+            ...prev,
+            createTimeBlock({
+                date: lastBlock?.date || getTodayInputDate(),
+                start_time: lastBlock?.end_time || '08:00',
+                end_time: '17:00',
+            }),
+        ]);
+    };
+
+    const removeTimeBlock = (id: string) => {
+        setFormError(null);
+        setInvalidBlockIds([]);
+        setTimeBlocks(prev => prev.length === 1 ? prev : prev.filter(block => block.id !== id));
+    };
+
+    const getBlocksToSubmit = () => editingEvent
+        ? [{ date: formData.date, start_time: formData.start_time, end_time: formData.end_time }]
+        : timeBlocks;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmedTitle = formData.title.trim();
+        const blocksToSubmit = getBlocksToSubmit();
+        const blockEntries = blocksToSubmit.map((block, index) => ({
+            ...block,
+            id: editingEvent ? `editing-block-${index}` : (block as TimeBlock).id,
+        }));
+
+        const conflictingBlockIds = new Set<string>();
+        const invalidBlock = blockEntries.find(block => {
+            const start = new Date(`${block.date}T${block.start_time}:00`);
+            const end = new Date(`${block.date}T${block.end_time}:00`);
+            return end <= start;
+        });
+
+        const hasCourtError = !formData.court_id;
+        const hasTitleError = !trimmedTitle;
+        setCourtError(hasCourtError);
+        setTitleError(hasTitleError);
+
+        if (hasCourtError || hasTitleError) {
+            setFormError('Complete the required fields first before saving this block.');
+            return;
+        }
+
+        if (invalidBlock) {
+            setInvalidBlockIds([invalidBlock.id]);
+            setFormError('End time must be later than start time. For overnight closures, create a separate next-day block.');
+            return;
+        }
+
+        if (!editingEvent) {
+            for (let i = 0; i < blockEntries.length; i += 1) {
+                const current = blockEntries[i];
+                const currentStart = new Date(`${current.date}T${current.start_time}:00`).getTime();
+                const currentEnd = new Date(`${current.date}T${current.end_time}:00`).getTime();
+
+                for (let j = i + 1; j < blockEntries.length; j += 1) {
+                    const compare = blockEntries[j];
+                    if (current.date !== compare.date) continue;
+
+                    const compareStart = new Date(`${compare.date}T${compare.start_time}:00`).getTime();
+                    const compareEnd = new Date(`${compare.date}T${compare.end_time}:00`).getTime();
+                    const overlaps = currentStart < compareEnd && compareStart < currentEnd;
+
+                    if (overlaps) {
+                        conflictingBlockIds.add(current.id);
+                        conflictingBlockIds.add(compare.id);
+                    }
+                }
+            }
+        }
+
+        if (conflictingBlockIds.size > 0) {
+            setInvalidBlockIds(Array.from(conflictingBlockIds));
+            setFormError('Schedules on the same day cannot use the same or overlapping allotted time. Adjust the conflicting rows and try again.');
+            return;
+        }
+
+        setFormError(null);
+        setInvalidBlockIds([]);
         setIsSubmitting(true);
 
         try {
-            const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`).toISOString();
-            const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`).toISOString();
-
-            await onSave({
+            const eventPayloads = blocksToSubmit.map(block => ({
                 ...(editingEvent && { id: editingEvent.id }),
                 court_id: formData.court_id,
-                title: formData.title,
+                title: trimmedTitle,
                 description: formData.description || undefined,
-                start_datetime: startDateTime,
-                end_datetime: endDateTime,
+                start_datetime: new Date(`${block.date}T${block.start_time}:00`).toISOString(),
+                end_datetime: new Date(`${block.date}T${block.end_time}:00`).toISOString(),
                 event_type: formData.event_type,
                 blocks_bookings: formData.blocks_bookings,
                 color: getEventColorByType(formData.event_type)
-            });
+            }));
+
+            await onSave(editingEvent ? eventPayloads[0] : eventPayloads);
 
             onClose();
         } catch (err) {
             console.error('Error saving event:', err);
-            alert('Failed to save event');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to save event';
+            setFormError(errorMessage);
         } finally {
             setIsSubmitting(false);
         }
@@ -125,8 +257,14 @@ const EventModal: React.FC<{
     if (!isOpen) return null;
 
     return ReactDOM.createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-lg max-h-[95vh] flex flex-col rounded-[32px] shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white w-full max-w-2xl max-h-[95vh] flex flex-col rounded-[32px] shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
                     <div>
@@ -147,7 +285,18 @@ const EventModal: React.FC<{
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
+                <form onSubmit={handleSubmit} noValidate className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
+                    {formError && (
+                        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                            <div className="mt-0.5 rounded-xl bg-white/80 p-2 shrink-0">
+                                <AlertCircle size={16} className="text-rose-600" />
+                            </div>
+                            <div>
+                                <p className="font-bold uppercase tracking-wide text-[11px] text-rose-700">Check this form</p>
+                                <p className="mt-1 leading-relaxed">{formError}</p>
+                            </div>
+                        </div>
+                    )}
                     {/* Court Selection */}
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
@@ -155,15 +304,23 @@ const EventModal: React.FC<{
                         </label>
                         <select
                             value={formData.court_id}
-                            onChange={(e) => setFormData(prev => ({ ...prev, court_id: e.target.value }))}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium"
-                            required
+                            onChange={(e) => {
+                                setFormError(null);
+                                setCourtError(false);
+                                setFormData(prev => ({ ...prev, court_id: e.target.value }));
+                            }}
+                            className={`w-full px-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium ${
+                                courtError ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+                            }`}
                         >
                             <option value="">Choose a court...</option>
                             {courts.map(court => (
                                 <option key={court.id} value={court.id}>{court.name}</option>
                             ))}
                         </select>
+                        {courtError && (
+                            <p className="mt-2 text-xs font-medium text-rose-600">Select a court to continue.</p>
+                        )}
                     </div>
 
                     {/* Event Type */}
@@ -197,11 +354,19 @@ const EventModal: React.FC<{
                         <input
                             type="text"
                             value={formData.title}
-                            onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                            onChange={(e) => {
+                                setFormError(null);
+                                setTitleError(false);
+                                setFormData(prev => ({ ...prev, title: e.target.value }));
+                            }}
                             placeholder="e.g., Monthly Maintenance, VIP Booking..."
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium"
-                            required
+                            className={`w-full px-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium ${
+                                titleError ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+                            }`}
                         />
+                        {titleError && (
+                            <p className="mt-2 text-xs font-medium text-rose-600">Enter an event title before saving.</p>
+                        )}
                     </div>
 
                     {/* Description */}
@@ -219,43 +384,156 @@ const EventModal: React.FC<{
                     </div>
 
                     {/* Date & Time */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                Date
-                            </label>
-                            <input
-                                type="date"
-                                value={formData.date}
-                                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
-                                required
-                            />
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    {editingEvent ? 'Date & Time' : 'Block Schedules'}
+                                </label>
+                                {!editingEvent && (
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Add one or more time blocks for this court. Each row becomes its own blocked event.
+                                    </p>
+                                )}
+                            </div>
+                            {!editingEvent && (
+                                <button
+                                    type="button"
+                                    onClick={addTimeBlock}
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 text-blue-700 border-2 border-blue-200 ring-4 ring-blue-100/70 hover:bg-blue-100 transition-all text-[10px] font-black uppercase tracking-widest shrink-0 animate-pulse"
+                                >
+                                    <Plus size={14} /> Add Time
+                                </button>
+                            )}
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                Start Time
-                            </label>
-                            <input
-                                type="time"
-                                value={formData.start_time}
-                                onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                End Time
-                            </label>
-                            <input
-                                type="time"
-                                value={formData.end_time}
-                                onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-                                className="w-full px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm"
-                                required
-                            />
-                        </div>
+
+                        {editingEvent ? (
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                        Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={formData.date}
+                                        onChange={(e) => {
+                                            setFormError(null);
+                                            setInvalidBlockIds([]);
+                                            setFormData(prev => ({ ...prev, date: e.target.value }));
+                                        }}
+                                        className={`w-full px-3 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                            invalidBlockIds.length > 0 ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+                                        }`}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                        Start Time
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={formData.start_time}
+                                        onChange={(e) => {
+                                            setFormError(null);
+                                            setInvalidBlockIds([]);
+                                            setFormData(prev => ({ ...prev, start_time: e.target.value }));
+                                        }}
+                                        className={`w-full px-3 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                            invalidBlockIds.length > 0 ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+                                        }`}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                        End Time
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={formData.end_time}
+                                        onChange={(e) => {
+                                            setFormError(null);
+                                            setInvalidBlockIds([]);
+                                            setFormData(prev => ({ ...prev, end_time: e.target.value }));
+                                        }}
+                                        className={`w-full px-3 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                            invalidBlockIds.length > 0 ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+                                        }`}
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {timeBlocks.map((block, index) => (
+                                    <div
+                                        key={block.id}
+                                        className={`p-3 rounded-2xl border bg-slate-50 ${
+                                            invalidBlockIds.includes(block.id) ? 'border-rose-300 bg-rose-50/70' : 'border-slate-200'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                Schedule {index + 1}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeTimeBlock(block.id)}
+                                                disabled={timeBlocks.length === 1}
+                                                className="p-2 rounded-xl text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                                aria-label="Remove time block"
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                                    Date
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={block.date}
+                                                    onChange={(e) => updateTimeBlock(block.id, { date: e.target.value })}
+                                                    className={`w-full px-3 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                                        invalidBlockIds.includes(block.id) ? 'border-rose-300' : 'border-slate-200'
+                                                    }`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                                    Start Time
+                                                </label>
+                                                <input
+                                                    type="time"
+                                                    value={block.start_time}
+                                                    onChange={(e) => updateTimeBlock(block.id, { start_time: e.target.value })}
+                                                    className={`w-full px-3 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                                        invalidBlockIds.includes(block.id) ? 'border-rose-300' : 'border-slate-200'
+                                                    }`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                                                    End Time
+                                                </label>
+                                                <input
+                                                    type="time"
+                                                    value={block.end_time}
+                                                    onChange={(e) => updateTimeBlock(block.id, { end_time: e.target.value })}
+                                                    className={`w-full px-3 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium text-sm ${
+                                                        invalidBlockIds.includes(block.id) ? 'border-rose-300' : 'border-slate-200'
+                                                    }`}
+                                                />
+                                            </div>
+                                        </div>
+                                        {invalidBlockIds.includes(block.id) && (
+                                            <p className="mt-3 text-xs font-medium text-rose-600">
+                                                This schedule conflicts with another row on the same day or has an invalid time range.
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Block Bookings Toggle */}
@@ -281,6 +559,15 @@ const EventModal: React.FC<{
                     </div>
 
                     {/* Actions */}
+                    {editingEvent && onDelete && (
+                        <button
+                            type="button"
+                            onClick={() => onDelete(editingEvent)}
+                            className="w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest bg-red-50 text-red-600 hover:bg-red-100 transition-all border border-red-100 flex items-center justify-center gap-2"
+                        >
+                            <Trash2 size={16} /> Delete Event
+                        </button>
+                    )}
                     <div className="flex gap-3 pt-2">
                         <button
                             type="button"
@@ -291,13 +578,96 @@ const EventModal: React.FC<{
                         </button>
                         <button
                             type="submit"
-                            disabled={isSubmitting || !formData.court_id || !formData.title}
+                            disabled={isSubmitting || !formData.court_id || !formData.title || (!editingEvent && timeBlocks.length === 0)}
                             className="flex-1 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/10"
                         >
-                            {isSubmitting ? 'Saving...' : (editingEvent ? 'Update Event' : 'Create Event')}
+                            {isSubmitting ? 'Saving...' : (editingEvent ? 'Update Event' : timeBlocks.length > 1 ? `Create ${timeBlocks.length} Blocks` : 'Create Event')}
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>,
+        document.body
+    );
+};
+
+const DayEventsModal: React.FC<{
+    isOpen: boolean;
+    dateLabel: string;
+    events: CourtEvent[];
+    getCourtName: (courtId: string) => string;
+    getEventTypeIcon: (type: CourtEventType) => React.ReactNode;
+    onClose: () => void;
+    onSelectEvent: (event: CourtEvent) => void;
+}> = ({ isOpen, dateLabel, events, getCourtName, getEventTypeIcon, onClose, onSelectEvent }) => {
+    if (!isOpen) return null;
+
+    return ReactDOM.createPortal(
+        <div
+            className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-lg max-h-[85vh] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Day Events</p>
+                        <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">{dateLabel}</h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                            {events.length} {events.length === 1 ? 'event' : 'events'} scheduled for this day
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-full bg-slate-100 p-2 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-900"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="max-h-[60vh] space-y-3 overflow-y-auto p-5">
+                    {events.map(event => (
+                        <button
+                            key={event.id}
+                            type="button"
+                            onClick={() => onSelectEvent(event)}
+                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition-all hover:border-slate-300 hover:bg-white"
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span
+                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-black uppercase"
+                                        style={{ backgroundColor: event.color || '#ef4444', color: 'white' }}
+                                    >
+                                        {getEventTypeIcon(event.event_type)}
+                                        {event.event_type.replace('_', ' ')}
+                                    </span>
+                                    {event.blocks_bookings && (
+                                        <span className="rounded-md bg-blue-100 px-2 py-1 text-[10px] font-black uppercase text-blue-700">
+                                            Blocking
+                                        </span>
+                                    )}
+                                </div>
+                                <Edit3 size={14} className="shrink-0 text-slate-400" />
+                            </div>
+                            <p className="mt-3 truncate text-sm font-black text-slate-900">{event.title}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500">
+                                <span className="flex items-center gap-1">
+                                    <MapPin size={12} /> {getCourtName(event.court_id)}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <Clock size={12} />
+                                    {new Date(event.start_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {' - '}
+                                    {new Date(event.end_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>,
         document.body
@@ -313,6 +683,7 @@ const CourtCalendar: React.FC = () => {
     const [isManagerRole, setIsManagerRole] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<CourtEvent | null>(null);
+    const [expandedDay, setExpandedDay] = useState<{ dateLabel: string; events: CourtEvent[] } | null>(null);
     const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
     const [selectedCourt, setSelectedCourt] = useState<string>('all');
 
@@ -375,39 +746,45 @@ const CourtCalendar: React.FC = () => {
         }
     };
 
-    const handleSaveEvent = async (eventData: Partial<CourtEvent>) => {
+    const handleSaveEvent = async (eventData: Partial<CourtEvent> | Partial<CourtEvent>[]) => {
         try {
-            if (eventData.id) {
-                // Update existing event
-                await updateCourtEvent(eventData.id, {
-                    title: eventData.title,
-                    description: eventData.description,
-                    start_datetime: eventData.start_datetime,
-                    end_datetime: eventData.end_datetime,
-                    event_type: eventData.event_type,
-                    blocks_bookings: eventData.blocks_bookings,
-                });
-            } else {
-                // Create new event
-                await createCourtEvent(
-                    eventData.court_id!,
-                    eventData.title!,
-                    eventData.description,
-                    eventData.start_datetime!,
-                    eventData.end_datetime!,
-                    eventData.event_type!,
-                    eventData.blocks_bookings,
-                    eventData.color
-                );
+            const eventsToSave = Array.isArray(eventData) ? eventData : [eventData];
+
+            for (const item of eventsToSave) {
+                if (item.id) {
+                    // Update existing event
+                    const result = await updateCourtEvent(item.id, {
+                        title: item.title,
+                        description: item.description,
+                        start_datetime: item.start_datetime,
+                        end_datetime: item.end_datetime,
+                        event_type: item.event_type,
+                        blocks_bookings: item.blocks_bookings,
+                    });
+                    if (result.error) throw result.error;
+                } else {
+                    // Create new event
+                    const result = await createCourtEvent(
+                        item.court_id!,
+                        item.title!,
+                        item.description,
+                        item.start_datetime!,
+                        item.end_datetime!,
+                        item.event_type!,
+                        item.blocks_bookings,
+                        item.color
+                    );
+                    if (result.error) throw result.error;
+                }
             }
-            fetchData();
+            await fetchData();
             setEditingEvent(null);
         } catch (err) {
             throw err;
         }
     };
 
-    const handleDeleteEvent = async (eventId: string) => {
+    const handleDeleteEvent = async (eventId: string, afterDelete?: () => void) => {
         showConfirm(
             'Delete Event?',
             'This will permanently delete this calendar event. Affected time slots will become available for booking again. This action cannot be undone.',
@@ -420,7 +797,9 @@ const CourtCalendar: React.FC = () => {
                         return;
                     }
                     // Refresh the events list
-                    fetchData();
+                    await fetchData();
+                    setEditingEvent(null);
+                    afterDelete?.();
                 } catch (err) {
                     console.error('Error deleting event:', err);
                     alert('Failed to delete event');
@@ -431,8 +810,20 @@ const CourtCalendar: React.FC = () => {
     };
 
     const handleEditEvent = (event: CourtEvent) => {
+        setExpandedDay(null);
         setEditingEvent(event);
         setIsModalOpen(true);
+    };
+
+    const handleOpenDayEvents = (day: number) => {
+        const dayEvents = getEventsForDay(day)
+            .sort((a, b) => new Date(a.start_datetime).getTime() - new Date(b.start_datetime).getTime());
+        const dayDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+
+        setExpandedDay({
+            dateLabel: dayDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+            events: dayEvents,
+        });
     };
 
     // Calendar helpers
@@ -676,12 +1067,16 @@ const CourtCalendar: React.FC = () => {
                                 >
                                     {day && (
                                         <>
+                                            {(() => {
+                                                const dayEvents = getEventsForDay(day);
+                                                return (
+                                                    <>
                                             <div className={`text-sm font-black mb-1 ${isToday(day) ? 'text-blue-600' : 'text-slate-900'
                                                 }`}>
                                                 {day}
                                             </div>
                                             <div className="space-y-1">
-                                                {getEventsForDay(day).slice(0, 3).map(event => (
+                                                {dayEvents.slice(0, 3).map(event => (
                                                     <button
                                                         key={event.id}
                                                         onClick={() => handleEditEvent(event)}
@@ -695,12 +1090,20 @@ const CourtCalendar: React.FC = () => {
                                                         </div>
                                                     </button>
                                                 ))}
-                                                {getEventsForDay(day).length > 3 && (
-                                                    <p className="text-[9px] font-bold text-slate-400 pl-1">
-                                                        +{getEventsForDay(day).length - 3} more
-                                                    </p>
+                                                {dayEvents.length > 3 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenDayEvents(day)}
+                                                        className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white/80 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700"
+                                                    >
+                                                        <span>+{dayEvents.length - 3} more</span>
+                                                        <span>View all</span>
+                                                    </button>
                                                 )}
                                             </div>
+                                                    </>
+                                                );
+                                            })()}
                                         </>
                                     )}
                                 </div>
@@ -786,8 +1189,22 @@ const CourtCalendar: React.FC = () => {
                     setEditingEvent(null);
                 }}
                 onSave={handleSaveEvent}
+                onDelete={(event) => handleDeleteEvent(event.id, () => {
+                    setIsModalOpen(false);
+                    setEditingEvent(null);
+                })}
                 courts={courts}
                 editingEvent={editingEvent}
+            />
+
+            <DayEventsModal
+                isOpen={Boolean(expandedDay)}
+                dateLabel={expandedDay?.dateLabel || ''}
+                events={expandedDay?.events || []}
+                getCourtName={getCourtName}
+                getEventTypeIcon={getEventTypeIcon}
+                onClose={() => setExpandedDay(null)}
+                onSelectEvent={handleEditEvent}
             />
 
             {/* Confirm Dialog */}

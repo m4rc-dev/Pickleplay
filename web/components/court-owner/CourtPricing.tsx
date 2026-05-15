@@ -84,6 +84,96 @@ function formatTime12(time24: string): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${period}`;
 }
 
+function timeToMinutes(time24: string): number {
+  const [h, m = 0] = time24.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function isOvernightRange(openTime: string, closeTime: string): boolean {
+  return closeTime !== '24:00' && timeToMinutes(closeTime) <= timeToMinutes(openTime);
+}
+
+function isInvalidHoursRange(openTime: string, closeTime: string): boolean {
+  return openTime === closeTime;
+}
+
+function formatCloseOption(closeTime: string, openTime: string): string {
+  const label = formatTime12(closeTime);
+  if (closeTime === '24:00') return `${label} next day`;
+  return closeTime === '24:00' || isOvernightRange(openTime, closeTime)
+    ? `${label} next day`
+    : `${label} same day`;
+}
+
+function formatHoursRange(openTime: string, closeTime: string): string {
+  return `${formatTime12(openTime)} - ${formatCloseOption(closeTime, openTime)}`;
+}
+
+function getCloseTimeOptions(openTime: string): string[] {
+  const openMinutes = timeToMinutes(openTime);
+  return HOUR_CLOSE_OPTIONS
+    .filter(time => time !== openTime && time !== '00:00')
+    .map(time => {
+      const rawMinutes = time === '24:00' ? 1440 : timeToMinutes(time);
+      const timelineMinutes = rawMinutes <= openMinutes && time !== '24:00'
+        ? rawMinutes + 1440
+        : rawMinutes;
+      return { time, timelineMinutes };
+    })
+    .sort((a, b) => a.timelineMinutes - b.timelineMinutes)
+    .map(({ time }) => time);
+}
+
+function getOrderedHoursWithinRange(openTime: string, closeTime: string, includeCloseEndpoint = false): string[] {
+  const openMinutes = timeToMinutes(openTime);
+  const rawCloseMinutes = closeTime === '24:00' ? 1440 : timeToMinutes(closeTime);
+  const closeMinutes = rawCloseMinutes <= openMinutes && closeTime !== '24:00'
+    ? rawCloseMinutes + 1440
+    : rawCloseMinutes;
+
+  const source = includeCloseEndpoint ? HOUR_CLOSE_OPTIONS : HOUR_OPTIONS;
+  return source
+    .map(time => {
+      const rawMinutes = time === '24:00' ? 1440 : timeToMinutes(time);
+      const minutes = rawMinutes < openMinutes && time !== '24:00' ? rawMinutes + 1440 : rawMinutes;
+      return { time, minutes };
+    })
+    .filter(({ minutes }) => (
+      includeCloseEndpoint
+        ? minutes >= openMinutes && minutes <= closeMinutes
+        : minutes >= openMinutes && minutes < closeMinutes
+    ))
+    .sort((a, b) => a.minutes - b.minutes)
+    .map(({ time }) => time);
+}
+
+function getTimelineMinutes(time: string, anchorOpenTime: string): number {
+  const rawMinutes = time === '24:00' ? 1440 : timeToMinutes(time);
+  return rawMinutes < timeToMinutes(anchorOpenTime) && time !== '24:00'
+    ? rawMinutes + 1440
+    : rawMinutes;
+}
+
+function getDefaultEndTime(openTime: string, closeTime: string): string {
+  const options = getOrderedHoursWithinRange(openTime, closeTime, true)
+    .filter(time => time !== openTime && timeToMinutes(time) > timeToMinutes(openTime));
+  const openTimeline = getTimelineMinutes(openTime, openTime);
+  const targetTimeline = openTimeline + 4 * 60;
+  return options.find(time => getTimelineMinutes(time, openTime) >= targetTimeline) || options[options.length - 1] || closeTime;
+}
+
+function getSameDayPricingStartOptions(openTime: string, closeTime: string): string[] {
+  return getOrderedHoursWithinRange(openTime, closeTime, false)
+    .filter(time => timeToMinutes(time) >= timeToMinutes(openTime));
+}
+
+function getSameDayPricingEndOptions(startTime: string, closeTime: string): string[] {
+  return HOUR_CLOSE_OPTIONS.filter(time => {
+    const minutes = time === '24:00' ? 1440 : timeToMinutes(time);
+    return minutes > timeToMinutes(startTime) && minutes <= (closeTime === '24:00' || timeToMinutes(closeTime) <= timeToMinutes(startTime) ? 1440 : timeToMinutes(closeTime));
+  });
+}
+
 function formatPrice(price: number): string {
   return price === 0 ? 'Free' : `₱${price}`;
 }
@@ -227,9 +317,9 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
 
   const handleSaveOperationHours = async () => {
     if (!user || !selectedCourtId) return;
-    const invalidDay = opHoursSchedule.find((d) => !d.isClosed && d.openTime >= d.closeTime);
+    const invalidDay = opHoursSchedule.find((d) => !d.isClosed && isInvalidHoursRange(d.openTime, d.closeTime));
     if (invalidDay) {
-      showToast(`Invalid hours for ${DAY_SHORT[invalidDay.dayOfWeek]}: close time must be after open time.`, 'error');
+      showToast(`Invalid hours for ${DAY_SHORT[invalidDay.dayOfWeek]}: choose a different close time. Overnight hours are allowed.`, 'error');
       return;
     }
     setIsSavingHours(true);
@@ -290,8 +380,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
 
   const handleSaveDateOverride = async () => {
     if (!user || !selectedCourtId || !dateOverrideDate) return;
-    if (!dateOverrideClosed && dateOverrideOpen >= dateOverrideClose) {
-      showToast('End time must be after start time for date override.', 'error');
+    if (!dateOverrideClosed && isInvalidHoursRange(dateOverrideOpen, dateOverrideClose)) {
+      showToast('Choose a different close time for this date. Overnight hours are allowed.', 'error');
       return;
     }
     setIsSavingDateOverride(true);
@@ -398,11 +488,18 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
     }
   };
 
-  /** Manual override: let owner mark court as ready even with base_price = 0 (free court) */
+  /** Validate setup before activating a court for player booking. */
   const handleManualSetupComplete = () => {
     if (!selectedCourtId || !selectedCourt) return;
+    if (selectedCourt.base_price <= 0) {
+      showToast('Set the default base price first.', 'error');
+      setBasePriceInput(selectedCourt.base_price.toString());
+      setEditingBasePrice(true);
+      return;
+    }
     if (daysWithCustomHours === 0) {
-      showToast('Please set operation hours first before marking as ready.', 'error');
+      showToast('Set operation hours before activating this court.', 'error');
+      setShowOperationHours(true);
       return;
     }
     setShowSetupReview(true);
@@ -530,12 +627,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
     if (dayOfWeek !== null) {
       const dayHours = opHoursSchedule.find(d => d.dayOfWeek === dayOfWeek);
       if (dayHours && !dayHours.isClosed) {
-        const openH = parseInt(dayHours.openTime.split(':')[0], 10);
-        const closeH = parseInt(dayHours.closeTime.split(':')[0], 10);
-        if (closeH > openH) {
-          const filtered = HOUR_CLOSE_OPTIONS.filter((_, idx) => idx >= openH && idx <= closeH);
-          return { options: filtered, openTime: dayHours.openTime, closeTime: dayHours.closeTime };
-        }
+        const filtered = getOrderedHoursWithinRange(dayHours.openTime, dayHours.closeTime, true);
+        return { options: filtered, openTime: dayHours.openTime, closeTime: dayHours.closeTime };
       }
       // If day is closed, return empty (shouldn't normally add pricing for closed days)
       if (dayHours?.isClosed) {
@@ -553,6 +646,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
 
   const formHourInfo = getFormHourOptions();
   const formHourOptions = formHourInfo.options;
+  const sameDayStartOptions = getSameDayPricingStartOptions(formHourInfo.openTime, formHourInfo.closeTime);
+  const sameDayEndOptions = getSameDayPricingEndOptions(formStartTime, formHourInfo.closeTime);
 
   // Group weekly rules by day
   const weeklyRulesByDay = DAY_NAMES.map((name, idx) => ({
@@ -587,11 +682,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
     const dayHours = targetDow !== null ? opHoursSchedule.find(d => d.dayOfWeek === targetDow) : null;
     if (dayHours && !dayHours.isClosed) {
       setFormStartTime(dayHours.openTime);
-      // Default end time to midpoint or +4h, whichever is smaller
-      const openH = parseInt(dayHours.openTime.split(':')[0], 10);
-      const closeH = parseInt(dayHours.closeTime.split(':')[0], 10);
-      const midH = Math.min(openH + 4, closeH);
-      setFormEndTime(midH.toString().padStart(2, '0') + ':00');
+      setFormEndTime(getDefaultEndTime(dayHours.openTime, dayHours.closeTime));
     } else {
       setFormStartTime('08:00');
       setFormEndTime('12:00');
@@ -615,7 +706,10 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
   const prepareSave = () => {
     if (!user || !selectedCourtId) return;
     if (!formPrice || parseFloat(formPrice) < 0) { showToast('Please enter a valid price.', 'error'); return; }
-    if (formStartTime >= formEndTime) { showToast('End time must be after start time.', 'error'); return; }
+    if (formStartTime >= formEndTime) {
+      showToast('Pricing rates cannot cross midnight. Add one rate up to 12:00 AM, then another rate for the next-day hours.', 'error');
+      return;
+    }
     if (formDayOfWeek === null && !formSpecificDate) { showToast('Please select a day or date.', 'error'); return; }
 
     const payload = {
@@ -883,204 +977,216 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
         </div>
       </div>
 
-      {/* ═══ SETUP YOUR NEW ADDED COURT BANNER ═══ */}
+      {/* Setup status */}
       {selectedCourt && !selectedCourt.setup_complete && (
-        <div className="bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 border-2 border-orange-200 rounded-[28px] p-6 shadow-lg shadow-orange-100/50 animate-in fade-in slide-in-from-top-3 duration-500">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center shrink-0 border border-orange-200">
-              <AlertTriangle size={28} className="text-orange-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-black text-orange-900 tracking-tight flex items-center gap-2">
-                🆕 Setup Your New Added Court
-                <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-2.5 py-1 rounded-full uppercase tracking-widest border border-orange-200 animate-pulse">Action Required</span>
-              </h2>
-              <p className="text-sm text-orange-700/80 font-medium mt-1 leading-relaxed">
-                Complete the setup below so this court will be visible to players on the booking page. Set both the <strong>Default Base Price</strong> and <strong>Operation Hours</strong> to activate.
-              </p>
-
-              {/* Setup checklist */}
-              <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                {/* Step 1: Base Price */}
-                <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border-2 flex-1 transition-all ${
-                  selectedCourt.base_price > 0
-                    ? 'bg-emerald-50 border-emerald-200'
-                    : 'bg-white border-orange-200'
-                }`}>
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                    selectedCourt.base_price > 0 ? 'bg-emerald-500' : 'bg-orange-100'
-                  }`}>
-                    {selectedCourt.base_price > 0
-                      ? <CheckCircle2 size={16} className="text-white" />
-                      : <span className="text-xs font-black text-orange-500">1</span>
-                    }
-                  </div>
-                  <div>
-                    <p className={`text-xs font-black uppercase tracking-wider ${selectedCourt.base_price > 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
-                      Default Base Price
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                      {selectedCourt.base_price > 0 ? `✅ Set to ₱${selectedCourt.base_price}/hr` : '⬜ Click "Edit Price" below to set'}
-                    </p>
-                  </div>
+        <div className="overflow-hidden rounded-[28px] border border-amber-200 bg-white shadow-sm animate-in fade-in slide-in-from-top-3 duration-500">
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px]">
+            <div className="p-5 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={24} className="text-amber-600" />
                 </div>
-
-                {/* Step 2: Operation Hours */}
-                <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border-2 flex-1 transition-all ${
-                  daysWithCustomHours > 0
-                    ? 'bg-emerald-50 border-emerald-200'
-                    : 'bg-white border-orange-200'
-                }`}>
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                    daysWithCustomHours > 0 ? 'bg-emerald-500' : 'bg-orange-100'
-                  }`}>
-                    {daysWithCustomHours > 0
-                      ? <CheckCircle2 size={16} className="text-white" />
-                      : <span className="text-xs font-black text-orange-500">2</span>
-                    }
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-amber-600">Court setup</p>
+                    <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black uppercase tracking-widest">Action required</span>
                   </div>
-                  <div>
-                    <p className={`text-xs font-black uppercase tracking-wider ${daysWithCustomHours > 0 ? 'text-emerald-700' : 'text-orange-700'}`}>
-                      Operation Hours
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                      {daysWithCustomHours > 0 ? `✅ ${daysWithCustomHours}/7 days configured` : '⬜ Expand "Operation Hours" below to set'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Manual "Mark as Ready" button for free courts or when both steps done */}
-              {selectedCourt.base_price > 0 && daysWithCustomHours > 0 && (
-                <div className="mt-4 flex items-center gap-3">
-                  <button
-                    onClick={handleManualSetupComplete}
-                    className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200/50 flex items-center gap-2"
-                  >
-                    <CheckCircle2 size={16} /> Review & Activate Court
-                  </button>
-                </div>
-              )}
-              {selectedCourt.base_price <= 0 && daysWithCustomHours > 0 && (
-                <div className="mt-4 flex items-center gap-3">
-                  <p className="text-xs text-orange-600 font-bold">
-                    <Info size={12} className="inline mr-1 -mt-0.5" />
-                    If this is a <strong>free court</strong>, you can still activate it:
+                  <h2 className="mt-2 text-xl md:text-2xl font-black text-slate-950 tracking-tight">
+                    Finish setup for {selectedCourt.name}
+                  </h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500 leading-relaxed max-w-3xl">
+                    Set a base price and weekly operation hours before this court appears on the player booking page.
                   </p>
-                  <button
-                    onClick={handleManualSetupComplete}
-                    className="px-4 py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <CheckCircle2 size={12} /> Review & Activate as Free Court
-                  </button>
                 </div>
-              )}
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className={`rounded-2xl border p-4 transition-all ${selectedCourt.base_price > 0 ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/50'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selectedCourt.base_price > 0 ? 'bg-emerald-600 text-white' : 'bg-white text-amber-700 border border-amber-200'}`}>
+                      {selectedCourt.base_price > 0 ? <CheckCircle2 size={18} /> : <PhilippinePeso size={18} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-800">Default base price</p>
+                      <p className="mt-1 text-sm font-bold text-slate-600">
+                        {selectedCourt.base_price > 0 ? `Set to ${formatPrice(selectedCourt.base_price)}/hr` : 'No base price yet'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setBasePriceInput(selectedCourt.base_price.toString()); setEditingBasePrice(true); }}
+                      className={`px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider hover:border-emerald-300 hover:text-emerald-700 transition-all ${selectedCourt.base_price <= 0 ? 'animate-pulse ring-2 ring-amber-300 shadow-lg shadow-amber-200/70' : ''}`}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl border p-4 transition-all ${daysWithCustomHours > 0 ? 'border-emerald-200 bg-emerald-50/60' : selectedCourt.base_price > 0 ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200 bg-slate-50/70 opacity-70'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${daysWithCustomHours > 0 ? 'bg-emerald-600 text-white' : 'bg-white text-amber-700 border border-amber-200'}`}>
+                      {daysWithCustomHours > 0 ? <CheckCircle2 size={18} /> : <Clock size={18} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-800">Operation hours</p>
+                      <p className="mt-1 text-sm font-bold text-slate-600">
+                        {daysWithCustomHours > 0 ? `${daysWithCustomHours}/7 days configured` : 'Weekly hours needed'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (selectedCourt.base_price <= 0) {
+                          showToast('Set the default base price before operation hours.', 'error');
+                          setBasePriceInput(selectedCourt.base_price.toString());
+                          setEditingBasePrice(true);
+                          return;
+                        }
+                        setShowOperationHours(true);
+                      }}
+                      className={`relative px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider hover:border-indigo-300 hover:text-indigo-700 transition-all ${selectedCourt.base_price > 0 && daysWithCustomHours === 0 ? 'ring-2 ring-amber-300 shadow-lg shadow-amber-200/70 bg-amber-50 text-amber-800' : ''}`}
+                    >
+                      {selectedCourt.base_price > 0 && daysWithCustomHours === 0 && (
+                        <span className="absolute -inset-1 rounded-2xl bg-amber-300/50 animate-ping pointer-events-none" />
+                      )}
+                      <span className="relative z-10">
+                      Set
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-bold text-slate-600">
+                  {selectedCourt.base_price <= 0
+                    ? 'Start with the default base price.'
+                    : daysWithCustomHours === 0
+                      ? 'Next, set operation hours.'
+                      : 'Setup is complete. Review and activate this court.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 p-5 md:p-6 text-white flex flex-col justify-between gap-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-lime-300">Visibility</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight">
+                  {selectedCourt.base_price > 0 && daysWithCustomHours > 0 ? 'Ready for review' : 'Hidden from players'}
+                </h3>
+                <p className="mt-2 text-sm font-medium text-white/60 leading-relaxed">
+                  Players will see this court after setup is reviewed and activated.
+                </p>
+              </div>
+              <button
+                onClick={handleManualSetupComplete}
+                className={`w-full px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                  selectedCourt.base_price > 0 && daysWithCustomHours > 0
+                    ? 'bg-lime-300 text-slate-950 hover:bg-lime-200'
+                    : 'bg-white/10 text-white/70 hover:bg-white/15'
+                }`}
+              >
+                <CheckCircle2 size={16} />
+                {selectedCourt.base_price > 0 && daysWithCustomHours > 0 ? 'Review & Activate' : 'Finish Required Step'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Base Price Info + Editable */}
-      {selectedCourt && (
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <PhilippinePeso size={18} className="text-blue-600" />
-            {editingBasePrice ? (
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-blue-900 text-sm">{selectedCourt.name}</span>
-                <span className="text-blue-600 font-medium text-sm">— Base price:</span>
-                <div className="flex items-center gap-1 bg-white rounded-xl border border-blue-200 px-3 py-1.5">
-                  <span className="text-blue-700 font-bold text-sm">₱</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={basePriceInput}
-                    onChange={(e) => setBasePriceInput(e.target.value)}
-                    className="w-24 text-sm font-black text-blue-700 bg-transparent outline-none"
-                    placeholder="e.g. 450"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') updateBasePrice(selectedCourt.id, parseFloat(basePriceInput));
-                      if (e.key === 'Escape') setEditingBasePrice(false);
-                    }}
-                  />
-                  <span className="text-blue-500 text-sm font-medium">/hr</span>
-                </div>
-                <button
-                  onClick={() => updateBasePrice(selectedCourt.id, parseFloat(basePriceInput))}
-                  className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-700 transition-all shadow-sm"
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  onClick={() => setEditingBasePrice(false)}
-                  className="px-3 py-1.5 bg-slate-200 text-slate-600 text-xs font-black rounded-xl hover:bg-slate-300 transition-all"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="text-sm flex items-center gap-2">
-                <span className="font-bold text-blue-900">{selectedCourt.name}</span>
-                <span className="text-blue-600 font-medium"> — Default base price: </span>
-                <span className="font-black text-blue-700">₱{selectedCourt.base_price}/hr</span>
-                <span className="text-blue-500 text-xs font-medium">(Used when no custom pricing rule matches a time slot)</span>
-              </div>
-            )}
+      {/* Setup actions */}
+      {selectedCourt && selectedCourt.setup_complete && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
+              <PhilippinePeso size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black uppercase tracking-wider text-slate-800">Default base price</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                {selectedCourt.base_price > 0 ? `Set to ${formatPrice(selectedCourt.base_price)}/hr` : 'No base price yet'}
+              </p>
+            </div>
+              <button
+                onClick={() => { setBasePriceInput(selectedCourt.base_price.toString()); setEditingBasePrice(true); }}
+              className="px-4 py-2.5 bg-emerald-700 text-white text-xs font-black rounded-2xl hover:bg-emerald-800 transition-all shadow-sm whitespace-nowrap flex items-center gap-2"
+              >
+                <Pencil size={13} /> Edit Price
+              </button>
           </div>
-          {!editingBasePrice && (
+
+          <div className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center justify-center shrink-0">
+              <Clock size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black uppercase tracking-wider text-slate-800">Operation hours</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                {daysWithCustomHours > 0 ? `${daysWithCustomHours}/7 days configured` : 'Weekly hours needed'}
+              </p>
+            </div>
             <button
-              onClick={() => { setBasePriceInput(selectedCourt.base_price.toString()); setEditingBasePrice(true); }}
-              className="px-4 py-2 bg-blue-600 text-white text-xs font-black rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200/50 whitespace-nowrap flex items-center gap-1.5"
+              onClick={() => setShowOperationHours(true)}
+              className="px-4 py-2.5 bg-indigo-700 text-white text-xs font-black rounded-2xl hover:bg-indigo-800 transition-all shadow-sm whitespace-nowrap flex items-center gap-2"
             >
-              <Pencil size={12} /> Edit Price
+              <Clock size={13} /> Set Hours
             </button>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ═══ OPERATION HOURS SECTION — 2 COLUMN LAYOUT ═══ */}
-      {selectedCourt && (
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-          {/* Header — always visible, click to expand */}
-          <button
-            onClick={() => setShowOperationHours(!showOperationHours)}
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50/50 transition-all"
+      {/* Operation Hours Modal */}
+      {selectedCourt && showOperationHours && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center p-2 md:p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setShowOperationHours(false)} />
+          <div className="relative w-full max-w-[1500px] max-h-[92vh] overflow-hidden bg-white rounded-[28px] shadow-2xl border border-white/70">
+          <div
+            className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4 px-5 md:px-8 py-5 border-b border-slate-100 bg-white text-left"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
-                <Clock size={18} className="text-indigo-600" />
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center shrink-0">
+                <Clock size={19} className="text-indigo-700" />
               </div>
               <div className="text-left">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Operation Hours</h3>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-black text-slate-950 tracking-tight">Operation Hours</h3>
+                  <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                    daysWithCustomHours > 0 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-amber-700 bg-amber-50 border-amber-100'
+                  }`}>
+                    {daysWithCustomHours > 0 ? 'Configured' : 'Default'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
                   {daysWithCustomHours > 0
-                    ? `Custom hours set for ${daysWithCustomHours}/7 days${dateOverrides.length > 0 ? ` • ${dateOverrides.length} date override${dateOverrides.length > 1 ? 's' : ''}` : ''}`
-                    : 'Using default hours (08:00 – 18:00) — click to customize'
+                    ? `Custom hours set for ${daysWithCustomHours}/7 days${dateOverrides.length > 0 ? ` with ${dateOverrides.length} date override${dateOverrides.length > 1 ? 's' : ''}` : ''}.`
+                    : 'Using default 8:00 AM to 6:00 PM hours until you customize them.'
                   }
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-stretch md:self-auto">
               {daysWithCustomHours > 0 && (
-                <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider border border-emerald-100">
+                <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full uppercase tracking-wider border border-emerald-100">
                   {daysWithCustomHours}/7 Days
                 </span>
               )}
               {dateOverrides.length > 0 && (
-                <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full uppercase tracking-wider border border-amber-100">
+                <span className="text-[9px] font-black text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full uppercase tracking-wider border border-amber-100">
                   {dateOverrides.length} Override{dateOverrides.length > 1 ? 's' : ''}
                 </span>
               )}
-              <ChevronRight size={16} className={`text-slate-300 transition-transform duration-300 ${showOperationHours ? 'rotate-90' : ''}`} />
+              <button
+                onClick={() => setShowOperationHours(false)}
+                className="ml-auto md:ml-1 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-all"
+                aria-label="Close operation hours"
+              >
+                <X size={16} className="text-slate-500" />
+              </button>
             </div>
-          </button>
+          </div>
 
-          {/* Expanded — 2-Column Layout */}
+          {/* Expanded, 2-column layout */}
           {showOperationHours && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="px-5 md:px-8 pb-8 pt-6 bg-slate-50/60 animate-in fade-in slide-in-from-top-2 duration-300 overflow-y-auto max-h-[calc(92vh-106px)]">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(620px,1.15fr)_minmax(440px,0.85fr)] gap-6">
 
                 {/* ══════ LEFT COLUMN: Weekly Schedule ══════ */}
                 <div className="space-y-3">
@@ -1157,8 +1263,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                                 onChange={(e) => {
                                   const nextOpen = e.target.value;
                                   updateDaySchedule(day.dayOfWeek, 'openTime', nextOpen);
-                                  if (day.closeTime <= nextOpen) {
-                                    const nextClose = HOUR_CLOSE_OPTIONS.find((h) => h > nextOpen) || '24:00';
+                                  if (day.closeTime === nextOpen) {
+                                    const nextClose = HOUR_CLOSE_OPTIONS.find((h) => h !== nextOpen) || '24:00';
                                     updateDaySchedule(day.dayOfWeek, 'closeTime', nextClose);
                                   }
                                 }}
@@ -1174,8 +1280,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                                 onChange={(e) => updateDaySchedule(day.dayOfWeek, 'closeTime', e.target.value)}
                                 className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-blue-200 outline-none"
                               >
-                                {HOUR_CLOSE_OPTIONS.filter((h) => h > day.openTime).map(h => (
-                                  <option key={h} value={h}>{formatTime12(h)}</option>
+                                {getCloseTimeOptions(day.openTime).map(h => (
+                                  <option key={h} value={h}>{formatCloseOption(h, day.openTime)}</option>
                                 ))}
                               </select>
 
@@ -1192,6 +1298,16 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                             <div className="flex-1">
                               <span className="text-[10px] font-medium text-rose-400 italic">Closed</span>
                             </div>
+                          )}
+
+                          {!day.isClosed && (
+                            <span className={`text-[7px] font-black uppercase tracking-wider border rounded-full px-1.5 py-0.5 shrink-0 ${
+                              isOvernightRange(day.openTime, day.closeTime)
+                                ? 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                                : 'text-slate-500 bg-slate-50 border-slate-200'
+                            }`}>
+                              {isOvernightRange(day.openTime, day.closeTime) ? 'Ends next day' : 'Same day'}
+                            </span>
                           )}
 
                           {existingEntry && (
@@ -1377,13 +1493,25 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                               onChange={(e) => setDateOverrideClose(e.target.value)}
                               className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 focus:ring-1 focus:ring-amber-200 outline-none"
                             >
-                              {HOUR_CLOSE_OPTIONS.filter(h => h > dateOverrideOpen).map(h => (
-                                <option key={h} value={h}>{formatTime12(h)}</option>
+                              {getCloseTimeOptions(dateOverrideOpen).map(h => (
+                                <option key={h} value={h}>{formatCloseOption(h, dateOverrideOpen)}</option>
                               ))}
                             </select>
                           </>
                         )}
                       </div>
+
+                      {!dateOverrideClosed && (
+                        <div className={`px-3 py-2 rounded-xl border text-[10px] font-bold ${
+                          isOvernightRange(dateOverrideOpen, dateOverrideClose)
+                            ? 'bg-indigo-50 border-indigo-100 text-indigo-700'
+                            : 'bg-slate-50 border-slate-100 text-slate-600'
+                        }`}>
+                          {isOvernightRange(dateOverrideOpen, dateOverrideClose)
+                            ? `Overnight schedule: closes tomorrow at ${formatTime12(dateOverrideClose)}.`
+                            : `Same-day schedule: closes today at ${formatTime12(dateOverrideClose)}.`}
+                        </div>
+                      )}
 
                       <div className="flex items-center gap-2">
                         <button
@@ -1472,7 +1600,89 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               </div>
             </div>
           )}
-        </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Base Price Modal */}
+      {selectedCourt && editingBasePrice && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setEditingBasePrice(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-[28px] shadow-2xl border border-white/70 overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <PhilippinePeso size={19} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">Default base price</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950 tracking-tight">{selectedCourt.name}</h3>
+                  <p className="mt-1 text-xs font-medium text-slate-500">Fallback hourly price when no custom rule matches.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingBasePrice(false)}
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-all"
+                aria-label="Close base price"
+              >
+                <X size={16} className="text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Hourly rate</label>
+                <div className="flex items-center gap-2 rounded-2xl bg-white border border-slate-200 px-4 py-3 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 transition-all">
+                  <span className="text-2xl font-black text-emerald-700">₱</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={basePriceInput}
+                    onChange={(e) => setBasePriceInput(e.target.value)}
+                    className="w-full bg-transparent outline-none text-3xl font-black text-slate-950"
+                    placeholder="300"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') updateBasePrice(selectedCourt.id, parseFloat(basePriceInput));
+                      if (e.key === 'Escape') setEditingBasePrice(false);
+                    }}
+                  />
+                  <span className="text-sm font-bold text-slate-400">/hr</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[300, 450, 500].map((price) => (
+                  <button
+                    key={price}
+                    onClick={() => setBasePriceInput(String(price))}
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-xs font-black text-slate-600 transition-all"
+                  >
+                    ₱{price}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditingBasePrice(false)}
+                  className="px-5 py-3 rounded-2xl bg-slate-100 text-slate-600 text-sm font-black hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateBasePrice(selectedCourt.id, parseFloat(basePriceInput))}
+                  className="flex-1 px-5 py-3 rounded-2xl bg-emerald-700 text-white text-sm font-black hover:bg-emerald-800 transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <Save size={16} /> Save Price
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Stats Bar */}
@@ -1893,11 +2103,14 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
       {showForm && ReactDOM.createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowForm(false)} />
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-8 space-y-5">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] shadow-2xl p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-slate-900">
-                {editingRule ? 'Edit' : 'Add'} Pricing Rate
-              </h2>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-700">Guided setup</p>
+                <h2 className="mt-1 text-lg font-black text-slate-900">
+                  {editingRule ? 'Edit' : 'Add'} Pricing Rate
+                </h2>
+              </div>
               <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                 <X size={18} className="text-slate-400" />
               </button>
@@ -1906,7 +2119,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
             {/* Day / Date Selection */}
             {!formSpecificDate && (
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Day of Week</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">1. Choose day of week</label>
                 <div className="flex flex-wrap gap-2">
                   {DAY_SHORT.map((d, idx) => {
                     const dayH = opHoursSchedule.find(dh => dh.dayOfWeek === idx);
@@ -1919,10 +2132,7 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                           // Reset times to this day's operation hours
                           if (dayH && !dayH.isClosed) {
                             setFormStartTime(dayH.openTime);
-                            const openH = parseInt(dayH.openTime.split(':')[0], 10);
-                            const closeH = parseInt(dayH.closeTime.split(':')[0], 10);
-                            const midH = Math.min(openH + 4, closeH);
-                            setFormEndTime(midH.toString().padStart(2, '0') + ':00');
+                            setFormEndTime(getDefaultEndTime(dayH.openTime, dayH.closeTime));
                           }
                         }}
                         className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
@@ -1952,11 +2162,21 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
 
             {/* Operation hours hint */}
             {formHourOptions.length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
-                <Clock size={12} className="text-indigo-500 shrink-0" />
-                <p className="text-[10px] font-bold text-indigo-600">
-                  Court hours: {formatTime12(formHourInfo.openTime)} – {formatTime12(formHourInfo.closeTime)}
-                </p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <Clock size={12} className="text-indigo-500 shrink-0" />
+                  <p className="text-[10px] font-bold text-indigo-600">
+                    Court hours: {formatHoursRange(formHourInfo.openTime, formHourInfo.closeTime)}
+                  </p>
+                </div>
+                {isOvernightRange(formHourInfo.openTime, formHourInfo.closeTime) && (
+                  <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl">
+                    <Info size={12} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+                      This court closes after midnight. Pricing rates must be split into before-midnight and after-midnight blocks.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {formHourOptions.length === 0 && (
@@ -1971,13 +2191,20 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
             {/* Time Range */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Start Time</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">2. Start Time</label>
                 <select
                   value={formStartTime}
-                  onChange={e => setFormStartTime(e.target.value)}
+                  onChange={e => {
+                    const nextStart = e.target.value;
+                    setFormStartTime(nextStart);
+                    const nextEndOptions = getSameDayPricingEndOptions(nextStart, formHourInfo.closeTime);
+                    if (!nextEndOptions.includes(formEndTime)) {
+                      setFormEndTime(nextEndOptions[0] || formHourInfo.closeTime);
+                    }
+                  }}
                   className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                 >
-                  {(formHourOptions.length > 0 ? formHourOptions : HOUR_OPTIONS).slice(0, -1).map(h => (
+                  {(sameDayStartOptions.length > 0 ? sameDayStartOptions : HOUR_OPTIONS).map(h => (
                     <option key={h} value={h}>{formatTime12(h)}</option>
                   ))}
                 </select>
@@ -1989,8 +2216,8 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
                   onChange={e => setFormEndTime(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 bg-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
                 >
-                  {(formHourOptions.length > 0 ? formHourOptions : HOUR_OPTIONS).filter(h => h > formStartTime).map(h => (
-                    <option key={h} value={h}>{formatTime12(h)}</option>
+                  {(sameDayEndOptions.length > 0 ? sameDayEndOptions : HOUR_CLOSE_OPTIONS.filter(h => h > formStartTime)).map(h => (
+                    <option key={h} value={h}>{h === '24:00' ? '12:00 AM next day' : `${formatTime12(h)} same day`}</option>
                   ))}
                 </select>
               </div>
@@ -2000,17 +2227,17 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="relative h-8 bg-slate-200 rounded-lg overflow-hidden">
                 {(() => {
-                  const opOpen = parseInt(formHourInfo.openTime.split(':')[0]);
-                  const opClose = parseInt(formHourInfo.closeTime.split(':')[0]);
-                  const opRange = opClose - opOpen || 24;
-                  const startH = parseInt(formStartTime.split(':')[0]);
-                  const endH = parseInt(formEndTime.split(':')[0]);
-                  const left = ((startH - opOpen) / opRange) * 100;
-                  const width = ((endH - startH) / opRange) * 100;
+                  const opStart = getTimelineMinutes(formHourInfo.openTime, formHourInfo.openTime);
+                  const opEnd = getTimelineMinutes(formHourInfo.closeTime, formHourInfo.openTime);
+                  const range = Math.max(opEnd - opStart, 60);
+                  const start = getTimelineMinutes(formStartTime, formHourInfo.openTime);
+                  const end = getTimelineMinutes(formEndTime, formHourInfo.openTime);
+                  const left = ((start - opStart) / range) * 100;
+                  const width = ((end - start) / range) * 100;
                   return (
                     <div
                       className="absolute top-0 bottom-0 bg-blue-500 rounded"
-                      style={{ left: `${Math.max(left, 0)}%`, width: `${Math.max(width, 2)}%` }}
+                      style={{ left: `${Math.max(Math.min(left, 100), 0)}%`, width: `${Math.max(Math.min(width, 100), 2)}%` }}
                     />
                   );
                 })()}
@@ -2018,18 +2245,26 @@ const CourtPricing: React.FC<CourtPricingProps> = ({ courtId: initialCourtId, on
               <div className="flex justify-between mt-1 text-[8px] font-bold text-slate-300 uppercase">
                 <span>{formatTime12(formHourInfo.openTime)}</span>
                 {(() => {
-                  const opOpen = parseInt(formHourInfo.openTime.split(':')[0]);
-                  const opClose = parseInt(formHourInfo.closeTime.split(':')[0]);
-                  const midH = Math.round((opOpen + opClose) / 2);
+                  const opStart = getTimelineMinutes(formHourInfo.openTime, formHourInfo.openTime);
+                  const opEnd = getTimelineMinutes(formHourInfo.closeTime, formHourInfo.openTime);
+                  const midMinutes = Math.round((opStart + opEnd) / 2) % 1440;
+                  const midH = Math.floor(midMinutes / 60);
                   return <span>{formatTime12(midH.toString().padStart(2, '0') + ':00')}</span>;
                 })()}
-                <span>{formatTime12(formHourInfo.closeTime)}</span>
+                <span>{formatCloseOption(formHourInfo.closeTime, formHourInfo.openTime)}</span>
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <p className="text-xs font-black text-emerald-900">What to do first</p>
+              <p className="mt-1 text-xs font-semibold text-emerald-700 leading-relaxed">
+                Choose the day, select one same-day time block, then enter the hourly price. If the court is open past midnight, create separate rates before and after midnight.
+              </p>
             </div>
 
             {/* Price */}
             <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Price Per Hour (₱)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">3. Price Per Hour</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">₱</span>
                 <input
