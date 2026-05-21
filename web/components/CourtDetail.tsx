@@ -156,6 +156,20 @@ const MiniMap: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
     return <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden border border-slate-200" />;
 };
 
+const getPaymentTypeLabel = (type?: string | null): string => {
+    if (type === 'gcash') return 'GCash';
+    if (type === 'maya') return 'Maya';
+    if (type === 'other_bank') return 'Other Bank';
+    return type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Cash';
+};
+
+const getPaymentTypeIcon = (type?: string | null) => {
+    if (type === 'gcash') return { bg: 'bg-blue-600', letter: 'G' };
+    if (type === 'maya') return { bg: 'bg-green-600', letter: 'M' };
+    if (type === 'other_bank') return { bg: 'bg-purple-600', letter: 'B' };
+    return { bg: 'bg-slate-600', letter: '?' };
+};
+
 const CourtDetail: React.FC = () => {
     const { courtId } = useParams<{ courtId: string }>();
     const navigate = useNavigate();
@@ -1456,14 +1470,12 @@ const CourtDetail: React.FC = () => {
                                                     : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 hover:-translate-y-0.5'
                                             }`}
                                         >
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${
-                                                method.payment_type === 'gcash' ? 'bg-blue-600' : 'bg-green-600'
-                                            }`}>
-                                                {method.payment_type === 'gcash' ? 'G' : 'M'}
+                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black text-sm ${getPaymentTypeIcon(method.payment_type).bg}`}>
+                                                {getPaymentTypeIcon(method.payment_type).letter}
                                             </div>
                                             <div className="flex-1">
                                                 <p className="text-sm font-bold text-slate-900">
-                                                    {method.payment_type === 'gcash' ? 'GCash' : 'Maya'}
+                                                    {getPaymentTypeLabel(method.payment_type)}
                                                 </p>
                                                 <p className="text-[11px] font-medium text-slate-400">{method.account_name}</p>
                                                 <p className="text-[11px] font-semibold text-slate-400">Tap to select</p>
@@ -1543,7 +1555,7 @@ const CourtDetail: React.FC = () => {
                                         <div className="text-center">
                                             <p className="text-xs font-bold text-slate-700">{selectedQRMethod.account_name}</p>
                                             <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-                                                {selectedQRMethod.payment_type === 'gcash' ? 'GCash' : 'Maya'}
+                                                {getPaymentTypeLabel(selectedQRMethod.payment_type)}
                                             </p>
                                         </div>
                                         <div className="bg-blue-50 rounded-lg px-3 py-1.5">

@@ -123,6 +123,16 @@ const statusColors: Record<string, string> = {
   resubmit: 'border-blue-200 bg-blue-50 text-blue-700',
 };
 
+const formatPaymentTypeLabel = (value?: string | null) => {
+  if (!value) return '—';
+  const normalized = value.replace(/_/g, ' ').trim();
+  if (!normalized) return '—';
+  return normalized
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 const Transactions: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'payments' | 'methods'>('payments');
@@ -324,7 +334,8 @@ const Transactions: React.FC = () => {
 
   const savePaymentMethod = async () => {
     if (!user) return;
-    if (!methodForm.account_name.trim()) { alert('Please enter account name'); return; }
+    const isOtherBank = methodForm.payment_type === 'other_bank';
+    if (isOtherBank && !methodForm.account_name.trim()) { alert('Please enter the bank/account name'); return; }
     if (!methodForm.qr_file && !editingMethod?.qr_code_url) { alert('Please upload a QR code'); return; }
     setIsSavingMethod(true);
     try {
@@ -523,12 +534,21 @@ const Transactions: React.FC = () => {
                   <select value={methodForm.payment_type} onChange={e => setMethodForm(prev => ({ ...prev, payment_type: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 mt-1">
                     <option value="gcash">GCash</option>
                     <option value="maya">Maya</option>
+                    <option value="other_bank">Other Bank</option>
                     <option value="cash">Cash</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-black uppercase text-slate-500">Account Name</label>
-                  <input value={methodForm.account_name} onChange={e => setMethodForm(prev => ({ ...prev, account_name: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 mt-1" />
+                  <label className="text-[11px] font-black uppercase text-slate-500">{methodForm.payment_type === 'other_bank' ? 'Bank / Account Name' : 'Account Name'}</label>
+                  <input
+                    value={methodForm.account_name}
+                    onChange={e => setMethodForm(prev => ({ ...prev, account_name: e.target.value }))}
+                    placeholder={methodForm.payment_type === 'other_bank' ? 'GoTyme, BPI, UnionBank, etc.' : 'Account name'}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 mt-1"
+                  />
+                  {methodForm.payment_type === 'other_bank' && (
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400">Required for Other Bank.</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[11px] font-black uppercase text-slate-500">Location (optional)</label>
@@ -564,7 +584,7 @@ const Transactions: React.FC = () => {
                 {paymentMethods.map(method => (
                   <div key={method.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-bold text-slate-900 capitalize">{method.payment_type}</p>
+                      <p className="text-sm font-bold text-slate-900">{formatPaymentTypeLabel(method.payment_type)}</p>
                       <p className="text-xs text-slate-500">{method.account_name}</p>
                       {method.location_id && <p className="text-[11px] text-slate-400 flex items-center gap-1"><MapPin size={12} /> {locations.find(l => l.id === method.location_id)?.name || 'Location'}</p>}
                     </div>
@@ -641,7 +661,7 @@ const Transactions: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payment Via</p>
-                          <p className="font-bold text-slate-800 mt-0.5 capitalize">{payment.payment_method || 'cash'}</p>
+                          <p className="font-bold text-slate-800 mt-0.5">{formatPaymentTypeLabel(payment.payment_method || 'cash')}</p>
                         </div>
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reference #</p>
@@ -803,7 +823,7 @@ const Transactions: React.FC = () => {
                         </div>
                         <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Payment Via</p>
-                          <p className="mt-1 font-bold text-slate-800 capitalize">{latestProof.payment_type || proofViewer.paymentMethod || '—'}</p>
+                          <p className="mt-1 font-bold text-slate-800">{formatPaymentTypeLabel(latestProof.payment_type || proofViewer.paymentMethod)}</p>
                         </div>
                         <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Account Name</p>
@@ -878,7 +898,7 @@ const Transactions: React.FC = () => {
                               </div>
                               <div>
                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Payment Via</p>
-                                <p className="mt-1 font-bold text-slate-800 capitalize">{previousProof.payment_type || proofViewer.paymentMethod || '—'}</p>
+                                <p className="mt-1 font-bold text-slate-800">{formatPaymentTypeLabel(previousProof.payment_type || proofViewer.paymentMethod)}</p>
                               </div>
                               <div>
                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Account Name</p>
